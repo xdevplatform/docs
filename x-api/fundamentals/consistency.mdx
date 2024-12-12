@@ -1,0 +1,109 @@
+---
+title: Consistency
+---
+
+
+## Consistency across the X API v2 endpoints
+
+One of the main aspects of the new v2 version of the X API is consistency across endpoints. This means that objects returned, features, and behaviors of the API are uniform across similar endpoints.
+
+You can expect the following elements to be the same across all endpoints:
+
+### Path naming
+
+Path naming always includes the endpoint [version](https://twitter.com/en/docs/twitter-api/versioning.html), followed by the **resource**. Beyond that, the path can contain an **ID** that relates to the earlier resource, a **selection verb** which helps to determine which data to return (e.g., `search` or `sample`), a **delivery verb** which helps to determine how the data will deliver (e.g., `stream`), or other resources that have a **relationship** with the primary resource (e.g., `/user/12/tweets`). Finally, you can append a **query parameter** to the end if the endpoint includes any query parameters.
+
+Here are some examples of how these path and query items could be organized:
+
+`/version/resource/id?param1=value&param2=value /version/resource/delivery/selection?param1=value&param2=value`
+
+
+Examples of actual requests:
+
+`/2/tweets/1067094924124872705?expansions=attachments.media_keys&tweet.fields=author_id /2/users/2244994945?user.fields=created_at,description /2/tweets/search/stream /2/tweets/search/recent?query=snow`
+
+
+### JSON Schema
+
+Responses to requests are defined using [JSON Schema](http://json-schema.org/). This means that requests consistently return sets of objects as arrays, with each element having an ID. Requests do not return maps with IDs as keys.
+
+### Response object and parameters
+
+The default object returned is the same for each endpoint of that object type:
+
+- `id` objects are always strings.
+- Parameters and response fields consistently use American-English spelling.
+- Fields are empty or not returned if there is no value.
+- The `entities` object only contains entities sourced from the Post text: this includes `urls`, `hashtags`, `mentions`, and `cashtags`.
+- All cards-related information, including the `media_keys` and `poll_ids` fields, are returned in the `attachments` object.
+
+Here is an example response object from the [single Post lookup](https://twitter.com/en/docs/twitter-api/tweets/lookup/api-reference/get-tweets-id.html) endpoint (with the [tweet.fields](https://twitter.com/en/docs/twitter-api/data-dictionary/object-model/tweet.html) parameter set to `author_id`, `entities`):
+
+```json
+{
+   "data": {
+       "id": "1278747501642657792",
+       "text": "It's been a year since Twitter's Developer Labs launched.\n\nAs we build towards the next generation of the #TwitterAPI (coming VERY soon), see what we've learned and changed along the way. https://t.co/WvjuEWCa6G",
+       "author_id": "2244994945",
+       "entities": {
+           "urls": [
+               {
+                   "start": 188,
+                   "end": 211,
+                   "url": "https://t.co/WvjuEWCa6G",
+                   "expanded_url": "https://blog.twitter.com/developer/en_us/topics/tools/2020/a-year-with-twitter-developer-labs.html",
+                   "display_url": "blog.twitter.com/developer/en_u…",
+                   "images": [
+                       {
+                           "url": "https://pbs.twimg.com/news_img/1278747527043362816/7HQRkQeV?format=jpg&name=orig",
+                           "width": 1600,
+                           "height": 600
+                       },
+                       {
+                           "url": "https://pbs.twimg.com/news_img/1278747527043362816/7HQRkQeV?format=jpg&name=150x150",
+                           "width": 150,
+                           "height": 150
+                       }
+                   ],
+                   "status": 200,
+                   "title": "A year with Twitter Developer Labs: What we've learned and changed",
+                   "description": "Labs has been invaluable in helping us understand what works well and what doesn’t, what you liked and what you didn’t.",
+                   "unwound_url": "https://blog.twitter.com/developer/en_us/topics/tools/2020/a-year-with-twitter-developer-labs.html"
+               }
+           ],
+           "hashtags": [
+               {
+                   "start": 106,
+                   "end": 117,
+                   "tag": "TwitterAPI"
+               }
+           ]
+       }
+   }
+}
+```
+### Authentication
+
+All X API v2 endpoints require authentication. Many of them accept the [OAuth 2.0 Bearer Token](https://developer.twitter.com/en/docs/authentication/oauth-2-0) method, requiring a Bearer Token with the request to the endpoint to make a successful request.
+
+For endpoints requiring authorization to create, manipulate, or retrieve data on behalf of another user, use [OAuth 1.0a User Context](https://developer.twitter.com/resources/fundamentals/authentication). This means providing your [developer App’s](https://developer.twitter.com/resources/fundamentals/authentication/obtaining-user-access-tokens) [API keys and tokens](https://developer.twitter.com/resources/fundamentals/authentication/api-key-and-secret) as well as a set of user [Access Tokens](https://developer.twitter.com/resources/fundamentals/authentication/obtaining-user-access-tokens) that you generate for the user on behalf of whom you’re making a request. The [3-legged OAuth flow](https://developer.twitter.com/resources/fundamentals/authentication/obtaining-user-access-tokens) can help you retrieve Access Tokens. Use a [tool or library](https://developer.twitter.com/en/docs/twitter-api/tools-and-libraries) that automatically builds this authorization header.
+
+More information on authentication can be found in our documentation on [authentication](https://developer.twitter.com/en/docs/authentication).
+
+---
+
+### Fields
+
+The object returned on each endpoint is condensed. To allow developers more customization in the response they get back from the API, the [`fields`](https://developer.twitter.com/en/docs/twitter-api/data-dictionary/object-model/tweet) parameter is used to request the fields desired. Fields will remain consistent across endpoints. The Post object will return the same fields across all endpoints where the Post object is returned. The same set of fields can be queried across similar endpoints.
+
+For example, the same Post fields can be queried in the [Posts lookup](https://developer.twitter.com/en/docs/twitter-api/tweets/lookup/introduction) and for the expanded pinned Post in the [Users lookup](https://developer.twitter.com/en/docs/twitter-api/users/lookup/introduction).
+
+---
+
+### Expansions
+
+Where appropriate, [expansions](https://developer.twitter.com/en/docs/twitter-api/expansions) are available for all nested id fields (e.g., all fields named `*_id`, such as `author_id`). Expansions are also available for all fields that have an id that is not the top-level identifier of the current object. For example, in the [Posts lookup](https://developer.twitter.com/en/docs/twitter-api/tweets/lookup/introduction), the Post is the current object with field `id` as the top-level identifier. The `author_id` or `referenced_tweets.id` fields are available to expand into complete user or Post objects by adding these comma-separated values to the `expansions` parameter.
+
+Please [report any inconsistencies](https://twitterdevfeedback.uservoice.com/) that you notice, related to these fields.
+
+

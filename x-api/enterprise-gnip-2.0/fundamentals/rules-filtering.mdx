@@ -1,0 +1,339 @@
+---
+title: "Rules and filtering: Enterprise"
+---
+
+## Getting started with enterprise rules and queries
+
+
+Products utilizing enterprise operators deliver social data to you based on filtering rules you set up. Rules are made up of one or more ‘clauses’, where a clause is a keyword, exact phrase, or one of the many enterprise operators. Before beginning to build rules with enterprise operators, be sure to review the syntax described below, look through the list of available operators, and understand the restrictions around building rules. You should also be sure to understand the nuances of how rules are evaluated logically, in the "[Order of operations](#orderofoperations)" section.
+
+Multiple clauses can be combined with both "and" and "or" logic.
+
+**Please note:** "And" logic is specified with a space between clauses, while or logic is specified with an upper-case `OR`. 
+
+Each rule can be up to 2,048 characters long with no limits on the number of positive clauses (things you want to match or filter on) and negative clauses (things you want to exclude and not match on).
+ 
+
+### Building rules and queries 
+
+**Keyword match**
+
+Keyword matches are similar to queries in a search interface. For example, the following enterprise operator rule would match activities with the term "social" in the text body.
+
+`social`
+
+**ANDing terms with white space**
+
+Adding another keyword is the same as adding another requirement for finding matches. For example, this rule would only match activities where both "social" and "media" were present in the text, in either order – _having a space between terms operates as boolean AND logic_. If you include an explicit AND in your rule, it will rejected by the rules endpoint.
+
+`social media`
+
+**ORing terms with upper-case OR**
+
+Many situations actually call for boolean OR logic, however. This is easily accomplished as well. _Note that the OR operator must be upper-case and a lower-case ‘or’ will be treated as a regular keyword._
+
+`social OR data`
+
+**Negating terms**
+
+Still other scenarios might call for excluding results with certain keywords (a boolean NOT logic). For instance, activities with ‘happy’, but excluding any with ‘birthday’ in the text.
+
+`social -personality`
+
+**Grouping with parentheses**
+
+These types of logic can be combined using grouping with parentheses, and expanded to much more complex queries.
+
+`(social OR data) (academic OR research) -personality -information -university`
+
+This is just the beginning though – while the above examples rely simply on tokenized matching for keywords, enterprise products also offer operators to perform different types of matching on the text.
+
+**Exact match**
+
+`"social media research"`
+
+**Substring match**
+
+`contains:info`
+
+**Proximity match**
+
+`"social media research"~3`
+
+
+Further, other operators allow you to filter on unique aspects of social data, besides just the text. 
+
+**The user who is posting a Post**
+
+`from:XDeveloeprs`
+
+**Geo-tagged Tweets within 10 miles of Pearl St. in Boulder, CO, United States**
+
+`point_radius:[-105.27346517 40.01924738 10.0mi]`
+
+**Putting it all together**
+
+These can be combined with text filters using the same types of logic described above.
+
+`(social OR data) (academic OR research OR "social media research") point_radius:[-105.27346517 40.01924738 10.0mi] lang:en -personality -information -university`
+
+### Boolean Syntax
+
+The examples in the previous section, utilized various types of boolean logic and grouping. See the table below for additional detail regarding the syntax and requirements for each.
+
+|     |     |     |
+| --- | --- | --- |
+| **Logic type** | **Operator syntax** | Description |
+| AND | social data | Whitespace between two operators results in AND logic between them  <br/>  <br/>Matches activities containing both keywords ("social", "data").  <br/>  <br/>**Do not use AND explicitly in your rule. Only use whitespace. An explicit AND will be treated like a regular keyword.** |
+| OR  | social OR data | To OR together two operators, insert an all-caps OR, enclosed in whitespace between them  <br/>  <br/>Matches activities with EITHER keyword ("social" OR "data")  <br/>  <br/>Note that if you combine OR and AND functionality in a single rule, you should understand the order of operations described in our "[Order of operations](#OrderOfOperations)" section, and consider grouping non-negated operators together using parentheses as described below to ensure your rule behaves as expected.  <br/>  <br/>You must use upper-case "OR" in your rule. Lower-case 'or' will be treated as a regular keyword. |
+| NOT | social data  <br/>-apple -android -phone | Insert a `-` character immediately in front of the operator or group of operators.  <br/>  <br/>The example rule shown matches activities containing keyword "social", but excludes those which contain the keyword "data."  <br/>  <br/>Negated ORs are not allowed where the rule would request "everything in the firehose except the negation." For example, `apple OR -ipad` is invalid because it would match all activities except those mentioning "ipad". |
+| Grouping | (social OR data) -XDeveloeprs -api | Parentheses around multiple operators create a functional "group".<br/><br/>Groups can be connected to clauses in the same manner as an individual clause via whitespace (AND) or ORs. However, note that it is a best practice to not group together negations by applying the negating - to the entire group. Instead, you should negate each individual operator, stringing them together via whitespace (AND). <br/><br/>For example, instead of using -(iphone OR imac OR macbook), use the following: -iphone -imac -macbook  <br/>  <br/>Grouping is especially important where a single rule combines AND and OR functionality, due to the order of operations used to evaluate the rule. See below for more details. |
+
+**Please note:** that operators may be either positive or negative.
+
+**Positive Operators** define what you want to **include** in the results. E.g. the `has:hashtags` operator says “I want activities containing hashtags.”
+
+**Negative Operators** define what you want to **exclude** from the results, and are created by using the Boolean NOT logic described above. For example, `-has:hashtags` says “Exclude any activities containing hashtagss, even if they otherwise match my rule.”
+
+Premum operator products have no restriction on the number of positive and negative clauses, subject to a maximum length of 2,048 characters.
+ 
+
+#### Order of Operations
+
+When combining AND and OR functionality in a single rule, the following order of operations will dictate how your rule is evaluated.
+
+1.  Operators connected by AND logic are combined first
+2.  Then, operators connected with OR logic are applied
+
+**Example:**
+
+* `apple OR iphone ipad` would be evaluated as `apple OR (iphone ipad)`
+* `ipad iphone OR android` would be evaluated as `(iphone ipad) OR android`
+
+To eliminate uncertainty and ensure that your rules are evaluated as intended, group terms together with parentheses where appropriate. For example:
+
+* `(apple OR iphone) ipad`
+* `iphone (ipad OR android)`
+
+#### Punctuation, Diacritics, and Case Sensitivity
+
+If you specify a keyword or hashtag rule with character accents or diacritics for enterprise operators, it will match Post text honoring the diacritics (hashtags or keywords). Rule with a keyword `Diacr**í**tica` or hashtag `#cumplea**ñ**os` will match "Diacr**í**tica" or "#cumplea**ñ**os" but not "Diacritica" or "#cumpleanos" without the tilde **í** or **eñe**.
+
+Characters with accents or diacritics are treated the same as normal characters and are not treated as word boundaries. For example, a rule of cumplea**ñ**os would only match activities containing the word cumpleaños and would not match activities containing cumplea, cumplean, or os.
+
+All operators are evaluated in a case-insensitive manner. For example, the rule `Cat` will match all of the following: "cat", "CAT", "Cat".
+
+#### PowerTrack rule tags
+
+As described on our "[Matching rules](/x-api/enterprise-gnip-2.0/fundamentals/data-enrichments#matching-rules)" page, each rule may be created with a tag. These tags have no effect on filtering, but can be used to create logical groupings of rules within your app. Each rule may have only one tag, with a maximum of 255 characters. Tags are included with the JSON formatted rule at the time of creation via the API, as described on our "Matching rules" page.
+
+#### Putting Rules in JSON Format
+
+In order to add or delete a rule from a stream via the API, the rules must utilize JSON format. Essentially, this requires putting each rule into the following structure:
+
+`{"value":"insert_rule_here"}`
+
+**Rules with double-quotes**
+
+If the rule contains double-quote characters (`“`) associated with exact-match or other operators, they must be escaped using a backslash to distinguish them from the structure of the JSON format.
+
+`"social data" @XDevelopers`
+
+The JSON formatted rule would be:
+
+`{"value":"\"social data\" @XDevelopers"}`
+
+**Rules with double-quote string literals**
+
+To include a double-quote character as a string literal within an exact-match, it must be double-escaped. For example, for a rule matching on the exact phrase "Toys “R” Us", including the double-quotes around "R", the plain-text representation of this would look like the following:
+
+`"Toys \"R\" Us"`
+
+Translating this to JSON format, you should use the following structure:
+
+`{"value":"\"Toys \\\"R\\\" Us\""}`
+
+**Rules with Tags**
+
+To include an optional tag with your rule, as described above, simply include an additional `tag` field with the rule value.
+
+`{"value":"\"social data\" @XDevelopers","tag":"RULE-TAG-01"}`
+
+**Formatting for API Requests**
+
+When adding or deleting rules from the stream via the API, multiple JSON formatted rules should be comma delimited, and wrapped in a JSON “rules” array, as shown below:
+
+`{"rules":[{"value":"from:XDevelopers"},{"value":"\social data\" @XDevelopers","tag":"RULE-TAG-01"}]}`
+
+#### Operators that match Quote Tweets
+
+When using the [PowerTrack API](/x-api/enterprise-gnip-2.0/powertrack-api) and [Historical PowerTrack API](https://developer.x.com/en/docs/x-api/enterprise/historical-powertrack-api), the operators below will match on content from both the original Post that was quoted and the new Quote Tweet.
+
+However, if you are using the [Search API](/x-api/enterprise-gnip-2.0/fundamentals/search-api), these operators will only match the contents of the Quote Tweet, and will not match on any content from the original Post that was quoted.
+
+* `Keywords`
+* `Phrases`
+* `Proximity`
+* `#hashtags`
+* `@mentions`
+* `$cashtags`
+* `url:`
+* `url_contains:`
+* `has:links`
+* `has:mentions`
+* `has:hashtags`
+* `has:media`
+* `has:symbols`
+* `is:quote`
+* `is:reply`
+
+## Enterprise operators
+
+Below are the operators available with PowerTrack and Historical PowerTrack. A subset of these are available with the 30-Day and Full-Archive search APIs. See [this table](/x-api/enterprise-gnip-2.0/fundamentals/rules-filtering#operators-by-product) for a product-by-product list of available operators. 
+
+| Operator                  | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+|---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| keyword                   | Matches a keyword within the text body or URL of a Post. Keywords must start with either a digit (0-9) or any non-punctuation character.<br/>Keyword matching is tokenized, meaning the keyword is matched against tokenized text of the Post body.<br/>For strings with punctuation (e.g., "coca-cola"), use a quoted "exact phrase match".<br/>_Example_: `(social OR pizza OR wildfire) -planet`                                                                                                                                                       |
+| emoji                     | Matches an emoji within the body of a Post, using tokenized matching based on punctuation, symbol/emoji, and separator characters.<br/>If an emoji has a variant, use quotes for exact matches.<br/>_Example_: `(🍕 OR 💜 OR 🐢) -🤖`                                                                                                                                                                                                                                                                                                                                                               |
+| "exact phrase match"      | Matches an exact phrase within the body of a Post. Punctuation is treated as whitespace.<br/>_Example_: `("social media" OR "developer.x.com" OR "wildfire911" OR "coca-cola") -"planet earth"`                                                                                                                                                                                                                                                                                                                                                                                                 |
+| #                         | Matches any Post with the specified hashtag. This is an exact match, meaning `#2016` will match posts with `#2016` but not `#2016election`.<br/>_Example_: `(#social OR #pizza OR #2016election) -#planet`                                                                                                                                                                                                                                                                                                                                                                                           |
+| @                         | Matches any Post mentioning the specified username.<br/>_Example_: `(@XDevelopers OR @api OR @twittereng) -@jack`                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| "keyword1 keyword2"~N     | Proximity operator that matches a Post where keywords are within N tokens of each other.<br/>Keywords in reverse order can be no more than N-2 tokens apart. N cannot be greater than 6.<br/>_Example_: `"social media"~5 OR "API"~3`                                                                                                                                                                                                                                                                                                                                                               |
+| contains:                 | Substring match for Posts with the specified substring in the body, regardless of tokenization.<br/>Use double quotes for substrings with whitespace or punctuation.<br/>_Example_: `(contains:social OR contains:"wikipedia.com") -contains:"buy now"`                                                                                                                                                                                                                                                                                                                                         |
+| from:                     | Matches any Post from a specific user by X numeric Account ID or username (excluding `@`).<br/>_Example_: `(from:2244994945 OR from:api OR from:twittereng) -from:jack`                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| to:                       | Matches any Post replying to a specific user by X numeric Account ID or username (excluding `@`).<br/>_Example_: `(to:2244994945 OR to:api OR to:twittereng) -to:jack`                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| url:                      | Performs a tokenized (keyword/phrase) match on expanded URLs of a post.<br/>_Example_: `@XDevelopers url:"developer.x.com"`                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| url_title:                | Performs a keyword/phrase match on the expanded URL HTML title metadata.<br/>_Available only with PowerTrack and Historical PowerTrack._                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| url_description:          | Performs a keyword/phrase match on the expanded page description metadata.<br/>_Available only with PowerTrack and Historical PowerTrack._                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| url_contains:             | Matches Posts with URLs containing the specified phrase or keyword.<br/>Enclose search terms with punctuation in quotes.<br/>_Example_: `(url_contains:"developer.x.com" OR url_contains:wildfire) -url_contains:reddit`                                                                                                                                                                                                                                                                                                                                                                         |
+| bio:                      | Matches a keyword or phrase within the user bio of a Post. This is a tokenized match within the 'description' field within the [User object](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary#native-enriched-user-object).<br/>_Example_: `(bio:engineer OR bio:"wordpress.com" OR bio:🚀) -bio:troll`<br/>_Note:_ Only available with PowerTrack and Historical PowerTrack.                                                                                                                            |
+| bio_name:                 | Matches a keyword within the user bio name of a Post. This is a tokenized match within a user’s “name” field in the [User object](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary#native-enriched-user-object).<br/>_Note:_ Only available with PowerTrack and Historical PowerTrack.                                                                                                                                                                                                                                                       |
+| bio_location:             | Matches Posts where the User object's location contains the specified keyword or phrase.<br/>This operator performs a tokenized match, similar to the normal keyword rules on the message body.<br/>This location is part of the [User object](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary#native-enriched-user-object), and is the account's 'home' location.<br/>_Note:_ Only available with PowerTrack and Historical PowerTrack.                                |
+| statuses_count:           | Matches Posts when the author has posted a number of statuses within the given range.<br/>If a single number is specified, any number equal to or higher will match.<br/>A range can be specified to match any number in the range (e.g., `statuses_count:1000..10000`).<br/>_Example:_ `to:api statuses_count:10`<br/>_Note:_ Only available with PowerTrack and Historical PowerTrack.                                                                                                                           |
+| followers_count:          | Matches Posts when the author has a followers count within the given range.<br/>If a single number is specified, any number equal to or higher will match.<br/>A range can be specified to match any number in the range (e.g., `followers_count:1000..10000`).<br/>_Note:_ Only available with PowerTrack and Historical PowerTrack.                                                                                                                                                                          |
+| friends_count:            | Matches Posts when the author has a friends count (the number of users they follow) within the given range.<br/>If a single number is specified, any number equal to or higher will match.<br/>A range can be specified to match any number in the range (e.g., `friends_count:1000..10000`).<br/>_Note:_ Only available with PowerTrack and Historical PowerTrack.                                                                                                                                              |
+| listed_count:             | Matches Posts when the author has been listed within X a certain number of times within the given range.<br/>If a single number is specified, any number equal to or higher will match.<br/>A range can be specified to match any number in the range (e.g., `listed_count:10..100`).<br/>_Note:_ Only available with PowerTrack and Historical PowerTrack.                                                                                                                                                    |
+| $                         | Matches any Post that contains the specified ‘cashtag’ entity.<br/>_Example_: `($TWTR OR $TSLA OR $BRK.A) -$F`<br/>_Note:_ The cashtag operator relies on X's ‘symbols’ entity extraction to match cashtags, rather than extracting it from the body itself.                                                                                                                                                                                                                                                          |
+| retweets_of:              | Matches Posts that are Retweets of a specified user.<br/>Accepts both usernames and numeric X Account IDs (NOT Post status IDs).<br/>_Example_: `(retweets_of:2244994945 OR retweets_of:api OR retweets_of:twittereng) -retweets_of:jack`                                                                                                                                                                                                                                                                                                               |
+| retweets_of_status_id:    | Deliver only explicit Retweets of the specified Post. Use the ID of an original Post and not a Retweet.<br/>_Example_: `retweets_of_status_id:1293593516040269825`<br/>_Note:_ Only available with PowerTrack and Historical PowerTrack.                                                                                                                                                                                                                                                                                                               |
+| in_reply_to_status_id:    | Deliver only explicit replies to the specified Post.<br/>_Example_: `in_reply_to_status_id:1293593516040269825`<br/>_Note:_ Only available with PowerTrack and Historical PowerTrack.                                                                                                                                                                                                                                                                                                                             |
+| sample:                   | Returns a random sample of Posts that match a rule. The sample percentage must be an integer between 1 and 100.<br/>The operator reduces the scope to X%, then the rule/filter is applied to that sampled subset.<br/>_Example:_ `#happybirthday sample:5`<br/>`"happy birthday"~5 sample:80`<br/>_Note:_ Only available with PowerTrack and Historical PowerTrack.                                                                                                                            |
+| source:                   | Matches any Post generated by the specified source application. The value can be the application name or the application’s URL.<br/>_Example:_ `#happybirthday source:"X for iPhone"`<br/>`"This is a test X from my TestingApp" source:MyTestAppName`<br/>_Note:_ The source operator searches on the Post source attribute and cannot be used alone.                                                                                                                 |
+| lang:                     | Matches Posts classified by X as being in a particular language. Posts are currently classified as only one language, so matching multiple languages yields no results. _Not recommended to use alone._                                                                                                                                                                                                                                                                                                                                                     |
+
+The list below represents the current supported languages and their corresponding BCP 47 language indentifier:
+
+|     |     |     |     |
+| --- | --- | --- | --- |
+| Amharic: am | German: de | Malayalam: ml | Slovak: sk |
+| Arabic: ar | Greek: el | Maldivian: dv | Slovenian: sl |
+| Armenian: hy | Gujarati: gu | Marathi: mr | Sorani Kurdish: ckb |
+| Basque: eu | Haitian Creole: ht | Nepali: ne | Spanish: es |
+| Bengali: bn | Hebrew: iw | Norwegian: no | Swedish: sv |
+| Bosnian: bs | Hindi: hi | Oriya: or | Tagalog: tl |
+| Bulgarian: bg | Latinized Hindi: hi-Latn | Panjabi: pa | Tamil: ta |
+| Burmese: my | Hungarian: hu | Pashto: ps | Telugu: te |
+| Croatian: hr | Icelandic: is | Persian: fa | Thai: th |
+| Catalan: ca | Indonesian: in | Polish: pl | Tibetan: bo |
+| Czech: cs | Italian: it | Portuguese: pt | Traditional Chinese: zh-TW |
+| Danish: da | Japanese: ja | Romanian: ro | Turkish: tr |
+| Dutch: nl | Kannada: kn | Russian: ru | Ukrainian: uk |
+| English: en | Khmer: km | Serbian: sr | Urdu: ur |
+| Estonian: et | Korean: ko | Simplified Chinese: zh-CN | Uyghur: ug |
+| Finnish: fi | Lao: lo | Sindhi: sd | Vietnamese: vi |
+| French: fr | Latvian: lv | Sinhala: si | Welsh: cy |
+| Georgian: ka | Lithuanian: lt |     |
+
+Example:
+
+(@XDevelopers OR to:XDevelopers) lang:es
+
+**Note:** The language operator matches on the specific Post language determined by X and set as the lang Post attribute.  See [HERE](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary) for more information on X Entities JSON attributes.  If no language classification can be made for a Post, the Post lang will be set as ‘und’ (for undefined).
+
+| Operator                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+|--------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| place                    | Matches Posts tagged with the specified location or X place ID.<br/>Multi-word place names should be enclosed in quotes.<br/>_Example:_ `(place:London OR place:"Great Britain") -place:USA`<br/>`place:fd70c22040963ac7`<br/>**Note:** See the [GET geo/search](https://developer.x.com/en/docs/x-api/v1/geo/places-near-location/api-reference/get-geo-search) public API endpoint for how to obtain X place IDs.<br/>**Note:** Will not match on Retweets or Quote Tweets, as Retweet places are attached to the original Post. |
+| place_country            | Matches Posts where the country code associated with a tagged place/location matches the given ISO alpha-2 character code.<br/>_Example:_ `place_country:GB OR place_country:AU OR place_country:CA`<br/>**Note:** Will not match on Retweets or Quote Tweets, as Retweet places are attached to the original Post.<br/>Valid ISO codes: [ISO 3166-1 alpha-2](http://en.wikipedia.org/wiki/ISO_3166-1_alpha-2).                                                                                                                                      |
+| point_radius:[lon lat radius] | Matches against the Exact Location (x,y) of the Post or a “Place” geo polygon within the defined radius.<br/>* Radius: < 25mi<br/>* Supported units: mi, km<br/>* Longitude: ±180<br/>* Latitude: ±90<br/>Coordinates are in decimal degrees.<br/>Arguments are bracketed, space-delimited.<br/>_Example:_ `point_radius:[-105.27346517 40.01924738 0.5mi]`<br/>_Example:_ `point_radius:[2.355128 48.861118 16km]`<br/>**Note:** Will not match on Retweets or Quote Tweets.                             |
+| bounding_box:[west_long south_lat east_long north_lat] | Matches against Exact Location or a “Place” geo polygon fully contained in a bounding box.<br/>Arguments are bracketed, space-delimited.<br/>Coordinates: decimal degrees (±180 long, ±90 lat).<br/>Width and height must be < 25mi.<br/>_Example:_ `bounding_box:[-105.301758 39.964069 -105.178505 40.09455]`<br/>**Note:** Will not match on Retweets or Quote Tweets.                                                                                                                                                    |
+| profile_country          | Matches Posts where the author’s profile geo country code matches a given ISO-3166-1-alpha-2 two-letter code.                                                                                                                                                                                                                                                                                                                                                                                                    |
+| profile_region           | Matches on the “region” field from the author’s profile geo enrichment, an exact full string match.<br/>Use double quotes for substrings containing whitespace or punctuation.<br/>_Example:_ `profile_region:"New York"`                                                                                                                                                                                                                                                                                |
+| profile_locality         | Matches on the “locality” field from the author’s profile geo enrichment, an exact full string match.<br/>Use double quotes for substrings containing whitespace or punctuation.<br/>_Example:_ `profile_locality:"San Francisco"`                                                                                                                                                                                                                                                                             |
+| profile_subregion        | Matches on the “subRegion” field from the author’s profile geo enrichment, including specific counties or metro areas.<br/>An exact full string match.<br/>_Example:_ `profile_subregion:"Santa Clara County"`                                                                                                                                                                                                                                                                                               |
+| has:geo                  | Matches Posts with Post-specific geo location data from X, including “geo” lat-long or “Place” location data with a display name and geo polygon.<br/>**Note:** With Search API, must be combined with non-`is:` or `has:` operators.                                                                                                                                                                                                                                                                           |
+| has:profile_geo          | Matches Posts with any Profile Geo metadata, regardless of value.<br/>Available alias: `has:derived_user_geo`.<br/>**Note:** With Search API, must be combined with non-`is:` or `has:` operators.                                                                                                                                                                                                                                                                                                            |
+| has:links                | Matches Posts with a link or referenced media in the "text" object of the payload, including media and Quote Tweets.<br/>**Note:** With Search API, must be combined with non-`is:` or `has:` operators.                                                                                                                                                                                                                                                                                                      |
+| is:retweet               | Delivers only explicit retweets. Can be negated to exclude retweets and deliver only original content.<br/>This operator looks only for true Retweets and not Quoted Tweets.<br/>**Note:** With Search API, must be combined with non-`is:` or `has:` operators.                                                                                                                                                                                                                                               |
+| is:reply                 | Delivers only explicit replies. Can be negated to exclude replies.<br/>PowerTrack matches replies to original Posts, replies in quoted Posts, and replies in Retweets.<br/>Search API matches only replies to original Posts.<br/>_Example:_ `@XDevelopers -is:reply`                                                                                                                                                                                                                                         |
+| is:quote                 | Delivers only Quote Tweets or Posts that reference another Post.<br/>Can be negated to exclude Quote Tweets.<br/>_Example:_ `@XDevelopers is:quote`                                                                                                                                                                                                                                                                                                                                                            |
+| is:verified              | Delivers only Posts from “verified” authors. Can be negated to exclude Posts from verified authors.<br/>_Example:_ `@XDevelopers is:verified`                                                                                                                                                                                                                                                                                                                                                                 |
+| has:mentions             | Matches Posts mentioning another X user.<br/>**Note:** With Search API, must be combined with non-`is:` or `has:` operators.                                                                                                                                                                                                                                                                                                                                                                                 |
+| has:hashtags             | Matches Posts containing a hashtag.<br/>**Note:** With Search API, must be combined with non-`is:` or `has:` operators.                                                                                                                                                                                                                                                                                                                                                                                       |
+| has:media                | Matches Posts containing a media url classified by X (e.g., pic.x.com).<br/>Available alias: `has:media_link`.<br/>**Note:** With Search API, must be combined with non-`is:` or `has:` operators.                                                                                                                                                                                                                                                                                                           |
+| has:images               | Matches Posts containing a media url (e.g., pic.x.com).<br/>**Note:** With Search API, must be combined with non-`is:` or `has:` operators.                                                                                                                                                                                                                                                                                                                                                                  |
+| has:videos               | Matches Posts containing native X videos uploaded to X.<br/>Available alias: `has:video_link`.<br/>This operator does not match videos from YouTube, Periscope, or other video hosting sites.<br/>**Note:** With Search API, must be combined with non-`is:` or `has:` operators.                                                                                                                                                                                                                            |
+| has:symbols              | Matches Posts containing a cashtag symbol (e.g., $TWTR).<br/>**Note:** With Search API, must be combined with non-`is:` or `has:` operators.                                                                                                                                                                                                                                                                                                                                                                 |
+
+
+## Operators by product
+### Rules and filtering: Enterprise
+
+All enterprise operators are available with PowerTrack and Historical PowerTrack APIs. However, only a subset of operators are available to the enterprise Search APIs, as noted on this page.
+
+The dark blue tags note which operators are available to different enterprise products:
+
+PowerTrack Search
+
+| Operator | Product | Description | Matches on payload element |
+| --- | --- | --- | --- |
+| "exact phrase match" | PowerTrack<br/><br/>Search | Matches an exact phrase within the body of a Post.<br/><br/>Components that can translate into a search operators will be treated as words. In other words:<br/><br/>* `"#hashtag"` will match `hashtag` but not `#hashtag` (use the [hashtag operator](#hashtag-operator) without quotes to match on actual hashtags) <br/>* `"$TWTR"` will match the word `TWTR` but not the cashtag `$TWTR` (use the [cashtag operator](#cashtag-operator) without quotes to match on actual cashtags)<br/><br/>**Note:** in 30 Day Search and Full Archive Search (Enterprise and Premium), punctuation is not tokenized and is instead treated as whitespace. | `text` |
+| @   | PowerTrack<br/><br/>Search | Matches any Post that mentions the given username. The value can be either the username (excluding the `@` character) or the user’s numeric ID or (obtained for example via the [GET users/lookup](https://developer.x.com/en/docs/x-api/v1/accounts-and-users/follow-search-get-users/api-reference/get-users-lookup) endpoint). | `entities.user_mentions` |
+| #   | PowerTrack<br/><br/>Search | Matches any Post with the given hashtag.<br/><br/>This operator performs an exact match. For example meaning the rule `#1989` will match Posts containing the exact hashtag `#1989`, but not those with the hashtag `#TaylorSwift1989`.<br/><br/>**Note:** this operator relies on X's entity extraction to match hashtags, rather than extracting the hashtag from the body itself. For more details on JSON attributes from entities, refer to [X Entities](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary). | `entities.hashtags` |
+| $   | PowerTrack<br/><br/>Search | Matches any Post that contains the specified cashtag (where the leading character of the token is `$`).<br/><br/>**Note: **this operator relies on X's entity extraction to match links, rather than extracting the link from the body itself. For more details on JSON attributes from entities, refer to [X Entities](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary). | `entities.symbols` |
+| bio: | PowerTrack | _Available alias_: user_bio:<br/><br/>Matches a keyword (using tokenized match) or a phrase within the user bio of a Post. Use double quotes to match a phrase. In other words:<br/><br/>* `bio:software engineer` will match Posts with the keyword `engineer` from users with the word `software` in their bio<br/>* `bio:"software engineer"` will match any Post posted by users with the phrase `software engineer` in their bio | `user``.description` |
+| bio_location: | PowerTrack | _Available alias_: user\_bio\_location:<br/><br/>Matches Posts where the [User object](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary#native-enriched-user-object)'s location contains the specified keyword (using tokenized match) or phrase.<br/><br/>This location is a non-normalized, user-generated, free-form string, and is different from a Post's location (when available). | `user.location` |
+| bio_name: | PowerTrack | Matches Posts where the [User object](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary#native-enriched-user-object)'s name contains the specified keyword (using tokenized match) or phrase. | `user.name` |
+| bounding_box: | PowerTrack<br/><br/>Search | _Available alias_: geo\_bounding\_box:<br/><br/>Matches against the exact location (long, lat) of the Post (when present), and against a geo polygon (where the Place is fully contained within the defined region).<br/><br/>* west\_long south\_lat represent the southwest corner of the bounding box where west-long is the longitude of that point, and south_lat is the latitude.<br/>* east\_long and north\_lat represent the northeast corner of the bounding box, where east\_long is the longitude of that point, and north\_lat is the latitude.<br/>* Width and height of the bounding box must be less than 25mi<br/>* Longitude is in the range of ±180<br/>* Latitude is in the range of ±90<br/>* All coordinates are in decimal degrees.<br/>* Rule arguments are contained within brackets, space delimited.<br/><br/>**Note:** operators matching on place (Post geo) will only include matches from original Posts. Retweets do not contain any place data. | `place` (original Posts only) |
+| contains: | PowerTrack | Substring match for Posts that have the given substring in the body, regardless of tokenization. In other words, this does a pure substring match and does not consider word boundaries.<br/><br/>Use double quotes to match substrings that contain whitespace or punctuation. | `text` |
+| &lt;emoji&gt; | PowerTrack<br/><br/>Search | Matches an emoji within the body of a Post.<br/><br/>This is a tokenized match, so your emoji will be matched against the tokenized text of the Post body. Tokenization is based on punctuation, symbol/emoji, and separator Unicode basic plane characters. For example, a Post with the text “I like 🍕” would be split into the following tokens: I, like, 🍕. These tokens would then be compared to the emoji used in your rule.<br/><br/>**Note:** if an emoji has a variant, you must use double quotes to add to a rule. | `text` |
+| followers_count: | PowerTrack | Matches Posts when the author has a followers count within the given range.<br/><br/>* A single number (e.g. `followers_count:42`) will match any number equal to or greater than the value specified.<br/>* A range (e.g. `followers_count:42..1337`) will match any number in the given range. | `user.followers_count` |
+| friends_count: | PowerTrack | _Available alias_: following_count:<br/><br/>Matches Posts when the author has a friends count (the number of users they follow) that falls within the given range.<br/><br/>* A single number (e.g. `followers_count:42`) will match any number equal to or greater than the value specified.<br/>* A range (e.g. `followers_count:42..1337`) will match any number in the given range. | `user.friends_count` |
+| from: | PowerTrack<br/><br/>Search | Matches any Post from a specific user. The value can be either the username (excluding the `@` character) or the user’s numeric ID or (obtained for example via the [GET users/lookup](https://developer.x.com/en/docs/x-api/v1/accounts-and-users/follow-search-get-users/api-reference/get-users-lookup) endpoint). | `user.id`, `user.id_str` (if using User ID)<br/><br/>`user.screen_name` (if using username) |
+| has:geo | PowerTrack<br/><br/>Search | Matches Posts that have Post-specific geolocation data provided from X. This can be either “geo” lat-long coordinate, or a “location” in the form of a X [Place](https://dev.twitter.com/overview/api/places), with the corresponding display name, geo polygon, and other fields.<br/><br/>Cannot be used as a standalone operator.<br/><br/>**Note:** operators matching on place (Post geo) will only include matches from original posts. Retweets do not contain any place data. | `place` (original Tweets only) |
+| has:hashtags | PowerTrack<br/><br/>Search | Matches Posts that contain at least one hashtag.<br/><br/>Cannot be used as a standalone operator. | `entities.hashtags` |
+| has:images | PowerTrack<br/><br/>Search | Matches Posts that contain at least one classified image URL.<br/><br/>Cannot be used as a standalone operator. | `entities.media` |
+| has:lang | PowerTrack | Matches Posts that have been classified by X as being of a particular language.<br/><br/>If a Post has not been classified, the operator will not match. Each Post is currently only classified as being of one language, so AND’ing together multiple languages will yield no results.<br/><br/>Cannot be used as a standalone operator. | `lang` when value is not `und` |
+| has:links | PowerTrack<br/><br/>Search | This operator matches Posts which contain links in the Post body.<br/><br/>Cannot be used as a standalone operator.<br/><br/>**Note:** this operator relies on X's entity extraction to match links, rather than extracting the link from the body itself. For more details on JSON attributes from entities, refer to [X Entities](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary). | `entities.urls` |
+| has:media | PowerTrack<br/><br/>Search | _Available alias_: has:media_link<br/><br/>Matches Posts that contain at least one classified media URL.<br/><br/>Cannot be used as a standalone operator. | `entities.media` |
+| has:mentions | PowerTrack<br/><br/>Search | Matches Posts that mention another X user.<br/><br/>Cannot be used as a standalone operator. | `entities.user_mentions` |
+| has:profile_geo | PowerTrack<br/><br/>Search | _Available alias_: has:derived\_user\_geo<br/><br/>Matches Posts that have any [Profile Geo](/x-api/enterprise-gnip-2.0/fundamentals/data-enrichments#profile-geo) metadata, regardless of the actual value.<br/><br/>Cannot be used as a standalone operator. | `user.location` |
+| has:symbols | PowerTrack<br/><br/>Enterprise | Matches Posts that contain a cashtag symbol (e.g. `$TWTR`).<br/><br/>Cannot be used as a standalone operator. | `entities.symbols` |
+| has:videos | PowerTrack<br/><br/>Search | _Available alias_: has:video_link<br/><br/>Matches Posts that contain at least one classified media URL.<br/><br/>Cannot be used as a standalone operator. | `entities.media` |
+| in\_reply\_to\_status\_id: | PowerTrack | _Available alias_: in\_reply\_to\_tweet\_id:<br/><br/>Deliver only explicit replies to the specified Post. | `id`, `id_str` of the target Post |
+| is:quote | PowerTrack | Deliver explicit Quote Tweets that match a rule.<br/><br/>It can also be negated (`-is:quote`) to exclude Quote Tweets that match a rule from delivery.<br/><br/>Cannot be used as a standalone operator. | `is_quote_status` (if `true`) |
+| is:reply | PowerTrack<br/><br/>Search | Deliver only replies that match a rule.<br/><br/>It can also be negated (`-is:reply`) to exclude delivery of replies that match the specified rule.<br/><br/>With PowerTrack, this operator matches on:<br/><br/>* Replies to an original Post<br/>* Replies in quoted Posts<br/>* Replies in Retweets<br/><br/>  <br/>When used with the Search API, this operator matches on replies to an original Post, but excludes replies in quoted Tweets and replies in Retweets.<br/><br/>You can use this operators in conjunction with `is:retweet` and `is:quote` to only deliver replies to original Posts.<br/><br/>Cannot be used as a standalone operator with the Search API.<br/><br/>**Note**: with Premium, this operator is not available in Sandbox dev environments. | Reply elements, e.g. `in_reply_to_status_id` |
+| is:retweet | PowerTrack<br/><br/>Search | Deliver only explicit Retweets that match a rule.<br/><br/>It can also be negated (`-is:retweet`) to exclude Retweets that match a rule from delivery and only original content is delivered.<br/><br/>This operator looks only for true Retweets (i.e. Retweets posted using the Retweet button). Quoted Tweets and modified Posts which do not use X's Retweet functionality will not be matched by this operator.<br/><br/>Cannot be used as a standalone operator. | Retweet elements, e.g. `retweeted_status` |
+| is:verified | PowerTrack<br/><br/>Search | Deliver only Posts where the author is verified by X.<br/><br/>It can also be negated to exclude Posts where the author is verified.<br/><br/>Cannot be used as a standalone operator. | `user.verified` |
+| keyword | PowerTrack<br/><br/>Search | Matches a keyword within the body of a Post.<br/><br/>This is a tokenized match, meaning that your keyword string will be matched against the tokenized text of the Post body. Tokenization is based on punctuation, symbol/emoji, and separator Unicode basic plane characters. For example, a Post with the text “I like coca-cola” would be split into the following tokens: `I`, `like`, `coca`, `cola`. These tokens would then be compared to the keyword string used in your rule. To match strings containing punctuation (e.g. coca-cola), symbol, or separator characters, you must use an [exact phrase match](#exact-match) operator. | `text` |
+| lang: | PowerTrack<br/><br/>Search | Matches Posts that have been classified by X as being of a particular language (if, and only if, the post has been classified). Each Post will be classified with only one language, so AND’ing together multiple languages will yield no results.<br/><br/>**Note: **if no language classification can be made the provided result is `und` (for undefined).<br/><br/>This operator will only match against supported languages. Providing any other value (including `und`) will result in the operator being ignored (in other words, Posts will not be filtered by this operator). The list below represents the currently supported languages and their corresponding BCP 47 language identifier:<br/><br/>`am` Amharic<br/><br/>`hu` Hungarian<br/><br/>`pt` Portuguese<br/><br/>`ar` Arabic<br/><br/>`is` Icelandic<br/><br/>`ro` Romanian<br/><br/>`hy` Armenian<br/><br/>`in` Indonesian<br/><br/>`ru` Russian<br/><br/>`bn` Bengali<br/><br/>`it` Italian<br/><br/>`sr` Serbian<br/><br/>`bg` Bulgarian<br/><br/>`ja` Japanese<br/><br/>`sd` Sindhi<br/><br/>`my` Burmese<br/><br/>`kn` Kannada<br/><br/>`si` Sinhala<br/><br/>`zh` Chinese<br/><br/>`km` Khmer<br/><br/>`sk` Slovak<br/><br/>`cs` Czech<br/><br/>`ko` Korean<br/><br/>`sl` Slovenian<br/><br/>`da` Danish<br/><br/>`lo` Lao<br/><br/>`ckb` Sorani Kurdish<br/><br/>`nl` Dutch<br/><br/>`lv` Latvian<br/><br/>`es` Spanish<br/><br/>`en` English<br/><br/>`lt` Lithuanian<br/><br/>`sv` Swedish<br/><br/>`et` Estonian<br/><br/>`ml` Malayalam<br/><br/>`tl` Tagalog<br/><br/>`fi` Finnish<br/><br/>`dv` Maldivian<br/><br/>`ta` Tamil<br/><br/>`fr` French<br/><br/>`mr` Marathi<br/><br/>`te` Telugu<br/><br/>`ka` Georgian<br/><br/>`ne` Nepali<br/><br/>`th` Thai<br/><br/>`de` German<br/><br/>`no` Norwegian<br/><br/>`bo` Tibetan<br/><br/>`el` Greek<br/><br/>`or` Oriya<br/><br/>`tr` Turkish<br/><br/>`gu` Gujarati<br/><br/>`pa` Panjabi<br/><br/>`uk` Ukrainian<br/><br/>`ht` Haitian<br/><br/>`ps` Pashto<br/><br/>`ur` Urdu<br/><br/>`iw` Hebrew<br/><br/>`fa` Persian<br/><br/>`ug` Uyghur<br/><br/>`hi` Hindi<br/><br/>`pl` Polish<br/><br/>`vi` Vietnamese<br/><br/>`cy` Welsh | `lang` when value is not `und` |
+| listed_count: | PowerTrack | _Available alias_: user\_in\_lists_count:<br/><br/>Matches Posts when the author has been listed on X a number of times falls within the given range.<br/><br/>* A single number (e.g. `listed_count:42`) will match any number equal to or greater than the value specified.<br/>* A range (e.g. `listed_count:42..1337`) will match any number in the given range. | `user.listed_count` |
+| place_country: | PowerTrack<br/><br/>Search | Matches Posts where the country code associated with a tagged [place/location](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary#native-enriched-geo-objects) matches the given [ISO alpha-2 character code](http://en.wikipedia.org/wiki/ISO_3166-1_alpha-2).<br/><br/>**Note:** operators matching on place (Post geo) will only include matches from original Posts. Retweets do not contain any place data. | `place` (original Posts only) |
+| place: | PowerTrack<br/><br/>Search | Matches Posts tagged with specified location or [X place ID](https://developer.x.com/en/docs/x-api/v1/geo/places-near-location/api-reference/get-geo-search). Multi-word place names should be enclosed in quotes (e.g. `place:"San Francisco"`)<br/><br/>**Note:** operators matching on place (Post geo) will only include matches from original posts. Retweets do not contain any place data. | `place` (original Posts only) |
+| point_radius: | PowerTrack<br/><br/>Search | **Note:** operators matching on place (Post geo) will only include matches from original posts. Retweets do not contain any place data. | `place` (original posts only) |
+| profile\_bounding\_box:\[west\_long south\_lat east\_long north\_lat\] | PowerTrack | Matches against the user's exact Location (long, lat) in the [Profile Geo enrichment](/x-api/enterprise-gnip-2.0/fundamentals/data-enrichments) where the Place is fully contained within the defined region.<br/><br/>* west\_long south\_lat represent the southwest corner of the bounding box where west-long is the longitude of that point, and south_lat is the latitude.<br/>* east\_long and north\_lat represent the northeast corner of the bounding box, where east\_long is the longitude of that point, and north\_lat is the latitude.<br/>* Width and height of the bounding box must be less than 25mi<br/>* Longitude is in the range of ±180<br/>* Latitude is in the range of ±90<br/>* All coordinates are in decimal degrees.<br/>* Rule arguments are contained within brackets, space delimited.<br/><br/>**Note:** operators matching on place (Post geo) will only include matches from original posts. Retweets do not contain any place data. | `user.derived.locations.geo.coordinates` |
+| profile_country: | PowerTrack<br/><br/>Search | Exact match on the country code from the [Profile Geo enrichment](/x-api/enterprise-gnip-2.0/fundamentals/data-enrichments).<br/><br/>Uses a normalized set of two-letter country codes, based on [ISO-3166-1-alpha-2 specification](http://en.wikipedia.org/wiki/ISO_3166-1_alpha-2).<br/><br/>To be concise, this operator is provided in lieu of an operator for the country field from the address object.<br/><br/>**Note:** operators matching on place (Post geo) will only include matches from original posts. Retweets do not contain any place data. | `user.derived.locations.country_code` |
+| profile_locality: | PowerTrack<br/><br/>Search | Exact match on the Locality field from the [Profile Geo enrichment](/x-api/enterprise-gnip-2.0/fundamentals/data-enrichments).<br/><br/>This is an exact full string match.<br/><br/>It is not necessary to escape characters with a backslash. For example, if matching something with a slash, use `one/two`.<br/><br/>Use double quotes to match substrings that contain whitespace or punctuation, e.g. `profile_locality:"Lower East Side"`. | `user.derived.locations.locality` |
+| profile\_point\_radius:\[lon lat radius\] | PowerTrack | Matches against the Exact Location (x,y) of the user's [Profile Geo enrichment](/x-api/enterprise-gnip-2.0/fundamentals/data-enrichments).<br/><br/>* Units of radius supported are miles (mi) and kilometers (km).<br/>* Radius must be less than 25mi.<br/>* Longitude is in the range of ±180<br/>* Latitude is in the range of ±90<br/>* All coordinates are in decimal degrees.<br/>* Rule arguments are contained within brackets, space delimited.<br/><br/>**Note:** operators matching on place (Post geo) will only include matches from original posts. Retweets do not contain any place data. | `user.derived.locations.geo` |
+| profile_region: | PowerTrack<br/><br/>Search | Exact match on the Region field from the [Profile Geo enrichment](/x-api/enterprise-gnip-2.0/fundamentals/data-enrichments).<br/><br/>This is an exact full string match.<br/><br/>It is not necessary to escape characters with a backslash. For example, if matching something with a slash, use `one/two`.<br/><br/>Use double quotes to match substrings that contain whitespace or punctuation, e.g. `profile_locality:"New York"`. | `user.derived.locations.region` |
+| profile_subregion: | PowerTrack | Exact match on the Subregion field from the [Profile Geo enrichment](/x-api/enterprise-gnip-2.0/fundamentals/data-enrichments).<br/><br/>This is an exact full string match.<br/><br/>It is not necessary to escape characters with a backslash. For example, if matching something with a slash, use `one/two`.<br/><br/>Use double quotes to match substrings that contain whitespace or punctuation, e.g. `profile_locality:"Kings County"`. | `user.derived.locations.sub_region` |
+| "keyword1 keyword2"~N | PowerTrack<br/><br/>Search | Commonly referred to as a proximity operator, this matches a Post where the keywords are no more than N tokens from each other.<br/><br/>If the keywords are in the opposite order, they can not be more than N-2 tokens from each other.<br/><br/>Can have any number of keywords in quotes.<br/><br/>N cannot be greater than 6. | `text` |
+| retweets\_of\_status_id: | PowerTrack | _Available alias_: retweets\_of\_tweet_id:<br/><br/>Deliver only explicit Retweets of the specified original Post. | `retweeted_status.id`, `retweeted_status.id_str` |
+| retweets_of: | PowerTrack<br/><br/>Search | _Available alias_: retweets\_of\_user:<br/><br/>Matches any Post that are Retweets of the given user. The value can be either the username (excluding the `@` character) or the user’s numeric ID or (obtained for example via the [GET users/lookup](https://developer.x.com/en/docs/x-api/v1/accounts-and-users/follow-search-get-users/api-reference/get-users-lookup) endpoint). | `retweeted_status.id` (if present) |
+| sample: | PowerTrack | Returns a random percent sample of Posts that match a rule rather than the entire set of Posts. The percent value must be represented by an integer between 1 and 100.<br/><br/>This operator applies to the entire rule and requires all OR'd terms to be grouped.<br/><br/>**Note:** the sample operator first reduces the scope of the firehose to X%, then the rule/filter is applied to that sampled subset. If you are using, for example, `sample:10`, each Post has a 10% chance of being in the sample. <br/><br/>**Note:** the sampling is deterministic, and you will get the same data sample in realtime as you would if you pulled the data historically. |     |
+| source: | PowerTrack | Matches any Post generated by the given source application. The value must be either the name of the application or the application’s URL.<br/><br/>Cannot be used as a standalone operator. | `source` |
+| statuses_count: | PowerTrack | _Available alias_: tweets_count:<br/><br/>Matches Posts when the author has posted a number of statuses that falls within the given range.<br/><br/>* A single number (e.g. `statuses_count:42`) will match any number equal to or greater than the value specified.<br/>* A range (e.g. `statuses_count:42..1337`) will match any number in the given range. | `user``.statuses_count` |
+| to: | PowerTrack<br/><br/>Search | Matches any Post that is in reply to a particular user. The value can be either the username (excluding the `@` character) or the user’s numeric ID or (obtained for example via the [GET users/lookup](https://developer.x.com/en/docs/x-api/v1/accounts-and-users/follow-search-get-users/api-reference/get-users-lookup) endpoint). | `text` |
+| url: | PowerTrack<br/><br/>Search | Performs a tokenized match on the expanded URLs of a Post. Tokens and phrases containing punctuation or special characters should be double-quoted (e.g. `url:"/developer"`).<br/><br/>While generally not recommended, the operator can also match on a specific protocol, enclosed in double-quotes (e.g. `url:"https://developer.twitter.com"`). | `entities.urls.expanded_url` |
+| url_contains: | PowerTrack | Performs a keyword/phrase match on the (new) [expanded URL title metadata enrichment](/x-api/enterprise-gnip-2.0/fundamentals/data-enrichments). | `entities.urls.expanded_url` |
+| url_description: | PowerTrack | _Available alias_: within\_url\_description:<br/><br/>Performs a keyword/phrase match on the (new) [expanded page description metadata enrichment](/x-api/enterprise-gnip-2.0/fundamentals/data-enrichments). | `entities.urls.unwound.description` |
+| url_title: | PowerTrack | _Available alias_: within\_url\_title:<br/><br/>Performs a keyword/phrase match on the (new) [expanded URL title metadata enrichment](/x-api/enterprise-gnip-2.0/fundamentals/data-enrichments). | `entities.urls.title` |

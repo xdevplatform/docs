@@ -1,0 +1,278 @@
+---
+title: "Data enrichments: Enterprise"
+---
+
+
+## Introduction
+
+`Enterprise`
+
+Enterprise enrichments are additive metadata included in the response payload of some of the data APIs. They are available in paid subscription plans only.
+
+The table below offers a brief description of each enrichment:
+
+| Enrichment: | Description: |
+| --- | --- |
+| Expanded and Enhanced URLs | Automatically expands shortened URLs (e.g., bitly) that are included in the body of a Post and provides HTML Title and Description metadata from the destination page. |
+| Matching rules object | Indicates which rule or rules matched the Posts received. The object returns rule tag and rule ID in the response object. |
+| Poll metadata | Notes the presence of the poll in a Post, includes the list of poll choices, and includes both the poll duration and expiration time. |
+| Profile geo | Derived user profile location data including the \[longitude, latitude\] coordinates (where possible) and related place metadata. |
+
+
+### Expanded and Enhanced URLs
+
+The Expanded and Enhanced URL enrichment automatically expands shortened URLs that are included in the body of a Post, and includes the resulting URL as metadata within the payload. In addition, this enrichment also provides HTML page metadata from the `title` and `description` of the destination page.
+
+**Important Details:**
+
+* To resolve a shortened link, our system sends HTTP HEAD requests to the URL provided and follows any redirects until it arrives at the final URL. This final URL (NOT the content of the page itself) is then included in the response payload.
+
+* The URL enrichment does add between 5-10 seconds latency to realtime streams
+* For requests made to the Full Archive Search API, expanded URL enrichment data is only available for Posts 13 months old or newer.
+
+* The URL enrichment is not available for Post links (including quote Tweets), Moments links, and profile links that are included within a Post. 
+     
+
+#### Post payload
+
+The Expanded and Enhanced URL enrichment can be found within the `entities` object of the Post payload - specifically in the `entitites.urls.unwound` object. It provides the following fields of metadata:
+
+* Expanded URL - `unwound.url`
+* Expanded HTTP Status - `unwound.status`
+* Expanded URL HTML title - 300 character limit - `unwound.title`
+* Expanded URL HTML description - 1000 character limit - `unwound.description`
+
+
+**This is an example of an [entities object](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary#x-entities) with the URL enrichment:**
+```
+"entities": {
+    "hashtags": [
+
+    ],
+    "urls": [
+      {
+        "url": "https:\/\/t.co\/HkTkwFq8UT",
+        "expanded_url": "http:\/\/bit.ly\/2wYTb9y",
+        "display_url": "bit.ly\/2wYTb9y",
+        "unwound": {
+          "url": "https:\/\/www.forbes.com\/sites\/laurencebradford\/2016\/12\/08\/11-websites-to-learn-to-code-for-free-in-2017\/",
+          "status": 200,
+          "title": "11 Websites To Learn To Code For Free In 2017",
+          "description": "It\u2019s totally possible to learn to code for free...but what are the best resources to achieve that? Here are 11 websites where you can get started."
+        },
+        "indices": [
+          10,
+          33
+        ]
+      }
+    ],
+    "user_mentions": [
+
+    ],
+    "symbols": [
+
+    ]
+  },
+  ```
+
+
+
+**This is an example of an entities object containing a Post link that is not enriched:
+**
+
+```
+"entities": {
+  "urls": [{
+    "url": "https://t.co/SywNbZdDmb",
+    "expanded_url": "https://twitter.com/TwitterDev/status/1050118621198921728",
+    "display_url": "twitter.com/TwitterDev/s…",
+     "indices": [
+        142,
+        165
+     ]
+   }
+  ]
+}
+```
+
+#### Filtering operators
+
+The following operators will filter and provide a tokenized match on the related fields of URL metadata:
+
+**url:**
+
+* Example: “url:tennis”
+* Tokenized match on any Expanded URL that includes the word tennis
+* Could also be used as a filter to include or exclude links from a specific website using something like “url:npr.org”
+
+**url_title:**
+
+* Example: “url_title:tennis”
+* Tokenized match on any Expanded URL HTML title that includes the word tennis
+* Matches on the HTML title data included in the payload, which is limited to 300 characters.
+
+**url_description:**
+
+* Example: “url_description:tennis”
+* Tokenized match on any Expanded URL HTML description that includes the word tennis
+* Matches on the HTML description included in the payload, which is limited to 1000 characters.
+     
+
+#### HTTP Status Codes
+
+The expanded URL enrichment also provides the HTTP status code for the final URL we are attempting to unwind. In normal cases, this will be a 200 value. Other 400-series values indicate problems with resolving the URL.
+
+Various status codes may be returned when attempting to unwind a URL. During the process of unwinding a URL, if we get a redirect, we will follow them indefinitely until we either:
+
+* Hit a 200 series code (success)
+* Hit a non-redirect series code (failures)
+* Timeout because the final URL could not be resolved in a reasonable amount of time (returns a 408 - timeout)
+* Hit an exception of some sort
+     
+
+If an exception is hit, we use the following mapping between reasons and status codes returned:
+
+| Reason | Status Code Returned |
+| --- | --- |
+| SSL Exceptions | 403 (Forbidden) |
+| Unwinding not allowed by URL | 405 |
+| Socket Timeout | 408 (Timeout) |
+| Unknown Host Exception | 404 (Not Found) |
+| Unsupported Operation | 404 (Not Found) |
+| Connect Exception | 404 (Not Found) |
+| Illegal Argument | 400 (Bad Request) |
+| Everything else | 400 (Bad Request) |
+
+
+### Matching rules
+
+The matching rules enrichment is an object of metadata that indicates which rule or rules matched the Posts received. This is most commonly used with the PowerTrack stream.
+
+Matching will be done via exact match on the terms contained in a rule, scanning the content of the activity with and without punctuation. Matching is not case sensitive. When the content is found to contain all terms defined in the rule, there will be a root-level a matching_rules object indicating the rule(s) that led to the match.
+
+**PowerTrack**
+
+Posts delivered through PowerTrack (realtime, Replay, and Historical) will contain the matching_rules object as follows:
+
+```
+"matching_rules": [{
+        "tag": null,
+        "id": 907728589029646336,
+        "id_str": "907728589029646336"
+    }]
+    ```
+
+
+
+In PowerTrack, the `matching_rules` object reflects _all_ rules that matched the given result. In other words, if more than one rule matches a specific Post, it will only be delivered once, but the `matching_rules` element will contain all the rules that matched.
+
+
+### Poll metadata
+
+Poll metadata is a free enrichment available across all products (Realtime & Historical APIs) in enriched native format payloads. The metadata notes the presence of the poll in a Post, includes the list of poll choices, and includes both the poll duration and expiration time. This enrichment makes it easy to acknowledge the presence of a poll and enables proper rendering of a poll Post for display.
+
+##### Important Details:
+
+* Available across all enterprise APIs (PowerTrack, Replay, Search, Historical PowerTrack)
+    * _Note:_ For Replay and Historical PowerTrack, this metadata was first made available on 02/22/17 - see documented [enrichment availability](https://developer.x.com/en/docs/x-api/enterprise/historical-powertrack-api/guides/hpt-timeline).
+* Does not include vote information or poll results
+* Does not currently have filter/operator support
+* Available in **enriched native format** only
+    * Enriched native format is a user-controlled setting that can be changed at any time through the Console: _Select a Product (PowerTrack, Replay, Search) > Settings tab > Output Format (Leave data in its original format)_
+
+#### Post Payload
+
+Poll Post will contain the following metadata in the “entities.polls” object in the payload:
+
+* An “options” array with up to four options that include the position (1-4) and option text
+* Poll expiration date
+* Poll duration
+
+See the sample payload below for further reference.
+
+#### Sample Payload
+
+Below is a snippet of the enriched native format payload highlighting the added poll metadata:
+```json
+"entities":{
+          "hashtags":[],
+          "urls":[],
+          "user_mentions":[],
+          "symbols":[],
+          "polls":[
+             {
+                "options":[
+                   {
+                      "position":1,
+                      "text":"The better answer"
+                   },
+                   {
+                      "position":2,
+                      "text":"The best answer"
+                   }
+                ],
+                "end_datetime":"Sat Feb 04 15:33:11 +0000 2017",
+                "duration_minutes":1440
+             }
+          ]
+       },
+```
+
+### Profile Geo
+
+#### Introduction
+
+Many X user profiles include public location information provided by the user. This data is returned as a normal string in user.location (see [User object data dictionary](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary#native-enriched-user-object)). The Profile Geo Enrichment adds structured geodata relevant to the user.location value by geocoding and normalizing location strings where possible. Both latitude/longitude coordinates and related place metadata are added to user.derived.locations _only_ when included as part of the Post payload in enterprise API products. This data is available when using [the enriched native format](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary) and can be filtered with a combination of [PowerTrack rules](/x-api/enterprise-gnip-2.0/fundamentals/rules-filtering#enterprise-operators).
+<Note>
+**Note:** Some of the supporting geodata used to create the Profile Geo enrichment comes from GeoNames.org and is used by X under the [Creative Commons Attribution 3.0 License](https://creativecommons.org/licenses/by/3.0/us/legalcode).
+</Note>
+Profile Geo data will be included in X's PowerTrack, Replay, Volume Stream, Search, and Historical PowerTrack APIs.
+
+#### Profile Geo Data
+
+| Enriched native field name | Example value | Description |
+| --- | --- | --- |
+| user.derived.locations.country | United States | The country location for where the user that created the Post is from. |
+| user.derived.locations.country_code | US  | A two-letter ISO-3166 country code that corresponds to the country location for where the user that created the Post is from. |
+| user.derived.locations.locality | Birmingham | The locality location (generally city) for where the user that created the Post is from. |
+| user.derived.locations.region | Alabama | The region location (generally state/province) for where the user that created the Post is from. |
+| user.derived.locations.sub_region | Jefferson County | The sub-region location (generally county) for where the user that created the Post is from. |
+| user.derived.locations.full_name | Birmingham, Alabama, United States | The full name (excluding sub-region) for where the user that created the Post is from. |
+| User.derived.locations.geo | See Below | An array that includes a lat/long value for a coordinate that corresponds to the lowers granularity location for where the user that created the Post is from. |
+
+The Historical PowerTrack, Search, and PowerTrack APIs supports filtering based on Profile Geo data. See the appropriate product documentation for more details on what operators are available for filtering on Profile Geo data.
+
+#### Sample Payload
+```
+{
+    "user": {
+        "derived": {
+            "locations": \[
+                {
+                    "country": "United States",
+                    "country_code": "US",
+                    "locality": "Birmingham",
+                    "region": "Alabama",
+                    "sub_region": "Jefferson County",
+                    "full_name": "Birmingham, Alabama, United States",
+                    "geo": {
+                        "coordinates": \[
+                            -86.80249,
+                            33.52066
+                        \],
+                        "type": "point"
+                    }
+                }
+            \]
+        }
+    }
+}
+```
+#### Limitations
+
+* The Profile Geo enrichment attempts to determine the best choice for the geographic place described in the profile location string. The result may not be accurate in all cases due to factors such as multiple places with similar names or ambiguous names.
+* If a value is not provided in a user’s profile location field (actor.location), we will not attempt to make a classification.
+* Precision Level: If a Profile Geo Enrichment can only be determined with confidence at the country or region level, lower-level geographies such as subRegion and locality will be omitted from the payload.
+* The Profile Geo enrichment provides lat/long coordinates (a single point) that corresponds to the Precision Level of the enrichment’s results. These coordinates represent the geographic center of the enrichment location results. For example, if the Precision Level is at the Country level, then those coordinates are set to the geographic center of that Country.
+* The PowerTrack operators provided for address properties (locality/region/country/country code) are intentionally granular to allow for many rule combinations. When attempting to target a specific location that shares a name with another location, consider combining address rules. For instance, the following would avoid matches for “San Francisco, Philippines”: profile\_locality:”San Francisco” profile\_region:California When building rules that target individual Profile Geo fields, keep in mind that each increased level of granularity will limit the results you see. In some cases when attempting to look at data from a city, you may wish to only rely on a region rule where the region offers significant overlap with the city, e.g. the city of Zurich, Switzerland can be effectively targeted along with surrounding areas with profile_region:”Zurich”.
+* Use with Native Geo Posts: The Profile Geo enrichment provides an alternative type of geography for a Post, different from the native geo value in the payload. These two types of geography can be combined together to capture all of the possible posts related to a given area (based on available geodata), though they are not conceptually equivalent.

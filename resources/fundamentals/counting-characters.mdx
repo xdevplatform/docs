@@ -1,0 +1,82 @@
+---
+title: Counting characters
+icon: text-size
+---
+
+## Counting characters when composing Tweets
+
+This page describes how characters are treated when composing Tweets and across the X API. For more information on the implementation, X provides an Open Source [twitter-text](http://github.com/twitter/twitter-text) library that can be found on [GitHub](https://github.com/twitter).
+
+### Background
+
+X began as an SMS text-based service. This limited the original Tweet length to 140 characters (which was partly driven by the 160 character limit of SMS, with 20 characters reserved for commands and usernames). Over time as X evolved, the maximum Tweet length grew to 280 characters - still short and brief, but enabling more expression. 
+
+### Definition of a Character
+
+In most cases, the text content of a Tweet can contain up to 280 characters or [Unicode](https://unicode.org/) glyphs. Some glyphs will count as more than one character. 
+
+We refer to whether a glyph counts as one or more characters as its weight. The exact definition of which characters have weights greater than one character is found in the [configuration file](https://github.com/twitter/twitter-text/tree/master/config) for the [twitter-text Tweet parsing library](https://github.com/twitter/twitter-text).
+
+The current version of the configuration file defines a default two-character weight and four ranges of [Unicode code points](https://unicode.org/charts/About.html) that are weighted differently. Currently code points in these ranges are all counted as a single character.
+
+- The first range covers characters across the Latin-1 code pages. (U+0000 - U+10FF).
+- The second range is general punctuation up to and including the Zero Width Joiner (used to combine emoji and other glyphs) (U+2000-U+200D).
+- The third range is general punctuation excluding U+200E and U+200F, which are Unicode directional marks (U+2010-U+201F).
+- The final range covers quotation marks (U+2032-U+2037).
+
+Examples of Tweet text and lengths calculated by the twitter-text library can be found in the library's [validate.yml](https://github.com/twitter/twitter-text/blob/master/conformance/validate.yml) test configuration file.
+
+#### Examples
+
+| Displayed character | Length | Description | Unicode sequence |
+|---------------------|--------|-------------|------------------|
+| a | 1 | Latin Small Letter a | U+0061 |
+| á | 1 | Latin Small Letter A with acute  | U+00E1 |
+| ӑ | 1 | Cyrillic Small Letter A with breve | U+04D1 |
+| Ồ | 1 | Latin Small Letter o with circumflex and acute | U+1ED2 |
+
+### Emojis
+
+Emoji supported by [twemoji](https://twemoji.twitter.com/) always count as two characters, regardless of combining modifiers. This includes emoji which have been modified by [Fitzpatrick skin tone](https://emojipedia.org/modifiers/) or [gender modifiers](https://blog.emojipedia.org/unicode-and-the-emoji-gender-gap/), even if they are composed of significantly more Unicode code points. Emoji weight is defined by a regular expression in twitter-text that looks for sequences of standard emoji combined with one or more Unicode Zero Width Joiners (U+200D).
+
+#### Examples
+
+| Displayed Emoji | Length | Description | Unicode sequence |
+|-----------------|--------|-------------|------------------|
+| 👾 | 2 | Default length of known emoji | -- |
+| 🙋🏽 | 2 | Emoji with skin tone modifier | 🙋 U+1F64B, 🏽 U+1F3FD |
+| 👨‍🎤 | 2 | Emoji sequence using combining glyph (zero-width joiner) | [👨 U+1F468](https://emojipedia.org/emoji/%F0%9F%91%A8/), [U+200D](https://emojipedia.org/emoji/%E2%80%8D/), [🎤 U+1F3A4](https://emojipedia.org/emoji/%F0%9F%8E%A4/) |
+| 👨‍👩‍👧‍👦 | 2 | Emoji sequence using multiple combining glyphs (zero-width joiners) | [👨 U+1F468](https://emojipedia.org/emoji/%F0%9F%91%A8/), [U+200D](https://emojipedia.org/emoji/%E2%80%8D/), [👩 U+1F469](https://emojipedia.org/emoji/%F0%9F%91%A9/), [U+200D](https://emojipedia.org/emoji/%E2%80%8D/), [👧 U+1F467](https://emojipedia.org/emoji/%F0%9F%91%A7/), [U+200D](https://emojipedia.org/emoji/%E2%80%8D/), [👦 U+1F466](https://emojipedia.org/emoji/%F0%9F%91%A6/) |
+
+### Chinese / Japanese / Korean Glyphs
+
+Glyphs used in CJK (Chinese / Japanese / Korean) languages also count as two characters.  Therefore, a Tweet composed of only CJK text can only have a maximum of 140 of these types of glyphs.
+
+### Entity Objects
+
+Tweets can contain [Entity Objects](https://developer.twitter.com/content/developer-twitter/en/docs/tweets/data-dictionary/overview/entities-object), some of which impact the length of a Tweet.
+
+URLs: [All URLs are wrapped in t.co links](https://developer.twitter.com/content/developer-twitter/en/docs/basics/tco). This means a URL's length is defined by the `transformedURLLength` parameter in the [twitter-text configuration file](https://github.com/twitter/twitter-text/tree/master/config). The current length of a URL in a Tweet is 23 characters, even if the length of the URL would normally be shorter.
+
+Replies: @names that auto-populate at the start of a reply Tweet will not count towards the character limit.  New non-reply Tweets starting with a @mention will count, as will @mentions added explicitly by the user in the body of the Tweet.
+
+Media: media attached to a Tweet, represented as a pic.twitter.com URL, if posted from an official client, counts for 0 characters.
+
+For more on Entity Objects, see the [developer documentation](https://developer.twitter.com/content/developer-twitter/en/docs/tweets/data-dictionary/overview/entities-object).
+
+### X Character Encoding
+
+X API endpoints only accept UTF-8 encoded text. All other encodings must be converted to UTF-8 before sending the the text to the API.
+
+X counts the length of a Tweet using the Normalization Form C (NFC) version of the text. 
+
+As an example: the word "café". There are two byte sequences that visually look and read the same, but use a different number of bytes:
+
+|     | | |
+|-----|---|---|
+| café | 0x63 0x61 0x66 0xC3 0xA9 | Using the "é" character, the "composed character". |
+| café | 0x63 0x61 0x66 0x65 0xCC 0x81 | Using the combining diacritical, which overlaps the "e" |
+
+Normalization Form C favors the use of a fully combined character (0xC3 0xA9 from the café example) over the long-form version (0x65 0xCC 0x81). 
+
+X counts the number of code points in the text, rather than UTF-8 bytes. The 0xC3 0xA9 from the café example is one code point (U+00E9) that is encoded as two bytes in UTF-8, whereas 0x65 0xCC 0x81 is two code points encoded as three bytes.

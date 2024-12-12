@@ -1,0 +1,65 @@
+---
+title: Rate limiting
+---
+
+The Advertiser API is rate limited similarly to REST API v1.1, as documented here: [REST API Rate Limiting in v1.1](https://developer.x.com/content/developer-twitter/en/docs/basics/rate-limits). Unlike REST API v1.1, there is no programmatic index of the limits per endpoint. The endpoint rate limits and reset windows are communicated via HTTP response headers.  All rate limiting in the Ads API utilizes OAuth 1.0A.
+
+**User Level and Ad Account Level Limits
+**
+
+There are two types of rate limits: user token level and ad account level. A subset of endpoints are enabled to use ad account level rate limiting. A user token is the [OAuth access token](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow) you use to authenticate and call the Ads API. Each user token can have access to one or more ad accounts.
+
+Developers should utilize the ad account level rate limit when it is returned in response headers and only utilize user level limit when the ad account limit is not found.
+
+User level rate limits are expressed via these headers: **x-rate-limit-limit**, **x-rate-limit-remaining** and **x-rate-limit-reset**
+
+For endpoints with ad account rate limiting enabled, the rate limits are expressed via these headers: **x-account-rate-limit-limit**, **x-account-rate-limit-remaining** and **x-account-rate-limit-reset**.
+
+The ad account level rate limits are provided only for GET endpoints to enable applications to synchronize entity data (such as campaign or line item objects) from a single user token accessing multiple ad accounts. Write actions are not guaranteed to use the same ad account level rate limits.
+
+For ad account level rate limited endpoints, the user level rate limit is set at a high value representing a global quota for your entire application. When available the ad account level rate limit should take precedence in controlling your request volume.
+
+**Best Practices**
+
+1) Save a timestamp in your database with the last synced timestamp, and when requesting data where applicable request data with sort\_by=updated\_at-desc option to enable you to stop your syncing process after reaching data older than your last synced timestamp. This will avoid syncing the same data redundantly.
+
+2) Request multiple entities in a single request: Some endpoints allow you to specify a comma-separated list of values, to retrieve multiple pieces of similar data. This can reduce the overall number of calls you make and thus leverage rate limit more efficiently.
+
+3) Request maximum “count” in your requests: Some endpoints such as [GET accounts/:account\_id/targeting\_criteria](/x-ads-api/campaign-management#targeting-criteria) are strongly recommended to call with maximum count value to return 1000 objects instead of the default of 200.
+
+**Analytics Syncing**
+
+See the [Analytics Rate Limiting Guide](/x-ads-api/analytics#best-practices) for more information about analytics endpoint rate limits.
+
+**FAQs**
+
+_Is it possible to increase rate limits for a particular ad account or our application?_
+
+We generally cannot raise rate limits and they are set to support the largest of ad accounts. Please implement the Best Practices listed in this document as a first step, and if rate limits are still impacting your ability to scale or achieve business objectives please reach out to your X Ads API contacts with complete details about the use case and requests involved.
+
+**Scopes of Rate Limiting**
+
+### Scopes for this doc
+
+* Category: all endpoints that fall into the given category are rate limited from a single allocated limit per window.
+* Endpoint: each endpoint has its own distinct allocated limit per window.
+
+**Ads API Rate Limit Chart**
+
+### Ads API Rate Limits
+
+| Endpoint Type | Scope by Endpoint or Category | Rate Limit per 1-minute window |
+| --- | --- | --- |
+| Writes (POST, PUT, DELETE) | Category | 450 |
+| Audience | Endpoint | 1500 |
+
+| Endpoint Type | Scope by Endpoint or Category | Rate Limit per 15-minute window |
+| --- | --- | --- |
+| Analytics (synchronous) | Category | 250 |
+| Core Entity Reads (Line Items, Campaigns, etc)<br/><br/>Other Account Reads (Other GET endpoints with :account_id) | Endpoint (Ad Account Level)<br/><br/>Endpoint (Partial Ad Account Level) | 10,000<br/><br/>2000 |
+| Targeting Criteria (besides below) | Category | 400 |
+| Targeting Criteria (tv\_markets, tv\_shows) | Endpoint | 2000 |
+| Audience Insights | Category | 400 |
+| Keyword Insights | Category | 500 |
+| Global Reads (GET endpoints without :account_id) | Endpoint | 5   |
+| Conversions | Endpoint | 60,000 |

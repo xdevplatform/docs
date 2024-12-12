@@ -1,0 +1,107 @@
+---
+title: Making Authenticated Requests
+---
+Accessing the Twitter Ads API endpoints requires your application to send authenticated web requests securely using TLS to https://ads-api.x.com.
+
+The following sections will provide an overview of making authenticated API requests, setting up [Twurl](https://github.com/twitter/twurl#getting-started) to interact with the API, and extending your application to support OAuth 1.0a and make requests against your Ads account.
+
+**Requirements**
+
+Before making authenticated requests to the Twitter Ads API, you will need:
+
+* an [approved developer account](/resources/fundamentals/developer-portal)
+* an application that has been [approved for Ads API](/x-ads-api/introduction) access
+* API key and secret obtained through the [app management UI](/resources/fundamentals/developer-apps) and
+* [access tokens](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow) for a user with access to a Twitter Ads account
+
+**Using the API**
+
+The Advertising API is accessed on https://ads-api.x.com. The [standard REST API](https://developer.x.com/en/docs/x-api/v1/tweets/post-and-engage/overview), and the Advertising API can be used together with the same client app. The Advertising API enforces HTTPS, therefore attempts to access an endpoint with HTTP will result in an error message.
+
+The Ads API outputs JSON. All identifiers are strings and all strings are UTF-8. The Advertising API is [versioned](/x-ads-api/fundamentals/versioning) and the version is specified as the first path element of any resource URL.
+
+https://ads-api.x.com/&lt;version&gt;/accounts
+
+**HTTP verbs & typical response codes**
+
+There are four HTTP verbs used in the Ads API:
+
+* **GET** retrieves data 
+* **POST** creates new data, such as campaigns
+* **PUT** updates existing data, like line items
+* **DELETE** removes data.
+
+While deletions are permanent, deleted data can still be viewed from most GET-based methods by including an explicit `with_deleted=true` parameter when asking for the resource. Otherwise, deleted records will return a HTTP 404.
+
+A successful request will return a HTTP 200-series response along with the JSON response representing the object when creating, deleting, or updating a resource.
+
+When updating data with HTTP PUT, only the specified fields will be updated. You can un-set an optional value by specifying the parameter with an empty string. As an example, this group of parameters would unset any already specified `end_time`: `&end_time=&paused=false`.
+
+See [Error Codes & Responses](/x-ads-api/fundamentals/error-codes-and-responses) for more details on error responses.
+
+**In-line parameters**
+
+Most resource URLs feature one or more in-line parameter. Many URLs also take explicitly declared parameters on the query string or, for POST or PUT requests, in the body.
+
+In-line parameters are denoted with a pre-pended colon (”:”) in the **Resource Path** section of each resource. For example, if the account you were working on were identified as `"abc1"` and you were [retrieving the campaigns associated with an account](/x-ads-api/campaign-management#campaigns), you would access that list by using the URL `https://ads-api.x.com/6/accounts/abc1/campaigns`. By specifying the in-line `account_id` parameter described in the resource URL (`https://ads-api.x.com/6/accounts/:account_id/campaigns`), you’ve scoped the request to objects associated only with that account.
+
+**Using Access Tokens**
+
+The Twitter Ads API uses signed HTTPS requests to validate an application’s identity and also obtain the permissions granted to the end-user that the application is making API request on behalf of, represented by the user's access token. All HTTP calls to the Ads API must include an Authorization request header (using OAuth 1.0a) over the HTTPS protocol.
+
+You will need to add support to generate OAuth 1.0a Authorization request headers to your application to integrate with the Twitter Ads API. However, due to the complexity of generating signed requests, we strongly recommended that partners use an existing library that either supports the X API or implements OAuth 1.0a request handling - here is a list of [recommended OAuth libraries](/resources/fundamentals/authentication#oauth-1-0a-2) and [authentication code samples](/resources/fundamentals/authentication#oauth-1-0a-2).
+
+Note we can assist partners that encounter authentication errors when using a known library but cannot support custom OAuth implementations.
+
+**HTTP & OAuth**
+
+Like Twitter REST API v1.1, the Advertising API requires the use of both [OAuth 1.0A](/resources/fundamentals/authentication) and HTTPS. API keys can be obtained through the [app management console](/resources/fundamentals/developer-apps). Access tokens must also be used to represent the “current user.” The current user is a Twitter account with advertising capabilities.
+
+It is strongly recommended that partners use an OAuth library, rather than writing your own. We can support debugging when using a known library, but cannot if you roll your own OAuth implementation. See the [libraries](/resources/fundamentals/authentication#oauth-1-0a-2) that you can use.
+
+The API is strict with HTTP 1.1 and OAuth. Ensure that you’re [encoding reserved characters](https://tools.ietf.org/html/rfc3986#section-2.2) appropriately within URLs and POST bodies before preparing OAuth signature base strings. The Advertising API in particular uses ”:” characters when specifying time and ”,” characters when providing a collection of options. Both characters are among this reserved set:
+
+|     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |     |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| !   | #   | $   | &   | ‘   | (   | )   | *   |     | ,   | /   | :   | ;   | =   | ?   | @   | \[  | \]  |
+| %21 | %23 | %24 | %26 | %27 | %28 | %29 | %2A | %2B | %2C | %2F | %3A | %3B | %3D | %3F | %40 | %5B | %5D |
+
+**Making your first API request with Twurl**
+
+Twitter helps maintain a command-line tool, [Twurl](https://developer.x.com/en/docs/tutorials/using-twurl), that supports OAuth 1.0a authorization headers as an alternative to [cURL](https://en.wikipedia.org/wiki/CURL). Twurl provides a simple way of making authenticated API requests and exploring the Ads API before adding authentication to your application.
+
+After [installing and authorizing Twurl](https://github.com/twitter/twurl#getting-started), you can quickly generate access tokens and make authenticated requests to the Ads API.
+```
+   twurl -H "ads-api.x.com" "/5/accounts/"
+```
+Take some time to get familiar with Twurl and the API by following this [step-by-step](/x-ads-api/campaign-management#creating-a-campaign-step-by-step) tutorial for creating a campaign through the API.
+
+**Testing with Postman**
+
+For those who are not familiar with a command-line tool, we also provide a Postman collection for the Twitter Ads API endpoints.
+
+[Postman](https://www.getpostman.com/products) is one of the most popular API development tools that exist in the industry nowadays. It’s an HTTP client that has a great user interface that lets you make a complex API request easier and increases productivity.
+
+To install Postman and start using the Ads API Postman collection, please see our [set up guide](https://github.com/twitterdev/postman-twitter-ads-api#installation).
+<Button href="https://app.getpostman.com/run-collection/369a02c0adc626ff6a06#?env%5BTwitter%20Ads%20API%5D=W3sia2V5IjoiYWNjb3VudF9pZCIsInZhbHVlIjoieW91cl9hZHNfYWNjb3VudF9pZCIsImVuYWJsZWQiOnRydWV9LHsia2V5IjoidmVyc2lvbiIsInZhbHVlIjoiNiIsImVuYWJsZWQiOnRydWV9LHsia2V5IjoiY29uc3VtZXJfa2V5IiwidmFsdWUiOiJ5b3VyX2NvbnN1bWVyX2tleSIsImVuYWJsZWQiOnRydWV9LHsia2V5IjoiY29uc3VtZXJfc2VjcmV0IiwidmFsdWUiOiJ5b3VyX2NvbnN1bWVyX3NlY3JldCIsImVuYWJsZWQiOnRydWV9LHsia2V5IjoiYWNjZXNzX3Rva2VuIiwidmFsdWUiOiJ5b3VyX2FjY2Vzc190b2tlbiIsImVuYWJsZWQiOnRydWV9LHsia2V5IjoidG9rZW5fc2VjcmV0IiwidmFsdWUiOiJ5b3VyX3Rva2VuX3NlY3JldCIsImVuYWJsZWQiOnRydWV9XQ==">
+  Run in Postman
+</Button>
+
+### Extending your application to make authenticated requests
+
+After getting familiar with making requests to the Ads API using Twurl, it is time to add support to create OAuth 1.0a authentication headers to your application.
+
+[OAuth 1.0a](/resources/fundamentals/authentication) authentication headers include information that verifies both the application’s and user's identity as well as prevents tampering with the request. Your application will need to create a new Authorization header for each API request. Many languages have open source libraries that support creating this authorization header to make API requests to Twitter.
+
+Here are some examples using C#, PHP, Ruby, and Python - [code samples](/resources/fundamentals/authentication#oauth-1-0a-2).
+
+
+**Custom Implementation**
+
+There are some scenarios that require implementing OAuth 1.0a authentication without the support of an open-source library. [Authorizing a request](/resources/fundamentals/authentication#authorizing-a-request) provides detailed instructions for implementing support for creating the Authorization header. We strongly recommend using a community-supported library.
+
+General outline:
+
+1.  Collect 7 key/value pairs for the header - starting with oauth_
+2.  Generate an [OAuth 1.0a HMAC-SHA1 signature](/resources/fundamentals/authentication#creating-a-signature) using those key/value pairs
+3.  Build the [Authorization header](/resources/fundamentals/authentication#authorizing-a-request) using the above values

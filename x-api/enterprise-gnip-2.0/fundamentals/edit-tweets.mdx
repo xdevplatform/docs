@@ -1,0 +1,109 @@
+---
+title: Edit Tweets
+---
+Enterprise endpoints have been updated to provide edited Post metadata. The _Edit Posts _feature was first introduced for testing among X employees on September 1, 2022. Starting on that date, eligible Posts were editable for 30 minutes and up to 5 times. _All objects for Posts created since September 29, 2022_ include Post edit metadata, even if the Post was never edited. Each time a Posts is edited, a new Post ID is created. A Post's edit history can be described by chaining these IDs together, starting with the original ID. Additionally, if any Post in the edit chain is deleted, all Posts in that chain are deleted as well. 
+
+These metadata details are included automatically. No request parameters are needed to include available edit history as part of the Post object. 
+
+With these new metadata, a developer can find out:
+
+* If a Post was edit eligible at the time of creation. Some Posts, such as those with polls or scheduled Posts, cannot be edited.
+* Posts are editable for 30 minutes, and can be edited up to 5 times. For editable Posts, you can see if time for editing remains and how many more edits are possible.
+* If you are viewing an edited version of a Post. In most cases, the API will return the most recent version of a Post, unless a specific past version is requested by Post ID.
+
+Three new Post attributes have been added at the root level:
+
+* **edit_history**  \- Provides all Post IDs associated with the edit history of the Post. The "initial\_tweet\_id" attribute indicates the original Post and the "edit\_tweet\_ids" attribute is an array that provides all IDs associated with its edit history. If the Post has not been edited, this array will contain a single ID.
+```
+"edit_history": {
+    "initial\_tweet\_id": "1283764123"
+    "edit\_tweet\_ids": \["1283764123"\]
+  }
+```
+* **edit_controls** \- Provides attributes that indicate when the 30-minute edit window ends and how many potential edits remain. 
+```
+"edit_controls": {  
+     "editable\_until\_ms": 1660155761384
+     "edits_remaining": 3   
+  }
+```
+* **editable** \- Indicates whether a Post was eligible for editing when created. 
+
+"editable": true
+
+Most Posts are eligible. However, the following types of Posts are not: 
+
+* Post is promoted
+* Post has a poll
+* Post is a non-self-thread reply
+* Post is a Retweet (note that Quote Tweets are eligible for edit)
+* Post is nullcast
+* Community Post
+* Superfollow Post
+* Collaborative Post
+
+**Example attributes for unedited Post**
+
+
+The JSON below highlights edit metadata that is included for a Post posted after the edit Post feature was added. This example is for a Post that has no edit history. 
+
+Note that the `"edit_tweet_ids"` array has a single ID. 
+
+```
+{
+  "created_at": "Wed Aug 16 18:29:02 +0000 2022",
+  "id": 1557433858676740098,
+  "id_str": "1557433858676740098",
+  "text": "I wonder if I will every use teh edit button",
+  "edit_history": {
+    "initial_tweet_id": "1557433858676740098",
+    "edit_tweet_ids": ["1557433858676740098"]
+  },
+  "edit_controls": {
+    "editable_until_ms": 1660155761384,
+    "edits_remaining": 5
+  },
+  "editable": true
+}
+```
+
+**Example attributes for an edited Post**
+
+The JSON below highlights edit metadata that is included for a post posted after the edit Post feature was added. This example is for a Post that has had a single edit. 
+
+Note that the `"edit_tweet_ids"` array has two IDs, one for the original Post and one for the edited update. 
+
+```
+{
+  "created_at": "Wed Aug 16 18:35:42 +0000 2022",
+  "id": 1557445923210514432,
+  "id_str": "1557445923210514432",
+  "text": "I wonder if I will ever use the edit button",
+  "edit_history": {
+    "initial_tweet_id": "1557433858676740098",
+    "edit_tweet_ids": ["1557433858676740098", "1557445923210514432"]
+  },
+  "edit_controls": {
+    "editable_until_ms": 1660155761384,
+    "edits_remaining": 4
+  },
+  "editable": true
+}
+```
+
+**Compliance support**
+
+The [Compliance Firehose](https://developer-staging.twitter.com/en/docs/twitter-api/enterprise/compliance-firehose-api/overview) and the v2 [batch compliance endpoint](https://developer.twitter.com/en/docs/twitter-api/compliance/batch-compliance) have both been updated to provide edit Post support: 
+
+A new "tweet_edit" event type has been added to the Compliance Firehose. 
+
+```
+{
+  "tweet_edit": {
+    "id": <tweetId>,
+    "initial_tweet_id": <tweetId>,
+    "edit_tweet_ids": [<tweetId1>, <tweetId2>, <tweetId3> ...],
+    "timestamp_ms": "<timestampMsStr>"
+  }
+}
+```

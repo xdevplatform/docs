@@ -1,0 +1,175 @@
+---
+title: v1 to v2 (Enterprise)
+sidebarTitle: v1 to v2 (Enterprise)
+---
+
+### PowerTrack API migration to X API v2 filtered stream
+
+Use this migration guide to understand the similarities and differences between [PowerTrack API](/x-api/enterprise-gnip-2.0/powertrack-api) and X API v2 [filtered stream](/x-api/posts/filtered-stream), and to help migrate a current PowerTrack API integration to v2 filtered stream.
+
+* **Similarities**
+    * Streaming delivery method
+    * Integration process
+    * Persistent stream connection with separate rules management endpoints
+    * Rule syntax
+    * Rule operators (with exceptions)
+    * Rule matching logic
+    * Support for Post edit history and metadata
+* **Differences**
+    * Rule length
+    * Rule volume
+    * Endpoint URLs
+    * App and Project requirement for access
+    * Authentication method
+    * Request parameters
+    * Usage tracking
+    * Multiple streams, redundant conections, backfill and Replay recovery
+    * Request parameters and response format
+    * Response JSON data structure
+
+#### Similarities
+
+**Streaming delivery method**
+
+Both PowerTrack and X API v2 filtered stream use streaming data delivery, which require the client to establish an open connection to an endpoint and keeping a very long lived HTTP request, and parsing the response incrementally from the server in real time.  Both PowerTrack and X API v2 filtered stream filter publicly available Posts matching rules that exist on the stream in real time, and use keep-alive signals as new line characters (\\r\\n) to signal the connection is still active. Both PowerTrack and X API v2 filtered stream endpoint connections deliver data in real time and should be read by the connecting client quickly.  
+
+**Integration process**
+
+Integrating with filtered stream is similar to integrating with PowerTrack, using the general process below:
+
+1.  Establish a streaming connection.
+2.  Asynchronously send separate requests to add and delete rules from the stream.
+3.  Reconnect to the stream automatically when connection is disconnected.
+
+**Persistent stream connection with separate rules management endpoints**
+
+Similar to the PowerTrack API and Rules API, the new X API v2 filtered stream endpoints allows you to apply multiple rules to a single stream and add and remove rules to your stream while maintaining the stream connection.
+
+|     |     |     |
+| --- | --- | --- |
+| **Feature** | **PowerTrack API** | **X API v2 filtered stream** |
+| **Connection endpoint** | [GET /stream](/x-api/enterprise-gnip-2.0/powertrack-api#api-reference-index) | [GET /2/tweets/search/stream](/x-api/posts/filtered-stream#get-2-tweets-search-stream.html) |
+| **Add rules** | [POST /rules](/x-api/posts/filtered-stream#get-2-tweets-search-stream) | [POST /2/tweets/search/stream/rules](/x-api/posts/filtered-stream#post-2-tweets-search-stream-rules) |
+| **Get rules** | [GET /rules](/x-api/enterprise-gnip-2.0/powertrack-api#get-rules) | [GET /2/tweets/search/stream/rules](/x-api/posts/filtered-stream#get-2-tweets-search-stream-rules) |
+| **Delete rules** | [POST /rules_method=delete](/x-api/enterprise-gnip-2.0/powertrack-api#post-rules-method-delete) | [POST /2/tweets/search/stream/rules](/x-api/posts/filtered-stream#post-2-tweets-search-stream-rules) |
+
+**Rule syntax, operators, and matching rules logic**
+
+The X API v2 filtered stream uses a subset of the same rule operators currently used for PowerTrack rules. These operators are used to create boolean based rule syntax used for filtering desired matching Posts from the live stream.  Both PowerTrack and filtered stream use the same rule syntax for building rules and matching logic is the same. While the majority of the operators are available for both PowerTrack and filter stream, there are a few notable differences and net new operators listed below.  For more details and example uses for each operator see current [PowerTrack operators](/x-api/enterprise-gnip-2.0/powertrack-api#powertrack-operators) and current X API v2 [filtered stream operators](/x-api/posts/filtered-stream#building-rules-for-filtered-stream). 
+
+Please note that many operators (noted as 'advanced operators') are reserved for those users who have been approved for [Academic Research access or Enterprise access](/x-api/getting-started/about-x-api).
+
+Operators available with both PowerTrack and X API v2 Filtered stream:
+
+| **Standalone operators** | **Conjunction required operators (must be used with at least one standalone operator within a rule)** |
+| --- | --- |
+| keyword (example: coffee )<br/><br/>emoji (example: 🐶 or \\uD83D\\uDC36 )<br/><br/>"exact phrase match" (example: "happy birthday" )<br/><br/>from:<br/><br/>to:<br/><br/>@<br/><br/>retweets_of:<br/><br/>#<br/><br/>url: | has:links<br/><br/>lang:<br/><br/>has:mentions<br/><br/>has:media<br/><br/>has:images<br/><br/>has:videos<br/><br/>is:retweet<br/><br/>is:quote<br/><br/>is:verified<br/><br/>has:hashtags<br/><br/>has:geo<br/><br/>sample:<br/><br/>-is:nullcast |
+
+|     |
+| --- |
+| **Net new operators available with X API v2 filtered stream** |
+| conversation_id: \- matches on Posts that exist in any reply threads from the specified Post conversation root.Net new operators available with X API v2 filtered stream:<br/><br/>context: \- matches on Posts that have been annotated with a context of interest. <br/><br/>entity: \- matches on Posts that have been annotated with an entity of interest. |
+
+|     |
+| --- |
+| **Operators currently only available on PowerTrack API** |
+| url_title:<br/><br/>url_description:<br/><br/>followers_count:<br/><br/>statuses_count:<br/><br/>friends_count:<br/><br/>listed_count:<br/><br/>"proximity match"~3<br/><br/>contains:<br/><br/>has:symbols<br/><br/>url_contains:<br/><br/>in\_reply\_to\_status\_id:<br/><br/>retweets\_of\_status_id:<br/><br/>source:<br/><br/>bio:<br/><br/>bio_name:<br/><br/>bio_location:<br/><br/>place:<br/><br/>place_country:<br/><br/>point_radius:<br/><br/>bounding_box:<br/><br/>is:reply<br/><br/>(Available without conjunction)<br/><br/>has:links<br/><br/>lang:<br/><br/>has:mentions<br/><br/>has:media<br/><br/>has:images<br/><br/>has:videos<br/><br/>is:retweet<br/><br/>is:quote<br/><br/>is:verified<br/><br/>is:reply<br/><br/>has:hashtags<br/><br/>has:geo<br/><br/>sample: |
+
+**Support for Post edit history and metadata**
+
+Both versions provide metadata that describes any edit history. Check out the [filtered stream API References](/x-api/posts/filtered-stream#api-reference-index) and the [Edit Posts fundamentals page](/x-api/fundamentals/edit-tweets) for more details. 
+
+#### Differences
+
+**Rule length**
+
+Rule length is measured the same way (by character count) for both PowerTrack and filtered stream rules, however the maximum length for PowerTrack rules is 2048 characters and the maximum rule length for rules on X API v2 filtered stream varies by [access level](/x-api/getting-started/about-x-api). 
+
+Enterprise access -  2048 characters (please contact your designated account manager regarding your specific account)
+
+**Rule volume**
+
+The PowerTrack maximum rule volume per stream is defined within the enterprise account contract.  X API v2 filtered stream rule volume varies by [access level](/x-api/getting-started/about-x-api).
+
+Enterprise access - 25000+ rules (please contact your designated account manager regarding your specific account)
+ 
+
+**Endpoint URLs**
+
+* PowerTrack endpoints:
+    * https://gnip-stream.twitter.com/stream/powertrack/accounts/{account\_name}/publishers/twitter/{stream\_label}.json
+    * https://gnip-api.x.com/rules/powertrack/accounts/{account\_name}/publishers/twitter/{stream\_label}.json
+    * https://gnip-api.x.com/rules/powertrack/accounts/{account\_name}/publishers/twitter/{stream\_label}/validation.json
+* X API v2 endpoint:
+    * https://api.x.com/2/tweets/search/stream
+    * https://api.x.com/2/tweets/search/stream/rule
+
+**App and Project requirements for v2 access**
+
+PowerTrack access is granted through a contracted annual subscription for data, and set up through console.gnip.com by your account manager at X.  PowerTrack does not require a X developer App to access.  In order to use the X API v2 filter stream, you must have [signed up for a X developer account](https://developer.twitter.com/en/portal/petition/essential/basic-info), and a X [developer App](https://developer.x.com/en/portal/projects-and-apps.html) associated with a Project. The developer App and Project setup for X API v2 access is all done through the [developer portal](https://developer.twitter.com/en/portal/projects-and-apps).  
+
+**Authentication method**
+
+The PowerTrack API endpoints use Basic Authentication set up in console.gnip.com. The X API v2 filtered stream endpoints require a X developer App and an [OAuth 2.0 App Access Token](https://developer.twitter.com/en/docs/authentication/oauth-2-0) (also referred to as Application-only or Bearer Authentication). To make requests to the X API v2 version you must use your specific developer App's Access Token to authenticate your requests.
+
+In the process of setting up your developer account, developer App and Project, an App Access Token is created and shared within the dev portal user interface, however, you can generate a new one by navigating to your app's “Keys and tokens” page on the [developer portal](https://developer.twitter.com/en/portal/projects-and-apps). If you’d like to generate/destroy the App Access Tokens programmatically, see this [OAuth 2.0 App-Only guide](/resources/fundamentals/authentication#bearer-token-also-known-as-app-only).
+
+**Usage tracking**
+
+PowerTrack usage can be retrieved programatically using the Usage API, or can be seen in console.gnip.com on the [usage tab](/x-api/enterprise-gnip-2.0/fundamentals/overview#usage-tab).  Post consumption across all PowerTrack streams is deduplicated each day and volume consumption is defined within the enterprise contract. 
+
+X API v2 filtered stream usage can be tracked within the developer portal at the Project level. Post consumption is [set at the Project level](/resources/fundamentals/projects) and is shared across several different X API v2 endpoints, including filtered stream, recent search, user Post timeline and user mention timeline.  Currently with Basic Access, the monthly Post consumption limit is 500,000 Posts per month total.
+
+**Multiple streams, redundant conections, backfill and Replay API for recovery**
+
+There are several recovery and redunancy features available via PowerTrack, some of which are not yet available for X API v2 filtered stream.  For PowerTrack, all [recovery and redundancy features](/x-api/enterprise-gnip-2.0/powertrack-api#recovery-and-redundancy-features) are configured within the enterprise contract. PowerTrack API currently has the flexibility to offer multiple PowerTrack streams (commonly "dev" and "production") with unique rulesets.  Currently, the X API v2 filtered stream is only available with a single stream.
+
+PowerTrack allows you to connect to have multiple connections to a single stream, generally used for redundant connections to different data centers or clients. 
+
+If a PowerTrack stream is disconnected breifly, a reconnection can be made using the backfillMinutes parameter to reduce the chance of data loss within five minutes of the disconection. While we have added this functionality to the X API v2 version, it is currently only available with Academic Research access, and has been renamed to backfill_minutes.
+
+If a PowerTrack stream is disconnected for longer than a 5 minute period, the separate [Replay API](/x-api/enterprise-gnip-2.0/powertrack-api#replay-api) can be used to recover data for up to a 2 hour period in the recent 5 day past.  Currently, the X API v2 filtered stream does not have a replay feature.
+
+**Request parameters and response format**
+
+One of the biggest differences between PowerTrack API and X API v2 filtered stream is the parameter functionality.
+
+Using the X API v2 filtered stream, there are several parameters used on the connection request to identify which fields or expanded objects to return in the Post payload.  This is common for all v2 endpoints. By default, only the Post id and text are returned for matching Posts but additional parameters, fields and expansions described below, can be added in order to recieve more detailed data per matching Post. 
+
+fields: X API v2 endpoints enable you to select which fields are provided in your payload. For example, Post, User, Media, Place, and Poll objects all have a list of fields that can be returned (or not). 
+
+expansions: Used to expand the complementary objects referenced in Post JSON payloads. For example, all Retweets and Replies reference other Posts. By setting expansions=referenced_tweets.id, these other Post objects are expanded according to the \`tweet.fields\` setting.  Other objects such as users, polls, and media can be expanded.
+
+https://api.x.com/2/tweets/search/stream?tweet.fields=created\_at,public\_metrics,author\_id,entities&expansions=attachments.poll\_ids
+
+You can learn more about how to use fields and expansions by visiting our [guide](/x-api/fundamentals/data-dictionary#how-to-use-fields-and-expansions), and by reading through our broader [data dictionary](/x-api/fundamentals/data-dictionary).
+
+|     |     |
+| --- | --- |
+| **Connection to PowerTrack ** | **Example request to X API v2 filtered stream** |
+| curl --compressed -v -uexample@customer.com "https://gnip-stream.twitter.com/stream/powertrack/accounts/:account\_name/publishers/twitter/:stream\_label.json" | curl "https://api.x.com/2/tweets/search/stream?tweet.fields=attachments,author\_id,context\_annotations,conversation\_id,created\_at,entities,geo,id,in\_reply\_to\_user\_id,lang,possibly\_sensitive,public\_metrics,referenced\_tweets,reply\_settings,source,text,withheld&user.fields=created\_at,description,entities,id,location,name,pinned\_tweet\_id,profile\_image\_url,protected,public\_metrics,url,username,verified,withheld&expansions=author\_id,referenced\_tweets.id,referenced\_tweets.id.author\_id,entities.mentions.username,attachments.poll\_ids,attachments.media\_keys,in\_reply\_to\_user\_id,geo.place\_id&place.fields=contained\_within,country,country\_code,full\_name,geo,id,name,place\_type&poll.fields=duration\_minutes,end\_datetime,id,options,voting\_status" -H "Authorization: Bearer $ACCESS_TOKEN" |
+
+The PowerTrack API data format is set within console.gnip.com at the stream settings level, which can be set to either the X [native enriched format](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary#native-enriched-tweet-object) or [Activity streams format](). 
+
+PowerTrack API only uses one optional parameter on connection, to reconnect using backfill (backfillMinutes=5). This optional parameter is also available to filtered stream, but is called backfill_minutes, and is only available via Academic Research access.
+ 
+
+https://gnip-stream.twitter.com/stream/powertrack/accounts/{account\_name}/publishers/twitter/{stream\_label}.json?backfillMinutes=5
+
+**Response structure and data format**
+
+As described above, the request parameters set at the connection request for X API v2 filtered stream determine the response data returned.  There are several different response possibilites using different fields and expansions which can range from the most simple default response with only the Post id and text, to an extremely detailed and expanded data payload.
+
+The data format for PowerTrack is set within console.gnip.com at the stream settings level, which can be set to either the X Native Enriched format or Activity Streams format. 
+
+The following table references Post response examples in each different format:
+
+|     |     |     |
+| --- | --- | --- |
+| **Native enriched format** | **Activity streams format** | **X API v2 filtered stream format** |
+| [Payload examples](https://developer.twitter.com/en/docs/twitter-api/enterprise/data-dictionary/native-enriched-objects/enriched-native-example-payloads) | [Payload examples](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary#activity-streams-payload-examples) | [Payload examples](/x-api/fundamentals/data-dictionary#twitter-api-v2-example-payloads) |
+
+If you would like to know more about how the enterprise data formats map to the X API v2 format, please visit our following guides:
+
+* [Native Enriched to X API v2 format migration guide](/x-api/migrate/data-format-migration#migrating-from-native-enriched-data-format-to-v2)
+* [Activity Streams to X API v2 format migration guide](/x-api/migrate/data-format-migration#migrating-from-activity-streams-data-format-to-v2)

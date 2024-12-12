@@ -1,0 +1,145 @@
+---
+title: Edit Tweets
+---
+
+# Introduction
+The X API v2 endpoints provide edited Post metadata. The _Edit Posts_ feature was first introduced for testing among X employees on September 1, 2022. Starting on that date, eligible Posts are editable for 30 minutes and up to 5 times. _All objects for Posts created since September 29, 2022_ include Post edit metadata, even if the Post was never edited. Each time a Post is edited, a new Post ID is created. A Post's edit history can be described by chaining these IDs together, starting with the original ID.  Additionally, if any Post in the edit chain is deleted, all Posts in that chain are deleted as well.
+
+Using the X API v2, a developer can find out:
+
+* If a Post was edit eligible at the time of creation. Some Posts, such as those with polls or scheduled Posts, can not be edited.
+* Posts are editable for 30 minutes, and can be edited up to 5 times. For editable POsts you can see if time for editing remains and how many more edits are possible.
+* If you are viewing an edited version of a Post (in most cases the API will return the most recent version of a Post, unless a specific past version is requested by Post ID).
+* The entire edit history of the Post.
+* The engagement attributed to each version of the Post.
+
+There are three components to a Post's edit history:
+
+1.  By default, the Post payload will contain an array of Post IDs that are part of a Post's edit history. This information is specified by the `edit_history_tweet_ids`, which is a default field in the Post payload. This array will contain at least one ID, the ID of the original, unedited Post. When there is only one ID that means the Post has no edit history. 
+2.  You can get information such as whether a Post was editable at the time it was created, how much time, if any, is remaining for a Post to be edited, and how many edits remain by specifying `edit_controls` in your [tweet.fields](https://developer.twitter.com/en/docs/twitter-api/fields) parameter.
+3.  Finally, you can get the Post objects for each Post in a Post's edit history, by specifying the `edit_history_tweet_ids` using the [expansion](https://developer.twitter.com/en/docs/twitter-api/expansions) parameter
+
+Most Posts are eligible for editing. However, the following types of Posts are not: 
+
+* Post is promoted
+* Post has a poll
+* Post is a non-self-thread reply
+* Post is a Retweet (note that Quote Tweets are eligible for edit)
+* Post is nullcast
+* Community Post
+* Superfollow Post
+* Collaborative Post
+
+Examples
+
+-----------
+
+The examples below demonstrate how a developer can request edited Post metadata using the X API v2. 
+
+**Note:** The examples below use the User Post Timeline endpoint, but you can request this metadata using the same parameters (with fields and expansions) for all endpoints that return Posts (e.g. Posts lookup, search, filtered stream,  etc.)
+
+### Default behavior
+
+By default, an API request to any endpoint that returns Post objects in the X API v2, you get:
+
+* The Post ID
+* The Post Text
+* An array of Post IDs that are part of a Post's edit history. If there is only one ID provided, that means the Post has not been edited.
+
+**Request:**
+
+      `curl --request GET 'https://api.x.com/2/users/:id/tweets' --header 'Authorization: Bearer $BEARER_TOKEN'`
+
+
+
+
+**Sample Response:**
+
+```{
+  "data": [
+    {
+      "id": "1514991667853602823",
+      "text": "we have an edit button",
+      "edit_history_tweet_ids": ["1514991667853602822", "1514991667853602823"]
+    }
+  ]
+}
+```
+
+### Getting additional data with edit_controls
+
+If you want additional edited Post metadata such as whether a Post was eligible to be edited when it was created and how much time is remaining for a Post to be editable, you can request this information using the tweet.fields parameter and setting it to edit_control.
+
+**Request:**
+
+      `curl --request GET 'https://api.x.com/2/users/:id/tweets?tweet.fields=edit_control' --header 'Authorization: Bearer $BEARER_TOKEN'`
+
+**Sample Response:**
+
+  ```
+  {
+  "data": [
+    {
+      "id": "1514991667853602823",
+      "text": "we have an edit button",
+      "edit_history_tweet_ids": ["1514991667853602822", "1514991667853602823"],
+      "edit_controls": {
+        "is_edit_eligible": true,
+        "editable_until": "2022-04-21 09:35:20.311",
+        "edits_remaining": 4
+      }
+    }
+  ]
+}
+```
+
+### Getting Post objects for all Posts in a Post's edit history
+
+The examples above provide an array of Post IDs in a Post's edit history. If you want the actual Post object for each of these Post IDs, you can use the expansion parameter and set it to `edit_history_tweet_ids`. The Post objects that make up the edit history will be provided in the "includes" object. 
+
+**Request:**
+
+      ```bash
+      curl --location --request GET 'https://api.x.com/2/users/:id/tweets?tweet.fields=edit_control&expansions=edit_history_tweet_ids' --header 'Authorization: Bearer $BEARER_TOKEN'`
+```
+
+
+
+**Sample Response:**
+
+  ```
+  {
+  "data": [
+    {
+      "id": "1514991667853602823",
+      "text": "we have an edit button",
+      "edit_history_tweet_ids": ["1514991667853602822", "1514991667853602823"],
+      "edit_controls": {
+        "is_edit_eligible": true,
+        "editable_until": "2022-04-21 09:35:20.311",
+        "edits_remaining": 4
+      }
+    }
+  ],
+  "includes": {
+    "tweets": [
+      {
+        "id": "1514991667853602822",
+        "text": "we need an eidt button",
+        "edit_history_tweet_ids": [
+          "1514991667853602822",
+          "1514991667853602823"
+        ],
+        "edit_controls": {
+          "is_edit_eligible": true,
+          "editable_until": "2022-04-21 09:35:20.311",
+          "edits_remaining": 4
+        }
+      }
+    ]
+  }
+}
+```
+
+
+

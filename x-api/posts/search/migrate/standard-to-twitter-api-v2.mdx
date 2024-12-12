@@ -1,0 +1,191 @@
+---
+title: v1 to v2
+sidebarTitle: v1 to v2
+---
+
+### Standard v1.1 compared to X API v2
+
+If you have been working with the v1.1 [search/posts](/x-api/posts/search/introduction), the goal of this guide is to help you understand the similarities and differences between the standard and X API v2 search Posts endpoint.
+
+* **Similarities**
+    * OAuth 1.0a User Context and OAuth 2.0 App-Only
+    * Support for Post edit history and metadata. 
+* **Differences**
+    * Endpoint URLs
+    * App and Project requirements
+    * Response data format
+    * Request parameters
+    * New query operators
+
+    * AND / OR operator precedence 
+
+#### Similarities
+
+**OAuth 1.0a User Context and OAuth 2.0 App-Only authentication**
+
+The v1.1 search/posts and the X API v2 recent search endpoint support both [OAuth 1.0a User Context](/resources/fundamentals/authentication) and [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0). 
+
+Therefore, if you were previously using the standard v1.1 search endpoint you can continue using the same authentication method if you migrate to the X API v2 version. 
+
+Depending on your authentication library/package of choice, App-Only authentication is probably the easiest way to get started and can be set with a simple request header. To learn how to generate an App Access Token see this [OAuth 2.0 App-Only guide](/resources/fundamentals/authentication#bearer-token-also-known-as-app-only). 
+
+If you would like to take advantage of the ability to pull private or advertising metrics with the X API v2 endpoint, you will need to use OAuth 1.0a User Context, and pass the user access tokens related to the user who posted the Post for which you would like to pull metrics. 
+
+
+**Support for Post edit history and metadata**
+
+Both versions provide metadata that describes any edit history. Check out the [search API References](/x-api/posts/recent-search) and the [Post edits fundamentals page](https://developer.x.com/en/docs/x-api/tweet-edits) for more details. 
+
+#### Differences
+
+**Endpoint URLs**
+
+* Standard v1.1 endpoints:
+    * https://api.x.com/1.1/search/tweets
+
+* X API v2 endpoint:
+    * https://api.x.com/2/tweets/search/recent
+         
+
+
+**App and Project requirements**
+
+The X API v2 endpoints require that you use credentials from a [developer App](/resources/fundamentals/developer-apps) that is associated to a [Project](/resources/fundamentals/projects) when authenticating your requests. All X API v1.1 endpoints can use credentials from standalone Apps or Apps associated with a Project. 
+
+
+**Response data format**
+
+One of the biggest differences between standard v1.1 and X API v2 endpoint versions is how you select which fields return in your payload.
+
+For the standard endpoints, you receive many of the response fields by default, and then have the option to use parameters to identify which fields or sets of fields should return in the payload.
+
+The X API v2 version only delivers the Post id and text fields by default. To request any additional fields or objects, you will need to use the [fields](https://developer.x.com/en/docs/x-api/fields/content/developer-twitter/en/docs/twitter-api/fields) and [expansions](https://developer.x.com/en/docs/x-api/fields/content/developer-twitter/en/docs/twitter-api/expansions) parameters. Any Post fields that you request from these endpoints will return in the primary Post object. Any expanded user, media, poll, or place objects and fields will return in an includes object within your response. You can then match any expanded objects back to the Post object by matching the IDs located in both the Post and the expanded object. 
+
+We encourage you to read more about these new parameters in their respective guides, or by reading our guide on [how to use fields and expansions](/x-api/fundamentals/data-dictionary#how-to-use-fields-and-expansions). 
+
+We have also put together a [data format migration guide](/x-api/migrate/data-format-migration#migrating-from-standard-v1-1s-data-format-to-v2) which can help you map standard v1.1 fields to the newer v2 fields. This guide will also provide you the specific expansion and field parameter that you will need to pass with your v2 request to return specific fields. 
+ 
+
+In addition to the changes in how you request certain fields, X API v2 is also introducing new JSON designs for the objects returned by the APIs, including [Post](/x-api/fundamentals/data-dictionary#tweet) and [user](/x-api/fundamentals/data-dictionary#user) objects.
+
+* At the JSON root level, the standard endpoints return Post objects in a statuses array, while X API v2 returns a data array. 
+* Instead of referring to Retweeted and Quoted "statuses", X API v2 JSON refers to Retweeted and Quoted Tweets. Many legacy and deprecated fields, such as contributors and user.translator_type are being removed. 
+* Instead of using both favorites (in Post object) and favourites (in user object), X API v2 uses the term like. 
+* X is adopting the convention that JSON values with no value (for example, null) are not written to the payload. Post and user attributes are only included if they have non-null values. 
+     
+
+We also introduced a new set of fields to the [Post object](/x-api/fundamentals/data-dictionary#tweet) including the following:
+
+* A [conversation_id](/x-api/fundamentals/conversation-id) field
+* Two new [annotations](x-api/fundamentals/tweet-annotations) fields, including context and entities
+* Several new [metrics](/x-api/fundamentals/metrics) fields 
+* A new reply_setting field, which shows you who can reply to a given Post
+
+#### Request parameters
+
+The following standard v1.1 request parameters have equivalents in X API v2:
+
+| Standard search v1.1 | Search Posts v2 |
+| --- | --- |
+| q   | query |
+|     | start_time (YYYY-MM-DDTHH:mm:ssZ) |
+| until (YYYY-MM-DD) | end_time (YYYY-MM-DDTHH:mm:ssZ) |
+| since_id | since_id |
+| max_id | until_id |
+| count | max_results |
+| Response provides search\_metadata.next\_results | next_token |
+
+There are also a set of standard search Posts request parameters **not** supported in X API v2:
+
+| **Standard v1.1 parameter** | **Details** |
+| --- | --- |
+| geocode | Search Posts at the Basic Access level does not support geo operators. |
+| locale | With standard search, this was used to specify the language of the query but never fully implemented. |
+| lang | Search Posts endpoints provide a lang query operator for matching on languages of interest. |
+| include_entities | Post entities are always included. |
+| result_type | Search Posts endpoints deliver all matching Posts, regardless of engagement level. |
+| extended | X API v2 is built from the ground up to support Posts with up to 280 characters. With v2, there is no concept of 'extended' Posts. |
+
+
+Here is an example request that shows the difference between a Standard request and a Search Posts request:
+
+|     |     |
+| --- | --- |
+| **Standard v1.1** | **X API v2** |
+| https://api.x.com/1.1/search/tweets.json?q=snow&count=50 | https://api.x.com/2/tweets/search/recent?query=snow&max_results=50 |
+
+
+These requests will both return the 50 most recent Posts that contain the keyword snow. The v2 request will return the default id and text fields of the matching Posts. Here is an example of specifying additional Posts and user fields to include in the JSON payload:
+
+|     |
+| --- |
+| **X API v2** |
+| https://api.x.com/2/tweets/search/recent?query=snow&max\_results=50&tweet.fields=id,created\_at,author_id,text,source,entities,attachments&user.fields=id,name,username,description |
+
+**New query operators**
+
+Search Posts introduces new operators in support of two new X API v2 features: 
+
+* **[Conversation IDs](/x-api/fundamentals/conversation-id)** \- As conversations unfold on X, a conservation ID will be available to mark Posts that are part of the conversation. All Posts in the conversation will have their conversation_id set to the Post ID that started it. 
+    * `conversation_id:`
+* **[X Annotations](x-api/fundamentals/tweet-annotations)** provide contextual information about Posts, and include entity and context annotations. Entities are comprised of people, places, products and organizations. Contexts are domains, or topics, that surfaced entities are a part of. For example, people mentioned in a Post may have a context that indicates whether they are an athlete, actor, or politician.  
+    * context: matches on Posts that have been annotated with a context of interest. 
+    * entity: matches on Posts that have been annotated with an entity of interest. 
+
+         
+
+#### AND / OR operator precedence 
+
+The basic building block for building search queries is the use of OR and AND logical groupings. The standard search API applies ORs before ANDs, while Search Posts endpoints (as well as the premium and enterprise versions) applies ANDs before ORs. This difference is critical when translating queries between the two. 
+
+For example, with standard search, if you wanted to match Posts with the keyword ‘storm’ that mention the word ‘colorado’ or the #COwx hashtag, you could do that with the following search query:
+
+storm #COwx OR colorado
+
+With the Search Posts operator precedence, ANDs are applied before ORs. So the above query is equivalent to: 
+
+(storm #COwx) OR colorado
+
+However, the above rule would match on any Posts that mentions ‘Colorado’, regardless if the Post mentions ‘storm’ or the #COwx hashtag. In addition it would also  match Posts that mentioned both the keyword ‘storm’ and the #COwx hashtag. 
+
+To make the query behave as originally intended, the OR clauses need to be grouped together. The translation of the original standard query to Search Posts would be:  
+
+storm (#COwx OR colorado)
+
+These two rules have very different matching behavior. For the month of October 2019, the original rule matches over 1,175,000 Posts while the correctly translated rule matches around 5,600 Posts. Be sure to mind your ANDs and ORs, and use parentheses where needed. 
+
+
+#### cURL requests
+
+**The following section displays cURL requests for the standard v1.1 endpoint and its equivalent endpoint in v2.**
+
+The requests are made using [OAuth 2.0 App-Only](https://developer.twitter.com(/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token). In order to run the following cURL requests, you will need to replace ACCESS_TOKEN in the authorization header with your app access token. For v2 endpoints, your app access token must belong to a [developer App](https://developer.twitter.com/en/docs/apps/overview) within a [Project](https://developer.twitter.com/en/docs/projects/overview). 
+
+The response payload returned by the v1.1 endpoint will be different from the response payload returned by the v2 endpoint. With v2, the response will include the default fields, as well as any other fields requested with the [fields](/x-api/fundamentals/fields) and [expansions](https://developer.twitter.com/en/docs/twitter-api/expansions) parameters. You can use these parameters to request a different set of fields to be returned.
+
+**Standard v1.1 [GET search/tweets](https://developer.twitter.com/en/docs/twitter-api/v1/tweets/search/api-reference/get-search-tweets) and v2 [GET tweets/search/recent](https://developer.twitter.com/en/docs/twitter-api/tweets/search/api-reference/get-tweets-search-recent) endpoints**
+
+      ```bash
+      curl --request GET \
+  --url 'https://api.x.com/1.1/search/tweets.json?q=from%3ATwitterDev%20-is%3Aretweet&count=100' \
+  --header 'Authorization: Bearer $ACCESS_TOKEN'
+  ```
+
+
+      ```bash
+      curl --request GET \
+  --url 'https://api.x.com/2/tweets/search/recent?query=from%3ATwitterDev%20-is%3Aretweet&tweet.fields=created_at%2Cconversation_id%2Centities&max_results=100' \
+  --header 'Authorization: Bearer $ACCESS_TOKEN'
+  ```
+
+
+**Next steps**
+
+[Check out our quick start guide for X API v2 recent search](/x-api/posts/search/quickstart/recent-search)
+
+[Review the API reference for recent search](/x-api/posts/recent-search)
+
+[Check out some sample code for these endpoints](https://github.com/xdevplatform/Twitter-API-v2-sample-code "Check out some sample code for these endpoints")
+
+[Step-by-step guide to making your first request to recent search](https://developer.x.com/en/docs/tutorials/step-by-step-guide-to-making-your-first-request-to-the-twitter-api-v2 "Step-by-step guide to making your first request to recent search")
+

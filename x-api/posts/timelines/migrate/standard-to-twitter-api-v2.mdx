@@ -1,0 +1,179 @@
+---
+title: v1 to v2
+sidebarTitle: v1 to v2
+---
+
+import { Button } from '/snippets/button.mdx';
+
+## Standard v1.1 timelines to X API v2 timelines
+
+If you have been working with the v1.1 timelines endpoints (statuses/user\_timeline and statuses/mentions\_timeline), the goal of this guide is to help you understand the similarities and differences between the standard and X API v2 timelines endpoints so that you can migrate your current integration to the new version.
+
+* **Similarities:**
+    * Authentication:
+        * OAuth 1.0a User Context (reverse chronological home timeline, user Post timeline and user mentions timeline)
+        * OAuth 2.0 App-Only (user Post timeline)
+    * Historical Access limit: User timeline (user Post timeline) provides access to most recent 3200 Posts; mentions timeline (user mention timeline) provides access to most recent 800 mentions.
+    * Support for Post edit history and metadata
+    * Rate limits (user Post timeline)
+    * Refresh polling: Ability to retrieve new results since the since_id
+    * Traversing timelines by Post IDs
+    * Results specifications:
+        * Results order: Results returned in reverse chronological order
+        * Ability to exclude replies (user Post timeline only)
+        * Ability to exclude Retweets (user Post timeline only)
+* **Differences**
+    * New Authentication capability: 
+        * OAuth 2.0 App-Only (user mention timeline)
+        * OAuth 2.0 Authorization Code Flow with PKCE (reverse chronological home timeline, user Post timeline and user mentions timeline)
+    * Access requirements: X API v2 App and Project requirements
+    * Rate limits (user mention timeline and reverse chronological home timeline)
+    * Different Request limit & Volume limit
+    * Additional pagination method
+        * Different max_results (count) per response
+    * Response data format
+    * Request parameters
+        * Customized data format based on request parameters, including v2 fields and expansions
+        * Additional available data: metrics, Post annotations, polls
+
+### Similarities
+
+**Authentication**
+
+The v1.1 statuses/user_timeline and the X API v2 user Post timeline endpoint support both [OAuth 1.0a User Context](https://developer-staging.twitter.com/resources/fundamentals/authentication) and [OAuth 2.0 App-Only](https://developer-staging.twitter.com/en/docs/authentication/oauth-2-0). Therefore, you can continue using the same authentication method and authorization tokens if you migrate to the X API v2 version. 
+ 
+
+**Historical Access**
+
+The v1.1 statuses/user_timeline and the X API v2 user Post timeline endpoint both will return the most recent 3200 Posts, including Retweets
+
+The v1.1 statuses/mentions_timeline and the X API v2 user mention timeline endpoint can return the most recent 800 Posts.
+ 
+
+**Support for Post edit history and metadata**
+
+Both versions provide metadata that describes any edit history. Check out the [filtered stream API References](/x-api/posts/filtered-stream#api-reference-index) and the [Edit Posts fundamentals page](/x-api/fundamentals/edit-tweets) for more details. 
+
+**Rate Limits**
+
+|     |     |
+| --- | --- |
+| **Standard v1.1** | **X API v2** |
+| user_timeline:<br/><br/>900 requests per 15 min with OAuth 1.0a User Context<br/><br/>1500 requests per 15 min with OAuth 2.0 App-Only | User Posts timeline:<br/><br/>900 requests per 15-minute window with OAuth 1.0a User Context<br/><br/>1500 requests per 15-minute window with OAuth 2.0 App-Only |
+
+**Refresh polling using since_id**
+
+Both versions allow polling for recent results using the since_id.
+ 
+
+**Traversing timelines by Post IDs**
+
+Both endpoints have the capability to traverse through timelines using Post ID 'timestamps' based on the way Post IDs are constructed.  The functionality is generally  the same except for the following:
+
+|     |     |
+| --- | --- |
+| **Standard timelines v1.1** | **timelines v2** |
+| since_id (exclusive)<br/><br/>max_id (inclusive) | since_id (exclusive)<br/><br/>until_id (also exclusive, vs max_id which was inclusive) |
+
+**Response filtering parameters**
+
+|     |     |
+| --- | --- |
+| **Standard timelines v1.1** | **timelines v2** |
+| Response filtering parameters:<br/><br/>* include_rts<br/>* exclude_replies | Response filtering parameters:<br/><br/>* exclude=retweets,replies |
+| Example <br/><br/>https://api.x.com/1.1/statuses/user\_timeline.json?user\_id=2244994945&include\_rts=0&&exclude\_replies=1 | Example:<br/><br/>https://api.x.com/2/users/2244994945/tweets?max_results=100&exclude=retweets,replies |
+| Notes:<br/><br/>For user_timeline:<br/><br/>* Using include_rts=0 does not change the possible historical Post limit of the most recent 3200 | Notes:<br/><br/>For user Posts timeline:<br/><br/>* Using exclude=retweets does not change the possible historical Post limit of the most recent  3200 <br/>* Using exclude=replies reduces the possible historical Post limit to the most recent 800 replies |
+
+### Differences
+
+**Authentication**
+
+**The v1.1 statuses/mentions_timeline endpoint only supports [OAuth 1.0a User Context](https://developer-staging.twitter.com/resources/fundamentals/authentication).  The X API v2 user mention timeline endpoint supports both [OAuth 1.0a User Context](https://developer-staging.twitter.com/resources/fundamentals/authentication),[OAuth 2.0 App-Only](https://developer-staging.twitter.com/en/docs/authentication/oauth-2-0), and [OAuth 2.0 Authorization Code with PKCE](https://developer.twitter.com/en/docs/authentication/oauth-2-0/authorization-code "This method allows an authorized app to act on behalf of the user, as the user. It is typically used to access or post public information for a specific user, and it us useful when your app needs to be aware of the relationship between a user and what this endpoint returns. Click to learn how to authenticate with OAuth 2.0 Authorization Code with PKCE.") **
+
+If you would like to take advantage of the ability to access private or promoted metrics using the X API v2 user Post timeline endpoint, you will need to use OAuth 1.0a User Context or OAuth 2.0 Authorization Code with PKCE, and pass the user access tokens related to the user who posted the Post for which you would like to access metrics.
+ 
+
+**Endpoint URLs**
+
+Note that the X API v2 timelines endpoints require a path parameter of :id for the user ID.
+
+* Standard v1.1 endpoints:
+    * https://api.x.com/1.1/statuses/home_timeline
+    * https://api.x.com/1.1/statuses/user_timeline
+    * https://api.x.com/1.1/statuses/mention_timeline
+* X API v2 endpoint:
+    * https://api.x.com/2/users/:id/timelines/reverse_chronological
+    * https://api.x.com/2/users/:id/tweets
+    * https://api.x.com/2/users/:id/mentions
+
+
+**App and Project requirements**
+
+The X API v2 endpoints require that you use credentials from a [developer App](https://developer-staging.twitter.com/en/docs/apps) that is associated to a [Project](https://developer-staging.twitter.com/en/docs/projects) when authenticating your requests. All X API v1.1 endpoints can use credentials from standalone Apps or Apps associated with a project. 
+ 
+
+**Rate Limits**
+
+|     |     |
+| --- | --- |
+| **mentions_timeline:**<br/><br/>75 requests per 15 min with OAuth 1.0a User Context | **user mention timeline: **<br/><br/>180 requests per 15-minute window with OAuth 1.0a User Context  <br/>450 requests per 15-minute window with OAuth 2.0 Bearer Token |
+| **home_timelime:**<br/><br/>15 requests per 15 minutes  <br/><br/>Up to 800 Posts are obtainable on the home timeline | **reverse chronological home timeline:**<br/><br/>180 requests per 15 minutes<br/><br/>You can return every Post created on a timeline over the last 7 days as well as the most recent 800 regardless of creation date. |
+
+**Request limits**
+
+|     |     |
+| --- | --- |
+| **Standard timelines v1.1** | **timelines v2** |
+| Daily request limit<br/><br/>* 100,000 request cap within a 24 hour period. | No daily request limits, only limited by consumption volume. |
+
+**Consumption volume limits**
+
+|     |     |
+| --- | --- |
+| **Standard timelines v1.1** | **timelines v2** |
+| Consumption limited only by request limits<br/><br/>* 100,000 request cap within a 24 hour period. | Consumption limited by only Project-level monthly [Post cap](/x-api/fundamentals/tweet-cap) (across multiple v2 endpoints) based on [access level](/x-api/getting-started/about-x-api).<br/><br/>* 500,000 Posts per month with Essential access.<br/>* 2 million Posts per month with Elevated access<br/>* 10 million Posts per month with Academic Research access <br/><br/>Reverse chronological home timeline is not subject to the monthly Post cap. |
+
+**Request parameters**
+
+|     |     |
+| --- | --- |
+| **Standard timelines v1.1** | **timelines v2** |
+| Required: user_id or screen_name | Required: The specific user ID is specified in the path parameter |
+| Optional:<br/><br/>count \- sets the maximum results returned per request<br/><br/>exclude_replies \- removes replies from the results<br/><br/>Include_rts \- when set to 0 removes retweets from the results<br/><br/>trim_user \- removes rehydrated user objects from the results<br/><br/>tweet_mode \- sets the data format returned for the results, set to extended for Posts longer than 140<br/><br/>since_id \- sets the earliest Post ID in result (exclusive)<br/><br/>max_id \- sets the latest Post ID in result (inclusive) | Optional:<br/><br/>max_results \- sets the maximum results returned per request<br/><br/>exclude=retweets,replies \- removes Retweets or replies from the results<br/><br/>tweet.fields \- sets the Post object fields to return<br/><br/>user.fields \- sets the User object fields to return<br/><br/>place.fields \- sets the place object fields to return<br/><br/>media.fields \- sets the media object fields to return<br/><br/>poll.fields \- sets the poll object fields to return<br/><br/>expansions - sets the expanded fields and data to return<br/><br/>start_time \- sets the earliest created_at time for the results<br/><br/>end_time \- sets the latest created_at time for the results<br/><br/>since_id \- sets the earliest Post ID for the  results (exclusive)<br/><br/>until_id \- sets the latest Post ID in result (exclusive) |
+
+**Response data format**
+
+|     |     |
+| --- | --- |
+| **Standard search v1.1** | **Search Posts v2** |
+| \[<br/>    tweet object,<br/>    tweet object<br/>  \] | <br/>  "data": \[id,text,id,text\],<br/>  "meta": <br/>    "oldest_id": "1337085692623646724",<br/>    "newest_id": "1334183616172019713",<br/>    "previous_token": "77qpymm88g5h9vqkluldpw91lr0qzfz1sqydh841iz48k",<br/>    "result_count": 10,<br/>    "next_token": "7140dibdnow9c7btw3w29gqolns6a1ipl3kzeae41vsxk"<br/>  <br/> |
+
+**X API v2 JSON format**
+
+X API v2 is introducing new JSON designs for the objects returned by the APIs, including [Post](https://developer-staging.twitter.com/en/docs/twitter-api/data-dictionary/object-model/tweet) and [user](https://developer-staging.twitter.com/en/docs/twitter-api/data-dictionary/object-model/user) objects. You can learn more about the X API v2 format, how to use fields and expansions by visiting our [guide](https://developer-staging.twitter.com/en/docs/twitter-api/data-dictionary/using-fields-and-expansions), and by reading through our broader [data dictionary](https://developer-staging.twitter.com/en/docs/twitter-api/data-dictionary)
+
+* At the JSON root level, the standard endpoints return Post objects in a statuses array, while X API v2 returns a data array. 
+* Instead of referring to Retweeted and Quoted "statuses", X API v2 JSON refers to Retweeted and Quoted Tweets. Many legacy and deprecated fields, such as contributors and user.translator_type are being removed. 
+* Instead of using both favorites (in Post object) and favorites (in user object), X API v2 uses the term like. 
+* X is adopting the convention that JSON values with no value (for example, null) are not written to the payload. Post and user attributes are only included if they have a non-null value.
+     
+
+One of the biggest differences between standard v1.1 and X API v2 endpoint versions is how you select which fields return in your payload. For the standard endpoints, there are several parameters that you could use to identify which fields or sets of fields would return in the payload, while the X API v2 version simplifies these different parameters into [fields](https://developer-staging.twitter.com/content/developer-twitter/en/docs/twitter-api/fields) and [expansions](https://developer-staging.twitter.com/content/developer-twitter/en/docs/twitter-api/expansions). 
+
+* fields: X API v2 endpoints enable you to select which fields are provided in your payload. For example, Post, user, Media, Place, and Poll objects all have a list of fields that can be returned (or not). 
+* expansions: Used to expand the complementary objects referenced in Post JSON payloads. For example, all Retweets and Replies reference other Posts. By setting expansions=referenced_tweets.id, these other Post objects are expanded according to the tweet.fields setting.  Other objects such as users, polls, and media can be expanded. 
+
+* conversation_id
+* Two new [annotations](https://developer-staging.twitter.com/en/docs/twitter-api/annotations) fields, including context and entities
+* Several new [metrics](https://developer-staging.twitter.com/en/docs/twitter-api/metrics) fields 
+     
+
+We have put together a [data format migration guide](/x-api/migrate/data-format-migration#migrating-from-standard-v1-1s-data-format-to-v2) which can help you map standard v1.1 fields to the newer v2 fields. This guide will also provide you the specific expansion and field parameter that you will need to pass with your v2 request to return specific fields. 
+
+**Next steps**
+
+[Check out our quick start guide for X API v2 Post lookup](/x-api/posts/lookup/quickstart "Check out our quick start guide for X API v2 Post lookup")
+
+[Review the API references for v2 Post lookup](/x-api/posts/lookup/migrate/overview "Review the API references for v2 Post lookup")
+
+[Check out our sample code for the timelines endpoints](https://github.com/xdevplatform/Twitter-API-v2-sample-code "Check out our sample code for the timelines endpoints")

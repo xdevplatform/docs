@@ -1,0 +1,130 @@
+---
+title: v1 to v2
+sidebarTitle: v1 to v2
+---
+
+## Standard v1.1 compared to X API v2
+
+If you have been working with the standard v1.1 GET statuses/show and GET statuses/lookup, this guide will help you understand the similarities and differences between the standard and X API v2 Posts lookup endpoints.
+
+You may also be interested in our [visual data format migration tool](/x-api/migrate/data-format-migration) to help you quickly see the differences between the [X API v1.1 data format](/x-api/fundamentals/data-dictionary) and the [X API v2 format](/x-api/fundamentals/data-dictionary).
+
+- **Similarities**
+  - OAuth 1.0a User Context
+  - Posts per request limits
+  - Support for Post edit history and metadata
+
+- **Differences**
+  - Endpoint URLs
+  - App and Project requirements
+  - Response data format
+  - Request parameters
+
+### Similarities
+
+#### OAuth 1.0a User Context Authentication Method
+
+The standard endpoint supports [OAuth 1.0a User Context](/resources/fundamentals/authentication), while the new X API v2 Post lookup endpoint supports both OAuth 1.0a User Context and [OAuth 2.0 App-Only](/resources/fundamentals/authentication). Therefore, if you were previously using one of the standard v1.1 Post lookup endpoints, you can continue using the same authentication method if you migrate to the X API v2 version.
+
+App-Only authentication is likely the easiest way to get started. To learn how to generate an App Access Token, see [this OAuth 2.0 App-only guide](/resources/fundamentals/authentication).
+
+#### Posts per Request Limits
+
+The v1.1 [GET statuses/lookup](https://developer.x.com/en/docs/twitter-api/v1/tweets/post-and-engage/api-reference/get-statuses-lookup) endpoint allows you to specify up to 100 Posts per request. This also applies to the GET /tweets endpoint. To specify a full 100 Posts, use the `ids` parameter as a query parameter with a comma-separated list of [Post IDs](/resources/fundamentals/x-ids).
+
+**Support for Post Edit History and Metadata**
+
+Both versions provide metadata that describes any edit history. Check out the Post lookup API References and the [Edit Posts fundamentals page](/x-api/fundamentals/edit-tweets) for more details.
+
+### Differences
+
+#### Endpoint URLs
+
+- **Standard v1.1 endpoints:**
+  - `https://api.x.com/1.1/statuses/show`
+  - `https://api.x.com/1.1/statuses/lookup`
+  
+- **X API v2 endpoint:**
+  - `https://api.x.com/2/tweets`
+  - `https://api.x.com/2/tweets/:id`
+
+#### App and Project Requirements
+
+X API v2 endpoints require credentials from a [developer App](/resources/fundamentals/developer-apps) associated with a [Project](/resources/fundamentals/projects) for authentication. X API v1.1 endpoints can use credentials from standalone Apps or Apps associated with a Project.
+
+#### Response Data Format
+
+A significant difference between standard v1.1 and X API v2 endpoint versions is how fields are selected in the payload.
+
+For standard endpoints, many response fields are included by default, with options to use parameters to specify additional fields. 
+
+X API v2, however, only delivers the Post `id` and `text` fields by default. Additional fields and objects require the use of [fields](/x-api/fundamentals/fields) and [expansions](/x-api/fundamentals/expansions) parameters. The expanded fields return in an `includes` object within the response, which can be matched to the primary Post object by matching IDs.
+
+For more on using fields and expansions, see the [guide on how to use fields and expansions](/x-api/fundamentals/data-dictionary). A [data format migration guide](/x-api/fundamentals/fields) also maps standard v1.1 fields to the newer v2 fields.
+
+Additionally, X API v2 introduces new JSON designs for objects, including the Post and [user](/x-api/fundamentals/data-dictionary#user) objects:
+
+- Standard endpoints return Post objects in a `statuses` array, while X API v2 uses a `data` array.
+- Retweeted and Quoted Tweets in X API v2 replace "statuses" terminology.
+- New terminology such as `like` replaces terms like `favorites` and `favourites`.
+- Attributes with no values (e.g., `null`) are not included in X API v2 payloads.
+
+The Post object in X API v2 includes new fields such as:
+- `conversation_id`
+- Two new [annotations](/x-api/fundamentals/tweet-annotations) fields (`context` and `entities`)
+- New [metrics](/x-api/fundamentals/metrics) fields
+- `reply_setting` field showing who can reply to a given Post
+
+#### Request Parameters
+
+The following standard v1.1 request parameters have equivalents in X API v2:
+
+| Standard | X API v2 |
+|----------|----------|
+| `id`     | `ids`    |
+
+Certain standard v1.1 parameters are **not** supported in X API v2:
+
+| Standard            | Comment                                                                                                                      |
+|---------------------|------------------------------------------------------------------------------------------------------------------------------|
+| `tweet_mode`        | Replaced by fields and expansions functionality.                                                                             |
+| `trim_user`         | Replaced by fields and expansions. Use `author_id` expansion and `user.fields` for user data.                               |
+| `include_my_retweet`| Provides the ID of the source Post for Retweeted Posts by the authenticating user.                                          |
+| `include_entities`  | Use fields and expansions to control entities in the payload.                                                               |
+| `include_ext_alt_text` | Adds `ext_alt_text` field in media entity if alt text is present.                                                         |
+| `include_card_uri`  | Adds `card_uri` when an ads card is attached.                                                                               |
+| `map`               | Returns the Post ID and error message for unavailable Posts in X API v2, as opposed to nullified fields in v1.1.            |
+
+### CURL Requests
+
+The following cURL requests show standard v1.1 endpoints and their v2 equivalents. Replace `ACCESS_TOKEN` in the header with your app access token. For v2 endpoints, the token must belong to a [developer App](https://developer.twitter.com/en/docs/apps/overview) within a [Project](https://developer.twitter.com/en/docs/projects/overview).
+
+The response payloads from v1.1 will differ from v2. With v2, you can request different fields with the [fields](/x-api/fundamentals/fields) and [expansions](/x-api/fundamentals/expansions) parameters.
+
+**Standard v1.1 `GET statuses/lookup` and v2 `GET /tweets` endpoints**
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/1.1/statuses/lookup.json?id=1460323737035677698%2C1460323743339741184' \
+  --header 'Authorization: Bearer $ACCESS_TOKEN'
+  ```
+  
+  ```
+  curl --request GET \
+  --url 'https://api.x.com/2/tweets?ids=1460323737035677698%2C1460323743339741184&tweet.fields=created_at&expansions=author_id&user.fields=created_at' \
+  --header 'Authorization: Bearer $ACCESS_TOKEN'
+  ```
+
+
+**Standard v1.1 `GET statuses/show/:id` and v2 `GET /tweets/:id` endpoints**
+```
+curl --request GET \
+  --url 'https://api.x.com/1.1/statuses/show.json?id=1460323737035677698' \
+  --header 'Authorization: Bearer $ACCESS_TOKEN'
+```
+
+```
+curl --request GET \
+  --url 'https://api.x.com/2/tweets/1460323737035677698?tweet.fields=created_at&expansions=author_id&user.fields=created_at' \
+  --header 'Authorization: Bearer $ACCESS_TOKEN'
+```

@@ -1,0 +1,97 @@
+---
+title: Rate limits
+---
+
+
+Every day, many thousands of developers make requests to the X API. To help manage the sheer volume of these requests, limits are placed on the number of requests that can be made. These limits help provide the reliable and scalable API that our developer community relies on.
+
+The maximum number of requests allowed is based on a time interval, typically over a specified period or window of time. The most common interval is fifteen minutes. For example, an endpoint with a limit of 900 requests per 15 minutes allows up to 900 requests in any 15-minute interval.
+
+Rate limits depend on the authentication method. For instance, if using [OAuth 1.0a User Context](/resources/fundamentals/authentication), each set of users’ [Access Tokens](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow) has its own rate limit per period. Alternatively, if using [OAuth 2.0 Bearer Token](/resources/fundamentals/authentication#oauth-2-0), your app will have its own separate limit per time period. When these limits are exceeded, an error is returned.
+
+## Table of contents
+
+- [X API v2 Free rate limits](#v2-limits-free)
+- [X API v2 Basic rate limits](#v2-limits-basic)
+- [X API v2 Pro rate limits](#v2-limits-pro)
+- [X API Enterprise rate limits](#v2-limits-enterprise)
+- [Rate limits and authentication method](#auth)
+- [HTTP headers and response codes](#headers-and-codes)
+- [Recovering from rate limits](#recovering)
+- [Tips to avoid being rate limited](#tips)
+
+## X API v2 rate limits - Free
+
+The following table lists the rate limits for the X API v2 Free access. These limits are also documented on each endpoint’s API Reference page and in the [developer portal](/resources/fundamentals/developer-portal)'s products section.
+
+| Endpoint                | #Requests | Window of time | Per      | Part of the Post pull cap? | Effective 30-day limit |
+|-------------------------|-----------|----------------|----------|----------------------------|-------------------------|
+| **POST_2_tweets**       | 50        | 24 hours      | per user | no                         | 1,500                   |
+|                         | 50        | 24 hours      | per app  | no                         | 1,500                   |
+| **DELETE_2_tweets_id**  | 50        | 24 hours      | per user | no                         | 1,500                   |
+|                         | 50        | 24 hours      | per app  | no                         | 1,500                   |
+| **GET_2_users_me**      | 25        | 24 hours      | per user | no                         | 750                     |
+
+## X API v2 rate limits - Basic
+
+The following table lists the rate limits for the X API v2 Basic access. These limits are also documented on each endpoint’s API Reference page and in the [developer portal](/resources/fundamentals/developer-portal)'s products section.
+
+| Endpoint                                | #Requests | Window of time | Per      | Part of the Post pull cap? | Effective 30-day limit |
+|-----------------------------------------|-----------|----------------|----------|----------------------------|-------------------------|
+| **DELETE_2_lists_param**                | 5         | 15 minutes     | per user | no                         | 14,400                  |
+| **DELETE_2_lists_param_members_param**  | 5         | 15 minutes     | per user | no                         | 14,400                  |
+| **DELETE_2_tweets_param**               | 5         | 15 minutes     | per user | no                         | 14,400                  |
+| **DELETE_2_users_id_bookmarks_tweet_id**| 5         | 15 minutes     | per user | no                         | 14,400                  |
+
+...
+
+## Rate limits and authentication method
+
+Rate limits are set at both the developer App and user access token levels:
+
+- **[OAuth 2.0 Bearer Token](/resources/fundamentals/authentication#oauth-2-0): App rate limit**
+  This method allows you to make a certain number of requests on behalf of your developer App. When using this authentication method, limits are determined by the requests made with a Bearer Token.
+  - Example: With a limit of 450 requests per 15-minute interval, you can make 450 requests on behalf of your App within that interval.
+
+- **[OAuth 1.0a User Context](/resources/fundamentals/authentication): User rate limit**
+  This method allows requests to be made on behalf of a X user identified by the user Access Token. For example, if retrieving private metrics from Posts, authenticate with user Access Tokens for that user, generated using the [3-legged OAuth flow](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow).
+  - Example: With a limit of 900 requests per 15 minutes per user, you can make up to 900 requests per user in that time frame.
+
+...
+
+## HTTP headers and response codes
+
+Use HTTP headers to understand where your application stands within a given rate limit, based on the most recent request made.
+
+- `x-rate-limit-limit`: rate limit ceiling for the endpoint
+- `x-rate-limit-remaining`: remaining requests for the 15-minute window
+- `x-rate-limit-reset`: remaining time before the rate limit resets (in UTC epoch seconds)
+
+### Error Responses
+If an application exceeds the rate limit for an endpoint, the API will return a [HTTP 429 “Too Many Requests”](http://tools.ietf.org/html/rfc6585) response with the following error message in the response body:
+
+```json
+{ "errors": [ { "code": 88, "message": "Rate limit exceeded" } ] }
+```
+
+## Recovering from a rate limit
+
+When these rate limits are exceeded, a 429 'Too many requests' error is returned from the endpoint. As discussed below, when rate limit errors occur, a best practice is to examine HTTP headers that indicate when the limit resets and pause requests until then.<br/>When a "too many requests" or rate-limiting error occurs, the frequency of making requests needs to be slowed down. When a rate limit error is hit, the `x-rate-limit-reset:` HTTP header can be checked to learn when the rate-limiting will reset<br/><br/>. Another common pattern is based on exponential backoff, where the time between requests starts off small (for example, a few seconds), then doubled before each retry. This is continued until a request is successful, or some reasonable maximum time between requests is reached (for example, a few minutes).<br/><br/> Ideally, the client-side is self-aware of existing rate limits and can pause requests until the currently exceeded window expires. If you exceed a 15-minute limit, then waiting a minute or two before retrying makes sense.<br/><br/> Note that beyond these limits on the number of requests, the Standard Basic level of access provides up to 500,000 Posts per month from the recent search and filtered stream endpoints. If you have exceeded the monthly limit on the number of Posts, then it makes more sense for your app to raise a notification and know its enrollment day of the month and hold off requests until that day.
+
+### Tips to avoid being rate limited
+The tips below are there to help you code defensively and reduce the possibility of being rate limited. Some application features that you may want to provide are simply impossible in light of rate-limiting, especially around the freshness of results. If real-time information is an aim of your application, look into the filtered and sampled stream endpoints.
+
+#### Caching
+Store API responses if expecting frequent usage. Instead of calling the API on every page load, cache the response locally.
+
+#### Prioritize active users
+If your site keeps track of many X users (for example, fetching their current status or statistics about their X usage), consider only requesting data for users who have recently signed into your site.
+
+#### Adapt to the search results
+If your application monitors a high volume of search terms, query less often for searches that have no results than for those that do. By using a back-off you can keep up to date on queries that are popular but not waste cycles requesting queries that very rarely change. Alternatively, consider using the filtered stream endpoint and filter with your search queries.
+
+#### Denylist
+If an application abuses the rate limits, it will be denied. Denied apps are unable to get a response from the X API. If you or your application has been denied and you think there has been a mistake, you can use our [Platform Support forms](https://support.twitter.com/forms/platform) to request assistance. Please include the following information:
+1.  Explain why you think your application was denied.
+2.  If you are no longer being rate limited, describe in detail how you fixed the problem.
+
