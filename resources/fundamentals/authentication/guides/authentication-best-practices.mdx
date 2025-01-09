@@ -1,0 +1,96 @@
+---
+title: Best practices
+---
+
+import { Button } from "/snippets/button.mdx";
+
+Your API keys and tokens should be guarded very carefully. 
+
+These credentials are directly tied to your [developer App](/resources/fundamentals/developer-apps) and those Twitter account that have authorized you to make requests on behalf of them. If your keys are compromised, bad actors could use them to make requests to the Twitter endpoints on behalf of your developer App or its authorized users, which could mean their requests might cause you to hit unexpected rate limits, use up your paid access allotment, or even cause your developer App to be suspended.
+
+The following sections include best practices that should be considered when managing your API keys and tokens.
+
+
+## Regenerate API keys and tokens
+
+In the event that you believe that your API keys has been exposed, you should regenerate your API keys by following these steps:
+
+1.  Navigate to the [developer portal's "Projects and Apps" page](https://developer.x.com/en/portal/projects-and-apps.html).
+2.  Click on the "Keys and tokens" icon (🗝 ) next to the relevant App.
+3.  Click on the "Regenerate" button next to the set of keys and tokens that you would like to regenerate. 
+
+
+
+If you would prefer to regenerate your Access Tokens or Bearer Tokens programatically, you can do so using our authentication endpoints.
+
+* If you would like to regenerate your Access Tokens, you must invalidate your tokens using the [POST oauth/invalidate_token](/resources/fundamentals/authentication/api-reference#post-oauth2-invalidate-token) endpoint, then regenerate your tokens using the [3-legged OAuth flow](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens).
+* If you would like to regenerate your Bearer Token, you must invalidate your token using the [POST oauth2/invalidate_token](/resources/fundamentals/authentication/api-reference#post-oauth2-invalidate-token) endpoint, then regenerate your token using the [POST oauth2/token](/resources/fundamentals/authentication/api-reference#post-oauth2-token) endpoint.
+
+
+
+## Having a central file for your secrets
+
+Having a file such as .ENV file or any other sort of .yaml file to contain your secrets is an option that could be helpful but be sure to have a strong .gitignore file that can prevent you from accidentally committing these to a git repository. 
+
+
+## Environment variables
+
+Writing code that utilizes environment variables might be helpful. 
+
+An example of this is as follows written in Python:
+
+```python
+import os
+
+consumer_key = os.environ.get("CONSUMER_KEY")
+
+consumer_secret = os.environ.get("CONSUMER_SECRET")
+```
+
+Inside of your terminal you would want to write something like this:
+
+```bash
+export CONSUMER_KEY='xxxxxxxxxxxxxxxxxxx'
+export CONSUMER_SECRET='xxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+## Source code and version control
+
+The most common security mistakes made by developers are having API keys and tokens committed to source code in accessible version control systems like GitHub and BitBucket. Many of these code repositories are publicly accessible. This mistake is made so often in public code repositories that there are lucrative bots that scrape for API keys.
+
+* Use server environment variables. By storing API keys in environment variables, you keep them out of your code and version control. This also allows you to use different keys for different environments easily.
+* Use a configuration file excluded from source control. Add the filename to your [.gitignore](https://git-scm.com/docs/gitignore) file to exclude the file from being tracked by version control.
+* If you remove the API keys from your code after you have used version control, the API keys are likely still accessible by accessing previous versions of your codebase. Regenerate your API keys, as described in the next section.
+
+## Databases
+
+If you need to store your access tokens in a database, please keep the following in mind:
+
+* Restrict access to the database in a way such that the access tokens are only readable by the owner of the token.
+* Restrict edit/write privileges to the database table for access tokens - this should be automated with the key management system.
+* Encrypt access tokens before storing in any data stores.
+
+## Password management tools
+
+Password management tools such as 1password or Last Pass can be helpful in keeping your keys and tokens in secure place. You might want to avoid sharing these in side of a shared team password management tool.
+
+## Web storage & cookies
+
+There are two types of web storage: LocalStorage and SessionStorage. These were created as improvements to using Cookies since the storage capacity for web storage is much higher than Cookie storage. However, there are different pros and cons to each of these storage options.
+ 
+
+**Web Storage: LocalStorage**
+
+Anything stored in local web storage is persistent. This means that the data will persist until the data is explicitly deleted. Depending on the needs of your project, you might view this as a positive. However, you should be mindful of using LocalStorage, since any changes/additions to data will be available on all future visits to the webpage in question. We would not usually recommend using LocalStorage, although there may be a few exceptions to this. If you decide to use LocalStorage, it is good to know that it supports the same-origin policy, so all data stored here will only be available via the same origin. An added performance perk of using LocalStorage would be a resulting decrease in client-server traffic since the data does not have to be sent back to the server for every HTTP request.
+ 
+
+**Web Storage: SessionStorage**
+
+SessionStorage is similar to LocalStorage, but the key difference is that SessionStorage is not persistent. Once the window (or tab, depending on which browser you are using) that was used to write to SessionStorage is closed, the data will be lost. This is useful in restricting read access to your token within a user session. Using SessionStorage is normally more preferable than LocalStorage when thinking in terms of security. Like LocalStorage, the perks of same-origin policy support and decreased client-server traffic apply to SessionStorage as well.
+ 
+
+**Cookies**
+
+Cookies are the more traditional way to store session data. You can set an expiration time for each cookie, which would allow for ease of revocability and restriction of access. However, the client-server traffic would definitely increase when using cookies, since the data is being sent back to the server for every HTTP request. If you decide to use cookies, you need to protect against session hijacking. By default, cookies are sent in plaintext over HTTP, which makes their contents vulnerable to packet sniffing and/or man-in-the-middle attacks where attackers may modify your traffic. You should always enforce HTTPS to protect your data in transit. This will provide confidentiality, integrity (of the data), and authentication. However, if your web application or site is available both through HTTP and HTTPS, you will also want to use the 'Secure' flag on the cookie. This will prevent attackers from being able to send links to the HTTP version of your site to a user and listening in on the resulting HTTP request generated.
+
+Another secondary defense against session hijacking when using cookies would be to validate the user's identity again before any high-impact actions are carried out. One other flag to consider for improving the security of your cookies would be the 'HttpOnly' flag. This flag tells the browser that the cookie in question shall only be accessible from the server specified. Any attempts made by client-side scripts would be forbidden by this flag, therefore helping to protect against most cross-site scripting (XSS) attacks.

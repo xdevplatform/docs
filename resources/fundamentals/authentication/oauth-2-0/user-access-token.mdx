@@ -1,0 +1,164 @@
+---
+title: How to connect to endpoints using OAuth 2.0 Authorization Code Flow with PKCE
+sidebarTitle: OAuth 2.0 Making requests on behalf of users
+---
+
+### How to connect to endpoints using OAuth 2.0 Authorization Code Flow with PKCE
+
+
+#### How to connect to the endpoints
+
+To authenticate your users, your App will need to implement an authorization flow. This authorization flow lets you direct your users to an authorization dialog on Twitter. From there, the primary Twitter experience will show the authorization dialog and handle the authorization on behalf of your App. Your users will be able to authorize your App or decline permission. After the user makes their choice, Twitter will redirect the user to your App, where you can exchange the authorization code for an access token (if the user authorized your App), or handle a rejection (if the user did not authorize your App).
+
+#### Working with confidential clients
+
+If you are working with confidential clients, you will need to use a [basic authentication](https://datatracker.ietf.org/doc/html/rfc2617#section-2) scheme for generating an authorization header with base64 encoding while making requests to the token endpoints.
+
+The `userid` and `password` are separated by a single colon (":") character within a base64 encoded string in the credentials.
+
+An example would look like this:
+
+      `-header 'Authorization: Basic V1ROclFTMTRiVWhwTWw4M2FVNWFkVGQyTldNNk1UcGphUTotUm9LeDN4NThKQThTbTlKSXQyZm1BanEzcTVHWC1icVozdmpKeFNlR3NkbUd0WEViUA=='`
+
+
+If the user agent wishes to send the Client ID "Aladdin" and password "open sesame,” it would use the following header field:
+
+      `Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==`
+
+
+To create the basic authorization header you will need to base64 encoding on your Client ID and Client Secret which can be obtained from your App’s “Keys and Tokens” page inside of the [developer portal.](https://developer.twitter.com/en/portal/dashboard)
+
+#### Steps to connect using OAuth 2.0
+
+**Step 1: Construct an Authorize URL**
+
+Your App will need to build an authorize URL to Twitter, indicating the scopes your App needs to authorize. For example, if your App needs to lookup Tweets, users and to manage follows, it should request the following scopes:
+
+`tweet.read%20users.read%20follows.read%20follows.write`
+
+The URL will also contain the `code_challenge` and state parameters, in addition to the other required parameters. In production you should use a random string for the `code_challenge`.
+
+**Step 2: GET oauth2/authorize**
+
+Have the user authenticate and send the application an authorization code. If you have enabled OAuth 2.0 for your App you can find your Client ID inside your App’s “Keys and Tokens” page.
+
+An example URL to redirect the user to would look like this:
+
+```
+https://twitter.com/i/oauth2/authorize?response_type=code&client_id=M1M5R3BMVy13QmpScXkzTUt5OE46MTpjaQ&redirect_uri=https://www.example.com&scope=tweet.read%20users.read%20follows.read%20follows.write&state=state&code_challenge=challenge&code_challenge_method=plain
+```
+
+An example URL with offline_access would look like this:
+
+```
+https://twitter.com/i/oauth2/authorize?response_type=code&client_id=M1M5R3BMVy13QmpScXkzTUt5OE46MTpjaQ&redirect_uri=https://www.example.com&scope=tweet.read%20users.read%20follows.read%20offline.access&state=state&code_challenge=challenge&code_challenge_method=plain
+```
+
+Upon successful authentication, the redirect\_uri  you would receive a request containing the auth\_code parameter. Your application should verify the state parameter.
+
+An example request from client’s redirect would be:
+
+```
+https://www.example.com/?state=state&code=VGNibzFWSWREZm01bjN1N3dicWlNUG1oa2xRRVNNdmVHelJGY2hPWGxNd2dxOjE2MjIxNjA4MjU4MjU6MToxOmFjOjE
+```
+
+**Step 3: POST oauth2/token - Access Token**
+
+At this point, you can use the authorization code to create an access token and refresh token (only if `offline.access` scope is requested). You can make a POST request to the following endpoint:
+
+```
+https://api.x.com/2/oauth2/token
+```
+
+You will need to pass in the `Content-Type` of `application/x-www-form-urlencoded` via a header.  Additionally, you should have in your request: `code`, `grant_type`, `client_id` and `redirect_uri`, and the `code_verifier`.
+
+Here is an example token request for a public client:
+
+```json
+curl --location --request POST 'https://api.x.com/2/oauth2/token' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--data-urlencode 'code=VGNibzFWSWREZm01bjN1N3dicWlNUG1oa2xRRVNNdmVHelJGY2hPWGxNd2dxOjE2MjIxNjA4MjU4MjU6MToxOmFjOjE' \
+--data-urlencode 'grant_type=authorization_code' \
+--data-urlencode 'client_id=rG9n6402A3dbUJKzXTNX4oWHJ' \
+--data-urlencode 'redirect_uri=https://www.example.com' \
+--data-urlencode 'code_verifier=challenge'
+```
+
+
+Here is an example using a confidential client: 
+
+```json
+curl --location --request POST 'https://api.x.com/2/oauth2/token' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--header 'Authorization: Basic V1ROclFTMTRiVWhwTWw4M2FVNWFkVGQyTldNNk1UcGphUTotUm9LeDN4NThKQThTbTlKSXQyZm1BanEzcTVHWC1icVozdmpKeFNlR3NkbUd0WEViUA=='\
+--data-urlencode 'code=VGNibzFWSWREZm01bjN1N3dicWlNUG1oa2xRRVNNdmVHelJGY2hPWGxNd2dxOjE2MjIxNjA4MjU4MjU6MToxOmFjOjE' \
+--data-urlencode 'grant_type=authorization_code' \
+--data-urlencode 'redirect_uri=https://www.example.com' \
+--data-urlencode 'code_verifier=challenge'
+```
+
+**Step 4: Connect to the APIs**
+
+You are now ready to connect to the endpoints using OAuth 2.0. To do so, you will request the API as you would using [Bearer Token authentication](/resources/fundamentals/authentication/oauth-2-0/application-only). Instead of passing your Bearer Token, you’ll want to use the access token you generated in the last step. As a response, you should see the appropriate payload corresponding to the endpoint you are requesting. This request is the same for both public and confidential clients. 
+
+
+An example of the request you would make would look as follows:
+
+```json
+curl --location --request GET 'https://api.x.com/2/tweets?ids=1261326399320715264,1278347468690915330' \
+--header 'Authorization: Bearer Q0Mzb0VhZ0V5dmNXSTEyNER2MFNfVW50RzdXdTN6STFxQlVkTGhTc1lCdlBiOjE2MjIxNDc3NDM5MTQ6MToxOmF0OjE'
+```
+
+**Step 5: POST oauth2/token - refresh token**
+
+A refresh token allows an application to obtain a new access token without prompting the user. You can create a refresh token by making a POST request to the following endpoint: https://api.x.com/2/oauth2/token You will need to add in the `Content-Type` of `application/x-www-form-urlencoded` via a header. In addition, you will also need to pass in your refresh\_token, set your grant\_type to be a `refresh_token`, and define your `client_id`.
+
+This request will work for public clients:
+
+```json
+POST 'https://api.x.com/2/oauth2/token' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--data-urlencode 'refresh_token=bWRWa3gzdnk3WHRGU1o0bmRRcTJ5VUxWX1lZTDdJSUtmaWcxbTVxdEFXcW5tOjE2MjIxNDc3NDM5MTQ6MToxOnJ0OjE' \
+--data-urlencode 'grant_type=refresh_token' \
+--data-urlencode 'client_id=rG9n6402A3dbUJKzXTNX4oWHJ'
+```
+
+Here is an example of one for confidential clients:
+
+```json
+POST 'https://api.x.com/2/oauth2/token' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--header 'Authorization: Basic V1ROclFTMTRiVWhwTWw4M2FVNWFkVGQyTldNNk1UcGphUTotUm9LeDN4NThKQThTbTlKSXQyZm1BanEzcTVHWC1icVozdmpKeFNlR3NkbUd0WEViUA=='\
+--data-urlencode 'refresh_token=bWRWa3gzdnk3WHRGU1o0bmRRcTJ5VUxWX1lZTDdJSUtmaWcxbTVxdEFXcW5tOjE2MjIxNDc3NDM5MTQ6MToxOnJ0OjE'\
+--data-urlencode 'grant_type=refresh_token'
+```
+
+
+**Step 6: POST oauth2/revoke - Revoke Token**
+
+A revoke token invalidates an access token or refresh token. This is used to enable a "log out" feature in clients, allowing you to clean up any security credentials associated with the authorization flow that may no longer be necessary. The revoke token is for an App to revoke a token and not a user. You can create a revoke token request by making a POST request to the following URL if the App wants to programmatically revoke the access given to it:
+
+```
+https://api.x.com/2/oauth2/revoke
+```
+
+You will need to pass in the `Content-Type` of `application/x-www-form-urlencoded` via a header, your token, and your client_id.
+
+In some cases, a user may wish to revoke access given to an App, they can revoke access by visiting the [connected Apps page](https://twitter.com/settings/connected_apps).
+
+```bash
+curl --location --request POST 'https://api.x.com/2/oauth2/revoke' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--data-urlencode 'token=Q0Mzb0VhZ0V5dmNXSTEyNER2MFNfVW50RzdXdTN6STFxQlVkTGhTc1lCdlBiOjE2MjIxNDc3NDM5MTQ6MToxOmF0OjE' \
+--data-urlencode 'client_id=rG9n6402A3dbUJKzXTNX4oWHJ'
+```
+
+
+This request will work for confidential clients:
+
+```bash
+curl --location --request POST 'https://api.x.com/2/oauth2/revoke' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--header 'Authorization: Basic V1ROclFTMTRiVWhwTWw4M2FVNWFkVGQyTldNNk1UcGphUTotUm9LeDN4NThKQThTbTlKSXQyZm1BanEzcTVHWC1icVozdmpKeFNlR3NkbUd0WEViUA=='\
+--data-urlencode 'token=Q0Mzb0VhZ0V5dmNXSTEyNER2MFNfVW50RzdXdTN6STFxQlVkTGhTc1lCdlBiOjE2MjIxNDc3NDM5MTQ6MToxOmF0OjE'
+```

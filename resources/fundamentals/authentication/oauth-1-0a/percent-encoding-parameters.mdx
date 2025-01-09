@@ -1,0 +1,48 @@
+---
+title: Percent encoding parameters
+sidebarTitle: Percent encoding parameters
+---
+
+import { Button } from "/snippets/button.mdx";
+
+### Percent encoding parameters
+
+Parts of the Twitter API, particularly those dealing with OAuth signatures, require strings to be encoded according to [RFC 3986, Section 2.1](http://tools.ietf.org/html/rfc3986#section-2.1). Since many implementations of URL encoding algorithms are not fully compatible with RFC 3986, bad encodings are a cause of many OAuth signature errors. For this reason, the exact signing algorithm to use is covered on this page.
+
+This page covers the URL encoding process described in [RFC 3986, Section 2.1](http://tools.ietf.org/html/rfc3986#section-2.1). We encourage you to reference that specification in case of any ambiguity or conflict with this document.
+ 
+
+#### Encoding a string
+
+The following algorithm assumes you are encoding a string SRC by copying its values byte-by-byte to a string DST.
+
+**Step 1: While SRC contains unread bytes, read the next byte (8 bits) from SRC.** Typically, this is considered a character, but in the case of encodings where a character may be more than one byte (such as UTF-8), just read the first byte.
+
+**Step 2: Check whether the read byte matches any of the following ASCII equivalents.** The following table has been broken down into rows for legibility, but you only need to determine whether the read byte exists in the table at all, not the specific row.
+
+| Name | ASCII characters | Equivalent byte values |
+| :--- | :--- | :--- |
+| Digits | ‘0’, ‘1’, ‘2’, ‘3’, ‘4’, ‘5’, ‘6’, ‘7’, ‘8’, ‘9’ | 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39 |
+| Uppercase letters | ‘A’, ‘B’, ‘C’, ‘D’, ‘E’, ‘F’, ‘G’, ‘H’, ‘I’, ‘J’, ‘K’, ‘L’, ‘M’, ‘N’, ‘O’, ‘P’, ‘Q’, ‘R’, ‘S’, ‘T’, ‘U’, ‘V’, ‘W’, ‘X’, ‘Y’, ‘Z’ | 0x41, 0x42, 0x43, 0x44, 0x45,0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B,0x4C, 0x4D, 0x4E, 0x4F, 0x50, 0x51,0x52, 0x53, 0x54, 0x55, 0x56, 0x57,0x58, 0x59, 0x5A |
+| Lowercase letters | ‘a’, ‘b’, ‘c’, ‘d’, ‘e’, ‘f’, ‘g’, ‘h’, ‘i’, ‘j’, ‘k’, ‘l’, ‘m’, ‘n’, ‘o’, ‘p’, ‘q’, ‘r’, ‘s’, ‘t’, ‘u’, ‘v’, ‘w’, ‘x’, ‘y’, ‘z’ | 0x61, 0x62, 0x63, 0x64, 0x65,0x66, 0x67, 0x68, 0x69, 0x6A, 0x6B,0x6C, 0x6D, 0x6E, 0x6F, 0x70, 0x71,0x72, 0x73, 0x74, 0x75, 0x76, 0x77,0x78, 0x79, 0x7A |
+| Reserved characters | ‘-‘, ‘.’, ‘_’, ‘~’ | 0x2D, 0x2E, 0x5F, 0x7E |
+
+**Step 2b: If the byte is not listed in the above table, continue.** Any other value must be encoded. **Step 2a: If the byte is listed in the above table, copy it into DST and go back to Step 1.** Characters listed in the above table do not need to be escaped, so you will just copy the byte directly.
+
+**Step 3: Write the character ‘%’ to DST.** The percent character ‘%’ (or 0x25 in hex and 00100101 in binary) indicates that the next two bytes will represent an encoded byte.
+
+**Step 4: Write two characters representing the uppercase ASCII-encoded hex value of the current byte to DST.** This is a bit confusing, so here is an example. Pretend the current byte is 0xE6 (11100110 in binary). This corresponds with the UTF-8 encoded value of ‘æ’. To encode this value, write the character ‘E’ (0x45, from the table above) and then the character ‘6’ (0x36) to DST. The last three characters are written should have been “%E6”. Note that if you write a letter such as A,B,C,D,E or F, you must use the uppercase character.
+
+**Step 5: Return to Step 1.** Keep going until the entirety of SRC is copied to DST.
+ 
+
+#### Examples
+
+The following examples may be helpful to compare with the output of your own code. You should consider any differences an error. Spaces encoded as “+” characters are an example of incorrect encoding.
+
+| Original string | Encoded string |
+| :--- | :--- |
+| Ladies + Gentlemen | Ladies%20%2B%20Gentlemen |
+| An encoded string! | An%20encoded%20string%21 |
+| Dogs, Cats & Mice | Dogs%2C%20Cats%20%26%20Mice |
+| ☃   | %E2%98%83 |
