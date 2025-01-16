@@ -1,0 +1,102 @@
+---
+title: Best practices
+sidebarTitle: Best practices
+---
+
+There are a few important concepts to understand when using the [`POST /2/media/upload`](/x-api/media/media-upload) endpoint. Uploading media with OAuth can be a bit tricky, so we’ve outlined some things to keep in mind as well as a working sample of how to use this endpoint here.
+
+## Keep in mind
+
+- You may attach up to 4 photos, 1 animated GIF or 1 video in a Post.
+- The image passed should be the raw binary of the image or binary base64 encoded, no need to otherwise encode or escape the contents as long as the Content-Type is set appropriately (when in doubt: `application/octet-stream`).
+- When posting base64 encoded images, be sure to set the “Content-Transfer-Encoding: base64” on the image part of the message.
+- Multi-part message boundaries must be on their own line and terminated by a CRLF.
+- For working examples of how to POST using this endpoint, we recommend testing with [xurl](https://github.com/xdevplatform/xurl). Also, take a look at the [X Libraries](/resources/tools-and-libraries) available.
+- Use the `media_id_string` provided in the API response for Javascript and any other languages that cannot accurately represent a long integer.
+
+## Media Categories
+
+The Media Category parameter defines the use case of the media file to be uploaded, and can affect file size limits or other constraints enforced for media uploads. It’s important to use the correct media category when uploading media to avoid problems when trying to use the media. It is an optional value passed in the INIT request as part of the upload flow. If media category is not specified, the uploaded media is assumed to be media for a Post (`tweet_image`, `tweet_video`, or `tweet_gif`), depending on the content type.
+
+The most common media categories are as follows:
+
+- `tweet_image`
+- `tweet_video`
+- `tweet_gif`
+- `dm_image`
+- `dm_video`
+- `dm_gif`
+- `subtitles`
+
+If you are an Ads API partner please refer to [these docs](/x-ads-api/creatives#promoted-video) for more information on recommended media category for promoted video.
+
+## Image specifications and recommendations
+
+Image files must meet all of the following criteria:
+
+- **Supported image media types**: `JPG`, `PNG`, `GIF`, `WEBP`
+- **Image size**: `<= 5 MB`
+- **Animated GIF size**: `<= 15 MB`
+
+The file size limit above is enforced by the media upload endpoint. In addition, there is a separate product entity specific file size limit which is applied when calling the Post creation (or similar) endpoints with `media_id`. The file size limit and other constraints may vary depending on the `media_category` parameter.
+
+## Animated GIF recommendations
+
+A GIF may fail during Post creation even if it is within the file size limit. Adhere to the following constraints to improve success rates.
+
+- **Resolution**: `<= 1280x1080` (`width` x `height`)
+- **Number of frames**: `<= 350`
+- **Number of pixels**: `<= 300 million` (`width` * `height` * `num_frames`)
+- **File size**: `<= 15Mb`
+
+In order to process larger GIFs, use the [chunked upload](/x-api/media/quickstart/chunked-media-upload) endpoint with the `media_category` parameter. This allows the server to process the GIF file asynchronously, which is a requirement for processing larger files. Pass `media_category=tweet_gif` to enable async upload behavior for Posts with an animated GIF.
+
+## Video specifications and recommendations
+
+Please use the Async Path for media uploads.
+
+### Recommended
+
+- **Video Codec**: `H264 High Profile`
+- **Frame Rates**: `30 FPS`, `60 FPS`
+- **Video Resolution**: `1280x720` (landscape), `720x1280` (portrait), `720x720` (square). Subscribed users can upload a 1080p video and get 1080p playback. Unsubscribed users can upload a 720p video and get a 720p playback.
+- **Minimum Video Bitrate**: `5,000 kbps`
+- **Minimum Audio Bitrate**: `128 kbps`
+- **Audio Codec**: `AAC LC`
+- **Aspect Ratio**: `16:9` (landscape or portrait), `1:1` (square)
+
+### Advanced
+
+- **Frame rate**: must be `60 FPS` or less
+- **Dimensions**: must be between `32x32` and `1280x1024`
+- **File size**: must not exceed `512 mb`
+- **Duration**: must be between `0.5 seconds` and `140 seconds`
+- **Aspect ratio**: must be between `1:3` and `3:1`
+- **[Pixel aspect ratio](https://en.wikipedia.org/wiki/Pixel_aspect_ratio)**: must have `1:1`
+- **Pixel format**: Only [YUV](https://en.wikipedia.org/wiki/YUV) 4:2:0 is supported
+- Audio must be [`AAC` with Low Complexity profile](https://en.wikipedia.org/wiki/Advanced_Audio_Coding#Modular_encoding). (High-Efficiency `AAC` is not supported)
+- Audio must be `mono` or `stereo`, not 5.1 or greater
+- Must not have [`open GOP`](https://en.wikipedia.org/wiki/Group_of_pictures)
+- Must use [`progressive scan`](https://en.wikipedia.org/wiki/Progressive_scan)
+
+### Additional Information
+
+In the table below each row represents an upload recommendation, but is not a requirement. All uploads are processed for optimization across multiple platforms.
+
+| Orientation | Width | Height | Video Bitrate | Audio Bitrate |
+| :--- | :--- | :--- | :--- | :--- |
+| Landscape | 1280 | 720 | 2048K | 128K |
+| Landscape | 640 | 360 | 768K | 64K |
+| Landscape | 320 | 180 | 256K | 64K |
+| Portrait | 720 | 1280 | 2048K | 128K |
+| Portrait | 360 | 640 | 768K | 64K |
+| Portrait | 180 | 320 | 256K | 64K |
+| Square | 720 | 720 | 2048K | 128K |
+| Square | 480 | 480 | 768K | 64K |
+| Square | 240 | 240 | 256K | 32K |
+
+For an example of how to upload media, please see the [chunked media upload documentation](/x-api/media/quickstart/chunked-media-upload).
+
+### Troubleshooting
+
+For issues with the Media APIs, browse the [Media API category](https://devcommunity.x.com/c/x-api/media-apis) in the developer forums for an answer.
