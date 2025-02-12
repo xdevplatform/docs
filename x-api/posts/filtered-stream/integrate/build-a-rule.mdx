@@ -3,38 +3,37 @@ title: Build a rule
 sidebarTitle: Build a rule
 ---
 
-### Building rules for filtered stream
+## Building rules for filtered stream
 
 The filtered stream endpoints deliver filtered Posts to you in real-time that match on a set of rules that are applied to the stream. Rules are made up of operators that are used to match on a variety of Post attributes.
 
 Multiple rules can be applied to a stream using the [POST /tweets/search/stream/rules](/x-api/posts/filtered-stream#post-2-tweets-search-stream-rules) endpoint. Once you’ve added rules and connect to your stream using the [GET /tweets/search/stream](/x-api/posts/filtered-stream#get-2-tweets-search-stream) endpoint, only those Posts that match your rules will be delivered in real-time through a persistent streaming connection. You do not need to disconnect from your stream to add or remove rules. 
 
-#### Table of contents
+### Table of contents
 
-* [Building a rule](#build)
-    * [Rule limitations](#limits)
-    * [Operator availability](#availability)
-    * [Operator types: standalone and conjunction-required](#types)
-    * [Boolean operators and grouping](#boolean)
+* [Building a rule](#building-a-rule)
+    * [Rule limitations](#rule-limitations)
+    * [Operator availability](#operator-availability)
+    * [Operator types: standalone and conjunction-required](#operator-types-standalone-and-conjunction-required)
+    * [Boolean operators and grouping](#boolean-operators-and-grouping)
     * [Order of operations](#order-of-operations)
-    * [Punctuation, diacritics, and case sensitivity](#punctuation)
-    * [Specificity and efficiency](#specificity)
-    * [Iteratively building a rule](#iterative)
-    * [Adding and removing rules](#adding-removing)
-    * [Rule examples](#examples)
-* [List of operators](#list)
-     
+    * [Punctuation, diacritics, and case sensitivity](#punctuation-diacritics-and-case-sensitivity)
+    * [Specificity and efficiency](#specificity-and-efficiency)
+    * [Iteratively building a rule](#iteratively-building-a-rule)
+    * [Adding and removing rules](#adding-and-removing-rules)
+    * [Rule examples](#rule-examples)
+* [List of operators](#operators)
 
-#### Building a rule
+### Building a rule
 
-**Rule limitations**
+#### Rule limitations
 
 Limits on the number of rules will depend on which [access level](/x-api/getting-started/about-x-api) is applied to your [Project](/resources/fundamentals/projects).
 
 You can see how these limits apply via the [filtered stream introduction](/x-api/posts/filtered-stream) page.
  
 
-**Operator availability**
+#### Operator availability
 
 While most operators are available to any developer, there are several that are reserved for those that have been approved for Basic, Pro, or Enterprise access levels. We list which [access level](/x-api/getting-started/about-x-api) each operator is available to in the [list of operators](#list) table using the following labels:
 
@@ -42,46 +41,48 @@ While most operators are available to any developer, there are several that are 
 * **Elevated operators:** Available when using a Project with Pro, or Enterprise access.
      
 
-**Operator types: standalone and conjunction-required**
+#### Operator types: standalone and conjunction-required
 
 **Standalone operators** can be used alone or together with any other operators (including those that require conjunction).
 
-For example, the following rule will work because it uses the #hashtag operator, which is standalone:
+For example, the following rule will work because it uses the `#hashtag` operator, which is standalone:
 
-#xapiv2
+`#xapiv2`
 
 **Conjunction required** operators cannot be used by themselves in a rule; they can only be used when at least one standalone operator is included in the rule. This is because using these operators alone would be far too general, and would match on an extremely high volume of Posts.
 
 For example, the following rules are not supported since they contain only conjunction required operators:
 
-has:media
-has:links OR is:retweet
+`has:media`
 
-If we add in a standalone operator, such as the phrase "X data", the rule would then work properly. 
+`has:links OR is:retweet`
 
-"X data" has:mentions (has:media OR has:links)
+If we add in a standalone operator, such as the phrase `"X data"`, the rule would then work properly. 
 
-**Boolean operators and grouping**
+`"X data" has:mentions (has:media OR has:links)`
+
+#### Boolean operators and grouping
 
 If you would like to string together multiple operators in a single rule, you have the following tools at your disposal:
 
 |     |     |
 | :--- | :--- |
-| **AND logic** | Successive operators **with a space between them** will result in boolean "AND" logic, meaning that Posts will match only if both conditions are met. For example, snow day #NoSchool will match Posts containing the terms snow and day and the hashtag #NoSchool. |
-| **OR logic** | Successive operators with OR between them will result in OR logic, meaning that Posts will match if either condition is met. For example, specifying grumpy OR cat OR #meme will match any Posts containing at least the terms grumpy or cat, or the hashtag #meme. |
-| **NOT logic, negation** | Prepend a dash (-) to a keyword (or any operator) to negate it (NOT). For example, cat #meme -grumpy will match Posts containing the hashtag #meme and the term cat, but only if they do not contain the term grumpy. One common rule clause is -is:retweet, which will not match on Retweets, thus matching only on original Posts, Quote Tweets, and replies. All operators can be negated, but negated operators cannot be used alone. |
-| **Grouping** | You can use parentheses to group operators together. For example, (grumpy cat) OR (#meme has:images) will return either Posts containing the terms grumpy and cat, or Posts with images containing the hashtag #meme. Note that ANDs are applied first, then ORs are applied. |
+| **AND logic** | Successive operators **with a space between them** will result in boolean "AND" logic, meaning that Posts will match only if both conditions are met. For example, `snow day #NoSchool` will match Posts containing the terms snow and day and the hashtag #NoSchool. |
+| **OR logic** | Successive operators with OR between them will result in OR logic, meaning that Posts will match if either condition is met. For example, specifying `grumpy OR cat OR #meme` will match any Posts containing at least the terms grumpy or cat, or the hashtag #meme. |
+| **NOT logic, negation** | Prepend a dash (-) to a keyword (or any operator) to negate it (NOT). For example, `cat #meme -grumpy` will match Posts containing the hashtag #meme and the term cat, but only if they do not contain the term grumpy. One common rule clause is `-is:retweet`, which will not match on Retweets, thus matching only on original Posts, Quote Tweets, and replies. All operators can be negated, but negated operators cannot be used alone. |
+| **Grouping** | You can use parentheses to group operators together. For example, `(grumpy cat) OR (#meme has:images)` will return either Posts containing the terms grumpy and cat, or Posts with images containing the hashtag #meme. Note that ANDs are applied first, then ORs are applied. |
 
 <Note>
 **A note on negations**
 
-All operators can be negated except for sample:, and -is:nullcast must always be negated. Negated operators cannot be used alone.
+All operators can be negated except for `sample:`, and `-is:nullcast` must always be negated. Negated operators cannot be used alone.
 
 Do not negate a set of operators grouped together in a set of parentheses. Instead, negate each individual operator.
 
-For example, instead of using skiing -(snow OR day OR noschool), we suggest that you use skiing -snow -day -noschool. 
+For example, instead of using `skiing -(snow OR day OR noschool)`, we suggest that you use `skiing -snow -day -noschool`. 
 </Note>
-**Order of operations**
+
+#### Order of operations
 
 When combining AND and OR functionality, the following order of operations will dictate how your rule is evaluated.
 
@@ -92,8 +93,8 @@ When combining AND and OR functionality, the following order of operations will 
 
 For example:
 
-* apple OR iphone ipad would be evaluated as apple OR (iphone ipad)
-* ipad iphone OR android would be evaluated as (iphone ipad) OR android
+* `apple OR iphone ipad` would be evaluated as `apple OR (iphone ipad)`
+* `ipad iphone OR android` would be evaluated as `(iphone ipad) OR android`
 
 
 
@@ -101,15 +102,14 @@ To eliminate uncertainty and ensure that your rule is evaluated as intended, gro
 
 For example:
 
-* (apple OR iphone) ipad
-* iphone (ipad OR android)
-     
+* `(apple OR iphone) ipad`
+* `iphone (ipad OR android)`
 
-**Punctuation, diacritics, and case sensitivity**
+#### Punctuation, diacritics, and case sensitivity
 
 If you specify a keyword or hashtag rule with character accents or diacritics, it will match Posts that contain the exact word with proper accents or diacritics, but not those that have the proper letters, but without the accent or diacritic. 
 
-For example, rules with the keyword diacrítica or hashtag #cumpleaños will match Posts that contain _diacrítica_ or _#cumpleaños_ because they include the accent or diacritic. However, these rules will not match Posts that contain _Diacritica_ or _#cumpleanos_ without the tilde í or eñe.
+For example, rules with the keyword `diacrítica` or hashtag `#cumpleaños` will match Posts that contain _diacrítica_ or _#cumpleaños_ because they include the accent or diacritic. However, these rules will not match Posts that contain _Diacritica_ or _#cumpleanos_ without the tilde í or eñe.
 
 
 Characters with accents or diacritics are treated the same as normal characters and are not treated as word boundaries. For example, a rule with the keyword _cumpleaños_ would only match Posts containing the word _cumpleaños_ and would not match Posts containing _cumplea_, _cumplean_, or _os_.
@@ -119,76 +119,75 @@ All operators are evaluated in a case-insensitive manner. For example, the rule 
 <Note>
 The [Search Posts](/x-api/posts/search/introduction) matching behavior acts differently from filtered stream. When [building a Search Posts query](/x-api/posts/search/integrate/build-a-query), know that keywords and hashtags that include accents or diacritics will match both the term with the accents and diacritics, as well as with normal characters. 
 
-For example, Search Posts queries that include a keyword Diacrítica or hashtag #cumpleaños will match both _Diacrítica_ and _#cumpleaños_, as well as _Diacritica_ or _#cumpleanos_ without the tilde í or eñe.
+For example, Search Posts queries that include a keyword `Diacrítica` or hashtag `#cumpleaños` will match both _Diacrítica_ and _#cumpleaños_, as well as _Diacritica_ or _#cumpleanos_ without the tilde í or eñe.
 </Note>
-**Specificity and efficiency**
+
+#### Specificity and efficiency
 
 When you start to build your rule, it is important to keep a few things in mind.
 
 * Using broad, standalone operators for your rule such as a single keyword or #hashtag is generally not recommended since it will likely match on a massive volume of Posts. Creating a more robust rule will result in a more specific set of matching Posts, and will hopefully reduce the amount of noise in the payload that you will need to sift through to find valuable insights. 
-    * For example, if your rule was just the keyword happy you will likely get anywhere from 200,000 - 300,000 Posts per day.
-    * Adding more conditional operators narrows your search results, for example (happy OR happiness) place_country:GB -birthday -is:retweet
+    * For example, if your rule was just the keyword `happy` you will likely get anywhere from 200,000 - 300,000 Posts per day.
+    * Adding more conditional operators narrows your search results, for example `(happy OR happiness) place_country:GB -birthday -is:retweet`
 * Writing efficient rules is also beneficial for staying within the characters rule length restriction. The character count includes the entire rule string including spaces and operators.
-    * For example, the following rule is 59 characters long: (happy OR happiness) place_country:GB -birthday -is:retweet
+    * For example, the following rule is 59 characters long: `(happy OR happiness) place_country:GB -birthday -is:retweet`
 
-
-**Quote Tweet matching behavior**
+#### Quote Tweet matching behavior
 
 When using the filtered stream endpoints, operators will match on both the content from the original Post that was quoted, as well as the content included in the Quote Tweet.
 
 However, please note that the [Search Posts](/x-api/posts/search/introduction) endpoints will not match on the content from the original Post that was quoted, but will match on the Quote Tweet's content.
 
+#### Iteratively building a rule
 
-**Iteratively building a rule**
-
-**Test your rule early and often**
+##### Test your rule early and often
 
 Getting a rule to return the "right" results the first time is rare. There is so much on X that may or may not be obvious at first and the rule syntax described above may be hard to match to your desired search. As you build a rule, it is important for you to periodically test it out with the stream endpoint to see what data it returns. You can also test with one of the [Search Post](/x-api/posts/search/introduction) endpoints, assuming the operators that you are using are also available via that endpoint. 
 
 For this section, we are going to start with the following rule and adjust it based on the results that we receive during our test: 
 
-happy OR happiness
+`happy OR happiness`
 
-**Use results to narrow the rule**
+##### Use results to narrow the rule
 
 As you test the rule, you should scan the returned Posts to see if they include the data that you are expecting and hoping to receive. Starting with a broad rule and a superset of Post matches allows you to review the result and narrow the rule to filter out undesired results.  
 
-When we tested the example rule, we noticed that we were getting Posts in a variety of different languages. In this situation, we want to only receive Posts that are in english, so we’re going to add the lang: operator:
+When we tested the example rule, we noticed that we were getting Posts in a variety of different languages. In this situation, we want to only receive Posts that are in english, so we’re going to add the `lang:` operator:
 
-(happy OR happiness) lang:en
+`(happy OR happiness) lang:en`
 
-The test delivered a number of Posts wishing people a happy birthday, so we are going to add -birthday as a negated keyword operator. We also want to only receive original Posts, so we’ve added the negated -is:retweet operator:
+The test delivered a number of Posts wishing people a happy birthday, so we are going to add `-birthday` as a negated keyword operator. We also want to only receive original Posts, so we’ve added the negated `-is:retweet` operator:
 
-(happy OR happiness) lang:en -birthday -is:retweet
+`(happy OR happiness) lang:en -birthday -is:retweet`
 
-**Adjust for inclusion where needed**
+##### Adjust for inclusion where needed
 
 If you notice that you are not receiving data that you expect and know that there are existing Posts that should return, you may need to broaden your rule by removing operators that may be filtering out the desired data. 
 
-For our example, we noticed that there were other Posts in our personal timeline that expressed the emotion that we are looking for and weren’t included in the test results. To ensure we have greater coverage, we are going to add the keywords, excited and elated.
+For our example, we noticed that there were other Posts in our personal timeline that expressed the emotion that we are looking for and weren’t included in the test results. To ensure we have greater coverage, we are going to add the keywords, `excited` and `elated`.
 
-(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet
+`(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet`
 
-**Adjust for popular trends/bursts over the time period**
+##### Adjust for popular trends/bursts over the time period
 
 Trends come and go on X quickly. Maintaining your rule should be an active process. If you plan to use a single rule for a while, we suggest that you periodically check in on the data that you are receiving to see if you need to make any adjustments.
 
-In our example, we notice that we started to receive some Posts that are wishing people a “happy holidays”. Since we don’t want these Posts included in our results, we are going to add a negated -holidays keyword.
+In our example, we notice that we started to receive some Posts that are wishing people a “happy holidays”. Since we don’t want these Posts included in our results, we are going to add a negated `-holidays` keyword.
 
-(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet -holidays 
+`(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet -holidays`
 
-**Adding and removing rules**
+#### Adding and removing rules
 
 You will be using the [POST /2/tweets/search/stream/rules](/x-api/posts/filtered-stream#post-2-tweets-search-stream-rules) endpoint when both adding and deleting rules from your stream.
 
-To add one or more rule to your stream, submit an add JSON body with an array that contains the value parameter including the rule, and the optional tag parameter including free-form text that you can use to [identify which returned Posts match this rule](/x-api/posts/filtered-stream#matching-returned-posts-to-their-associated-rule). 
+To add one or more rule to your stream, submit an `add` JSON body with an array that contains the value parameter including the rule, and the optional `tag` parameter including free-form text that you can use to [identify which returned Posts match this rule](/x-api/posts/filtered-stream#matching-returned-posts-to-their-associated-rule). 
 
 For example, if you were trying to add a set of rules to your stream, your cURL command might look like this:
 
-      `curl -X POST 'https://api.x.com/2/tweets/search/stream/rules' \
+```bash
+curl -X POST 'https://api.x.com/2/tweets/search/stream/rules' \
 -H "Content-type: application/json" \
 -H "Authorization: Bearer $ACCESS_TOKEN" -d \
-```
 '{
   "add": [
     {"value": "cat has:media", "tag": "cats with media"},
@@ -199,17 +198,14 @@ For example, if you were trying to add a set of rules to your stream, your cURL 
 }'
 ```
 
-
-
-
-Similarly, to remove one or more rules from your stream, submit a delete JSON body with the array of that contains the id parameter including the rule IDs that you would like to delete.
+Similarly, to remove one or more rules from your stream, submit a `delete` JSON body with the array of that contains the `id` parameter including the rule IDs that you would like to delete.
 
 For example, if you were trying to remove a set of rules from your stream, your cURL command might look like this:
 
-      `curl -X POST 'https://api.x.com/2/tweets/search/stream/rules' \
+```bash
+curl -X POST 'https://api.x.com/2/tweets/search/stream/rules' \
   -H "Content-type: application/json" \
   -H "Authorization: Bearer $ACCESS_TOKEN" -d \
-  ```
   '{
     "delete": {
       "ids": [
@@ -218,13 +214,9 @@ For example, if you were trying to remove a set of rules from your stream, your 
       ]
     }
   }'
-  ```
-
-
-
+```
 
 We have sample code in different languages available via our [Github](https://github.com/xdevplatform/Twitter-API-v2-sample-code/tree/master/Filtered-Stream). 
-
 
 #### Rule examples
 
@@ -232,450 +224,95 @@ We have sample code in different languages available via our [Github](https://g
 
 The following rule matched on Posts coming from weather agencies and gauges that discuss Hurricane Harvey, which hit Houston in 2017. Notice the use of the [matching rules](/x-api/posts/filtered-stream#matching-returned-posts-to-their-associated-rule) tag, and the JSON format that you will need to use when submitting the rule to the [POST /2/tweets/search/stream/rules endpoint](/x-api/posts/filtered-stream#post-2-tweets-search-stream-rules).
 
-      ```
-      {
-            "value": "-is:retweet has:geo (from:NWSNHC OR from:NHC_Atlantic OR from:NWSHouston OR from:NWSSanAntonio OR from:USGS_TexasRain OR from:USGS_TexasFlood OR from:JeffLindner1)",
-            "tag": "theme:info has:geo original from weather agencies and gauges"
-        }
-      ```
-
-
-
+```json
+{
+    "value": "-is:retweet has:geo (from:NWSNHC OR from:NHC_Atlantic OR from:NWSHouston OR from:NWSSanAntonio OR from:USGS_TexasRain OR from:USGS_TexasFlood OR from:JeffLindner1)",
+    "tag": "theme:info has:geo original from weather agencies and gauges"
+}
+```
 
 ##### Reviewing the sentiment of a conversation
 
 The next rule could be used to better understand the sentiment of the conversation developing around the hashtag, _#nowplaying_, but only from Posts published within North America.
 
-      ```
-        {
-            "value": "#nowplaying (happy OR exciting OR excited OR favorite OR fav OR amazing OR lovely OR incredible) (place_country:US OR place_country:MX OR place_country:CA) -horrible -worst -sucks -bad -disappointing",
-            "tag": "#nowplaying positive"
-        },
-        {
-            "value": "#nowplaying (horrible OR worst OR sucks OR bad OR disappointing) (place_country:US OR place_country:MX OR place_country:CA) -happy -exciting -excited -favorite -fav -amazing -lovely -incredible",
-            "tag": "#nowplaying negative"
-        }
-        ```
-
-
-
+```json
+{
+    "value": "#nowplaying (happy OR exciting OR excited OR favorite OR fav OR amazing OR lovely OR incredible) (place_country:US OR place_country:MX OR place_country:CA) -horrible -worst -sucks -bad -disappointing",
+    "tag": "#nowplaying positive"
+},
+{
+    "value": "#nowplaying (horrible OR worst OR sucks OR bad OR disappointing) (place_country:US OR place_country:MX OR place_country:CA) -happy -exciting -excited -favorite -fav -amazing -lovely -incredible",
+    "tag": "#nowplaying negative"
+}
+```
 
 ##### Find Posts that relate to a specific Post annotation
 
-This rule was built to search for original Posts that included an image of a pet that is not a cat, where the language identified in the Post is Japanese. To do this, we used the context: operator to take advantage of the [Post annotation](/x-api/fundamentals/post-annotations) functionality. We first used the [Post lookup](/x-api/posts/lookup/introduction) endpoint and the tweet.fields=context_annotations fields parameter to identify which domain.entity IDs we need to use in our query:
+This rule was built to search for original Posts that included an image of a pet that is not a cat, where the language identified in the Post is Japanese. To do this, we used the `context:` operator to take advantage of the [Post annotation](/x-api/fundamentals/post-annotations) functionality. We first used the [Post lookup](/x-api/posts/lookup/introduction) endpoint and the `tweet.fields=context_annotations` fields parameter to identify which domain.entity IDs we need to use in our query:
 
-* Posts that relate to cats return **domain** 66 (Interests and Hobbies category) with entity 852262932607926273 (Cats). 
-* Posts that relate to pets return **domain** 65 (Interests and Hobbies Vertical) with entity 852262932607926273 (Pets). 
+* Posts that relate to cats return `domain` 66 (Interests and Hobbies category) with `entity` 852262932607926273 (Cats). 
+* Posts that relate to pets return `domain` 65 (Interests and Hobbies Vertical) with `entity` 852262932607926273 (Pets). 
      
 
 Here is what the rule would look like:
 
-      ```        {
-            "value": "context:65.852262932607926273 -context:66.852262932607926273 -is:retweet has:images lang:ja",
-            "tag": "Japanese pets with images - no cats"
-        }
-        ```
-
-
-
-
-#### Operators
-
-* **Essential: **Available when using any access level.
-* **Elevated: **Available when using a Project with Pro, or Enterprise access.
-* For some operators, an alternate name, or alias, is available. 
-
-**Operator**[Type](#type)[Availability](#availability)DescriptionkeywordStandalone
-
-Essential
-
-Matches a keyword within the body of a Post. This is a tokenized match, meaning that your keyword string will be matched against the tokenized text of the Post body. Tokenization splits words based on punctuation, symbols, and Unicode basic plane separator characters.
-
-For example, a Post with the text “I like coca-cola” would be split into the following tokens: I, like, coca, cola. These tokens would then be compared to the keyword string used in your rule. To match strings containing punctuation (for example coca-cola), symbol, or separator characters, you must wrap your keyword in double-quotes.
-
-Example: pepsi OR cola OR "coca cola"emojiStandaloneEssentialMatches an emoji within the body of a Post. Similar to a keyword, emojis are a tokenized match, meaning that your emoji will be matched against the tokenized text of the Post body.
-
-Note that if an emoji has a variant, you must wrap it in double quotes to add to a rule.
-
-Example: (😃 OR 😡) 😬"exact phrase match"StandaloneEssentialMatches the exact phrase within the body of a Post.
-
-Example: ("X API" OR #v2) -"filtered stream"#StandaloneEssentialMatches any Post containing a recognized hashtag, if the hashtag is a recognized entity in a Post.
-
-This operator performs an exact match, NOT a tokenized match, meaning the rule #thanku will match posts with the exact hashtag #thanku, but not those with the hashtag #thankunext.
-
-Example: #thankunext #fanart OR @arianagrande@StandaloneEssentialMatches any Post that mentions the given username, if the username is a recognized entity (including the @ character).
-
-Example: (@XDeveloeprs OR @api) -@x$StandaloneEssentialMatches any Post that contains the specified ‘cashtag’ (where the leading character of the token is the ‘$’ character).
-
-Note that the cashtag operator relies on X's ‘symbols’ entity extraction to match cashtags, rather than trying to extract the cashtag from the body itself.
-
-Example: $twtr OR @XDevelopers -$fbfrom:StandaloneEssentialMatches any Post from a specific user.
-The value can be either the username (excluding the @ character) or the user’s numeric user ID.
-
-You can only pass a single username/ID from: operator.
-
-Example: from:XDevelopers OR from:api -from:Xto:StandaloneEssentialMatches any Post that is in reply to a particular user.
-The value can be either the username (excluding the @ character) or the user’s numeric user ID.
-
-You can only pass a single username/ID per to: operator.
-
-Example: to:XDevelopers OR to:api -to:xurl:StandaloneEssentialPerforms a tokenized match on any validly-formatted URL of a Post.
-
-This operator can matches on the contents of both the url or expanded_url fields. For example, a Post containing "You should check out X Developer Labs: https://t.co/c0A36SWil4" (with the short URL redirecting to https://developer.x.com) will match both the following rules:
-
-from:XDevelopers url:"https://developer.x.com"
-(because it will match the contents of entities.urls.expanded_url)
-
-from:XDevelopers url:"https://t.co"
-(because it will match the contents of entities.urls.url)
-
-Tokens and phrases containing punctuation or special characters should be double-quoted (for example, url:"/developer"). Similarly, to match on a specific protocol, enclose in double-quotes (for example, url:"https://developer.x.com").
-
-You can only pass a single URL per url: operator.retweets_of:StandaloneEssential
-
-_Available alias:_ retweets\_of\_user:
-
-Matches Posts that are Retweets of the specified user. The value can be either the username (excluding the @ character) or the user’s numeric user ID.
-
-You can only pass a single username/ID per retweets_of: operator.
-
-Example: retweets\_of:XDevelopers OR retweets\_of:twitterapi
-
-See [HERE](https://developer.x.com/x-api/users/users-lookup) for methods for looking up numeric X Account IDs.
-
-context:StandaloneEssentialMatches Posts with a specific domain id and/or domain id, enitity id pair where * represents a wildcard. To learn more about this operator, please visit our page on [Post annotations](/x-api/fundamentals/post-annotations).
-
-You can only pass a single domain/entitie per context: operator.
-
-context:domain\_id.entity\_id
-context:domain_id.*
-context:*.entity_id
-
-Examples:
-context:10.799022225751871488
-(domain\_id.entity\_id returns Posts matching that specific domain-entity pair)
-
-context:47.*
-(domain_id.* returns Posts matching that domain ID, with any domain-entity pair)
-
-context:*.799022225751871488
-(*.entity_id returns Posts matching that entity ID, with any domain-entity pair)entity:StandaloneEssentialMatches Posts with a specific entity string value. To learn more about this operator, please visit our page on [annotations](/x-api/fundamentals/post-annotations).
-
-You can only pass a single entity per entity: operator.
-
-entity:"string declaration of entity/place"
-
-Examples: entity:"Michael Jordan" OR entity:"Barcelona"conversation_id:StandaloneEssentialMatches Posts that share a common conversation ID. A conversation ID is set to the Post ID of a Post that started a conversation. As Replies to a Post are posted, even Replies to Replies, the conversation_id is added to its JSON payload.
-
-You can only pass a single conversation ID per conversation_id: operator.
-
-Example: conversation_id:1334987486343299072 (from:XDevelopers OR from:api)
-
-bio:
-
-StandaloneEssential
-
-_Available alias: _user_bio:
-
-Matches a keyword or phrase within the Post publisher's bio. This is a tokenized match within the contents of the description field within the [User object](/x-api/fundamentals/data-dictionary#user).
-
-Example: bio:developer OR bio:"data engineer" OR bio:academic
-
-bio_name:StandaloneEssentialMatches a keyword within the Post publisher's user bio name. This is a tokenized match within the contents of a user’s “name” field within the [User object](/x-api/fundamentals/data-dictionary#user).
-
-Example: bio\_name:phd OR bio\_name:md
-
-bio_location:
-
-StandaloneEssential
-
-_Available alias: _user\_bio\_location:
-
-Matches Posts that are published by users whose location contains the specified keyword or phrase. This operator performs a tokenized match, similar to the normal keyword rules on the message body.
-
-This location is part of the [User object](/x-api/enterprise-gnip-2.0/powertrack-api#powertrack-operators), matches on the 'location' field, and is a non-normalized, user-generated, free-form string. It is also different from a Post's location (see place:).
-
-Example: bio\_location:"big apple" OR bio\_location:nyc OR bio_location:manhattan
-
-place:StandaloneElevatedMatches Posts tagged with the specified location or X place ID. Multi-word place names (“New York City”, “Palo Alto”) should be enclosed in quotes.
-
-You can only pass a single place per place: operator.
-
-Note: See the [GET geo/search](https://developer.x.com/en/docs/x-api/v1/geo/places-near-location/api-reference/get-geo-search) standard v1.1 endpoint for how to obtain X place IDs.
-
-Note: This operator will not match on Retweets, since Retweet's places are attached to the original Post. It will also not match on places attached to the original Post of a Quote Tweet.
-
-Example: place:"new york city" OR place:seattle OR place:fd70c22040963ac7place_country:StandaloneElevatedMatches Posts where the country code associated with a tagged place/location matches the given ISO alpha-2 character code.
-
-You can find a list of valid ISO codes on [Wikipedia](http://en.wikipedia.org/wiki/ISO_3166-1_alpha-2).
-
-You can only pass a single ISO code per place_country: operator.
-
-Note: This operator will not match on Retweets, since Retweet's places are attached to the original Post. It will also not match on places attached to the original Post of a Quote Tweet.
-
-Example: place\_country:US OR place\_country:MX OR place_country:CApoint_radius:StandaloneElevated
-
-Matches against the place.geo.coordinates object of the Post when present, and in X, against a place geo polygon, where the Place polygon is fully contained within the defined region.
-
-point_radius:\[longitude latitude radius\]
-
-* Units of radius supported are miles (mi) and kilometers (km)
-
-* Radius must be less than 25mi
-
-* Longitude is in the range of ±180
-
-* Latitude is in the range of ±90
-
-* All coordinates are in decimal degrees
-
-* Rule arguments are contained within brackets, space delimited
-
-
-
-You can only pass a single geo polygon per point_radius: operator.
-
-Note: This operator will not match on Retweets, since Retweet's places are attached to the original Post. It will also not match on places attached to the original Post of a Quote Tweet.
-
-Example: point\_radius:\[2.355128 48.861118 16km\] OR point\_radius:\[-41.287336 174.761070 20mi\]
-
-bounding_box:
-
-StandaloneElevated
-
-_Available alias: _geo\_bounding\_box:
-
-Matches against the place.geo.coordinates object of the Post when present, and in X, against a place geo polygon, where the place polygon is fully contained within the defined region.
-
-
-bounding\_box:\[west\_long south\_lat east\_long north_lat\]
-
-
-* west\_long south\_lat represent the southwest corner of the bounding box where west_long is the longitude of that point, and south_lat is the latitude.
-
-* east\_long north\_lat represent the northeast corner of the bounding box, where east_long is the longitude of that point, and north_lat is the latitude.
-
-* Width and height of the bounding box must be less than 25mi
-
-* Longitude is in the range of ±180
-
-* Latitude is in the range of ±90
-
-* All coordinates are in decimal degrees.
-
-* Rule arguments are contained within brackets, space delimited.
-
-
-
-You can only pass a single geo polygons per bounding_box: operator.
-
-Note: This operator will not match on Retweets, since Retweet's places are attached to the original Post. It will also not match on places attached to the original Post of a Quote Tweet.
-
-Example: bounding_box:\[-105.301758 39.964069 -105.178505 40.09455\]
-
-is:retweetConjunction requiredEssentialMatches on Retweets that match the rest of the specified rule. This operator looks only for true Retweets (for example, those generated using the Retweet button). Quote Tweets will not be matched by this operator.
-
-Example: data @XDevelopers -is:retweetis:replyConjunction requiredEssentialDeliver only explicit replies that match a rule. Can also be negated to exclude replies that match a rule from delivery.
-
-When used with the filtered stream, this operator matches on replies to an original Post, replies in quoted Posts and replies in Retweets.
-
-Example: from:XDevelopers is:replyis:quoteConjunction requiredEssentialReturns all Quote Tweets, also known as Posts with comments.
-
-Example: "sentiment analysis" is:quoteis:verifiedConjunction requiredEssentialDeliver only Posts whose authors are verified by X.
-
-Example: #nowplaying is:verified-is:nullcastConjunction requiredElevatedRemoves Posts created for promotion only on ads.x.com that have a "source":"Twitter for Advertisers (legacy)" or "source":"Twitter for Advertisers".
-This operator must be negated.
-
-For more info on Nullcasted Posts, see our page on [Post availability](https://developer.x.com/en/docs/x-api/v1/tweets/post-and-engage/guides/tweet-availability).
-
-Example: "mobile games" -is:nullcasthas:hashtagsConjunction requiredEssentialMatches Posts that contain at least one hashtag.
-
-Example: from:XDevelopers -has:hashtagshas:cashtagsConjunction requiredEssentialMatches Posts that contain a cashtag symbol (with a leading ‘$’ character. For example, $tag).
-
-Example: #stonks has:cashtagshas:linksConjunction requiredEssentialThis operator matches Posts which contain links and media in the Post body.
-
-Example: from:XDevelopers announcement has:linkshas:mentionsConjunction requiredEssentialMatches Posts that mention another X user.
-
-Example: #nowplaying has:mentions
-
-has:media
-
-Conjunction requiredEssential
-
-_Available alias: _has:media_link
-
-Matches Posts that contain a media object, such as a photo, GIF, or video, as determined by X. This will not match on media created with Periscope, or Posts with links to other media hosting sites.
-
-Example: (kittens OR puppies) has:media
-
-has:imagesConjunction requiredEssentialMatches Posts that contain a recognized URL to an image.
-
-Example: #meme has:images
-
-has:video_link
-
-Conjunction requiredEssential
-
-_Available alias: _has:videos
-
-Matches Posts that contain native X videos, uploaded directly to X. This will not match on videos created with Periscope, or Posts with links to other video hosting sites.
-
-Example: #icebucketchallenge has:video_link
-
-has:geoConjunction requiredEssentialMatches Posts that have Post-specific geolocation data provided by the X user. This can be either a location in the form of a X place, with the corresponding display name, geo polygon, and other fields, or in rare cases, a geo lat-long coordinate.
-
-Note: Operators matching on place (Post geo) will only include matches from original posts. Retweets do not contain any place data.
-
-Example: recommend #paris has:geo -bakerysample:Conjunction requiredEssentialReturns a random percent sample of Posts that match a rule rather than the entire set of Posts. The percent value must be represented by an integer between 1 and 100 (for example, sample:10 will return a random 10% sample).
-
-This operator first reduces the scope of the stream to the percentage you specified, then the rule/filter is applied to that sampled subset. In other words, if you are using, for example, sample:10, each Post will have a 10% chance of being in the sample.
-
-This operator applies to the entire rule and requires all OR'd terms to be grouped.
-
-Example: #nowplaying @spotify sample:15lang:Conjunction requiredEssentialMatches Posts that have been classified by X as being of a particular language (if, and only if, the post has been classified). It is important to note that each Post is currently only classified as being of one language, so AND’ing together multiple languages will yield no results.
-
-You can only pass a single BCP 47 language identifier per lang: operator.
-
-Note: if no language classification can be made the provided result is ‘und’ (for undefined).
-
-Example: recommend #paris lang:en
-
-The list below represents the currently supported languages and their corresponding BCP 47 language identifier:
-
-
-|     |     |     |     |
-| :--- | :--- | :--- | :--- |
-| Amharic: am | German: de | Malayalam: ml | Slovak: sk |
-| Arabic: ar | Greek: el | Maldivian: dv | Slovenian: sl |
-| Armenian: hy | Gujarati: gu | Marathi: mr | Sorani Kurdish: ckb |
-| Basque: eu | Haitian Creole: ht | Nepali: ne | Spanish: es |
-| Bengali: bn | Hebrew: iw | Norwegian: no | Swedish: sv |
-| Bosnian: bs | Hindi: hi | Oriya: or | Tagalog: tl |
-| Bulgarian: bg | Latinized Hindi: hi-Latn | Panjabi: pa | Tamil: ta |
-| Burmese: my | Hungarian: hu | Pashto: ps | Telugu: te |
-| Croatian: hr | Icelandic: is | Persian: fa | Thai: th |
-| Catalan: ca | Indonesian: in | Polish: pl | Tibetan: bo |
-| Czech: cs | Italian: it | Portuguese: pt | Traditional Chinese: zh-TW |
-| Danish: da | Japanese: ja | Romanian: ro | Turkish: tr |
-| Dutch: nl | Kannada: kn | Russian: ru | Ukrainian: uk |
-| English: en | Khmer: km | Serbian: sr | Urdu: ur |
-| Estonian: et | Korean: ko | Simplified Chinese: zh-CN | Uyghur: ug |
-| Finnish: fi | Lao: lo | Sindhi: sd | Vietnamese: vi |
-| French: fr | Latvian: lv | Sinhala: si | Welsh: cy |
-| Georgian: ka | Lithuanian: lt |     |
-
-followers_count: Essential
-
-Matches Posts when the author has a followers count within the given range.
-
-If a single number is specified, any number equal to or higher will match.
-
-Example: followers_count:500
-
-Additionally, a range can be specified to match any number in the given range.
-
-Example: followers_count:1000..10000
-
-tweets_count:
-
- Essential
-
-_Available alias: _statuses_count:
-
-Matches Posts when the author has posted a number of Posts that falls within the given range.
-
-If a single number is specified, any number equal to or higher will match.
-
-Example: tweets_count:1000
-
-Additionally, a range can be specified to match any number in the given range.
-
-Example: tweets_count:1000..10000
-
-following_count:
-
- Essential
-
-_Available alias: _friends_count:
-
-Matches Posts when the author has a friends count (the number of users they follow) that falls within the given range.
-
-If a single number is specified, any number equal to or higher will match.
-
-Example: following_count:500
-
-Additionally, a range can be specified to match any number in the given range.
-
-Example: following_count:1000..10000
-
-listed_count:
-
- Essential
-
-_Available alias: _user\_in\_lists_count:
-
-Matches Posts when the author is included in the specified number of Lists. 
-
-If a single number is specified, any number equal to or higher will match.
-
-Example: listed_count:10
-
-Additionally, a range can be specified to match any number in the given range.
-
-Example: listed_count:10..100
-
-url_title:
-
- Essential
-
-_Available alias: _within\_url\_title:
-
-Performs a keyword/phrase match on the expanded URL HTML title metadata.
-
-Example: url_title:snow
-
-url_description:
-
- Essential
-
-_Available alias: _within\_url\_description:
-
-Performs a keyword/phrase match on the expanded page description metadata.
-
-Example: url_description:weather
-
-url_contains: Essential
-
-Matches Posts with URLs that literally contain the given phrase or keyword. To search for patterns with punctuation in them (i.e. google.com) enclose the search term in quotes.
-
-NOTE: This will match against the expanded URL as well.
-
-Example: url_contains:photos
-
-source: Essential
-
-Matches any Post generated by the given source application. The value must be either the name of the application or the application’s URL. Cannot be used alone.
-
-Example: source:"X for iPhone"
-
-Note: As a X app developer, Posts created programmatically by your application will have the source of your application Name and Website URL set in your [app settings](/resources/fundamentals/developer-apps#app-management).
-
-in\_reply\_to\_tweet\_id:
-
- Essential
-
-_Available alias: _in\_reply\_to\_status\_id:
-
-Deliver only explicit Replies to the specified Post.
-
-Example: in\_reply\_to\_tweet\_id:1539382664746020864
-
-retweets\_of\_tweet_id:
-
- Essential
-
-_Available alias: _retweets\_of\_status_id:
-
-Deliver only explicit (or native) Retweets of the specified Post. Note that the status ID used should be the ID of an original Post and not a Retweet. 
-
-Example: retweets\_of\_tweet_id:1539382664746020864
+```json
+{
+    "value": "context:65.852262932607926273 -context:66.852262932607926273 -is:retweet has:images lang:ja",
+    "tag": "Japanese pets with images - no cats"
+}
+```
+
+### Operators
+
+* **Essential:** Available when using any access level.
+* **Elevated:** Available when using a Project with Pro, or Enterprise access.
+* For some operators, an alternate name, or alias, is available.
+
+| **Operator**                  | **Type**           | **Availability** | **Description**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+|:------------------------------|:-------------------|:-----------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `keyword`                     | Standalone         | Essential        | Matches a keyword within the body of a Post. This is a tokenized match, meaning that your keyword string will be matched against the tokenized text of the Post body. Tokenization splits words based on punctuation, symbols, and Unicode basic plane separator characters.<br/>For example, a Post with the text “I like coca-cola” would be split into the following tokens: I, like, coca, cola. These tokens would then be compared to the keyword string used in your rule. To match strings containing punctuation (for example, coca-cola), symbol, or separator characters, you must wrap your keyword in double-quotes.<br/><br/>Example: `pepsi OR cola OR "coca cola"`                                                                                                                                                                                                                                                         |
+| `emoji`                       | Standalone         | Essential        | Matches an emoji within the body of a Post. Similar to a keyword, emojis are a tokenized match, meaning that your emoji will be matched against the tokenized text of the Post body.<br/><br/>Note that if an emoji has a variant, you must wrap it in double quotes to add to a rule.<br/><br/>Example: `(😃 OR 😡) 😬`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `"exact phrase match"`        | Standalone         | Essential        | Matches the exact phrase within the body of a Post.<br/><br/>Example: `("X API" OR #v2) -"filtered stream"`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `#`                           | Standalone         | Essential        | Matches any Post containing a recognized hashtag, if the hashtag is a recognized entity in a Post.<br/><br/>This operator performs an exact match, NOT a tokenized match, meaning the rule `#thanku` will match posts with the exact hashtag #thanku, but not those with the hashtag #thankunext.<br/><br/>Example: `#thankunext #fanart OR @arianagrande`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `@`                           | Standalone         | Essential        | Matches any Post that mentions the given username, if the username is a recognized entity (including the @ character).<br/><br/>Example: `(@XDevelopers OR @api) -@x`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `$`                           | Standalone         | Essential        | Matches any Post that contains the specified 'cashtag' (where the leading character of the token is the &dollar; character).<br/><br/>Note that the cashtag operator relies on X's 'symbols' entity extraction to match cashtags, rather than trying to extract the cashtag from the body itself.<br/><br/>Example: `$twtr OR @XDevelopers -$fb`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `from:`                       | Standalone         | Essential        | Matches any Post from a specific user.<br/>The value can be either the username (excluding the @ character) or the user's numeric user ID.<br/><br/>You can only pass a single username/ID `from:` operator.<br/><br/>Example: `from:XDevelopers OR from:api -from:X`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `to:`                         | Standalone         | Essential        | Matches any Post that is in reply to a particular user.<br/>The value can be either the username (excluding the @ character) or the user's numeric user ID.<br/><br/>You can only pass a single username/ID per `to:` operator.<br/><br/>Example: `to:XDevelopers OR to:api -to:x`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `url:`                        | Standalone         | Essential        | Performs a tokenized match on any validly-formatted URL of a Post.<br/><br/>This operator can match on the contents of both the `url` or `expanded_url` fields. For example, a Post containing "You should check out X Developer Labs: https://t.co/c0A36SWil4" (with the short URL redirecting to https://developer.x.com) will match both the following rules:<br/><br/>`from:XDevelopers url:"https://developer.x.com"`<br/>(because it will match the contents of `entities.urls.expanded_url`)<br/><br/>`from:XDevelopers url:"https://t.co"`<br/>(because it will match the contents of `entities.urls.url`)<br/><br/>Tokens and phrases containing punctuation or special characters should be double-quoted (for example, `url:"/developer"`). Similarly, to match on a specific protocol, enclose in double-quotes (for example, `url:"https://developer.x.com"`).<br/><br/>You can only pass a single URL per `url:` operator.                                                                                                                                                                                                                                                  |
+| `retweets_of:`                | Standalone         | Essential        | *Available alias:* `retweets_of_user:`<br/>Matches Posts that are Retweets of the specified user. The value can be either the username (excluding the @ character) or the user's numeric user ID.<br/><br/>You can only pass a single username/ID per `retweets_of:` operator.<br/><br/>Example: `retweets_of:XDevelopers OR retweets_of:twitterapi`<br/>See [HERE](/x-api/users/lookup/introduction) for methods for looking up numeric X Account IDs.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `context:`                    | Standalone         | Essential        | Matches Posts with a specific domain id and/or domain id, entity id pair where * represents a wildcard. To learn more about this operator, please visit our page on [Post annotations](/x-api/fundamentals/post-annotations).<br/><br/>You can only pass a single domain/entity per `context:` operator.<br/><br/>`context:domain_id.entity_id`<br/>`context:domain_id.*`<br/>`context:*.entity_id`<br/><br/>Examples:<br/>`context:10.799022225751871488`<br/>(`domain_id.entity_id` returns Posts matching that specific domain-entity pair)<br/><br/>`context:47.*`<br/>(`domain_id.*` returns Posts matching that domain ID, with any domain-entity pair)<br/><br/>`context:*.799022225751871488`<br/>(`*.entity_id` returns Posts matching that entity ID, with any domain-entity pair)                                                                                                                                                                                                                                                        |
+| `entity:`                     | Standalone         | Essential        | Matches Posts with a specific entity string value. To learn more about this operator, please visit our page on [annotations](/x-api/fundamentals/post-annotations).<br/><br/>You can only pass a single entity per `entity:` operator.<br/><br/>`entity:"string declaration of entity/place"`<br/><br/>Examples: `entity:"Michael Jordan" OR entity:"Barcelona"`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `conversation_id:`            | Standalone         | Essential        | Matches Posts that share a common conversation ID. A conversation ID is set to the Post ID of a Post that started a conversation. As Replies to a Post are posted, even Replies to Replies, the `conversation_id` is added to its JSON payload.<br/><br/>You can only pass a single conversation ID per `conversation_id:` operator.<br/><br/>Example: `conversation_id:1334987486343299072 (from:XDevelopers OR from:api)`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `bio:`                        | Standalone         | Essential        | *Available alias:* `user_bio:`<br/>Matches a keyword or phrase within the Post publisher's bio. This is a tokenized match within the contents of the `description` field within the [User object](/x-api/fundamentals/data-dictionary#user).<br/><br/>Example: `bio:developer OR bio:"data engineer" OR bio:academic`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `bio_name:`                   | Standalone         | Essential        | Matches a keyword within the Post publisher's user bio name. This is a tokenized match within the contents of a user's "name" field within the [User object](/x-api/fundamentals/data-dictionary#user).<br/><br/>Example: `bio_name:phd OR bio_name:md`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `bio_location:`               | Standalone         | Essential        | *Available alias:* `user_bio_location:`<br/>Matches Posts that are published by users whose location contains the specified keyword or phrase. This operator performs a tokenized match, similar to the normal keyword rules on the message body.<br/><br/>This location is part of the [User object](/x-api/fundamentals/data-dictionary#user), matches on the 'location' field, and is a non-normalized, user-generated, free-form string. It is also different from a Post's location (see `place:`).<br/><br/>Example: `bio_location:"big apple" OR bio_location:nyc OR bio_location:manhattan`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `place:`                      | Standalone         | Elevated         | Matches Posts tagged with the specified location or X place ID. Multi-word place names (“New York City”, “Palo Alto”) should be enclosed in quotes.<br/><br/>You can only pass a single place per `place:` operator.<br/><br/>Note: See the [GET geo/search](https://developer.x.com/content/developer-twitter/en/docs/geo/places-near-location/api-reference/get-geo-search) standard v1.1 endpoint for how to obtain X place IDs.<br/><br/>Note: This operator will not match on Retweets, since Retweet's places are attached to the original Post. It will also not match on places attached to the original Post of a Quote Tweet.<br/><br/>Example: `place:"new york city" OR place:seattle OR place:fd70c22040963ac7`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `place_country:`              | Standalone         | Elevated         | Matches Posts where the country code associated with a tagged place/location matches the given ISO alpha-2 character code.<br/><br/>You can find a list of valid ISO codes on [Wikipedia](http://en.wikipedia.org/wiki/ISO_3166-1_alpha-2).<br/><br/>You can only pass a single ISO code per `place_country:` operator.<br/><br/>Note: This operator will not match on Retweets, since Retweet's places are attached to the original Post. It will also not match on places attached to the original Post of a Quote Tweet.<br/><br/>Example: `place_country:US OR place_country:MX OR place_country:CA`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `point_radius:`               | Standalone         | Elevated         | Matches against the `place.geo.coordinates` object of the Post when present, and in X, against a place geo polygon, where the Place polygon is fully contained within the defined region.<br/><br/>`point_radius:[longitude latitude radius]`<br/><br/>- Units of radius supported are miles (mi) and kilometers (km)<br/>- Radius must be less than 25mi<br/>- Longitude is in the range of ±180<br/>- Latitude is in the range of ±90<br/>- All coordinates are in decimal degrees<br/>- Rule arguments are contained within brackets, space delimited<br/><br/>You can only pass a single geo polygon per `point_radius:` operator.<br/><br/>Note: This operator will not match on Retweets, since Retweet's places are attached to the original Post. It will also not match on places attached to the original Post of a Quote Tweet.<br/><br/>Example: `point_radius:[2.355128 48.861118 16km] OR point_radius:[-41.287336 174.761070 20mi]`                                                                                                                                                                                                                        |
+| `bounding_box:`               | Standalone         | Elevated         | *Available alias:* `geo_bounding_box:`<br/>Matches against the place.geo.coordinates object of the Post when present, and in X, against a place geo polygon, where the place polygon is fully contained within the defined region.<br/><br/>`bounding_box:[west_long south_lat east_long north_lat]`<br/><br/>- `west_long south_lat` represent the southwest corner of the bounding box where `west_long` is the longitude of that point, and `south_lat` is the latitude.<br/>- `east_long north_lat` represent the northeast corner of the bounding box, where `east_long` is the longitude of that point, and `north_lat` is the latitude.<br/>- Width and height of the bounding box must be less than 25mi<br/>- Longitude is in the range of ±180<br/>- Latitude is in the range of ±90<br/>- All coordinates are in decimal degrees.<br/>- Rule arguments are contained within brackets, space delimited.<br/><br/>You can only pass a single geo polygon per `bounding_box:` operator.<br/><br/>Note: This operator will not match on Retweets, since Retweet's places are attached to the original Post. It will also not match on places attached to the original Post of a Quote Tweet.<br/><br/>Example: `bounding_box:[-105.301758 39.964069 -105.178505 40.09455]` |
+| `is:retweet`                  | Conjunction required | Essential        | Matches on Retweets that match the rest of the specified rule. This operator looks only for true Retweets (for example, those generated using the Retweet button). Quote Tweets will not be matched by this operator.<br/><br/>Example: `data @XDevelopers -is:retweet`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `is:reply`                    | Conjunction required | Essential        | Deliver only explicit replies that match a rule. Can also be negated to exclude replies that match a rule from delivery.<br/><br/>When used with the filtered stream, this operator matches on replies to an original Post, replies in quoted Posts, and replies in Retweets.<br/><br/>Example: `from:XDevelopers is:reply`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `is:quote`                    | Conjunction required | Essential        | Returns all Quote Tweets, also known as Posts with comments.<br/><br/>Example: `"sentiment analysis" is:quote`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `is:verified`                 | Conjunction required | Essential        | Deliver only Posts whose authors are verified by X.<br/><br/>Example: `#nowplaying is:verified`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `-is:nullcast`                | Conjunction required | Elevated         | Removes Posts created for promotion only on ads.twitter.com that have a `source:"Twitter for Advertisers (legacy)"` or `source:"Twitter for Advertisers".`<br/>This operator must be negated.<br/><br/>For more info on Nullcasted Posts, see our page on [Post availability](https://developer.x.com/content/developer-twitter/en/docs/twitter-api/v1/tweets/post-and-engage/guides/tweet-availability).<br/><br/>Example: `"mobile games" -is:nullcast`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `has:hashtags`                | Conjunction required | Essential        | Matches Posts that contain at least one hashtag.<br/><br/>Example: `from:XDevelopers -has:hashtags`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `has:cashtags`                | Conjunction required | Essential        | Matches Posts that contain a cashtag symbol (with a leading '$' character. For example, `$tag`).<br/><br/>Example: `#stonks has:cashtags`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `has:links`                   | Conjunction required | Essential        | This operator matches Posts which contain links and media in the Post body.<br/><br/>Example: `from:XDevelopers announcement has:links`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `has:mentions`                | Conjunction required | Essential        | Matches Posts that mention another X user.<br/><br/>Example: `#nowplaying has:mentions`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `has:media`                   | Conjunction required | Essential        | *Available alias:* `has:media_link`<br/>Matches Posts that contain a media object, such as a photo, GIF, or video, as determined by X. This will not match on media created with Periscope, or Posts with links to other media hosting sites.<br/><br/>Example: `(kittens OR puppies) has:media`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `has:images`                  | Conjunction required | Essential        | Matches Posts that contain a recognized URL to an image.<br/><br/>Example: `#meme has:images`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `has:video_link`              | Conjunction required | Essential        | *Available alias:* `has:videos`<br/>Matches Posts that contain native X videos, uploaded directly to X. This will not match on videos created with Periscope, or Posts with links to other video hosting sites.<br/><br/>Example: `#icebucketchallenge has:video_link`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `has:geo`                     | Conjunction required | Essential        | Matches Posts that have Post-specific geolocation data provided by the X user. This can be either a location in the form of a X place, with the corresponding display name, geo polygon, and other fields, or in rare cases, a geo lat-long coordinate.<br/><br/>Note: Operators matching on place (Post geo) will only include matches from original posts. Retweets do not contain any place data.<br/><br/>Example: `recommend #paris has:geo -bakery`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `sample:`                     | Conjunction required | Essential        | Returns a random percent sample of Posts that match a rule rather than the entire set of Posts. The percent value must be represented by an integer between 1 and 100 (for example, `sample:10` will return a random 10% sample).<br/><br/>This operator first reduces the scope of the stream to the percentage you specified, then the rule/filter is applied to that sampled subset. In other words, if you are using, for example, `sample:10`, each Post will have a 10% chance of being in the sample.<br/><br/>This operator applies to the entire rule and requires all OR'd terms to be grouped.<br/><br/>Example: `#nowplaying @spotify sample:15`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `lang:`                       | Conjunction required | Essential        | Matches Posts that have been classified by X as being of a particular language (if, and only if, the post has been classified). It is important to note that each Post is currently only classified as being of one language, so AND’ing together multiple languages will yield no results.<br/><br/>You can only pass a single BCP 47 language identifier per `lang:` operator.<br/><br/>Note: if no language classification can be made the provided result is 'und' (for undefined).<br/><br/>Example: `recommend #paris lang:en`<br/><br/>The list below represents the currently supported languages and their corresponding BCP 47 language identifier:<br/><br/>| Language         | BCP 47 |<br/>|-|-|<br/>| Amharic          | `am`   |<br/>| Arabic           | `ar`   |<br/>| Armenian         | `hy`   |<br/>| Basque           | `eu`   |<br/>| Bengali          | `bn`   |<br/>| Bosnian          | `bs`   |<br/>| Bulgarian        | `bg`   |<br/>| Burmese          | `my`   |<br/>| Croatian         | `hr`   |<br/>| Catalan          | `ca`   |<br/>| Czech            | `cs`   |<br/>| Danish           | `da`   |<br/>| Dutch            | `nl`   |<br/>| English          | `en`   |<br/>| Estonian         | `et`   |<br/>| Finnish          | `fi`   |<br/>| French           | `fr`   |<br/>| Georgian         | `ka`   |<br/>| German           | `de`   |<br/>| Greek            | `el`   |<br/>| Gujarati         | `gu`   |<br/>| Haitian Creole   | `ht`   |<br/>| Hebrew           | `iw`   |<br/>| Hindi            | `hi`   |<br/>| Latinized Hindi  | `hi-Latn` |<br/>| Hungarian        | `hu`   |<br/>| Icelandic        | `is`   |<br/>| Indonesian       | `in`   |<br/>| Italian          | `it`   |<br/>| Japanese         | `ja`   |<br/>| Kannada          | `kn`   |<br/>| Khmer            | `km`   |<br/>| Korean           | `ko`   |<br/>| Lao              | `lo`   |<br/>| Latvian          | `lv`   |<br/>| Lithuanian       | `lt`   |<br/>| Malayalam        | `ml`   |<br/>| Maldivian        | `dv`   |<br/>| Marathi          | `mr`   |<br/>| Nepali           | `ne`   |<br/>| Norwegian        | `no`   |<br/>| Oriya            | `or`   |<br/>| Panjabi          | `pa`   |<br/>| Pashto           | `ps`   |<br/>| Persian          | `fa`   |<br/>| Polish           | `pl`   |<br/>| Portuguese       | `pt`   |<br/>| Romanian         | `ro`   |<br/>| Russian          | `ru`   |<br/>| Serbian          | `sr`   |<br/>| Simplified Chinese | `zh-CN` |<br/>| Sindhi           | `sd`   |<br/>| Sinhala          | `si`   |<br/>| Slovak           | `sk`   |<br/>| Slovenian        | `sl`   |<br/>| Sorani Kurdish   | `ckb`  |<br/>| Spanish          | `es`   |<br/>| Swedish          | `sv`   |<br/>| Tagalog          | `tl`   |<br/>| Tamil            | `ta`   |<br/>| Telugu           | `te`   |<br/>| Thai             | `th`   |<br/>| Tibetan          | `bo`   |<br/>| Traditional Chinese | `zh-TW` |<br/>| Turkish          | `tr`   |<br/>| Ukrainian        | `uk`   |<br/>| Urdu             | `ur`   |<br/>| Uyghur           | `ug`   |<br/>| Vietnamese       | `vi`   |<br/>| Welsh            | `cy`   | |
+| `followers_count:`            |                  | Essential        | Matches Posts when the author has a followers count within the given range.<br/>If a single number is specified, any number equal to or higher will match.<br/><br/>Example: `followers_count:500`<br/><br/>Additionally, a range can be specified to match any number in the given range.<br/><br/>Example: `followers_count:1000..10000`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `tweets_count:`               |                  | Essential        | *Available alias:* `statuses_count:`<br/>Matches Posts when the author has posted a number of Posts that falls within the given range.<br/>If a single number is specified, any number equal to or higher will match.<br/><br/>Example: `tweets_count:1000`<br/><br/>Additionally, a range can be specified to match any number in the given range.<br/><br/>Example: `tweets_count:1000..10000`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `following_count:`            |                  | Essential        | *Available alias:* `friends_count:`<br/>Matches Posts when the author has a friends count (the number of users they follow) that falls within the given range.<br/>If a single number is specified, any number equal to or higher will match.<br/><br/>Example: `following_count:500`<br/><br/>Additionally, a range can be specified to match any number in the given range.<br/><br/>Example: `following_count:1000..10000`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `listed_count:`               |                  | Essential        | *Available alias:* `user_in_lists_count:`<br/>Matches Posts when the author is included in the specified number of Lists.<br/>If a single number is specified, any number equal to or higher will match.<br/><br/>Example: `listed_count:10`<br/><br/>Additionally, a range can be specified to match any number in the given range.<br/><br/>Example: `listed_count:10..100`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `url_title:`                  |                  | Essential        | *Available alias:* `within_url_title:`<br/>Performs a keyword/phrase match on the expanded URL HTML title metadata.<br/><br/>Example: `url_title:snow`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `url_description:`            |                  | Essential        | *Available alias:* `within_url_description:`<br/>Performs a keyword/phrase match on the expanded page description metadata.<br/><br/>Example: `url_description:weather`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `url_contains:`               |                  | Essential        | Matches Posts with URLs that literally contain the given phrase or keyword. To search for patterns with punctuation in them (i.e., google.com) enclose the search term in quotes.<br/>NOTE: This will match against the expanded URL as well.<br/><br/>Example: `url_contains:photos`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `source:`                     |                  | Essential        | Matches any Post generated by the given source application. The value must be either the name of the application or the application's URL. Cannot be used alone.<br/><br/>Example: `source:"X for iPhone"`<br/><br/>Note: As an X app developer, Posts created programmatically by your application will have the source of your application Name and Website URL set in your [app settings](/resources/fundamentals/developer-apps#app-management).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `in_reply_to_tweet_id:`       |                  | Essential        | *Available alias:* `in_reply_to_status_id:`<br/>Deliver only explicit Replies to the specified Post.<br/><br/>Example: `in_reply_to_tweet_id:1539382664746020864`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `retweets_of_tweet_id:`       |                  | Essential        | *Available alias:* `retweets_of_status_id:`<br/>Deliver only explicit (or native) Retweets of the specified Post. Note that the status ID used should be the ID of an original Post and not a Retweet.<br/><br/>Example: `retweets_of_tweet_id:1539382664746020864`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
