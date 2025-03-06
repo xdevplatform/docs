@@ -1,0 +1,117 @@
+name: Update Documentation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'  # Runs daily at midnight UTC
+
+jobs:
+  update-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set Up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Fetch Latest OpenAPI Specification
+        run: curl -o openapi.json https://api.twitter.com/2/openapi.json
+
+      - name: Remove Existing api-reference Directory
+        run: rm -rf api-reference
+
+      - name: Generate MDX Files
+        run: npx @mintlify/scraping@latest openapi-file ./openapi.json -o api-reference
+
+      - name: Rename Subdirectories
+        run: |
+          if [ -d "api-reference/tweets" ]; then
+            mv api-reference/tweets api-reference/posts
+          fi
+          if [ -d "api-reference/mediaupload" ]; then
+            mv api-reference/mediaupload api-reference/media
+          fi
+          # Add more rename commands here if needed, e.g.:
+          # if [ -d "api-reference/other" ]; then
+          #   mv api-reference/other api-reference/newname
+          # fi
+      - name: Move Files Within api-reference
+        run: |
+          # Ensure the destination directory exists
+          mkdir -p api-reference/openapi
+          # Move the file if it exists
+          if [ -f "api-reference/general/returns-the-openapi-specification-document.mdx" ]; then
+            mv api-reference/general/returns-the-openapi-specification-document.mdx api-reference/openapi/returns-the-openapi-specification-document.mdx
+            echo "Moved returns-the-openapi-specification-document.mdx from general to openapi"
+          else
+            echo "Source file api-reference/general/returns-the-openapi-specification-document.mdx not found"
+          fi
+          # Ensure the destination directory exists
+          mkdir -p api-reference/posts
+          # Move the file if it exists
+          if [ -f "api-reference/general/rules-count.mdx" ]; then
+            mv api-reference/general/rules-count.mdx api-reference/posts/rules-count.mdx
+            echo "Moved rules-count.mdx from general to posts"
+          else
+            echo "Source file api-reference/general/rules-count.mdx not found"
+          fi
+          # Ensure the destination directory exists
+          mkdir -p api-reference/users/personalized-trends
+          # Move the file if it exists
+          if [ -f "api-reference/trends/personalized-trends.mdx" ]; then
+            mv api-reference/trends/personalized-trends.mdx api-reference/users/personalized-trends/personalized-trends.mdx
+            echo "Moved personalized-trends.mdx from trends to users/personalized-trends"
+          else
+            echo "Source file api-reference/general/rules-count.mdx not found"
+          fi
+      - name: Rename Files Containing '%'
+        run: |
+          find api-reference -type f -name '*%*.mdx' -exec bash -c '
+            new_name="${0//%/}"
+            if [ ! -f "$new_name" ]; then
+              mv "$0" "$new_name"
+            else
+              echo "Cannot rename $0 to $new_name: file already exists"
+            fi
+          ' {} \;
+      - name: Move Files to x-api
+        run: |
+          # Function to move files from api-reference to x-api
+          move_files() {
+            local src_dir=$1
+            local dest_dir=$2
+            for item in "$src_dir"/*; do
+              if [ -d "$item" ]; then
+                # Handle subdirectories
+                local base_name=$(basename "$item")
+                local new_dest="$dest_dir/$base_name"
+                mkdir -p "$new_dest"  # Create subdirectory in x-api if it doesn’t exist
+                move_files "$item" "$new_dest"  # Recursively move contents
+              elif [ -f "$item" ]; then
+                # Move individual files
+                local file_name=$(basename "$item")
+                local dest_file="$dest_dir/$file_name"
+                mv "$item" "$dest_file"  # Move file to x-api subdirectory
+              fi
+            done
+          }
+
+          # Start moving files from api-reference to x-api
+          move_files "api-reference" "x-api"
+
+      - name: Remove api-reference Directory
+        run: rm -rf api-reference
+
+      - name: Commit and Push Changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add openapi.json x-api
+          if git commit -m "Update documentation with latest OpenAPI spec"; then
+            git push
+          else
+            echo "No changes to commit"
+          fi
