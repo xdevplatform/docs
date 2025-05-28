@@ -2,7 +2,7 @@
   "openapi" : "3.0.0",
   "info" : {
     "description" : "Twitter API v2 available endpoints",
-    "version" : "2.138",
+    "version" : "2.139",
     "title" : "Twitter API v2",
     "termsOfService" : "https://developer.twitter.com/en/developer-terms/agreement-and-policy.html",
     "contact" : {
@@ -3276,6 +3276,64 @@
             }
           }
         }
+      },
+      "post" : {
+        "security" : [
+          {
+            "OAuth2UserToken" : [
+              "media.write"
+            ]
+          },
+          {
+            "UserToken" : [ ]
+          }
+        ],
+        "tags" : [
+          "MediaUpload"
+        ],
+        "summary" : "Image or subtitle media upload",
+        "description" : "Uploads an image or a subtitle using a single API call.",
+        "externalDocs" : {
+          "url" : "https://docs.x.com/x-api/media/media-upload"
+        },
+        "operationId" : "uploadMedia",
+        "parameters" : [ ],
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MediaUploadConfigRequestOneShot"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "The request has succeeded.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/MediaUploadResponse"
+                }
+              }
+            }
+          },
+          "default" : {
+            "description" : "The request has failed.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/2/media/upload/initialize" : {
@@ -3373,6 +3431,11 @@
         ],
         "requestBody" : {
           "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MediaUploadAppendRequest"
+              }
+            },
             "multipart/form-data" : {
               "schema" : {
                 "$ref" : "#/components/schemas/MediaUploadAppendRequest"
@@ -3517,77 +3580,6 @@
               "application/json" : {
                 "schema" : {
                   "$ref" : "#/components/schemas/Get2MediaMediaKeyResponse"
-                }
-              }
-            }
-          },
-          "default" : {
-            "description" : "The request has failed.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/Error"
-                }
-              },
-              "application/problem+json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/Problem"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/2/notes" : {
-      "get" : {
-        "security" : [
-          {
-            "BearerToken" : [ ]
-          },
-          {
-            "OAuth2UserToken" : [
-              "list.read",
-              "tweet.read",
-              "users.read"
-            ]
-          },
-          {
-            "UserToken" : [ ]
-          }
-        ],
-        "tags" : [
-          "Community Notes"
-        ],
-        "summary" : "Community Note lookup by Post ID",
-        "description" : "Returns a variety of information about the Community Noted specified by the requested Post ID.",
-        "externalDocs" : {
-          "url" : "https://developer.x.com/en/docs/x-api/community_notes/api-reference/get-community-note"
-        },
-        "operationId" : "findNoteByTweetId",
-        "parameters" : [
-          {
-            "name" : "postId",
-            "in" : "query",
-            "description" : "A single Post ID.",
-            "required" : true,
-            "schema" : {
-              "$ref" : "#/components/schemas/TweetId"
-            },
-            "explode" : false,
-            "style" : "form"
-          },
-          {
-            "$ref" : "#/components/parameters/NoteFieldsParameter"
-          }
-        ],
-        "responses" : {
-          "200" : {
-            "description" : "The request has succeeded.",
-            "content" : {
-              "application/json" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/Get2NotesResponse"
                 }
               }
             }
@@ -11720,6 +11712,16 @@
           }
         ]
       },
+      "DisplayTextRange" : {
+        "type" : "array",
+        "description" : "Represent a boundary range (start and end zero-based indices) for the portion of text that is displayed for a post. `start` must be smaller than `end`. The start index is inclusive, the end index is exclusive.",
+        "minItems" : 2,
+        "maxItems" : 2,
+        "items" : {
+          "type" : "integer",
+          "minimum" : 0
+        }
+      },
       "DmAttachments" : {
         "type" : "array",
         "description" : "Attachments to a DM Event.",
@@ -12317,27 +12319,72 @@
         }
       },
       "GeoRestrictions" : {
-        "type" : "object",
-        "properties" : {
-          "blacklisted_country_codes" : {
-            "type" : "array",
-            "description" : "List of blacklisted country codes",
-            "items" : {
-              "type" : "string",
-              "description" : "Country code in ISO 3166-1 alpha-2 format",
-              "example" : "us"
+        "oneOf" : [
+          {
+            "type" : "object",
+            "required" : [
+              "whitelisted_country_codes",
+              "blacklisted_country_codes"
+            ],
+            "properties" : {
+              "blacklisted_country_codes" : {
+                "type" : "array",
+                "description" : "List of blacklisted country codes",
+                "minItems" : 0,
+                "maxItems" : 0,
+                "items" : {
+                  "type" : "string",
+                  "description" : "Country code in ISO 3166-1 alpha-2 format",
+                  "pattern" : "^[a-zA-Z]{2}$",
+                  "example" : "us"
+                }
+              },
+              "whitelisted_country_codes" : {
+                "type" : "array",
+                "description" : "List of whitelisted country codes",
+                "minItems" : 1,
+                "items" : {
+                  "type" : "string",
+                  "description" : "Country code in ISO 3166-1 alpha-2 format",
+                  "pattern" : "^[a-zA-Z]{2}$",
+                  "example" : "us"
+                }
+              }
             }
           },
-          "whitelisted_country_codes" : {
-            "type" : "array",
-            "description" : "List of whitelisted country codes",
-            "items" : {
-              "type" : "string",
-              "description" : "Country code in ISO 3166-1 alpha-2 format",
-              "example" : "us"
+          {
+            "type" : "object",
+            "required" : [
+              "whitelisted_country_codes",
+              "blacklisted_country_codes"
+            ],
+            "properties" : {
+              "blacklisted_country_codes" : {
+                "type" : "array",
+                "description" : "List of blacklisted country codes",
+                "minItems" : 1,
+                "items" : {
+                  "type" : "string",
+                  "description" : "Country code in ISO 3166-1 alpha-2 format",
+                  "pattern" : "^[a-zA-Z]{2}$",
+                  "example" : "us"
+                }
+              },
+              "whitelisted_country_codes" : {
+                "type" : "array",
+                "description" : "List of whitelisted country codes",
+                "minItems" : 0,
+                "maxItems" : 0,
+                "items" : {
+                  "type" : "string",
+                  "description" : "Country code in ISO 3166-1 alpha-2 format",
+                  "pattern" : "^[a-zA-Z]{2}$",
+                  "example" : "us"
+                }
+              }
             }
           }
-        }
+        ]
       },
       "Get2CommunitiesIdResponse" : {
         "type" : "object",
@@ -14843,25 +14890,6 @@
         "description" : "The Media Key identifier for this attachment.",
         "pattern" : "^([0-9]+)_([0-9]+)$"
       },
-      "MediaKeyStruct" : {
-        "type" : "object",
-        "properties" : {
-          "media" : {
-            "type" : "number",
-            "description" : "Unique identifier of this media",
-            "format" : "long",
-            "example" : "1344889453626359968"
-          },
-          "media_category" : {
-            "type" : "string",
-            "description" : "The media category of media",
-            "enum" : [
-              "PreviewImage"
-            ],
-            "example" : "PreviewImage"
-          }
-        }
-      },
       "MediaMetrics" : {
         "type" : "object",
         "properties" : {
@@ -14917,10 +14945,15 @@
           }
         }
       },
-      "MediaPayload" : {
+      "MediaPayloadBinary" : {
         "type" : "string",
         "description" : "The file to upload.",
         "format" : "binary"
+      },
+      "MediaPayloadByte" : {
+        "type" : "string",
+        "description" : "The file to upload.",
+        "format" : "byte"
       },
       "MediaSegments" : {
         "type" : "integer",
@@ -14944,15 +14977,38 @@
         }
       },
       "MediaUploadAppendRequest" : {
-        "type" : "object",
-        "properties" : {
-          "media" : {
-            "$ref" : "#/components/schemas/MediaPayload"
+        "oneOf" : [
+          {
+            "type" : "object",
+            "required" : [
+              "media",
+              "segment_index"
+            ],
+            "properties" : {
+              "media" : {
+                "$ref" : "#/components/schemas/MediaPayloadBinary"
+              },
+              "segment_index" : {
+                "$ref" : "#/components/schemas/MediaSegments"
+              }
+            }
           },
-          "segment_index" : {
-            "$ref" : "#/components/schemas/MediaSegments"
+          {
+            "type" : "object",
+            "required" : [
+              "media",
+              "segment_index"
+            ],
+            "properties" : {
+              "media" : {
+                "$ref" : "#/components/schemas/MediaPayloadByte"
+              },
+              "segment_index" : {
+                "$ref" : "#/components/schemas/MediaSegments"
+              }
+            }
           }
-        }
+        ]
       },
       "MediaUploadAppendResponse" : {
         "type" : "object",
@@ -15022,7 +15078,42 @@
             "type" : "integer",
             "description" : "The total size of the media upload in bytes.",
             "minimum" : 0,
-            "maximum" : 536870912
+            "maximum" : 17179869184
+          }
+        },
+        "additionalProperties" : false
+      },
+      "MediaUploadConfigRequestOneShot" : {
+        "type" : "object",
+        "properties" : {
+          "additional_owners" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/UserId"
+            }
+          },
+          "media_category" : {
+            "$ref" : "#/components/schemas/MediaCategory"
+          },
+          "media_type" : {
+            "type" : "string",
+            "description" : "The type of media.",
+            "enum" : [
+              "text/srt",
+              "text/vtt",
+              "image/jpeg",
+              "image/gif",
+              "image/bmp",
+              "image/png",
+              "image/webp",
+              "image/pjpeg",
+              "image/tiff"
+            ],
+            "example" : "video/mp4"
+          },
+          "shared" : {
+            "type" : "boolean",
+            "description" : "Whether this media is shared or not."
           }
         },
         "additionalProperties" : false
@@ -15967,7 +16058,23 @@
         "type" : "object",
         "properties" : {
           "media_key" : {
-            "$ref" : "#/components/schemas/MediaKeyStruct"
+            "type" : "object",
+            "properties" : {
+              "media" : {
+                "type" : "number",
+                "description" : "Unique identifier of this media",
+                "format" : "long",
+                "example" : "1344889453626359968"
+              },
+              "media_category" : {
+                "type" : "string",
+                "description" : "The media category of media",
+                "enum" : [
+                  "PreviewImage"
+                ],
+                "example" : "PreviewImage"
+              }
+            }
           }
         }
       },
@@ -17080,6 +17187,9 @@
             "description" : "Creation time of the Tweet.",
             "format" : "date-time",
             "example" : "2021-01-06T18:40:40.000Z"
+          },
+          "display_text_range" : {
+            "$ref" : "#/components/schemas/DisplayTextRange"
           },
           "edit_controls" : {
             "type" : "object",
