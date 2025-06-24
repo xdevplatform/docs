@@ -1,0 +1,319 @@
+---
+title: Response codes and errors
+sidebarTitle: Response codes
+---
+
+import { Button } from '/snippets/button.mdx';
+
+The X API provides the following response and error codes to help understand and debug in the moment. Use the debugging guide and error index below for additional context.
+
+Successful responses are indicated with a 200-series HTTP code and a JSON-based payload containing the object(s) requested, created, modified, or deleted along with an expression of the server's interpretation of your request.
+
+Error responses are served with a non-200-series HTTP code. Different error codes indicate different reasons for an error. The X API attempts to return appropriate [HTTP status codes](https://en.wikipedia.org/wiki/List_of_HTTP_status_codes) for every request.
+
+## X API HTTP status codes
+
+| Code | Text | Description | Troubleshooting tips |
+| :--- | :--- | :---------- | :------------------- |
+| 200 | OK | The request was successful! | |
+| 304 | Not Modified | There was no new data to return. | |
+| 400 | Bad Request	| The request was invalid or cannot be otherwise served. An accompanying error message will explain further. Requests without authentication or with invalid query parameters are considered invalid and will yield this response. | Double check the format of your JSON query. For example, if your rule contains double-quote characters associated with an exact-match or other operator, you may need to escape them using a backslash to distinguish them from the structure of the JSON format. |
+| 401 | Unauthorized | There was a problem authenticating your request. This could be due to missing or incorrect authentication credentials. This may also be returned in other undefined circumstances. | Check that you are using the correct [authentication method](https://docs.x.com/resources/fundamentals/authentication/overview) and that your credentials are correct. |
+| 403 | Forbidden | The request is understood, but it has been refused or access is not allowed. An accompanying error message will explain why. | Check that your developer account includes access to the endpoint you’re trying to use. You may also need to get your App allowlisted (e.g. Engagement API or Ads API) or sign up for access. |
+| 404 | Not Found | The URI requested is invalid or the resource requested, such as a user, does not exist. | Check that you are using valid parameters and the correct URI for the endpoint you’re using. |
+| 406 | Not Acceptable | Returned when an invalid format is specified in the request. Generally, this occurs where your client fails to properly include the headers to accept gzip encoding, but can occur in other circumstances as well. | Check that you are correctly passing expected query parameters, including expected headers, in your request. |
+| 409 | Connection Exception | Returned when attempting to connect to a filtered stream that has no rules. | Check that you have created at least one rule on the stream you are connecting to. Filtered stream will only return Posts that match an active rule. If there are no rules, the stream will not return any Posts. |
+| 410 | Gone | This resource is gone. Used to indicate that an API endpoint has been turned off. | |
+| 422 | Unprocessable Entity | Returned when the data is unable to be processed. | Check that the data you are sending in your request is valid. For example, this data could be the JSON body of your request or an image. |
+| 429 | Too Many Requests | Returned when a request cannot be served due to the App's [rate limit](/resources/fundamentals/rate-limits) or [Post cap](/x-api/fundamentals/post-cap) having been exhausted. See [Rate Limiting](/resources/fundamentals/rate-limits). | Check the number of requests per timeframe allowed with the endpoint you’re using. Wait for the timeframe to reset. Space out your requests to ensure you don’t hit rate limits or upgrade to the next available data plan. |
+| 500 | Internal Server Error | Something is broken. This is usually a temporary error, for example in a high load situation or if an endpoint is temporarily having issues. | Check the X API [status page](/status) or the [developer community forum](https://devcommunity.x.com/) in case others are having similar issues, or simply wait and try again later. |
+| 502 | Bad Gateway | X is down, or being upgraded | Check the X API [status page](/status) or the [developer community forum](https://devcommunity.x.com/) in case others are having similar issues, or simply wait and try again later. |
+| 503 | Service Unavailable | The X servers are up, but overloaded with requests. Try again later. | Check the X API [status page](/status) or the [developer community forum](https://devcommunity.x.com/) in case others are having similar issues, or simply wait and try again later. |
+| 504 | Gateway Timeout | The X servers are up, but the request couldn’t be serviced due to some failure within the internal stack. Try again later. | Check the X API [status page](/status) or the [developer community forum](https://devcommunity.x.com/) in case others are having similar issues, or simply wait and try again later. |
+
+When an error is incurred during a request, detailed information about the error is returned in the response body to aid in diagnosing the problem. A type field, which is a URI, indicates the nature of the problem, while additional fields provide details about the problem. The type, title, and detail fields will always be returned in these bodies (see table below). Any additional fields, as in the example below, will vary depending on the type of the error.
+
+```json
+{
+  "client_id": "101010101",
+  "required_enrollment": "Standard Basic",
+  "registration_url": "https://developer.twitter.com/en/account",
+  "title": "Client Forbidden",
+  "detail": "This request must be made using an approved developer account that is enrolled in the requested endpoint. Learn more by visiting our documentation.",
+  "reason": "client-not-enrolled",
+  "type": "https://api.x.com/2/problems/client-forbidden"
+}
+```
+
+## Partial errors
+
+In some cases you may see the errors detailed above in a response that returned a 200 status code. In those cases, the endpoint is designed to return the data that it can, while providing detailed errors about what it could not return.
+
+For example, the [Posts lookup endpoint](/x-api/posts/lookup/introduction) allows a X [developer App](/resources/fundamentals/developer-apps#overview) to request more than one ID. If some of those Posts are available, but one of them has been deleted, the available Posts would be returned in the data field of the response. An additional errors field would be returned in the payload, indicating which requested Post(s) could not be returned. The same format is used as full request errors to make diagnosing issues easier.
+
+## Error information
+
+Each problem type indicates the nature of the problem encountered. A full list of problems that you can run into can be found in our [API specification](https://api.x.com/2/openapi.json) as well.
+
+The X API attempts to return appropriate [HTTP status codes](https://en.wikipedia.org/wiki/List_of_HTTP_status_codes) for every request.
+
+| Title | Type | Description |
+| :--- | :--- | :--- |
+| Generic Problem | `about:blank` | A generic problem with no additional information beyond that provided by the HTTP status code. |
+| Invalid Request Problem | `https://api.X.com/2/problems/invalid-request` | A problem that indicates this request is invalid. If your request takes a POST body, ensure the contents is valid JSON and matches the [OpenAPI spec](https://api.x.com/2/openapi.json). |
+| Resource Not Found Problem | `https://api.X.com/2/problems/resource-not-found` | A problem that indicates that a given Post, User, etc. does not exist. |
+| Resource Unauthorized Problem | `https://api.X.com/2/problems/not-authorized-for-resource` | A problem that indicates you are not allowed to see a particular Post, User, etc. |
+| Client Forbidden Problem | `https://api.X.com/2/problems/client-forbidden` | A problem that indicates your client is forbidden from making this request. |
+| Disallowed Resource Problem | `https://api.X.com/2/problems/disallowed-resource` | A problem that indicates that the resource requested violates the precepts of this API. |
+| Unsupported Authentication Problem | `https://api.X.com/2/problems/unsupported-authentication` | A problem that indicates that the authentication used is not supported. |
+| Usage Capped Problem | `https://api.X.com/2/problems/usage-capped` | A problem that indicates that a usage cap has been exceeded. |
+| Connection Exception Problem | `https://api.X.com/2/problems/streaming-connection` | A problem that indicates something is wrong with the connection. |
+| Client Disconnected Problem | `https://api.X.com/2/problems/client-disconnected` | Your client has gone away. |
+| Operational Disconnect Problem | `https://api.X.com/2/problems/operational-disconnect` | You have been disconnected for operational reasons. |
+| Rule Cap Problem | `https://api.X.com/2/problems/rule-cap` | You have exceeded the maximum number of rules. |
+| Rule Length Problem | `https://api.X.com/2/problems/rule-length` | You have exceeded the maximum number of characters allowed on your query or rule based on your access level. See [access levels](/x-api/getting-started/about-x-api#x-api-access-levels-and-versions). |
+| Invalid Rules Problem | `https://api.X.com/2/problems/invalid-rules` | The rule you have submitted is invalid. |
+| Duplicate Rules Problem | `https://api.X.com/2/problems/duplicate-rules` | The rule you have submitted is a duplicate. |
+
+See [below](#x-api-error-codes) for machine-parseable error codes.
+
+---
+
+## Troubleshooting tips
+
+<Accordion title="Debugging your code">
+
+When building an application, it's normal to run into errors or unexpected issues from time to time. Below are some tips for how you can debug your code: 
+
+Start by breaking down the issue into smaller parts to identify where the problem lies. For example, if you’re integrating a REST or a streaming endpoint, the issue could lie with any of the following items:
+
+- The endpoint requires proper [authentication](/resources/fundamentals/authentication/overview).
+- The endpoint requires valid parameters and headers. Any filtering rules are built using the correct operators and proper [syntax](/x-api/enterprise-gnip-2.0/fundamentals/rules-filtering#building-rules-and-queries).
+- The endpoint's URI must be correct and, in the case of REST endpoints, the correct HTTP method must be used.
+- The data or resource you are trying to access is not accessible to you (for example, private data is only available to authenticated users).
+- Your current data package gives you access to certain endpoints only and to specific rate limits. Check out your [developer portal](https://developer.x.com/en/portal/products) for more details.
+- Your code uses a third-party library to integrate the endpoint in your code.
+- Your code needs to successfully parse the endpoint response.
+
+Read the accompanying error message. This should give you a good indication of what the problem is. Use the tables in the [error and response codes section](#x-api-http-status-codes) for troubleshooting tips specific to each error code.
+
+For REST endpoints, you can use a REST client like [Postman](https://www.postman.com/) or [Insomnia](https://insomnia.rest/) to validate steps (1) to (5) above (review our ["Getting started with Postman"](/tutorials/postman-getting-started) guide). If the request with the REST client returns a 200 success status code, you can assume that the issue lies with your code or the library that you are using; not with the endpoint request itself.
+
+For streaming endpoints, you can use cURL (a command-line tool for getting or sending requests using the URL syntax) to check if the issue lies with the request to the endpoint (steps (1) to (5) above) or with your code itself (steps (6) to (7) above).
+</Accordion>
+
+<Accordion title="Authentication issues">
+- Check that you are using the proper [authentication method](/resources/fundamentals/authentication/overview) required for the endpoint. This can be identified via the endpoint’s API reference page.
+- Check that your authentication credentials are correct. You can check or regenerate your App keys and tokens in the [Apps section](https://developer.x.com/en/portal/projects-and-apps) of your developer dashboard (under “Details”).
+- Check that you have properly [authorized your OAuth 1.0a request](/resources/fundamentals/authentication/oauth-1-0a/authorizing-a-request) with `oauth_nonce`, `oauth_signature`, and `oauth_timestamp` for your request.
+- If the issue persists, consider using an OAuth library, a REST client like [Postman](https://www.postman.com/) or [Insomnia](https://insomnia.rest/), or [xurl](https://github.com/xdevplatform/xurl).
+
+Review our [guide on authentication](/resources/fundamentals/authentication/overview) for additional information on all of the above.
+</Accordion>
+
+<Accordion title="Rate limiting and Post cap issues">
+
+A 429 error can deliver if you hit a rate limit for a given endpoint, or if you hit a Post cap.
+
+If the specific ‘Too many requests’ error is returned, you hit the endpoint's rate limit. In other words, you've exceeded the maximum number of requests allowed for an endpoint per specified time period. 
+
+Note that rate limits are set per-App and per-user levels. 
+
+- **X App level** indicates the number of requests allowed when using OAuth 2.0 App-Only, where rate limits are determined globally for the entire App. For example, if a method allows for 15 requests per rate limit window, then it allows you to make 15 requests per window on behalf of your X App. This limit is considered completely separately from the user-level limit. Read more in our guide on [OAuth 2.0 App-Only](/resources/fundamentals/authentication/oauth-2-0/application-only).
+- **User-context level** indicates the number of requests that can be made per user Access Token when using OAuth 1.0a User Context or OAuth 2.0 Authorization Code with PKCE. For example, if a method allows for 15 requests per rate limit window, then it allows 15 requests per window and per user Access Token. Read more in our guide on how to obtain a user’s Access Tokens with [OAuth 1.0a](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens) and [OAuth 2.0](/resources/fundamentals/authentication/oauth-2-0/user-access-token).
+
+Start by checking the rate limits for the endpoint you are using. You can find this information in the endpoint's API reference page and in the new developer portal dashboard.
+
+Review our documentation for additional information on rate limits, including how to use HTTP headers to track where your App is at for a given rate limit, how to recover from a rate limit 429 error code, and tips to avoid being rate limited in the first place:
+
+- [Rate limits for v2 endpoints](/x-api/fundamentals/rate-limits)
+
+If you've received the specific "Usage cap exceeded: Monthly product cap" error, that means you've hit the Post cap for your access level. We have plenty of details on what these [Post caps](/x-api/fundamentals/post-cap) are on our documentation page.
+</Accordion>
+
+<Accordion title="Missing Post issues">
+
+Follow the steps below, if you expected a Post to be returned, but it wasn’t delivered by the endpoint.
+
+- Check your rule to ensure that you are using the correct [operators](/x-api/enterprise-gnip-2.0/fundamentals/rules-filtering#enterprise-operators) and [syntax](/x-api/enterprise-gnip-2.0/fundamentals/rules-filtering#building-rules-and-queries). Break the rule into smaller clauses to ensure that you are using the correct syntax.
+- If the account from which the Post was sent was [protected](https://help.twitter.com/en/safety-and-security/public-and-protected-tweets) at the time the Post was created, the Post won’t be returned - even if the account is public at the time of the request to the endpoint. You can typically check this using [X Advanced Search](https://x.com/search-advanced): if a Post is not surfaced using the X Advanced Search functionality, you should assume that it won’t be returned by the endpoint.
+
+The following steps apply to streaming endpoints only:
+
+- Were you connected to the stream when the Post was sent? Remember that the timestamp delivered in the Post object indicates time in UTC. If you experienced a disconnect when the Post was sent, review the [recovery and redundancy features](/x-api/posts/filtered-stream/integrate/recovery-and-redundancy-features#recovery-and-redundancy) available to backfill any missed data.
+- Was your rule in place when the Post was sent? Remember that the timestamp delivered in the Post object indicates time in UTC.
+</Accordion>
+
+<Accordion title="Webhook issues">
+<AccordionGroup >
+<Accordion title="Code 32 - Could not authenticate you">
+
+This error generally means that something is either malformed in the request, headers, authorization, or the URI that you are specifying. This is not an [Account Activity API](/x-api/account-activity/introduction) (premium or enterprise) error, it’s an authorization error and X isn’t getting the proper OAuth setup or URI.
+
+- Free/Pro/Basic - Make sure you have an approved [developer account](/resources/fundamentals/developer-portal#overview), have established a [dev environment](/resources/fundamentals/developer-portal#overview) for the Account Activity API. You must use the proper environment name and App tokens in your request.
+- Enterprise - Make sure the consumer keys and access tokens you are using belong to a [X App](https://developer.x.com/en/docs/apps) that has been allowlisted for use of Enterprise products. If you don't have your consumer keys and access tokens, or need to allowlist your X App, please reach out to your account manager.
+- If you are trying to register a webhook, the [POST :env_name/webhooks](https://developer.x.com/en#post-account-activity-all-env-name-webhooks) endpoint requires that you replace `:env_name` with your environment name in the request. Also, this endpoint requires that you authenticate using [OAuth1.0a User Context](/resources/fundamentals/authentication/oauth-1-0a/api-key-and-secret), meaning that you need to use the consumer keys and access tokens generated by the [X App](/resources/fundamentals/developer-apps#overview) that you selected as your designated dev environment.
+- If authenticating with [OAuth1.0a User Context](/resources/fundamentals/authentication/oauth-1-0a/api-key-and-secret), make sure you have properly [authorized your request](/resources/fundamentals/authentication/oauth-1-0a/authorizing-a-request) with the proper `oauth_nonce`, `oauth_signature`, and `oauth_timestamp`.
+- Make sure that your access tokens have the proper permission level.
+    1. When on the 'Keys and tokens' tab in the [App section](/resources/fundamentals/developer-apps#overview) of your developer dashboard, please make sure that your access tokens have the 'Read, write, and direct messages' [permission level](/resources/fundamentals/developer-apps#app-permissions).
+    2. If the tokens' permission level is set to anything less than this, please navigate to the 'Permissions' tab, adjust the access permission to 'Read, write, and direct messages', then regenerate your access tokens and secret from the 'Keys and tokens' tab.
+- Make sure that your URI is formed properly. Please keep in mind that `:env_name` is case sensitive.
+</Accordion>
+<Accordion title="Code 200 - Forbidden">
+- Free/Basic/Pro - Make sure that you have an approved [developer account](https://developer.x.com/en/docs/developer-portal/overview) before you try to make a request to the API. You also must use the proper `:env_name` in the request, which you can set up on the [dev environments](https://developer.x.com/en/docs/developer-portal/overview) section of your developer portal.
+- Enterprise - Make sure that your account manager has set you up with access to the Account Activity API.
+- Make sure you have set up your URI properly. This error can trigger if you have entered the incorrect URI in your request.
+</Accordion>
+<Accordion title="Code 214 - Webhook URI does not meet the requirements">
+- Please make sure that you are using https.
+- Your webhook URI could be malformed.
+- Learn more about how to set up your webhook URI under the [Develop webhook consumer App](https://developer.x.com/en/docs/twitter-api/premium/account-activity-api/guides/getting-started-with-webhooks#webhook-url) section on [Getting started with webhooks](https://developer.x.com/en/docs/twitter-api/premium/account-activity-api/guides/getting-started-with-webhooks) page.
+</Accordion>
+<Accordion title="Code 214 - High latency on CRC GET request. Your webhook should respond in less than 3 seconds.">
+- This means that your server is slow. Make sure that you are responding to the CRC within 3 seconds.
+</Accordion>
+<Accordion title="Code 214 - Non-200 response code during CRC GET request (i.e. 404, 500, etc).">
+- Your server is down. Make sure that your server is running properly.
+</Accordion>
+<Accordion title="Code 214 - Too many resources already created">
+- Enterprise - You have already used all of your webhooks. Use the [GET webhooks](https://developer.x.com/en/docs/twitter-api/premium/account-activity-api/api-reference/aaa-enterprise#get-account-activity-webhooks) endpoint with each of your allowlisted Apps to identify where your webhooks are distributed.
+</Accordion>
+<Accordion title="Code 261 - App cannot perform write actions">
+- The App that you are using with the API does not have the proper [permission level](/resources/fundamentals/developer-apps#app-permissions) set for its access token and access token secret. Please navigate to the 'Keys and tokens' tab on the X [Apps](/resources/fundamentals/developer-apps#overview) dashboard and check the permission levels assigned to your access token and access token secret. If it is set to anything other than 'Read, write and Direct Messages,' then you are going to have to adjust the settings under the 'Permission' tab and regenerate your access token and access token secret to apply the new settings.
+- Alternatively, you are trying to register a webhook using OAuth 2.0 Bearer Token authentication, which is not supported. Please authenticate with [OAuth1.0a User Context](/resources/fundamentals/authentication/oauth-1-0a/api-key-and-secret) instead as noted in the API reference sections for registering a webhook for [enterprise Account Activity API](/x-api/enterprise-gnip-2.0/fundamentals/account-activity#enterprise-account-activity-api) and [premium Account Activity API](https://developer.x.com/en#post-account-activity-all-env-name-webhooks).
+</Accordion>
+</AccordionGroup>
+</Accordion>
+
+<Accordion title="Full buffer disconnect issues">
+You may get one of the following errors when your stream is not keeping up with the speed at which we are delivering data and your App isn't consuming the data from the stream fast enough:
+
+```
+This stream has been disconnected because your client was unable to keep up with us.
+```
+
+```
+This stream has been disconnected for operational reasons.
+```
+
+We allow delivery to get behind for a period of time, and we have a temporary staging buffer amount for each stream on our side; but if you don't catch up, we initiate a disconnect to allow you to reconnect at the current point in time. Please note that this may lead to data loss (for data that is within the buffer at the time of the full buffer disconnect).
+
+These can occur around large spikes in data. Generally, we recommend using a buffer process for consuming data quickly that is separate from the processing process.
+
+If you are an enterprise customer using v1.1 endpoints, you can find out more about optimizing your App to prevent disconnects like this in our articles on [connection](/x-api/enterprise-gnip-2.0/powertrack-api#disconnections-explained) and on consuming streaming data [here](https://developer.x.com/en/docs/tutorials/consuming-streaming-data) and [here](/x-api/enterprise-gnip-2.0/powertrack-api#planning-for-high-volume-social-data-events).
+
+There is a range of tools available for retrieving missed Posts due to a disconnect, including the ones listed below. Note that the following tools are only available with v1.1 endpoints at enterprise level of access.
+
+- [**Redundant Connections**](/x-api/enterprise-gnip-2.0/powertrack-api#recovery-and-redundancy-features) - With multiple connections, consume the stream from multiple servers to prevent missed data when one is disconnected.
+- [**Replay**](/x-api/enterprise-gnip-2.0/powertrack-api#recovery-and-redundancy-features) - Recover data from within the last 5 days using a separate stream.
+- [**Backfill**](/x-api/enterprise-gnip-2.0/powertrack-api#recovery-and-redundancy-features) - Reconnect within 5 minutes and start from where you left off.
+- **Historical PowerTrack** - Recover data from the entire X archive.
+</Accordion>
+
+### X API error codes
+
+In addition to [descriptive error text](#x-api-http-status-codes), error messages contain machine-parseable codes. While the text for an error message may change, the codes will stay the same.
+
+The following table describes the codes which may appear when working with the X API (note that the Ads API and some other resource families may present additional error codes). If an error response is not listed in the table, fall back to examining the HTTP status codes above in order to determine the best way to address the issue. Please also use the above tables for troubleshooting tips for each corresponding HTTP status code.
+
+| Code | Text | Description |
+| :--- | :--- | :---------- |
+| 3 | Invalid coordinates. | Corresponds with HTTP 400. The coordinates provided as parameters were not valid for the request. |
+| 13 | No location associated with the specified IP address. | Corresponds with HTTP 404. It was not possible to derive a location for the IP address provided as a parameter on the geo search request. |
+| 17 | No user matches for specified terms. | Corresponds with HTTP 404. It was not possible to find a user profile matching the parameters specified. |
+| 32 | Could not authenticate you. | Corresponds with HTTP 401. There was an issue with the authentication data for the request. |
+| 34 | Sorry, that page does not exist. | Corresponds with HTTP 404. The specified resource was not found. |
+| 36 | You cannot report yourself for spam. | Corresponds with HTTP 403. You cannot use your own user ID in a report spam call. |
+| 38 | &lt;named&gt; parameter is missing. | Corresponds with HTTP 403. The request is missing the &lt;named&gt; parameter (such as media, text, etc.) in the request. |
+| 44 | attachment_url parameter is invalid. | Corresponds with HTTP 400. The URL value provided is not a URL that can be attached to this Post. |
+| 50 | User not found. | Corresponds with HTTP 404. The user is not found. |
+| 63 | User has been suspended. | Corresponds with HTTP 403 The user account has been suspended and information cannot be retrieved. |
+| 64 | Your account is suspended and is not permitted to access this feature. | Corresponds with HTTP 403. The access token being used belongs to a suspended user. |
+| 68 | Some actions on this user's Post have been disabled by X. The X REST API v1 is no longer active. | Corresponds with HTTP 410. The request was made to a retired v1-era URL. |
+| 87 | Client is not permitted to perform this action. | Corresponds with HTTP 403. The endpoint called is not a permitted URL. |
+| 88 | Rate limit exceeded. | Corresponds with HTTP 429. The request limit for this resource has been reached for the current rate limit window. |
+| 89 | Invalid or expired token. | Corresponds with HTTP 403. The access token used in the request is incorrect or has expired. |
+| 92 | SSL is required. | Corresponds with HTTP 403. Only TLS v1.2 connections are allowed in the API. Update the request to a secure connection. See how to connect using TLS. |
+| 93 | This App is not allowed to access or delete your Direct Messages. | Corresponds with HTTP 403. The OAuth token does not provide access to Direct Messages. |
+| 99 | Unable to verify your credentials. | Corresponds with HTTP 403. The OAuth credentials cannot be validated. Check that the token is still valid. |
+| 109 | The specified user is not found in this list. | Corresponds with HTTP 404. Not Found. |
+| 110 | The user you are trying to remove from this list is not a member. | Corresponds with HTTP 400. Bad Request. |
+| 120 | Account update failed: value is too long (maximum is nn characters). | Corresponds with HTTP 403. Thrown when one of the values passed to the update_profile.json endpoint exceeds the maximum value currently permitted for that field. The error message will specify the allowable maximum number of nn characters. |
+| 130 | Over capacity. | Corresponds with HTTP 503. X is temporarily over capacity. |
+| 131 | Internal error. | Corresponds with HTTP 500. An unknown internal error occurred. |
+| 135 | Could not authenticate you. | Corresponds with HTTP 401. Timestamp out of bounds (often caused by a clock drift when authenticating - check your system clock). |
+| 139 | You have already favorited this status. | Corresponds with HTTP 403. A Post cannot be favorited (liked) more than once. |
+| 144 | No status found with that ID. | Corresponds with HTTP 404. The requested Post ID is not found (if it existed, it was probably deleted). |
+| 150 | You cannot send messages to users who are not following you. | Corresponds with HTTP 403. Sending a Direct Message failed. |
+| 151 | There was an error sending your message: reason. | Corresponds with HTTP 403. Sending a Direct Message failed. The reason value will provide more information. |
+| 160 | You've already requested to follow the user. | Corresponds with HTTP 403. This was a duplicated follow request and a previous request was not yet acknowleged. |
+| 161 | You are unable to follow more people at this time. | Corresponds with HTTP 403. Thrown when a user cannot follow another user due to reaching the limit. This limit is applied to each user individually, independent of the Apps they use to access the X platform. |
+| 179 | Sorry, you are not authorized to see this status. | Corresponds with HTTP 403. Thrown when a Post cannot be viewed by the authenticating user, usually due to the Post's author having protected their Posts. |
+| 185 | User is over daily status update limit. | Corresponds with HTTP 403. Thrown when a Post cannot be posted due to the user having no allowance remaining to post. Despite the text in the error message indicating that this error is only thrown when a daily limit is reached, this error will be thrown whenever a posting limitation has been reached. Posting allowances have roaming windows of time of unspecified duration. |
+| 186 | Post needs to be a bit shorter. | Corresponds with HTTP 403. The status text is too long. |
+| 187 | Status is a duplicate. | Corresponds with HTTP 403. The status text has already been Posted by the authenticated account. |
+| 195 | Missing or invalid url parameter. | Corresponds with HTTP 403.  The request needs to have a valid url parameter. |
+| 205 | You are over the limit for spam reports. | Corresponds with HTTP 403. The account limit for reporting spam has been reached. Try again later. |
+| 214 | Owner must allow dms from anyone. | Corresponds with HTTP 403. The user is not set up to have open Direct Messages when trying to set up a welcome message. |
+| 215 | Bad authentication data. | Corresponds with HTTP 400. The method requires authentication but it was not presented or was wholly invalid. |
+| 220 | Your credentials do not allow access to this resource. | Corresponds with HTTP 403. The authentication token in use is restricted and cannot access the requested resource. |
+| 226 | This request looks like it might be automated. To protect our users from spam and other malicious activity, we can't complete this action right now. | Corresponds with HTTP 403. We constantly monitor and adjust our filters to block spam and malicious activity on the X platform. These systems are tuned in real-time. If you get this response our systems have flagged the Post or Direct Message as possibly fitting this profile. If you believe that the Post or DM you attempted to create was flagged in error, report the details by filing a ticket at https://help.x.com/forms/platform. |
+| 251 | This endpoint has been retired and should not be used. | Corresponds with HTTP 410. The App made a request to a retired URL. |
+| 261 | Your App cannot perform write actions. | Corresponds with HTTP 403. Caused by the App being restricted from POST, PUT, or DELETE actions. Check the information on your [App](/resources/fundamentals/developer-apps) dashboard. You may also file a ticket at https://help.x.com/forms/platform. |
+| 271 | You can't mute yourself. | Corresponds with HTTP 403. The authenticated user account cannot mute itself. |
+| 272 | You are not muting the specified user. | Corresponds with HTTP 403. The authenticated user account is not muting the account a call is attempting to unmute. |
+| 323 | Animated GIFs are not allowed when uploading multiple images. | Corresponds with HTTP 400. Only one animated GIF may be attached to a single Post. |
+| 324 | The validation of media ids failed. | Corresponds with HTTP 400. There was a problem with the media ID submitted with the Post. |
+| 325 | A media id was not found. | Corresponds with HTTP 400. The media ID attached to the Post was not found. |
+| 326 | To protect our users from spam and other malicious activity, this account is temporarily locked. | Corresponds with HTTP 403. The user should log in to https://x.com to unlock their account before the user token can be used. |
+| 327 | You have already reposted this Post. | Corresponds with HTTP 403. The user cannot repost the same Post more than once. |
+| 349 | You cannot send messages to this user. | Corresponds with HTTP 403. The sender does not have privileges to Direct Message the recipient. |
+| 354 | The text of your direct message is over the max character limit. | Corresponds with HTTP 403. The message size exceeds the number of characters permitted in a Direct Message. |
+| 355 | Subscription already exists. | Corresponds with HTTP 409 Conflict. Related to Account Activity API request to add a new subscription for an authenticated user. |
+| 385 | You attempted to reply to a Post that is deleted or not visible to you. | Corresponds with HTTP 403. A reply can only be sent with reference to an existing public Post. |
+| 386 | The Post exceeds the number of allowed attachment types. | Corresponds with HTTP 403. A Post is limited to a single attachment resource (media, Quote Post, etc.) |
+| 407 | The given URL is invalid. | Corresponds with HTTP 400. A URL included in the Post could not be handled. This may be because a non-ASCII URL could not be converted, or for other reasons. |
+| 415 | Callback URL not approved for this client App. Approved callback URLs can be adjusted in your App's settings. | Corresponds with HTTP 403. The App callback URLs must be allowlisted via the [App details page](/resources/fundamentals/developer-apps) in the [developer portal](/resources/fundamentals/developer-portal). Only approved callback URLs may be used by the X App. See the [Callback URL documentation](/resources/fundamentals/developer-apps#callback-urls). |
+| 416 | Invalid / suspended App. | Corresponds with HTTP 401. The App has been suspended and cannot be used with [Sign-in with X](/resources/fundamentals/authentication/guides/log-in-with-x). |
+| 417 | Desktop applications only support the `oauth_callback` value `oob`. | Corresponds with HTTP 401. The App is attempting to use [out-of-band PIN-based OAuth](/resources/fundamentals/authentication/oauth-1-0a/pin-based-oauth), but a callback URL has been specified in the App's settings. |
+| 421 | This Post is no longer available. | Corresponds with HTTP 404. The Post cannot be retrieved. This may be for a number of reasons. Read about the [X Rules](https://help.x.com/en/rules-and-policies/enforcement-options). |
+| 422 | This Post is no longer available because it violated the X Rules. | Corresponds with HTTP 404. The Post is not available in the API. Read about the [X Rules](https://help.x.com/en/rules-and-policies/enforcement-options). |
+| 425 | Some actions on this user's Post have been disabled by X. | Corresponds with HTTP 403. Forbidden. Read about [public-interest exceptions on X](https://help.x.com/en/rules-and-policies/public-interest). |
+| 433 | The original Post author restricted who can reply to this Post. | Corresponds with HTTP 403. Thrown when reply to a Post, and the author of that original Post limited who can reply. In this case, a reply can only be sent if the author follows or has been mentioned by the author of the original Post. |
+
+### Get help
+
+The X community forum is available for you to ask technical questions about the X developer platform. This is a discussions forum where you will find questions by other developers and technical information on a variety of topics related to using the X API.
+
+We encourage you to join the conversation by responding to questions and engaging in conversations on our forum. X employees are also there to provide support.
+
+<Button href="https://devcommunity.x.com/">
+  X community forum
+</Button>
+
+#### Before you post a question
+
+- Search the X developer documentation for information relating to your issue
+- Search the community forum for similar questions by other developers
+- Review the community forum guidelines
+
+#### When you post a question, make sure to include the following information
+
+- A description of the problem
+- The API call being made (include headers, if possible)
+- The X response returned (include any error messages)
+- What you expected to receive instead
+- List of steps taken to troubleshoot the issue
+- List of steps required to reproduce the issue
+- If relevant, the time frame during which an issue occurred 
+- If relevant, the App ID, Post ID, etc.
+- Any relevant code sample or screenshots
+
+Please only include one topic/question per post.
+
+If you have feature requests or feedback, please submit these through the [X Developer Platform Feedback Form](https://t.co/devfeedback). 
+
+For Policy-related issues, such as App suspension, please contact [Policy support](https://help.twitter.com/forms/platform).
+
+For X-related issues, such as login and account support, please use the [X Help Desk](https://help.twitter.com/en/contact-us).
+
