@@ -7,7 +7,6 @@ import { Button } from '/snippets/button.mdx';
 
 ## Getting started with the filtered stream endpoints
 
-
 This quick start guide will help you make your first request to the filtered stream endpoint group using a cURL request. cURL is a command line tool which allows you to make requests with minimal configuration.
 
 If you would like to see sample code in different languages, please visit our[X API v2 sample code](https://github.com/xdevplatform/Twitter-API-v2-sample-code) GitHub repository. 
@@ -21,28 +20,35 @@ To complete this guide, you will need to have a set of [keys and tokens](/resou
 * Create a [Project](/resources/fundamentals/projects) and an associated [developer App](/resources/fundamentals/developer-apps) in the developer portal.
 * Navigate to your App's “Keys and tokens” page to generate the required credentials. Make sure to save all credentials in a secure location.
 </Note>
+
 ### Steps to build a filtered stream request using cURL
 
 **Step one: Create a rule**
 
 Rules are made up of one or many different [operators](/x-api/posts/filtered-stream#building-rules-for-filtered-stream) that are combined using boolean logic and parentheses to help define which Posts will deliver to your stream. In this guide, we will filter the stream to find Posts that contain both the keyword “cat” and images. Here is our rule:
 
-cat has:images
+```cat has:images
+```
 
 **Step two: Add a tag to your rule**
 
 You can add multiple concurrent rules to your stream. When you open your streaming connection, Posts that match any of these rules will flow through the same streaming connection. To ensure that you know which Post matches which rule, you can pass a tag along with your rule creation request. Each Post that matches that rule will then include a tag field within the Post payload noting which rule it matched. For this rule, we are going to assign the following tag:
 
-cats with images
+```cats with images
+```
 
 **Step three: Add your rule to the stream**
 
 This endpoint requires you to pass an application/JSON body along with this request that contains your rule and its tag. You will also notice that we have included the rule value and tag within an add object since we are trying to add this rule to the stream. This JSON body will look like this:
-```
+
+```json
 {
-  "add": \[
-    {"value": "cat has:images", "tag": "cats with images"}
-  \]
+  "add": [
+    {
+      "value": "cat has:images",
+      "tag": "cats with images"
+    }
+  ]
 }
 ```
 
@@ -52,8 +58,6 @@ Now that you have fully set up this JSON body, you can add that to a cURL reques
 curl -X POST 'https://api.x.com/2/tweets/search/stream/rules' \
 -H "Content-type: application/json" \
 -H "Authorization: Bearer $APP_ACCESS_TOKEN" -d \
-```
-```json
 '{
   "add": [
     {"value": "cat has:images", "tag": "cats with images"}
@@ -64,47 +68,45 @@ curl -X POST 'https://api.x.com/2/tweets/search/stream/rules' \
 **Step four: Authenticate your request**
 
 Since the filtered stream rules endpoints require [OAuth 2.0 App-Only authentication](/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token), you will need to replace $APP\_ACCESS\_TOKEN in the cURL command from step three with the [App Access Token](/resources/fundamentals/authentication#using-and-generating-an-app-only-bearer-token) that you generated in the prerequisites. 
- 
 
 **Step five: Add your rule to the stream**
 
 Next step is to execute your cURL request, which will add the rule to your stream. Copy and paste the cURL command into your command line interface and press "return". 
 
 If your cURL request was successful, you’ll receive a response containing data about your value, tag, and id (serves as a unique identifier for your rule). This response will look similar to this:
- 
 
-```
+```json
 {
-	"data": [{
-		"value": "cat has:images",
-		"tag": "cats with images",
-		"id": "1273026480692322304"
-	}],
-	"meta": {
-		"sent": "2020-06-16T22:55:39.356Z",
-		"summary": {
-			"created": 1,
-			"not_created": 0,
-			"valid": 1,
-			"invalid": 0
-		}
-	}
+  "data": [
+    {
+      "value": "cat has:images",
+      "tag": "cats with images",
+      "id": "1273026480692322304"
+    }
+  ],
+  "meta": {
+    "sent": "2020-06-16T22:55:39.356Z",
+    "summary": {
+      "created": 1,
+      "not_created": 0,
+      "valid": 1,
+      "invalid": 0
+    }
+  }
 }
 ```
 
-
-
-
 You can validate that your rule was added successfully by sending the following GET request to the rules endpoint, once again making sure to replace $APP\_ACCESS\_TOKEN with your token. This request will return a full list of all the rules that have been added to your stream.
 
-      ```curl -X GET 'https://api.x.com/2/tweets/search/stream/rules' \
+```bash
+curl -X GET 'https://api.x.com/2/tweets/search/stream/rules' \
 -H "Authorization: Bearer $APP_ACCESS_TOKEN"
 ```
 
 If your cURL request was successful, you should receive the following:
  
-
-```{
+```json
+{
 	"data": [{
 		"id": "1273028376882589696",
 		"value": "cat has:images",
@@ -123,7 +125,6 @@ If you connect to the stream after step five, you will receive the default [Post
 For this exercise, we will request a three different sets of fields from different objects:
 
 1.  The additional tweet.created_at field in the primary Post objects.
-
 2.  The associated authors’ [user object’s](/x-api/fundamentals/data-dictionary#user) default fields for the returned Posts: id, name, and username
 3.  The additional  user.created_at field in the associated user objects.
      
@@ -138,28 +139,27 @@ To request these fields, you will need to pass the following in your request:
 | user.fields | created_at | includes.users.created_at |
 
 Now that you know this, you can piece together your request URL to connect to the stream, which will look like this:
- 
 
-      `https://api.x.com/2/tweets/search/stream?tweet.fields=created_at&expansions=author_id&user.fields=created_at`
 
+```bash
+https://api.x.com/2/tweets/search/stream?tweet.fields=created_at&expansions=author_id&user.fields=created_at
+```
 
 **Step seven: Connect to the stream and review your response**
 
 Now that your rule is in place and you’ve specified which fields you want returned, you’re ready to connect to the stream, which will deliver Post objects that match the rule you’ve submitted. This is what the cURL command looks like once you’ve added the URL from step six into your request:
  
 
-      `curl -X GET -H "Authorization: Bearer $APP_ACCESS_TOKEN" "https://api.x.com/2/tweets/search/stream?tweet.fields=created_at&expansions=author_id&user.fields=created_at"`
-
-
-
-
+```bash
+curl -X GET -H "Authorization: Bearer $APP_ACCESS_TOKEN" "https://api.x.com/2/tweets/search/stream?tweet.fields=created_at&expansions=author_id&user.fields=created_at"
+```
 
 Once again, this request must be authenticated using OAuth 2.0 App-Only, so make sure to replace $APP\_ACCESS\_TOKEN with your credentials before copying and pasting it into your command line tool.
 
 Once you are connected to the filtered stream you will start to receive Posts that match your rules in the following JSON format:
  
 
-```
+```json
 {
   "data": [
     {
@@ -196,7 +196,5 @@ Once you are connected to the filtered stream you will start to receive Posts th
   }
 }
 ```
-
-
 
 If you would like to close your connection, you can press Control-C in your command line tool on either Mac or Windows systems to break the connection, or you can also close the window. 
