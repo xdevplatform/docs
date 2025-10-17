@@ -1,0 +1,260 @@
+---
+title: Quickstart
+sidebarTitle: Quickstart
+---
+
+This guide explains how to subscribe for and receive events using the X Activity API endpoints. There generally 3 steps involved:
+1. Identify the User ID for the User who's events you want to filter on
+2. Create a subscription for the type of event you want to filter for that User
+3. Receive the events using webhook or persistent http stream connection
+
+## Getting User IDs
+
+Before creating subscriptions, you'll need to know the user ID of the account you want to filter on. In this example, we will use the XDevelopers handle. You can look up user IDs in a few of ways including:
+
+**Look up a user's ID by username:**
+```bash
+curl -H "Authorization: Bearer YOUR_BEARER_TOKEN" "https://api.x.com/2/users/by/username/xdevelopers"
+```
+
+**Get your own user ID:**
+```bash
+curl -H "Authorization: Bearer YOUR_BEARER_TOKEN" https://api.x.com/2/users/me
+```
+
+Both endpoints return user information including the `id` field, which you can use in subscription filters. Example json response is shown below:
+
+```json
+{
+    "data": {
+        "id": "2244994945",
+        "name": "Developers",
+        "username": "XDevelopers"
+    }
+}
+```
+
+## Creating a Subscription
+
+Next step is to create a subscription. In this example, we will subscribe to XDevelopers's bio updates. In order to do so, we will pass the `user_id` and `event_type` in the JSON body. In this case, the `event_type` is `ProfileBioUpdate`.
+
+We'll pass X Developer's user ID: `2244994945`, and an optional tag:
+
+```json
+{
+  "event_type": "ProfileBioUpdate",
+  "filter": {
+    "user_id": "2244994945"
+  },
+  "tag": "Xdevelopers' bio updates"
+}
+```
+
+We'll use our [bearer token](https://docs.x.com/fundamentals/authentication/oauth-2-0/overview#bearer-token-also-known-as-app-only) (from the developer portal) for authorization for all endpoints related to XAA:
+
+```bash
+curl -H "Authorization: Bearer YOUR_BEARER_TOKEN" \
+  https://api.x.com/2/activity/subscriptions \
+  -X POST \
+  -d '{
+    "event_type": "ProfileBioUpdate",
+    "filter": {
+      "user_id": "2244994945"
+    },
+    "tag": "Xdevelopers' bio updates"
+  }'
+```
+
+Upon successful request, your subscription will be created:
+
+```json
+{
+  "data":[
+    {
+      "created_at":"2025-10-09T16:35:08.000Z",
+      "event_type":"ProfileBioUpdate",
+      "filter":{
+        "user_id":"2244994945"
+      },
+      "subscription_id":"1976325569252868096",
+      "tag": "Xdevelopers' bio updates",
+      "updated_at":"2025-10-09T16:35:08.000Z"
+    }
+  ],
+  "meta": {
+    "total_subscriptions": 1
+  }
+}
+```
+
+## Getting the events 
+
+Once we have created the subscription, we can receive the events via [webhooks](https://docs.x.com/x-api/webhooks/introduction) or a persistent HTTP stream. In this example, we will open the persistent HTTP stream:
+
+```bash
+curl -H "Authorization: Bearer YOUR_BEARER_TOKEN" https://api.x.com/2/activity/stream
+```
+
+When Xdevelopers account updates their profile bio, the event will be delivered through the stream:
+
+```json
+{
+  "data": {
+    "filter": {
+      "user_id": "2244994945"
+    },
+    "event_type": "ProfileBioUpdate",
+    "tag": "Xdevelopers' bio updates",
+    "payload": {
+      "before": "Mars & Cars",
+      "after": "Mars, Cars & AI"
+    }
+  }
+}
+```
+
+## Subscription Management
+
+The X Activity API provides endpoints to manage your subscriptions through standard CRUD operations.
+
+### Create Subscription
+
+Create a new subscription to receive events:
+
+```bash
+curl -H "Authorization: Bearer YOUR_BEARER_TOKEN" \
+  -X POST \
+  https://api.x.com/2/activity/subscriptions \
+  -d '{
+    "event_type": "ProfileBioUpdate",
+    "filter": {
+      "user_id": "123456789"
+    },
+    "tag": "my bio updates",
+    "webhook_id": "1976325569252868099"
+  }'
+```
+
+**Note:**
+
+- The `tag` field is optional. This can be used to help identify events on delivery.
+- The `webhook_id` field is also optional. See our [webhook docs](https://docs.x.com/x-api/webhooks/introduction) for help setting up a webhook. If a `webhook_id` is specified, the event will be delivered to the provided webhook, in addition to the stream if it is open.
+
+**Response:**
+
+```json
+{
+  "data": {
+    "subscription_id": "1976325569252868096",
+    "event_type": "ProfileBioUpdate",
+    "filter": {
+      "user_id": "123456789"
+    },
+    "created_at": "2025-10-09T16:35:08.000Z",
+    "updated_at": "2025-10-09T16:35:08.000Z",
+    "tag": "my bio updates",
+    "webhook_id": "1976325569252868099"
+  }
+}
+```
+
+### List Subscriptions
+
+Retrieve all active subscriptions for your application:
+
+```bash
+curl -H "Authorization: Bearer YOUR_BEARER_TOKEN" \
+  https://api.x.com/2/activity/subscriptions
+```
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "subscription_id": "1976325569252868096",
+      "event_type": "ProfileBioUpdate",
+      "filter": {
+        "user_id": "123456789"
+      },
+      "created_at": "2025-10-09T16:35:08.000Z",
+      "updated_at": "2025-10-10T03:50:59.000Z",
+    },
+    {
+      "subscription_id": "1976325569252868097",
+      "event_type": "ProfilePictureUpdate",
+      "filter": {
+        "user_id": "987654321"
+      },
+      "created_at": "2025-10-08T14:35:08.000Z",
+      "updated_at": "2025-10-08T14:35:08.000Z",
+    }
+  ],
+  "meta": {
+    "total_subscriptions": 2
+  }
+}
+```
+
+### Delete Subscription
+
+Remove a subscription:
+
+```bash
+curl -H "Authorization: Bearer YOUR_BEARER_TOKEN" \
+  -X DELETE \
+  https://api.x.com/2/activity/subscriptions/1976325569252868096
+```
+
+**Response:**
+
+```json
+{
+  "data": {
+    "deleted": true
+  },
+  "meta": {
+    "total_subscriptions": 0
+  }
+}
+```
+
+`total_subscriptions` shows the remaining number of subscriptions associated with your app after the delete operation.
+
+### Update Subscription
+
+The PUT endpoint allows you to update a subscription's delivery method or tag.
+
+Updating the `filter` or `event_type` requires deleting the existing subscription and adding a new one.
+
+```
+curl -H "Authorization: Bearer YOUR_BEARER_TOKEN" \
+  -X PUT \
+  https://api.x.com/2/activity/subscriptions/1976325569252868096 \
+  -d '{
+    "tag": "my new tag",
+    "webhook_id": "192846273860294839"
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "data": {
+    "subscription_id": "1976325569252868096",
+    "event_type": "ProfileBioUpdate",
+    "filter": {
+      "user_id": "123456789"
+    },
+    "created_at": "2025-10-09T16:35:08.000Z",
+    "updated_at": "2025-10-10T17:10:58.000Z",
+    "tag": "my new tag",
+    "webhook_id": "192846273860294839"
+  },
+  "meta": {
+    "total_subscriptions": 1
+  }
+}
+```
