@@ -11,30 +11,59 @@ The XDK provides:
 - **Reconnection Logic**: Automatic handling of disconnects (e.g., due to network issues).
 
 ## Setup and Basic Streaming
-**Example: Streaming Posts Matching a Rule**
+
+### Synchronous
+
 ```python
-import asyncio
 from xdk import Client
 
-async def stream_posts(client: Client):
-    # Add a rule (e.g. Posts from xdevelopers)
-    client.streams.add_rules(rules=[{"value": "from:xai", "tag": "xdevelopers_posts"}])
+# Initialize client
+client = Client(bearer_token="your_bearer_token")
 
-    # Start streaming
-    async for event in client.tweets.stream_filtered():
-        if event.data:  # Filter for Post events
-            post = event.data
-            print(f"New Post from @{post.author_id}: {post.text}")
-        # Handle other event types (e.g., disconnects) via event.type
+# Stream posts (make sure you have rules set up first)
+for post_response in client.stream.posts():
+    data = post_response.model_dump()
+    
+    if 'data' in data and data['data']:
+        tweet = data['data']
+        print(f"Post: {tweet.get('text', '')}")
+```
 
-    # Cleanup on exit
-    client.streams.delete_rules(tag="xai_posts")
+### Async
+
+```python
+import asyncio
+from asyncio import Queue
+import threading
+from xdk import Client
+
+async def stream_posts_async(client: Client):
+    queue = Queue()
+    loop = asyncio.get_event_loop()
+    stop = threading.Event()
+    
+    def run_stream():
+        for post in client.stream.posts():
+            if stop.is_set():
+                break
+            asyncio.run_coroutine_threadsafe(queue.put(post), loop)
+        asyncio.run_coroutine_threadsafe(queue.put(None), loop)
+    
+    threading.Thread(target=run_stream, daemon=True).start()
+    
+    while True:
+        post = await queue.get()
+        if post is None:
+            break
+        data = post.model_dump()
+        if 'data' in data and data['data']:
+            print(f"Post: {data['data'].get('text', '')}")
+    stop.set()
 
 async def main():
     client = Client(bearer_token="your_bearer_token")
-    await stream_posts(client)
+    await stream_posts_async(client)
 
-# Run the async loop
 asyncio.run(main())
 ```
 
@@ -43,38 +72,41 @@ Rules define filters on what specific data you are looking for(e.g. keywords, us
 
 **Adding Rules**:
 ```python
-rules = [
-    {"value": "(python OR sdk) lang:en", "tag": "python_dev"},
-    {"value": "from:xdevelopers -is:retweet", "tag": "official_updates"}
-]
-client.streams.add_rules(rules=rules)
+from xdk.stream.models import UpdateRulesRequest
+
+# Add a rule
+add_rules = {
+    "add": [
+        {"value": "from:xdevelopers", "tag": "official_updates"}
+    ]
+}
+
+request_body = UpdateRulesRequest(**add_rules)
+response = client.stream.update_rules(body=request_body)
 ```
 
-**Listing/Deleting Rules**:
+**Deleting Rules**:
 ```python
-available_rules = client.streams.get_rules()
-print(available_rules)  # List of Rule objects
+from xdk.stream.models import UpdateRulesRequest
 
-client.streams.delete_rules(ids=["12345"])  # By ID
-client.streams.delete_rules(tag="python_dev")  # By tag
+delete_rules = {
+    "delete": {
+        "ids": ["rule_id_1", "rule_id_2"]
+    }
+}
+
+request_body = UpdateRulesRequest(**delete_rules)
+response = client.stream.update_rules(body=request_body)
 ```
 
-## Advanced Streaming
-- **Custom Backoff**: Configure reconnection attempts:
-  ```python
-  client = Client(bearer_token="...", stream_backoff_max=60)  # Seconds
-  ```
-- **Event Filtering**: Process specific events (e.g., `tweet_create`, `user_block`).
-- **Error Handling**:
-  ```python
-  try:
-      async for event in client.tweets.stream_filtered():
-          # Process
-          pass
-  except xdk.StreamDisconnectError as e:
-      print(f"Stream disconnected: {e.code} - {e.reason}")
-  ```
-- **High-Volume Tips**: Use async queues (e.g., `asyncio.Queue`) for processing in separate tasks. Monitor connection health via `event.stream_lifespan`.
+**Listing Rules**:
+```python
+response = client.stream.get_rules()
+
+# Print rules
+for rule in response.data:
+    print(f"ID: {rule.id}, Value: {rule.value}, Tag: {rule.tag}")
+```
 
 For full rule syntax, see [X Streaming Rules Docs](https://developer.x.com/en/docs/twitter-api/tweets/filtered-stream/integrate/build-a-rule).
 
