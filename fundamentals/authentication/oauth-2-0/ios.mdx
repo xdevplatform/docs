@@ -1,0 +1,141 @@
+---
+title: iOS - OAuth 2.0 Flow with Deep Linking to the X App
+sidebarTitle: iOS
+---
+
+# OAuth 2.0 Flow with Deep Linking to the X App
+
+This section provides guidance for iOS developers implementing the OAuth 2.0 Authorization Code Flow with PKCE in a way that leverages deep linking to the installed X app for a more seamless user experience. This approach avoids opening an embedded web view or system browser by redirecting the authentication process to the X app if it is installed on the device. If the X app is not installed, you can fall back to the standard authorization flow.
+
+This method is particularly useful for native iOS apps to provide a better user experience by utilizing the native X app for sign-in and authorization.
+
+**Note:** This flow uses the same parameters as the standard OAuth 2.0 authorization endpoint (`https://x.com/i/oauth2/authorize`) but initiates the process via a specialized start flow URL to enable app-to-app switching. Ensure your app is configured for OAuth 2.0 in the [X Developer Portal](https://developer.x.com/en/portal/dashboard) with the appropriate callback URLs and scopes.
+
+## Prerequisites
+
+- Your app must be registered in the X Developer Portal with OAuth 2.0 enabled.
+- You must implement PKCE (Proof Key for Code Exchange) as described in the [main OAuth 2.0 Authorization Code Flow documentation](/fundamentals/authentication/oauth-2-0/authorization-code).
+- The X app must be installed on the user's device for deep linking to work. If not, fall back to the standard flow.
+
+## Step 1: Configure Your Info.plist for URL Scheme Queries
+
+To check if the X app is installed and to enable deep linking, add the `twitter` scheme to your app's `LSApplicationQueriesSchemes` array in `Info.plist`. This allows your app to use `UIApplication.shared.canOpenURL(_:)` to detect the X app.
+
+Open your `Info.plist` file (as source code or via Xcode's editor) and add the following:
+
+```xml
+<key>LSApplicationQueriesSchemes</key>
+<array>
+    <string>twitter</string>
+</array>
+```
+
+This step is required to comply with iOS privacy rules and to query custom URL schemes.
+
+## Step 2: Check for X App Installation
+
+Before initiating the flow, check if the device can open the `twitter://` scheme:
+
+```swift
+let twitterScheme = URL(string: "twitter://")!
+if UIApplication.shared.canOpenURL(twitterScheme) {
+    // Proceed with deep link flow
+} else {
+    // Fall back to standard web-based flow
+}
+```
+
+If the X app is not detected, use the standard authorization URL (`https://x.com/i/oauth2/authorize`) and present it in an `ASWebAuthenticationSession`, `SFSafariViewController`, or similar, as described in the [User Access Token documentation](/fundamentals/authentication/oauth-2-0/user-access-token).
+
+## Step 3: Construct the Authorization Start Flow URL
+
+Build the URL using the endpoint `https://x.com/i/oauth2_start_flow` (or `https://x.com/i/oauth2_start_flow` for compatibility). Include all standard OAuth 2.0 parameters.
+
+Required parameters:
+- `client_id`: Your app's Client ID from the X Developer Portal.
+- `response_type`: Set to `code`.
+- `scope`: Space-separated list of scopes (e.g., `tweet.read users.read`).
+- `redirect_uri`: Your app's registered callback URL (must use a custom scheme like `myapp://oauth-callback` for deep linking back to your app).
+- `state`: A unique value to prevent CSRF attacks.
+- `code_challenge`: The PKCE code challenge (base64url-encoded SHA-256 hash of the code verifier).
+- `code_challenge_method`: Set to `S256`.
+
+Example URL construction in Swift:
+
+```swift
+let baseURL = "https://x.com/i/oauth2_start_flow"
+let parameters = [
+    "client_id": clientID,
+    "response_type": "code",
+    "scope": scopes.joined(separator: " "),
+    "redirect_uri": redirectURI,
+    "state": state,
+    "code_challenge": codeChallenge,
+    "code_challenge_method": "S256"
+]
+
+var components = URLComponents(string: baseURL)!
+components.queryItems = parameters.map { URLQueryItem(name: $0, value: $1) }
+
+guard let authURL = components.url else {
+    // Handle error
+}
+```
+
+**Important:** Encode parameters properly using `URLComponents` to handle special characters.
+
+## Step 4: Open the URL to Start the Flow
+
+Use `UIApplication.shared.open(_:)` to open the constructed URL. This will switch to the X app if installed, where the user can authenticate and authorize your app.
+
+```swift
+UIApplication.shared.open(authURL) { success in
+    if !success {
+        // Handle failure (e.g., fall back to web flow)
+    }
+}
+```
+
+The X app will handle the authorization dialog. Upon user approval, it will redirect back to your app via the `redirect_uri` (using your custom scheme), passing the authorization code.
+
+## Step 5: Handle the Redirect and Exchange for Access Token
+
+Implement deep link handling in your app to capture the redirect. In your `AppDelegate` or `SceneDelegate`:
+
+```swift
+func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+    // Parse the URL for 'code' and 'state'
+    guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+          let code = components.queryItems?.first(where: { $0.name == "code" })?.value,
+          let state = components.queryItems?.first(where: { $0.name == "state" })?.value else {
+        return false
+    }
+    
+    // Verify state matches the sent value
+    if state != expectedState {
+        // Handle CSRF error
+        return false
+    }
+    
+    // Proceed to exchange code for access token (POST to https://api.x.com/2/oauth2/token)
+    return true
+}
+```
+
+Exchange the code for an access token as described in the [User Access Token documentation](/fundamentals/authentication/oauth-2-0/user-access-token), using your code verifier for PKCE.
+
+## Error Handling and Fallback
+
+- If the X app is not installed, fall back to the standard `https://x.com/i/oauth2/authorize` URL presented in a web view.
+- Handle cases where the user cancels in the X app (redirect may include an error parameter).
+- Test on physical devices, as simulators may not have the X app installed.
+- Ensure your `redirect_uri` is a custom scheme registered in your Info.plist under `CFBundleURLTypes`.
+
+## Best Practices
+
+- Always use PKCE to secure the flow.
+- Store the state and code verifier securely (e.g., in memory).
+- For production apps, handle token refresh if using refresh tokens.
+- This flow enhances UX but relies on the X app being installed; provide a graceful fallback.
+
+For more details on the standard flow, refer to the [OAuth 2.0 Authorization Code Flow](/fundamentals/authentication/oauth-2-0/authorization-code) and [User Access Token](/fundamentals/authentication/oauth-2-0/user-access-token) documentation. If you encounter issues, check the [X Developer Community](https://devcommunity.x.com/) for support.
