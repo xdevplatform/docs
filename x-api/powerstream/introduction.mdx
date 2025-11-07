@@ -1,0 +1,333 @@
+---
+title: Introduction
+sidebarTitle: Introduction
+---
+
+Powerstream is our fastest, real-time streaming API for accessing public X data. Similar to the legacy GNIP Powetrack API, it uses rules to filter Posts based on keywords, operators, and metadata. Once a persistent http connection is made to the Powerstream endpoint, you can start receiving matching Posts in near-real time.
+
+Currently, Powerstream supports up to 1,000 rules and each rule can be 2048 characters.
+
+## Key Features:
+- **Real-time data delivery**: Get data matching your rules in near-real time.
+- **Precise filtering**: Filter for exactly the data you are looking for using Boolean queries with operators.
+- **Delivery**: JSON response over HTTP/1.1 chunked transfer encoding.
+- **Local Data-center support**:  Fetch posts only from the local datacenter to reduce latency by avoiding replication lag.
+
+## Authentication
+
+Powerstream API endpoints use OAuth 2.0 Bearer Token. Include in `Authorization: Bearer <token>` header and you can start using these endpoints.
+
+## Quick Start
+
+This section showcases how to quickly get started with the PowerStream endpoints using Python with the `requests` library. Install it via `pip install requests`. All examples use OAuth 2.0 Bearer Token authentication. Replace `YOUR_BEARER_TOKEN` with your actual token (store it securely, e.g., via `os.getenv('BEARER_TOKEN')`).
+
+We'll cover each endpoint with code snippets. Assume these imports at the top:
+
+```python
+import requests
+import json
+import time
+import sys
+import os  # For env vars
+```
+
+### Setup
+```python
+bearer_token = os.getenv('BEARER_TOKEN') or "YOUR_BEARER_TOKEN"  # Use env var for security
+base_url = "https://api.x.com/2/powerstream"
+rules_url = f"{base_url}/rules"  # For rule management
+headers = {
+   "Authorization": f"Bearer {bearer_token}",
+   "Content-Type": "application/json"
+}
+```
+
+### 1. Create Rules (POST /rules)
+Add rules to filter your stream.
+
+```python
+data = {
+   "rules": [
+       {
+           "value": "(cat OR dog) lang:en -is:retweet",
+           "tag": "pet-monitor"
+       },
+       # Add more rules as needed (up to 100)
+   ]
+}
+
+response = requests.post(rules_url, headers=headers, json=data)
+if response.status_code == 201:
+   rules_added = response.json().get("data", {}).get("rules", [])
+   print("Rules added:")
+   for rule in rules_added:
+       print(f"ID: {rule['id']}, Value: {rule['value']}, Tag: {rule.get('tag', 'N/A')}")
+else:
+   print(f"Error {response.status_code}: {response.text}")
+```
+
+### 2. Delete Rules (POST /rules)
+Remove rules by ID (recommended) or value.
+
+```python
+data = {
+   "rules": [
+       {
+           "value": "(cat OR dog) lang:en -is:retweet",
+           "tag": "pet-monitor"
+       },
+       # Add more rules as needed (up to 100)
+   ]
+}
+
+response = requests.delete(rules_url, headers=headers, json=data)
+if response.status_code == 200:
+   deleted = response.json().get("data", {})
+   print(f"Deleted count: {deleted.get('deleted', 'N/A')}")
+   if 'not_deleted' in deleted:
+       print("Not deleted:", deleted['not_deleted'])
+else:
+   print(f"Error {response.status_code}: {response.text}")
+```
+
+**Tip**: To delete all rules, first GET them, extract IDs, then delete in bulk.
+
+### 3. Get Rules (GET /rules)
+Fetch all active rules.
+
+```python
+response = requests.get(rules_url, headers=headers)
+if response.status_code == 200:
+   rules = response.json().get("data", {}).get("rules", [])
+   if rules:
+       print("Active rules:")
+       for rule in rules:
+           print(f"ID: {rule['id']}, Value: {rule['value']}, Tag: {rule.get('tag', 'N/A')}")
+   else:
+       print("No active rules.")
+else:
+   print(f"Error {response.status_code}: {response.text}")
+```
+
+### 4. PowerStream (GET /stream)
+Connect to the stream for real-time Posts. Use `stream=True` for line-by-line reading. Implement reconnect logic for robustness.
+
+```python
+stream_url = base_url
+
+def main():
+   while True:
+       response = requests.request("GET", stream_url, headers=headers, stream=True)
+       print(response.status_code)
+       for response_line in response.iter_lines():
+           if response_line:
+               json_response = json.loads(response_line)
+               print(json.dumps(json_response, indent=4, sort_keys=True))
+               if response.status_code != 200:
+                   print(response.headers)
+                   raise Exception(
+                       "Request returned an error: {} {}".format(
+                           response.status_code, response.text
+                       )
+                   )
+```
+
+#### Local Datacenter Support
+
+For latency optimization, Powerstream provides an option to fetch only posts that originated or were created in the local datacenter where a connection is established. This avoids replication lag, resulting in faster delivery compared to posts from other datacenters. To enable this, append the query parameter `?localDcOnly=true` to the stream endpoint (e.g., `/2/powerstream?localDcOnly=true`). The datacenter you are connected to will be indicated both in the initial data payload of the stream and as an HTTP header in the response.
+
+To use in code:
+
+```python
+# For local datacenter only:
+stream_url = "https://api.x.com/2/powerstream?localDcOnly=true"
+```
+
+If the `localDcOnly` parameter is enabled, when the stream first connects, it will include the following response headers indicating which local datacenter is being used:
+
+```bash
+'x-powerstream-datacenter': 'atla',
+'x-powerstream-localdconly': 'true'
+```
+
+In addition to this, it will also send an initial payload specifying the datacenter:
+
+```bash
+{
+    "type": "connection_metadata",
+    "datacenter": "atla",
+    "timestamp": 1762557264155
+}
+```
+
+<Note>
+**Tip:** To optimize latency, set up connections from different geographic locations (e.g., one near Atlanta on the US East Coast and another near Portland on the US West Coast), enabling `localDcOnly=true` for each. This provides faster access to posts from each respective datacenter. Aggregate the streams on your end to combine cross-datacenter data.
+</Note>
+
+## Operators
+
+In order to set rules for filtering, you can use keywords and operators. Check out the list of available operators below.
+
+### Field-Based Operators
+
+#### User Operators
+| Operator | Summary | Example |
+|----------|---------|---------|
+| `from:` | Matches posts from a specific user | `from:xdevelopers` or `from:123456` |
+| `to:` | Matches posts directed to a specific user | `to:jvaleski` |
+| `retweets_of:` | Matches reposts of a specific user | `retweets_of:xdevelopers` |
+
+#### Content Operators
+| Operator | Summary | Example |
+|----------|---------|---------|
+| `contains:` | Matches posts containing specific text/keywords | `contains:hello` or `contains:-2345.432` |
+| `url_contains:` | Matches posts with URLs containing specific text | `url_contains:"com/willplayforfood"` |
+| `lang:` | Matches posts in specific languages | `lang:en` |
+
+#### Entity Operators
+| Operator | Summary | Example |
+|----------|---------|---------|
+| `has:` | Matches posts containing specific entities (Options: mentions, geo, links, media, lang, symbols, images, videos) | `has:images`, `has:geo`, `has:mentions` |
+| `is:` | Matches posts of specific types or with specific properties (Options: retweet, reply) | `is:retweet`, `is:reply` |
+
+#### Location Operators
+| Operator | Summary | Example |
+|----------|---------|---------|
+| `place:` | Matches posts from specific places/locations | `place:"Belmont Central"`, `place:02763fa2a7611cf3` |
+| `bounding_box:` | Matches posts within a geographic bounding box | `bounding_box:[-112.424083 42.355283 -112.409111 42.792311]` |
+| `point_radius:` | Matches posts within a radius of a point | `point_radius:[-111.464973 46.371179 25mi]`, `point_radius:[-111.464973 46.371179 15km]` |
+
+#### Advanced/Content Operators
+| Operator | Summary | Example |
+|----------|---------|---------|
+| `bio:` | Matches posts from users with specific bio content (Uses phrase matching) | N/A |
+| `bio_name:` | Matches posts from users with specific name in bio (Uses phrase matching) | N/A |
+
+#### Additional Operators
+| Operator | Summary | Example |
+|----------|---------|---------|
+| `retweets_of_status_id:` | Matches reposts of specific posts | `retweets_of_status_id:1234567890123456789` |
+| `in_reply_to_status_id:` | Matches replies to specific posts | `in_reply_to_status_id:1234567890123456789` |
+
+### Non-Field Operators
+
+#### Special Syntax Operators
+| Operator | Summary | Example |
+|----------|---------|---------|
+| `@` | Mention operator | `@username` |
+| Phrase matching | Matches exact phrases | `"exact phrase"` |
+
+#### Logical Operators
+| Operator | Summary | Example |
+|----------|---------|---------|
+| `OR` | Logical OR between expressions | `x OR facebook` |
+| Space/AND | Logical AND between expressions | `x facebook` (both terms must be present) |
+| `()` | Grouping for complex expressions | `(x OR facebook) iphone` |
+| `-` | Negation/exclusion | `x -facebook` (x but not facebook) |
+
+## Responses
+
+The payload of the Powestream API is the same format as the legacy GNIP Powertrack API. A sample json response looks like:
+
+```json
+[
+   {
+       "created_at": "Tue Mar 21 20:50:14 +0000 2006",
+       "id": 20,
+       "id_str": "20",
+       "text": "just setting up my twttr",
+       "truncated": false,
+       "entities": {
+           "hashtags": [],
+           "symbols": [],
+           "user_mentions": [],
+           "urls": []
+       },
+       "source": "<a href=\"http://x.com\" rel=\"nofollow\">X Web Client</a>",
+       "in_reply_to_status_id": null,
+       "in_reply_to_status_id_str": null,
+       "in_reply_to_user_id": null,
+       "in_reply_to_user_id_str": null,
+       "in_reply_to_screen_name": null,
+       "user": {
+           "id": 12,
+           "id_str": "12",
+           "name": "jack",
+           "screen_name": "jack",
+           "location": "",
+           "description": "no state is the best state",
+           "url": "https://t.co/ZEpOg6rn5L",
+           "entities": {
+               "url": {
+                   "urls": [
+                       {
+                           "url": "https://t.co/ZEpOg6rn5L",
+                           "expanded_url": "http://primal.net/jack",
+                           "display_url": "primal.net/jack",
+                           "indices": [
+                               0,
+                               23
+                           ]
+                       }
+                   ]
+               },
+               "description": {
+                   "urls": []
+               }
+           },
+           "protected": false,
+           "followers_count": 6427829,
+           "friends_count": 3,
+           "listed_count": 32968,
+           "created_at": "Tue Mar 21 20:50:14 +0000 2006",
+           "favourites_count": 36306,
+           "utc_offset": null,
+           "time_zone": null,
+           "geo_enabled": true,
+           "verified": false,
+           "statuses_count": 30134,
+           "lang": null,
+           "contributors_enabled": false,
+           "is_translator": false,
+           "is_translation_enabled": false,
+           "profile_background_color": "EBEBEB",
+           "profile_background_image_url": "http://abs.twimg.com/images/themes/theme7/bg.gif",
+           "profile_background_image_url_https": "https://abs.twimg.com/images/themes/theme7/bg.gif",
+           "profile_background_tile": false,
+           "profile_image_url": "http://pbs.twimg.com/profile_images/1661201415899951105/azNjKOSH_normal.jpg",
+           "profile_image_url_https": "https://pbs.twimg.com/profile_images/1661201415899951105/azNjKOSH_normal.jpg",
+           "profile_banner_url": "https://pbs.twimg.com/profile_banners/12/1742427520",
+           "profile_link_color": "990000",
+           "profile_sidebar_border_color": "DFDFDF",
+           "profile_sidebar_fill_color": "F3F3F3",
+           "profile_text_color": "333333",
+           "profile_use_background_image": true,
+           "has_extended_profile": true,
+           "default_profile": false,
+           "default_profile_image": false,
+           "following": null,
+           "follow_request_sent": null,
+           "notifications": null,
+           "translator_type": "regular",
+           "withheld_in_countries": []
+       },
+       "geo": null,
+       "coordinates": null,
+       "place": null,
+       "contributors": null,
+       "is_quote_status": false,
+       "retweet_count": 122086,
+       "favorite_count": 263321,
+       "favorited": false,
+       "retweeted": false,
+       "lang": "en"
+   }
+]
+```
+
+## Limits & Best Practices
+
+- Rate Limits: 50 requests/24h for rule management; no limit on streams (but connection limits apply).
+- Reconnection: Exponential backoff on disconnects.
+- Monitoring: Use `Connection: keep-alive` headers.
+
