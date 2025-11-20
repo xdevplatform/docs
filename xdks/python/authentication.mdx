@@ -2,114 +2,89 @@
 title: Authentication
 sidebarTitle: Authentication
 ---
-
-The X API requires authentication for all endpoints. The XDK supports three authentication methods: 
+The X API requires authentication for all endpoints. The XDK supports three authentication methods:
 1. Bearer Token (app-only)
 2. OAuth 2.0 with PKCE
-3. OAuth 1.0a User Context 
-
+3. OAuth 1.0a User Context
 - **Bearer Token**: Use this for read-only access for endpoints that support app-auth (e.g., searching Post's, streaming endpoints).
 - **OAuth 2.0 PKCE**: Secure authentication for scope-based, user-authorized access (e.g. getting authenticated user's Post non_public metrics)
 - **OAuth 1.0a**: Legacy auth for full read/write access, including DMs and media uploads.
-
 **Note**: We recommend developers move away from OAuth 1.0 and use OAuth 2.0 for user-authorized access.
-
 Obtain credentials from the [X Developer Portal](https://developer.x.com/en/portal/dashboard). You'll need an approved developer account and an app with appropriate permissions (e.g., Read + Write).
-
 ## Creating a Client
 All authentication flows create a `Client` instance:
-
 ```python
 from xdk import Client
 ```
-
 ### 1. Bearer Token (App-Only)
 For read-only operations without user context.
-
 **Steps**:
 1. In the Developer Portal, generate a Bearer Token for your app.
 2. Pass it to the `Client`.
-
 **Example**:
 ```python
 client = Client(bearer_token="XXXXX")
 ```
-
 **Usage**:
 ```python
 response = client.posts.search_recent(query="python", max_results=10)
 print(response.data[0]['text'])  # Access first Post
 ```
-
 ### 2. OAuth 2.0 with PKCE (User Context)
 This example shows how to use OAuth 2.0 with Proof Key for Code Exchange (PKCE). Use this for user-specific access (e.g. posting on behalf of a user), uploading media for a user etc.).
-
 **Steps**:
 1. In the developer portal, register your app with a redirect URI (e.g., `http://localhost:8080/callback`).
 2. Get Client ID (no secret needed for PKCE).
 3. Initiate the flow, direct user to auth URL and handle callback.
-
 **Example** (using a web server for callback):
 ```python
 from xdk.auth import OAuth2PKCE
 from urllib.parse import urlparse
 import webbrowser
-
 # Step 1: Create PKCE instance
 auth = OAuth2PKCE(
     client_id="your_client_id",
     redirect_uri="http://localhost:8080/callback",
     scopes=["tweet.read", "users.read", "offline.access"]  # Adjust scopes as needed
 )
-
 # Step 2: Get authorization URL
 auth_url = auth.get_authorization_url()
 print(f"Visit this URL to authorize: {auth_url}")
 webbrowser.open(auth_url)
-
 # Step 3: Handle callback (in a real app, use a web framework like Flask)
 # Assume callback_url = "http://localhost:8080/callback?code=AUTH_CODE_HERE"
 callback_url = input("Paste the full callback URL here: ")
 parsed = urlparse(callback_url)
 code = parsed.query.split("=")[1]
-
 # Step 4: Exchange code for tokens
 tokens = auth.fetch_token(authorization_code=code)
 access_token = tokens["access_token"]
 refresh_token = tokens["refresh_token"]  # Store for renewal
-
 # Step 5: Create client
 client = Client(oauth2_access_token=access_token)
 ```
-
 **Token Refresh** (automatic in SDK for long-lived sessions):
 ```python
 # If access token expires, refresh using stored refresh_token
 tokens = auth.refresh_token(refresh_token=refresh_token)
 client = Client(oauth2_access_token=tokens["access_token"])
 ```
-
 ### 3. OAuth 1.0a User Context
 For legacy endpoints that require OAuth 1.0 support.
-
 **Steps**:
 1. Generate Consumer Key/Secret and Access Token/Secret via Developer Portal.
 2. Pass it when initializing the client.
-
 **Example**:
 ```python
 from xdk.auth import OAuth1User
-
 auth = OAuth1User(
     consumer_key="your_consumer_key",
     consumer_secret="your_consumer_secret",
     access_token="your_access_token",
     access_token_secret="your_access_token_secret"
 )
-
 client = Client(auth=auth)
 ```
-
 **Note**:
 - Never hardcode secrets in production; use environment variables or secret managers (e.g., `os.getenv("X_BEARER_TOKEN")`).
 - For PKCE, ensure HTTPS for redirect URIs in production.
