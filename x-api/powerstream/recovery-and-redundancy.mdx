@@ -1,0 +1,41 @@
+---
+title: Recovery and redundancy
+sidebarTitle: Recovery and redundancy
+---
+
+When consuming streaming data, maximizing your connection time and receiving all matched data is a fundamental goal. This means that it is important to take advantage of redundant connections, automatically detect disconnections, to reconnect quickly, and to have a plan for recovering lost data.
+
+In this integration guide, we will discuss different recovery and redundancy features: redundant connections, backfill, and recovery.
+ 
+
+## Redundant connections
+
+A redundant connection simply allows you to establish more than one simultaneous connections to the stream. This provides redundancy by allowing you to connect to the same stream with two separate consumers, receiving the same data through both connections. Thus, your app has a hot failover for various situations such as if one stream is disconnected or if your application's primary server fails.
+
+To use a redundant stream, simply connect to the same URL used for your primary connection. The data for your stream will be sent through both connections.
+
+## Backfill
+
+After you've detected a disconnection, your system should be smart enough to reconnect to the stream. If possible, your system should take note of how long the disconnection lasted so that you can use the proper recovery feature to backfill the data. 
+
+If you identified that the disconnection lasted five minutes or less, you can use the backfill parameter, `backfillMinutes`. If you pass this parameter with your `GET /powerstream` request, you will receive the Posts that match your rules within the past one to five minutes. We generally deliver these older Posts first before any newly matched Posts, and also do not deduplicate Posts. This means that if you were disconnected for 90 seconds, but request two minutes worth of backfill data, you will receive 30 seconds worth of duplicate Posts, which your system should be tolerant of. Here is an example of what a request might look like with the backfill parameter:
+
+`curl 'https://api.x.com/2/powerstream?backfillMinutes=5' -H "Authorization: Bearer $ACCESS_TOKEN"`
+
+
+If you identified that the disconnection time lasted for longer than five minutes, you can utilize the [recent search endpoint](/x-api/posts/search/introduction) or the recovery feature to request missed data. 
+
+## Recovery
+
+You can use the Recovery feature to recover missed data within the last 24 hours if you are unable to reconnect with the 5 minute backfill window.
+
+The streaming recovery feature allows you to have an extended backfill window of 24 hours. Recovery enables you to 'replay' the time period of missed data. A recovery stream is started when you make a connection request using `startTime` and `endTime` request parameters. Once connected, Recovery will re-stream the time period indicated, then disconnect.  
+
+|     |     |     |
+| :--- | :--- | :--- |
+| **Name** | **Type** | **Description** |
+| `startTime` | date (ISO 8601) | YYYY-MM-DDTHH:mm:ssZ (ISO 8601/RFC 3339).<br/><br/>Date in UTC signifying the start time to recover from. |
+| `endTime` | date (ISO 8601) | YYYY-MM-DDTHH:mm:ssZ (ISO 8601/RFC 3339).<br/><br/>Date in UTC signifying the end time to recover to. |
+
+
+Example request URL: `https://api.x.com/2/powerstream?startTime=2022-07-12T15:10:00Z&endTime=2022-07-12T15:20:00Z`
