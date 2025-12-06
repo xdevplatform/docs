@@ -1,7 +1,6 @@
 ---
 title: Streaming
 sidebarTitle: Streaming
-keywords: ["Python streaming", "Python XDK streaming", "streaming API Python", "real-time streaming Python", "filtered stream Python", "Python stream"]
 ---
 The X API supports real-time data via endpoints like the [Filtered Stream Endpoint](https://docs.x.com/x-api/posts/filtered-stream/introduction), delivering matching Posts as they occur. This requires making a persistent http connection.
 ## Setup and Basic Streaming
@@ -12,10 +11,11 @@ from xdk import Client
 client = Client(bearer_token="your_bearer_token")
 # Stream posts (make sure you have rules set up first)
 for post_response in client.stream.posts():
-    data = post_response.model_dump()
+    data = post_response.model_dump() if hasattr(post_response, 'model_dump') else dict(post_response)
     if 'data' in data and data['data']:
         tweet = data['data']
-        print(f"Post: {tweet.get('text', '')}")
+        post_text = tweet.get('text', '') if isinstance(tweet, dict) else (tweet.text if hasattr(tweet, 'text') else '')
+        print(f"Post: {post_text}")
 ```
 ### Async
 ```python
@@ -74,14 +74,23 @@ response = client.stream.update_rules(body=request_body)
 ```
 **Listing Rules**:
 ```python
-response = client.stream.get_rules()
-# Print rules
-for rule in response.data:
-    print(f"ID: {rule.id}, Value: {rule.value}, Tag: {rule.tag}")
+# get_rules returns an Iterator, so iterate over it
+for page in client.stream.get_rules():
+    if page.data:
+        for rule in page.data:
+            # Access rule attributes - Pydantic models support both attribute and dict access
+            rule_id = rule.id if hasattr(rule, 'id') else rule.get('id', '')
+            rule_value = rule.value if hasattr(rule, 'value') else rule.get('value', '')
+            rule_tag = rule.tag if hasattr(rule, 'tag') else rule.get('tag', '')
+            print(f"ID: {rule_id}, Value: {rule_value}, Tag: {rule_tag}")
+    break  # Remove break to get all pages
 ```
 For full rule syntax, see [X Streaming Rules Docs](https://developer.x.com/en/docs/twitter-api/tweets/filtered-stream/integrate/build-a-rule).
 ## Troubleshooting
 - **403 Forbidden**: Invalid auth or insufficient permissions.
 - **420 Enhance Your Calm**: Rate limited; wait and retry.
 - **No Data**: Check rules with `get_rules()`; ensure matching Posts exist.
+
+For detailed code examples using the Python XDK, check out our [code samples GitHub repo](https://github.com/xdevplatform/samples/tree/main/python).
+
 For more examples and API reference, see the inline docstrings (e.g., `help(client.tweets.search_recent)`) or the generated stubs in the source. Contribute feedback via the [GitHub repo](https://github.com/xdevplatform/xdk/tree/main/xdk/python).
