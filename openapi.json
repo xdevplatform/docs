@@ -1077,6 +1077,124 @@
         }
       }
     },
+    "/2/connections" : {
+      "get" : {
+        "security" : [
+          {
+            "BearerToken" : [ ]
+          }
+        ],
+        "tags" : [
+          "Connections"
+        ],
+        "summary" : "Get Connection History",
+        "description" : "Returns active and historical streaming connections with disconnect reasons for the authenticated application.",
+        "operationId" : "getConnectionHistory",
+        "parameters" : [
+          {
+            "name" : "status",
+            "in" : "query",
+            "description" : "Filter by connection status. Use 'active' for current connections, 'inactive' for historical/disconnected connections, or 'all' for both.",
+            "required" : false,
+            "schema" : {
+              "type" : "string",
+              "enum" : [
+                "active",
+                "inactive",
+                "all"
+              ],
+              "default" : "active"
+            },
+            "style" : "form"
+          },
+          {
+            "name" : "endpoints",
+            "in" : "query",
+            "description" : "Filter by streaming endpoint. Specify one or more endpoint names to filter results.",
+            "required" : false,
+            "schema" : {
+              "type" : "array",
+              "uniqueItems" : true,
+              "items" : {
+                "type" : "string",
+                "enum" : [
+                  "filter_stream",
+                  "sample_stream",
+                  "sample10_stream",
+                  "firehose_stream",
+                  "tweets_compliance_stream",
+                  "users_compliance_stream",
+                  "tweet_label_stream",
+                  "firehose_stream_lang_en",
+                  "firehose_stream_lang_ja",
+                  "firehose_stream_lang_ko",
+                  "firehose_stream_lang_pt",
+                  "likes_firehose_stream",
+                  "likes_sample10_stream",
+                  "likes_compliance_stream"
+                ]
+              }
+            },
+            "explode" : false,
+            "style" : "form"
+          },
+          {
+            "name" : "max_results",
+            "in" : "query",
+            "description" : "The maximum number of results to return per page.",
+            "required" : false,
+            "schema" : {
+              "type" : "integer",
+              "minimum" : 1,
+              "maximum" : 100,
+              "format" : "int32",
+              "default" : 10
+            },
+            "style" : "form"
+          },
+          {
+            "name" : "pagination_token",
+            "in" : "query",
+            "description" : "Token for paginating through results. Use the value from 'next_token' in the previous response.",
+            "required" : false,
+            "schema" : {
+              "type" : "string"
+            },
+            "style" : "form"
+          },
+          {
+            "$ref" : "#/components/parameters/ConnectionFieldsParameter"
+          }
+        ],
+        "responses" : {
+          "200" : {
+            "description" : "The request has succeeded.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Get2ConnectionsResponse"
+                }
+              }
+            }
+          },
+          "default" : {
+            "description" : "The request has failed.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/2/connections/all" : {
       "delete" : {
         "security" : [
@@ -12233,19 +12351,24 @@
           },
           {
             "$ref" : "#/components/schemas/NewsActivityResponsePayload"
+          },
+          {
+            "$ref" : "#/components/schemas/FollowActivityResponsePayload"
           }
         ],
         "discriminator" : {
           "propertyName" : "../event_type",
           "mapping" : {
-            "NewsNew" : "#/components/schemas/NewsActivityResponsePayload",
-            "ProfileBannerPictureUpdate" : "#/components/schemas/ProfileUpdateActivityResponsePayload",
-            "ProfileBioUpdate" : "#/components/schemas/ProfileUpdateActivityResponsePayload",
-            "ProfileGeoUpdate" : "#/components/schemas/ProfileUpdateActivityResponsePayload",
-            "ProfilePictureUpdate" : "#/components/schemas/ProfileUpdateActivityResponsePayload",
-            "ProfileScreennameUpdate" : "#/components/schemas/ProfileUpdateActivityResponsePayload",
-            "ProfileUrlUpdate" : "#/components/schemas/ProfileUpdateActivityResponsePayload",
-            "ProfileVerifiedBadgeUpdate" : "#/components/schemas/ProfileUpdateActivityResponsePayload"
+            "follow.follow" : "#/components/schemas/FollowActivityResponsePayload",
+            "follow.unfollow" : "#/components/schemas/FollowActivityResponsePayload",
+            "news.new" : "#/components/schemas/NewsActivityResponsePayload",
+            "profile.update.banner_picture" : "#/components/schemas/ProfileUpdateActivityResponsePayload",
+            "profile.update.bio" : "#/components/schemas/ProfileUpdateActivityResponsePayload",
+            "profile.update.geo" : "#/components/schemas/ProfileUpdateActivityResponsePayload",
+            "profile.update.profile_picture" : "#/components/schemas/ProfileUpdateActivityResponsePayload",
+            "profile.update.screenname" : "#/components/schemas/ProfileUpdateActivityResponsePayload",
+            "profile.update.url" : "#/components/schemas/ProfileUpdateActivityResponsePayload",
+            "profile.update.verified_badge" : "#/components/schemas/ProfileUpdateActivityResponsePayload"
           }
         }
       },
@@ -12295,6 +12418,16 @@
           "event_type" : {
             "type" : "string",
             "enum" : [
+              "profile.update.bio",
+              "profile.update.profile_picture",
+              "profile.update.banner_picture",
+              "profile.update.screenname",
+              "profile.update.geo",
+              "profile.update.url",
+              "profile.update.verified_badge",
+              "news.new",
+              "follow.follow",
+              "follow.unfollow",
               "ProfileBioUpdate",
               "ProfilePictureUpdate",
               "ProfileBannerPictureUpdate",
@@ -12302,7 +12435,9 @@
               "ProfileGeoUpdate",
               "ProfileUrlUpdate",
               "ProfileVerifiedBadgeUpdate",
-              "NewsNew"
+              "NewsNew",
+              "FollowFollow",
+              "FollowUnfollow"
             ]
           },
           "filter" : {
@@ -13865,6 +14000,18 @@
             }
           }
         }
+      },
+      "FollowActivityResponsePayload" : {
+        "type" : "object",
+        "properties" : {
+          "source" : {
+            "$ref" : "#/components/schemas/User"
+          },
+          "target" : {
+            "$ref" : "#/components/schemas/User"
+          }
+        },
+        "additionalProperties" : false
       },
       "FoundMediaOrigin" : {
         "type" : "object",
