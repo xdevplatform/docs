@@ -731,20 +731,369 @@ async function injectElement() {
   
   console.log('[Cost Estimator] Pricing found! Cost:', pricing.cost, 'Type:', pricing.pricingType);
   
-  // Find the page context menu button
-  const moreActionsButton = document.querySelector('[id^="radix-"][aria-haspopup="menu"]');
-  if (!moreActionsButton) {
-    console.log('More actions button not found, skipping.');
-    return;
-  }
-  
-  console.log('More actions button found, setting up cost estimator menu item.');
-  
-  // Create the cost estimator dropdown container (positioned relative to page context menu)
+  // Find the page context menu container
   const pageContextMenu = document.getElementById('page-context-menu');
   if (!pageContextMenu) {
     console.log('Page context menu not found, skipping.');
     return;
+  }
+  
+  // Function to modify the Copy page button
+  function modifyCopyPageButton(button) {
+    if (!button) return false;
+    
+    // Check if already modified
+    if (button.dataset.pricingModified === 'true') {
+      return true;
+    }
+    
+    console.log('[Cost Estimator] Modifying Copy page button to View Pricing');
+    
+    // Replace the icon with dollar sign - try multiple approaches
+    // Look for SVG in the button, including nested in divs
+    // The SVG should be inside: button > div > svg
+    const buttonDiv = button.querySelector('div.flex.items-center');
+    let existingIcon = null;
+    
+    if (buttonDiv) {
+      existingIcon = buttonDiv.querySelector('svg');
+    }
+    
+    if (!existingIcon) {
+      // Fallback: search anywhere in button
+      existingIcon = button.querySelector('svg');
+    }
+    
+    if (existingIcon) {
+      console.log('[Cost Estimator] Found SVG icon, replacing with dollar sign');
+      console.log('[Cost Estimator] Original SVG:', existingIcon.outerHTML);
+      
+      // Get all attributes from the original icon to preserve them
+      const viewBox = existingIcon.getAttribute('viewBox') || '0 0 18 18';
+      const width = existingIcon.getAttribute('width') || '18';
+      const height = existingIcon.getAttribute('height') || '18';
+      const className = existingIcon.getAttribute('class') || '';
+      const fill = existingIcon.getAttribute('fill') || 'none';
+      const xmlns = existingIcon.getAttribute('xmlns') || 'http://www.w3.org/2000/svg';
+      
+      // Parse viewBox to get center coordinates
+      const viewBoxParts = viewBox.split(' ').map(Number);
+      const viewBoxWidth = viewBoxParts[2] || 18;
+      const viewBoxHeight = viewBoxParts[3] || 18;
+      const centerX = viewBoxWidth / 2;
+      const centerY = viewBoxHeight / 2;
+      
+      // Clear ALL existing SVG content (paths, shapes, groups, etc.)
+      existingIcon.innerHTML = '';
+      
+      // Ensure the SVG has the right attributes
+      existingIcon.setAttribute('viewBox', viewBox);
+      existingIcon.setAttribute('width', width);
+      existingIcon.setAttribute('height', height);
+      if (className) existingIcon.setAttribute('class', className);
+      existingIcon.setAttribute('fill', fill);
+      existingIcon.setAttribute('xmlns', xmlns);
+      
+      // Create dollar sign using SVG path (more reliable than text)
+      // Dollar sign path for viewBox 0 0 18 18 - simplified version
+      const dollarPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      // Dollar sign: vertical line with S shape through it
+      dollarPath.setAttribute('d', 'M9 2.25V4.5M9 13.5V15.75M11.25 6.75C11.25 8.40685 10.0784 9.75 8.25 9.75C6.42157 9.75 5.25 8.40685 5.25 6.75C5.25 5.10315 6.42157 3.75 8.25 3.75C10.0784 3.75 11.25 5.10315 11.25 6.75M11.25 11.25C11.25 12.8969 10.0784 14.25 8.25 14.25C6.42157 14.25 5.25 12.8969 5.25 11.25C5.25 9.60315 6.42157 8.25 8.25 8.25C10.0784 8.25 11.25 9.60315 11.25 11.25');
+      dollarPath.setAttribute('stroke', 'currentColor');
+      dollarPath.setAttribute('stroke-width', '1.5');
+      dollarPath.setAttribute('stroke-linecap', 'round');
+      dollarPath.setAttribute('stroke-linejoin', 'round');
+      dollarPath.setAttribute('fill', 'none');
+      
+      // Add the path to the existing SVG (preserving all attributes)
+      existingIcon.appendChild(dollarPath);
+      
+      // Also add text as primary (path is backup) - make it visible and properly styled
+      const dollarText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      dollarText.setAttribute('x', centerX.toString());
+      dollarText.setAttribute('y', (centerY + 0.5).toString()); // Slight adjustment for better centering
+      dollarText.setAttribute('text-anchor', 'middle');
+      dollarText.setAttribute('dominant-baseline', 'central');
+      dollarText.setAttribute('fill', 'currentColor');
+      dollarText.setAttribute('font-size', (Math.min(viewBoxWidth, viewBoxHeight) * 0.9).toString());
+      dollarText.setAttribute('font-weight', '700');
+      dollarText.setAttribute('font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif');
+      dollarText.setAttribute('style', 'user-select: none; pointer-events: none;');
+      dollarText.textContent = '$';
+      existingIcon.appendChild(dollarText);
+      
+      console.log('[Cost Estimator] SVG icon replaced with dollar sign');
+      console.log('[Cost Estimator] New SVG:', existingIcon.outerHTML);
+    } else {
+      console.log('[Cost Estimator] No SVG icon found in button, creating new one');
+      // If no SVG exists, we need to create one and insert it before the text
+      // Find the div that contains the text (should be div.flex.items-center)
+      const buttonDiv = button.querySelector('div.flex.items-center, div');
+      if (buttonDiv) {
+        console.log('[Cost Estimator] Found button div, creating SVG icon');
+        // Create a new SVG element matching the original structure
+        const newSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        newSvg.setAttribute('width', '18');
+        newSvg.setAttribute('height', '18');
+        newSvg.setAttribute('viewBox', '0 0 18 18');
+        newSvg.setAttribute('fill', 'none');
+        newSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        newSvg.setAttribute('class', 'w-4 h-4');
+        
+        // Add dollar sign text (primary method - same as menu item)
+        const dollarText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        dollarText.setAttribute('x', '9');
+        dollarText.setAttribute('y', '13');
+        dollarText.setAttribute('text-anchor', 'middle');
+        dollarText.setAttribute('fill', 'currentColor');
+        dollarText.setAttribute('font-size', '16');
+        dollarText.setAttribute('font-weight', 'bold');
+        dollarText.setAttribute('font-family', 'system-ui, -apple-system, sans-serif');
+        dollarText.textContent = '$';
+        newSvg.appendChild(dollarText);
+        
+        // Insert SVG as the first child of the div (before the text)
+        // The div structure is: <div>View Pricing</div> or <div><span>View Pricing</span></div>
+        const firstChild = buttonDiv.firstChild;
+        if (firstChild && firstChild.nodeType === Node.TEXT_NODE) {
+          // If first child is text node, insert before it
+          buttonDiv.insertBefore(newSvg, firstChild);
+        } else if (firstChild) {
+          // Insert before first element
+          buttonDiv.insertBefore(newSvg, firstChild);
+        } else {
+          // Prepend to div
+          buttonDiv.insertBefore(newSvg, buttonDiv.firstChild);
+        }
+        
+        console.log('[Cost Estimator] Created new SVG icon with dollar sign');
+        console.log('[Cost Estimator] New SVG:', newSvg.outerHTML);
+        console.log('[Cost Estimator] Button div after insertion:', buttonDiv.outerHTML.substring(0, 300));
+      } else {
+        console.log('[Cost Estimator] Could not find button div to insert SVG');
+      }
+    }
+    
+    // Update button text to "View Pricing"
+    const buttonTextElements = button.querySelectorAll('span, div');
+    buttonTextElements.forEach(el => {
+      const text = el.textContent.trim().toLowerCase();
+      if (text.includes('copy') || text.includes('page')) {
+        el.textContent = 'View Pricing';
+      }
+      // Remove any description text
+      if (text.includes('markdown') || text.includes('llm')) {
+        el.textContent = '';
+        el.style.display = 'none';
+      }
+    });
+    
+    // Also update any direct text nodes
+    const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+    let textNode;
+    while (textNode = walker.nextNode()) {
+      if (textNode.parentElement && textNode.parentElement.closest('svg')) {
+        continue; // Skip SVG text
+      }
+      const text = textNode.textContent.trim().toLowerCase();
+      if (text.includes('copy') || text.includes('page')) {
+        textNode.textContent = 'View Pricing';
+      }
+      if (text.includes('markdown') || text.includes('llm')) {
+        textNode.textContent = '';
+      }
+    }
+    
+    // Update aria-label if it exists
+    if (button.hasAttribute('aria-label')) {
+      button.setAttribute('aria-label', 'View Pricing');
+    }
+    
+    // Mark as modified
+    button.dataset.pricingModified = 'true';
+    
+    // Final check: ensure SVG exists after all modifications
+    const finalCheckSvg = button.querySelector('svg');
+    if (!finalCheckSvg) {
+      console.log('[Cost Estimator] WARNING: SVG still missing after modifications, creating it now');
+      const buttonDiv = button.querySelector('div.flex.items-center, div');
+      if (buttonDiv) {
+        const newSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        newSvg.setAttribute('width', '18');
+        newSvg.setAttribute('height', '18');
+        newSvg.setAttribute('viewBox', '0 0 18 18');
+        newSvg.setAttribute('fill', 'none');
+        newSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        newSvg.setAttribute('class', 'w-4 h-4');
+        
+        const dollarText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        dollarText.setAttribute('x', '9');
+        dollarText.setAttribute('y', '13');
+        dollarText.setAttribute('text-anchor', 'middle');
+        dollarText.setAttribute('fill', 'currentColor');
+        dollarText.setAttribute('font-size', '16');
+        dollarText.setAttribute('font-weight', 'bold');
+        dollarText.setAttribute('font-family', 'system-ui, -apple-system, sans-serif');
+        dollarText.textContent = '$';
+        newSvg.appendChild(dollarText);
+        
+        buttonDiv.insertBefore(newSvg, buttonDiv.firstChild);
+        console.log('[Cost Estimator] Created SVG in final check');
+      }
+    }
+    
+    return true;
+  }
+  
+  // Find and modify the Copy page button
+  let copyPageButton = pageContextMenu.querySelector('button[aria-label*="Copy"], button[aria-label*="copy"]');
+  if (!copyPageButton) {
+    // Try finding any button in the page context menu
+    copyPageButton = pageContextMenu.querySelector('button');
+  }
+  if (!copyPageButton) {
+    // Try finding by text content
+    const allButtons = pageContextMenu.querySelectorAll('button');
+    copyPageButton = Array.from(allButtons).find(btn => {
+      const text = btn.textContent.toLowerCase();
+      return text.includes('copy') || text.includes('page');
+    });
+  }
+  
+  if (copyPageButton) {
+    // Modify the button using our function
+    modifyCopyPageButton(copyPageButton);
+    
+    // Replace click handler to show cost estimator instead of copying
+    // Remove existing event listeners by cloning and replacing
+    const newButton = copyPageButton.cloneNode(true);
+    
+    // Re-apply modifications to cloned button (this will create SVG if missing)
+    modifyCopyPageButton(newButton);
+    
+    // Verify SVG exists in cloned button before replacing
+    const svgCheck = newButton.querySelector('svg');
+    if (!svgCheck) {
+      console.log('[Cost Estimator] WARNING: SVG missing in cloned button, creating it');
+      const buttonDiv = newButton.querySelector('div.flex.items-center, div');
+      if (buttonDiv) {
+        const newSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        newSvg.setAttribute('width', '18');
+        newSvg.setAttribute('height', '18');
+        newSvg.setAttribute('viewBox', '0 0 18 18');
+        newSvg.setAttribute('fill', 'none');
+        newSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        newSvg.setAttribute('class', 'w-4 h-4');
+        
+        const dollarText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        dollarText.setAttribute('x', '9');
+        dollarText.setAttribute('y', '13');
+        dollarText.setAttribute('text-anchor', 'middle');
+        dollarText.setAttribute('fill', 'currentColor');
+        dollarText.setAttribute('font-size', '16');
+        dollarText.setAttribute('font-weight', 'bold');
+        dollarText.setAttribute('font-family', 'system-ui, -apple-system, sans-serif');
+        dollarText.textContent = '$';
+        newSvg.appendChild(dollarText);
+        
+        buttonDiv.insertBefore(newSvg, buttonDiv.firstChild);
+      }
+    }
+    
+    copyPageButton.parentNode.replaceChild(newButton, copyPageButton);
+    
+    // Add click handler to show cost estimator
+    newButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Show the cost estimator dropdown
+      const dropdown = document.getElementById('cost-estimator-dropdown');
+      if (dropdown) {
+        toggleCostEstimatorDropdown();
+      } else {
+        // If dropdown doesn't exist, try to create it
+        createOrUpdateDropdown().then(newDropdown => {
+          if (newDropdown) {
+            toggleCostEstimatorDropdown();
+          }
+        });
+      }
+    });
+    
+    // Set up MutationObserver to watch for button changes and re-apply modifications
+    const buttonObserver = new MutationObserver((mutations) => {
+      // Check for any button that contains "Copy" or "Page" text and hasn't been modified
+      const allButtons = pageContextMenu.querySelectorAll('button');
+      allButtons.forEach(btn => {
+        const text = btn.textContent.toLowerCase();
+        if ((text.includes('copy') || text.includes('page')) && btn.dataset.pricingModified !== 'true') {
+          console.log('[Cost Estimator] Found unmodified Copy page button, applying modifications');
+          modifyCopyPageButton(btn);
+          
+          // Also replace click handler
+          const newBtn = btn.cloneNode(true);
+          modifyCopyPageButton(newBtn);
+          btn.parentNode.replaceChild(newBtn, btn);
+          
+          newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const dropdown = document.getElementById('cost-estimator-dropdown');
+            if (dropdown) {
+              toggleCostEstimatorDropdown();
+            } else {
+              createOrUpdateDropdown().then(newDropdown => {
+                if (newDropdown) {
+                  toggleCostEstimatorDropdown();
+                }
+              });
+            }
+          });
+        }
+      });
+    });
+    
+    buttonObserver.observe(pageContextMenu, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['aria-label', 'data-pricing-modified'],
+      characterData: true
+    });
+    
+    // Also check immediately in case button already exists
+    setTimeout(() => {
+      const existingButton = pageContextMenu.querySelector('button');
+      if (existingButton && existingButton.dataset.pricingModified !== 'true') {
+        const text = existingButton.textContent.toLowerCase();
+        if (text.includes('copy') || text.includes('page')) {
+          console.log('[Cost Estimator] Found existing unmodified button, applying modifications');
+          modifyCopyPageButton(existingButton);
+          const newBtn = existingButton.cloneNode(true);
+          modifyCopyPageButton(newBtn);
+          existingButton.parentNode.replaceChild(newBtn, existingButton);
+          newBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const dropdown = document.getElementById('cost-estimator-dropdown');
+            if (dropdown) {
+              toggleCostEstimatorDropdown();
+            } else {
+              createOrUpdateDropdown().then(newDropdown => {
+                if (newDropdown) {
+                  toggleCostEstimatorDropdown();
+                }
+              });
+            }
+          });
+        }
+      }
+    }, 100);
+    
+    console.log('[Cost Estimator] Copy page button modified to View Pricing');
+  } else {
+    console.log('[Cost Estimator] Copy page button not found, skipping button modification');
   }
   
   // Create or update dropdown with current page's pricing
@@ -754,19 +1103,16 @@ async function injectElement() {
     return;
   }
   
-  // Function to add menu item when menu opens
+  // Function to add menu item to the dropdown menu
   function addMenuItemToMenu() {
-    console.log('[Cost Estimator] addMenuItemToMenu called');
     const menuContent = findMenuContent();
     if (!menuContent) {
       console.log('[Cost Estimator] Menu content not found');
       return false;
     }
     
-    console.log('[Cost Estimator] Menu content found:', menuContent);
-    
-    // Check if already added
-    if (menuContent.querySelector('#cost-estimator-menu-item')) {
+    // Check if menu item already exists
+    if (document.getElementById('cost-estimator-menu-item')) {
       console.log('[Cost Estimator] Menu item already exists');
       return true;
     }
@@ -799,7 +1145,7 @@ async function injectElement() {
       dollarText.setAttribute('y', '13');
       dollarText.setAttribute('text-anchor', 'middle');
       dollarText.setAttribute('fill', 'currentColor');
-      dollarText.setAttribute('font-size', '14');
+      dollarText.setAttribute('font-size', '16');
       dollarText.setAttribute('font-weight', 'bold');
       dollarText.setAttribute('font-family', 'system-ui, -apple-system, sans-serif');
       dollarText.textContent = '$';
@@ -827,7 +1173,7 @@ async function injectElement() {
         return text.includes('copy') || text.includes('page');
       }) || allSpans[0];
       
-      titleSpan.textContent = 'Cost Estimator';
+      titleSpan.textContent = 'View Pricing';
       
       // Find and replace description - look for spans containing "Markdown" or "LLMs"
       const descriptionSpan = allSpans.find(span => {
@@ -879,7 +1225,7 @@ async function injectElement() {
         if (text.length > 0) {
           const lowerText = text.toLowerCase();
           if (!foundFirst && (lowerText.includes('copy') || lowerText.includes('page'))) {
-            node.textContent = 'Cost Estimator';
+            node.textContent = 'View Pricing';
             foundFirst = true;
           } else if (lowerText.includes('markdown') || lowerText.includes('llm') || lowerText.includes('copy page as')) {
             // Found the description text
@@ -899,13 +1245,6 @@ async function injectElement() {
       function closeMenuAndShowEstimator() {
         console.log('[Cost Estimator] closeMenuAndShowEstimator called');
         
-        // Check if dropdown exists before closing menu
-        let dropdown = document.getElementById('cost-estimator-dropdown');
-        console.log('[Cost Estimator] Dropdown exists before menu close?', dropdown !== null);
-        if (dropdown) {
-          console.log('[Cost Estimator] Dropdown parent:', dropdown.parentElement);
-        }
-        
         // Find and hide the menu content
         const menuContent = findMenuContent();
         if (menuContent) {
@@ -914,17 +1253,20 @@ async function injectElement() {
         }
         
         // Close the menu by clicking the button if it's open
-        const isMenuOpen = moreActionsButton.getAttribute('aria-expanded') === 'true' || 
-                           moreActionsButton.getAttribute('data-state') === 'open';
-        
-        if (isMenuOpen) {
-          // Trigger click to close menu
-          moreActionsButton.click();
+        const moreActionsButton = pageContextMenu.querySelector('button[aria-haspopup="menu"], button[aria-expanded="true"]');
+        if (moreActionsButton) {
+          const isMenuOpen = moreActionsButton.getAttribute('aria-expanded') === 'true' || 
+                             moreActionsButton.getAttribute('data-state') === 'open';
+          
+          if (isMenuOpen) {
+            // Trigger click to close menu
+            moreActionsButton.click();
+          }
         }
         
         // Show cost estimator after a short delay to ensure menu closes and dropdown exists
         setTimeout(() => {
-          dropdown = document.getElementById('cost-estimator-dropdown');
+          const dropdown = document.getElementById('cost-estimator-dropdown');
           console.log('[Cost Estimator] Looking for dropdown after menu close...');
           console.log('[Cost Estimator] Dropdown found?', dropdown !== null);
           if (dropdown) {
@@ -932,8 +1274,6 @@ async function injectElement() {
             showCostEstimator();
           } else {
             console.log('[Cost Estimator] Dropdown not found when trying to show, checking pageContextMenu...');
-            const pageContextMenu = document.getElementById('page-context-menu');
-            console.log('[Cost Estimator] pageContextMenu exists?', pageContextMenu !== null);
             if (pageContextMenu) {
               console.log('[Cost Estimator] pageContextMenu children:', Array.from(pageContextMenu.children).map(c => c.id));
             }
@@ -964,79 +1304,88 @@ async function injectElement() {
       closeMenuAndShowEstimator();
     });
     
-    // Insert at the end of the menu
-    menuContent.appendChild(menuItem);
+    // Insert at the beginning of the menu (first menu item)
+    const firstMenuItem = menuContent.querySelector('[role="menuitem"]');
+    if (firstMenuItem) {
+      menuContent.insertBefore(menuItem, firstMenuItem);
+    } else {
+      menuContent.appendChild(menuItem);
+    }
     
-    console.log('[Cost Estimator] Menu item added to DOM. Menu state:', menuContent.getAttribute('data-state'));
+    console.log('[Cost Estimator] Menu item added to DOM as first item. Menu state:', menuContent.getAttribute('data-state'));
     console.log('[Cost Estimator] Menu item element:', menuItem);
     console.log('[Cost Estimator] Total menu items now:', menuContent.querySelectorAll('[role="menuitem"]').length);
     return true;
   }
   
   // Watch for menu opening and add item when it opens
-  const menuObserver = new MutationObserver(function(mutations) {
-    if (moreActionsButton.getAttribute('aria-expanded') === 'true') {
-      // Menu is open, try to add menu item
-      setTimeout(() => {
-        addMenuItemToMenu();
-      }, 50); // Small delay to ensure menu content is rendered
-    }
-  });
-  
-  // Watch for menu content being added to DOM
-  const menuContentObserver = new MutationObserver(function(mutations) {
-    mutations.forEach(function(mutation) {
-      if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-        Array.from(mutation.addedNodes).forEach(node => {
-          if (node.nodeType === 1 && (
-            node.getAttribute('role') === 'menu' ||
-            node.querySelector && node.querySelector('[role="menu"]')
-          )) {
-            setTimeout(() => {
-              addMenuItemToMenu();
-            }, 50);
-          }
-        });
+  const moreActionsButton = pageContextMenu.querySelector('button[aria-haspopup="menu"]');
+  if (moreActionsButton) {
+    const menuObserver = new MutationObserver(function(mutations) {
+      if (moreActionsButton.getAttribute('aria-expanded') === 'true') {
+        // Menu is open, try to add menu item
+        setTimeout(() => {
+          addMenuItemToMenu();
+        }, 50); // Small delay to ensure menu content is rendered
       }
     });
-  });
-  
-  // Also watch for clicks on the more actions button
-  moreActionsButton.addEventListener('click', function() {
-    console.log('[Cost Estimator] More actions button clicked');
-    // Try multiple times with increasing delays to catch the menu when it opens
-    [50, 100, 200, 300].forEach(delay => {
-      setTimeout(() => {
-        console.log(`[Cost Estimator] Attempting to add menu item after ${delay}ms`);
-        const added = addMenuItemToMenu();
-        if (added) {
-          console.log('[Cost Estimator] Menu item successfully added');
+    
+    // Watch for menu content being added to DOM
+    const menuContentObserver = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+          Array.from(mutation.addedNodes).forEach(node => {
+            if (node.nodeType === 1 && (
+              node.getAttribute('role') === 'menu' ||
+              node.querySelector && node.querySelector('[role="menu"]')
+            )) {
+              setTimeout(() => {
+                addMenuItemToMenu();
+              }, 50);
+            }
+          });
         }
-      }, delay);
+      });
     });
-  });
-  
-  menuObserver.observe(moreActionsButton, {
-    attributes: true,
-    attributeFilter: ['aria-expanded', 'data-state']
-  });
-  
-  menuContentObserver.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
+    
+    // Also watch for clicks on the more actions button
+    moreActionsButton.addEventListener('click', function() {
+      console.log('[Cost Estimator] More actions button clicked');
+      // Try multiple times with increasing delays to catch the menu when it opens
+      [50, 100, 200, 300].forEach(delay => {
+        setTimeout(() => {
+          console.log(`[Cost Estimator] Attempting to add menu item after ${delay}ms`);
+          const added = addMenuItemToMenu();
+          if (added) {
+            console.log('[Cost Estimator] Menu item successfully added');
+          }
+        }, delay);
+      });
+    });
+    
+    menuObserver.observe(moreActionsButton, {
+      attributes: true,
+      attributeFilter: ['aria-expanded', 'data-state']
+    });
+    
+    menuContentObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
   
   // Close dropdown when clicking outside
   const clickOutsideHandler = function(e) {
-    if (dropdownOpen && !pageContextMenu.contains(e.target) && !dropdown.contains(e.target)) {
+    const dropdown = document.getElementById('cost-estimator-dropdown');
+    if (dropdownOpen && dropdown && !pageContextMenu.contains(e.target) && !dropdown.contains(e.target)) {
       toggleCostEstimatorDropdown();
     }
   };
   document.addEventListener('click', clickOutsideHandler);
   
   console.log('Cost estimator menu integration set up.');
-  
   injected = true;
+  
   if (typeof observer !== 'undefined') {
     observer.disconnect();
   }
@@ -1057,6 +1406,14 @@ if (document.readyState !== 'loading') {
 
 // Set up a MutationObserver to watch for changes in case of dynamic content
 const observer = new MutationObserver(function(mutations) {
+  // Check if URL changed (for client-side navigation)
+  const currentUrl = window.location.pathname;
+  if (window.lastInjectedUrl !== currentUrl) {
+    injected = false;
+    window.lastInjectedUrl = currentUrl;
+    console.log('[Cost Estimator] URL changed, resetting injection state');
+  }
+  
   if (injected) {
     console.log('Already injected, ignoring mutation.');
     return;
@@ -1084,6 +1441,38 @@ const observer = new MutationObserver(function(mutations) {
     injectElement().catch(err => console.error('Error in injectElement:', err));
   }
 });
+
+// Also listen for popstate events (browser back/forward) and pushstate/replacestate (SPA navigation)
+let lastPathname = window.location.pathname;
+function checkNavigation() {
+  const currentPathname = window.location.pathname;
+  if (currentPathname !== lastPathname) {
+    lastPathname = currentPathname;
+    injected = false;
+    window.lastInjectedUrl = currentPathname;
+    console.log('[Cost Estimator] Navigation detected, resetting injection state');
+    // Small delay to let the page render
+    setTimeout(() => {
+      injectElement().catch(err => console.error('Error in injectElement after navigation:', err));
+    }, 100);
+  }
+}
+
+window.addEventListener('popstate', checkNavigation);
+
+// Override pushState and replaceState to detect SPA navigation
+const originalPushState = history.pushState;
+const originalReplaceState = history.replaceState;
+
+history.pushState = function() {
+  originalPushState.apply(history, arguments);
+  setTimeout(checkNavigation, 0);
+};
+
+history.replaceState = function() {
+  originalReplaceState.apply(history, arguments);
+  setTimeout(checkNavigation, 0);
+};
 
 observer.observe(document.body, {
   childList: true,
