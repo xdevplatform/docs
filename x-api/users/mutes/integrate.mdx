@@ -1,79 +1,237 @@
 ---
-title: Integration guide
-sidebarTitle: Integration guide
-keywords: ["mutes integration", "mute users integration", "mutes guide", "mute integration guide", "mutes setup", "mute users setup"]
+title: Integration Guide
+sidebarTitle: Integration Guide
+description: Key concepts and best practices for integrating mutes endpoints
+keywords: ["mutes integration", "mute users integration", "mutes guide"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-This page contains information on several tools and key concepts that you should be aware of as you integrate the mutes endpoints into your system. We’ve broken the page into a couple of different sections:
+This guide covers the key concepts you need to integrate the mutes endpoints into your application.
 
-* [Helpful tools](#helpful)
-* Key Concepts
-* [Authentication](#authentication)
-* [Developer portal, Projects, and Apps](#portal)
-* [Rate limits](#limits)
-* [Fields and expansions](#fields)
-* [Pagination](#pagination)
+---
 
-### Helpful tools
+## Authentication
 
-Before we dive into some key concepts that will help you integrate this endpoint, we recommend that you become familiar with:
+Mutes endpoints require user authentication to access private mute lists:
 
-#### Postman
+| Method | Description |
+|:-------|:------------|
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | Recommended for new applications |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | Legacy support |
 
-Postman is a great tool that you can use to test out an endpoint. Each Postman request includes every path and body parameter to help you quickly understand what is available to you. To learn more about our Postman collections, please visit our ["Using Postman"](/tutorials/postman-getting-started) page. 
+<Warning>
+App-Only authentication is not supported. You must authenticate on behalf of a user.
+</Warning>
 
-#### Code samples
+### Required scopes (OAuth 2.0)
 
-Interested in getting set up with this endpoint with some code in your preferred coding language? We’ve got a handful of different code samples available that you can use as a starting point on our [Github page](https://github.com/xdevplatform/Twitter-API-v2-sample-code).
+| Scope | Required for |
+|:------|:-------------|
+| `mute.read` | Retrieving muted accounts |
+| `mute.write` | Muting and unmuting accounts |
+| `users.read` | Required with mute scopes |
 
-#### Third-party libraries
+---
 
-Take advantage of one of our communities’ [third-party libraries](/x-api/tools-and-libraries/overview) to help you get started. You can find a library that works with the v2 endpoints by looking for the proper version tag.
+## Endpoints overview
 
-### Key concepts
+| Method | Endpoint | Description |
+|:-------|:---------|:------------|
+| GET | `/2/users/:id/muting` | Get list of muted accounts |
+| POST | `/2/users/:id/muting` | Mute an account |
+| DELETE | `/2/users/:source_user_id/muting/:target_user_id` | Unmute an account |
 
-#### Authentication
+---
 
-All X API v2 endpoints require you to authenticate your requests with a set of credentials, also known as keys and tokens. You can use either OAuth 1.0a User Context, or OAuth 2.0 Authorization Code with PKCE to authenticate your requests to these endpoints. 
+## Fields and expansions
 
-[OAuth 1.0a User Context](/resources/fundamentals/authentication) requires you to utilize your API Keys, user Access Tokens, and a handful of other parameters to [create an authorization header](/resources/fundamentals/authentication#authorizing-a-request), which you will then pass with your request. The Access Tokens must be associated with the user that you are making the request on behalf of. If you would like to generate a set of Access Tokens for another user, they must authorize your App using the [3-legged OAuth flow](https://developer-staging.x.com/resources/fundamentals/authentication/obtaining-user-access-tokens). 
+### Default response
 
-Please note that OAuth 1.0a can be difficult to use. If you are not familiar with this authentication method, we recommend that you use a [library](/x-api/tools-and-libraries/overview), use a tool like Postman, or use OAuth 2.0 to authenticate your requests.
+```json
+{
+  "data": [
+    {
+      "id": "1234567890",
+      "name": "Example User",
+      "username": "example"
+    }
+  ]
+}
+```
 
-[OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) allows for greater control over an application’s scope, and authorization flows across multiple devices. OAuth 2.0 allows you to pick specific fine-grained scopes which give you specific permissions on behalf of a user. 
+### Available fields
 
-To enable OAuth 2.0 in your App, you must enable it in your’s App’s authentication settings found in the App settings section of the developer portal.
+<Accordion title="user.fields">
+| Field | Description |
+|:------|:------------|
+| `created_at` | Account creation date |
+| `description` | User bio |
+| `profile_image_url` | Avatar URL |
+| `public_metrics` | Follower/following counts |
+| `verified` | Verification status |
+</Accordion>
 
-#### Developer portal, Projects, and developer Apps
+<Accordion title="expansions">
+| Expansion | Description |
+|:----------|:------------|
+| `pinned_tweet_id` | User's pinned Post |
+</Accordion>
 
-To retrieve a set of authentication credentials that will work with the X API v2 endpoints, you must [sign up for a developer account](https://developer.x.com/en/portal/petition/essential/basic-info), set up a [Project](/resources/fundamentals/projects) within that account, and created a [developer App](/resources/fundamentals/developer-apps) within that Project. You can then find your keys and tokens within your developer App.
- 
+### Example with fields
 
-#### Rate limits
+<CodeGroup dropdown>
 
-Every day, many thousands of developers make requests to the X API. To help manage the sheer volume of these requests, [rate limits](/x-api/fundamentals/rate-limits) are placed on each endpoint that limits the number of requests you can make on behalf of your app or on behalf of an authenticated user. 
+```bash cURL
+curl "https://api.x.com/2/users/123456789/muting?\
+user.fields=username,verified,created_at&\
+max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
 
-These endpoints are rate limited at the user level, meaning that the authenticated user that you are making the request on behalf of can only call the endpoint a certain number of times across any developer App.
+```python Python SDK
+from xdk import Client
 
-There is a user rate limit of 50 requests per 15 minutes per endpoint with both POST and DELETE methods. However, with the GET method, the rate limit is only 15 requests per 15 minutes.
- 
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
 
-#### Fields and expansions
+# Get muted users with additional fields
+for page in client.users.get_muting(
+    user_id="123456789",
+    user_fields=["username", "verified", "created_at"],
+    max_results=100
+):
+    for user in page.data:
+        print(f"{user.username} - Verified: {user.verified}")
+```
 
-The X API v2 GET endpoint allows users to select exactly which data they want to return from the API using a set of tools called fields and expansions. The expansions parameter allows you to expand objects referenced in the payload. For example, this endpoint allows you to pull the following [expansions](/x-api/fundamentals/expansions):
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
-* pinned\_tweet\_id
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
 
+const paginator = client.users.getMuting("123456789", {
+  userFields: ["username", "verified", "created_at"],
+  maxResults: 100,
+});
 
-The **fields** parameter allows you to select exactly which [fields](/x-api/fundamentals/fields) within the different data objects you would like to receive. This endpoint delivers User objects primarily. By default, the User object returns the **id** , **name**  and **username** fields. To receive additional fields such as **user.created_at** or **user.entities**, you will have to specifically request those using a **fields** parameter. 
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Verified: ${user.verified}`);
+  });
+}
+```
 
-We’ve added a guide on using [fields and expansions](/x-api/fundamentals/data-dictionary#how-to-use-fields-and-expansions) together to our [X API v2 data dictionary](/x-api/fundamentals/data-dictionary).
+</CodeGroup>
 
-#### Pagination
+---
 
-Mutes lookup can return a lot of data. To ensure we are returning consistent, high-performing results at any given time, we use pagination. Pagination is a feature in X API v2 endpoints that return more results than can be returned in a single response. When that happens, the data is returned in a series of 'pages'. Learn more about how to [paginate through results.](/x-api/fundamentals/pagination)
-<Note>
-**Please note:** If a user mutes from [X](https://x.com/), there is a limit of 200 requests per 15 minutes.
-</Note>
+## Pagination
+
+For users with large mute lists, results are paginated:
+
+<CodeGroup dropdown>
+
+```bash cURL
+# First request
+curl "https://api.x.com/2/users/123/muting?max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+
+# Subsequent request with pagination token
+curl "https://api.x.com/2/users/123/muting?max_results=100&pagination_token=NEXT_TOKEN" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# The SDK handles pagination automatically
+all_muted = []
+
+for page in client.users.get_muting(user_id="123", max_results=100):
+    if page.data:
+        all_muted.extend(page.data)
+
+print(f"Muted {len(all_muted)} users")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+async function getAllMutedUsers(userId) {
+  const allMuted = [];
+
+  // The SDK handles pagination automatically
+  const paginator = client.users.getMuting(userId, { maxResults: 100 });
+
+  for await (const page of paginator) {
+    if (page.data) {
+      allMuted.push(...page.data);
+    }
+  }
+
+  return allMuted;
+}
+
+// Usage
+const muted = await getAllMutedUsers("123");
+console.log(`Muted ${muted.length} users`);
+```
+
+</CodeGroup>
+
+<Card title="Pagination guide" icon="arrow-right" href="/x-api/fundamentals/pagination">
+  Learn more about pagination
+</Card>
+
+---
+
+## Behavior differences
+
+### Muting vs Blocking
+
+| Feature | Mute | Block |
+|:--------|:-----|:------|
+| See their Posts | No (hidden) | No |
+| They see your Posts | Yes | No |
+| They follow you | Yes (can follow) | No (removed) |
+| They can DM you | Yes | No |
+| Notification sent | No | No |
+
+<Tip>
+Muting is private — the muted user is not notified and cannot tell they've been muted.
+</Tip>
+
+---
+
+## Error handling
+
+| Status | Error | Solution |
+|:-------|:------|:---------|
+| 400 | Invalid request | Check user ID format |
+| 401 | Unauthorized | Verify access token |
+| 403 | Forbidden | Check scopes and permissions |
+| 404 | Not Found | User doesn't exist |
+| 429 | Too Many Requests | Wait and retry |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/x-api/users/mutes/quickstart/manage-mutes-quickstart">
+    Make your first mutes request
+  </Card>
+  <Card title="Blocks" icon="ban" href="/x-api/users/blocks/introduction">
+    Block users instead of muting
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/users/get-muting">
+    Full endpoint documentation
+  </Card>
+  <Card title="Sample code" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    Working code examples
+  </Card>
+</CardGroup>

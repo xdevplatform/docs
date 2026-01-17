@@ -51,13 +51,13 @@ Both versions provide metadata that describes any edit history. Check out the [f
 
 **App and Project requirements**
 
-The X API v2 endpoints require that you use credentials from a [developer App](/resources/fundamentals/developer-apps) that is associated to a [Project](/resources/fundamentals/projects) when authenticating your requests. All X API v1.1 endpoints can use credentials from standalone Apps or Apps associated with a Project.
+The X API v2 endpoints require that you use credentials from a [developer App](/resources/fundamentals/developer-apps) that is associated to a [Project](/resources/fundamentals/developer-apps) when authenticating your requests. All X API v1.1 endpoints can use credentials from Apps or Apps associated with an App.
 
 **Authentication method**
 
 The standard endpoint supports [OAuth 1.0a User Context](/resources/fundamentals/authentication), whereas the X API v2 filtered stream endpoints supports [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) (also referred to as Application-only authentication). To make requests to the X API v2 version you must use a App Access Token to authenticate your requests.
 
-If you no longer have the App Access Token that was presented to you when you created your Project and app in the developer portal, you can generate a new one by navigating to your app's “Keys and tokens” page on the developer portal. If you’d like to generate an App Access Token programmatically, see this [OAuth 2.0 App-Only guide](/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token). 
+If you no longer have the App Access Token that was presented to you when you created your App and app in the Developer Console, you can generate a new one by navigating to your app's “Keys and tokens” page on the Developer Console. If you’d like to generate an App Access Token programmatically, see this [OAuth 2.0 App-Only guide](/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token). 
 
 **Rule volume and persistent stream**
 
@@ -119,6 +119,120 @@ X API v2 introduces new operators in support of two new features: 
 
 * **[Conversation IDs](/x-api/fundamentals/conversation-id)** \- As conversations unfold on X, a conservation ID will be available to mark Posts that are part of the conversation. All Posts in the conversation will have their conversation_id set to the Post ID that started it. 
     * conversation_id:
-* **[X Annotations](/x-api/fundamentals/post-annotations)** provide contextual information about Posts, and include entity and context annotations. Entities are comprised of people, places, products and organizations. Contexts are domains, or topics, that surfaced entities are a part of. For example, people mentioned in a Post may have a context that indicates whether they are an athlete, actor, or politician.  
-    * context: \- matches on Posts that have been annotated with a context of interest. 
-    * entity: \- matches on Posts that have been annotated with an entity of interest. 
+* **[X Annotations](/x-api/fundamentals/post-annotations)** provide contextual information about Posts, and include entity and context annotations. Entities are comprised of people, places, products and organizations. Contexts are domains, or topics, that surfaced entities are a part of. For example, people mentioned in a Post may have a context that indicates whether they are an athlete, actor, or politician.  
+    * context: \- matches on Posts that have been annotated with a context of interest. 
+    * entity: \- matches on Posts that have been annotated with an entity of interest.
+
+---
+
+## Code examples
+
+### Add a rule to filtered stream (v2)
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Authorization: Bearer $BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"add": [{"value": "cat has:images", "tag": "cats with images"}]}'
+```
+
+```python Python
+import requests
+
+bearer_token = "YOUR_BEARER_TOKEN"
+url = "https://api.x.com/2/tweets/search/stream/rules"
+
+headers = {
+    "Authorization": f"Bearer {bearer_token}",
+    "Content-Type": "application/json"
+}
+
+data = {
+    "add": [{"value": "cat has:images", "tag": "cats with images"}]
+}
+
+response = requests.post(url, headers=headers, json=data)
+print(response.json())
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Add a rule to filtered stream
+response = client.posts.add_stream_rules(
+    add=[{"value": "cat has:images", "tag": "cats with images"}]
+)
+print(response.data)
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Add a rule to filtered stream
+const response = await client.posts.addStreamRules({
+  add: [{ value: "cat has:images", tag: "cats with images" }],
+});
+console.log(response.data);
+```
+
+</CodeGroup>
+
+### Connect to filtered stream (v2)
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/stream?tweet.fields=created_at,author_id" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python
+import requests
+
+bearer_token = "YOUR_BEARER_TOKEN"
+url = "https://api.x.com/2/tweets/search/stream"
+
+params = {"tweet.fields": "created_at,author_id"}
+headers = {"Authorization": f"Bearer {bearer_token}"}
+
+# Stream Posts in real-time
+response = requests.get(url, headers=headers, params=params, stream=True)
+for line in response.iter_lines():
+    if line:
+        print(line.decode("utf-8"))
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Connect to filtered stream
+for post in client.posts.stream(
+    tweet_fields=["created_at", "author_id"]
+):
+    print(f"{post.data.created_at}: {post.data.text[:50]}...")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Connect to filtered stream
+const stream = client.posts.stream({
+  tweetFields: ["created_at", "author_id"],
+});
+
+for await (const post of stream) {
+  console.log(`${post.data?.created_at}: ${post.data?.text?.slice(0, 50)}...`);
+}
+```
+
+</CodeGroup>

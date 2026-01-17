@@ -1,91 +1,281 @@
 ---
-title: Integration guide
-sidebarTitle: Integration guide
-keywords: ["list lookup integration", "lists integration guide", "list lookup setup", "lists integration"]
+title: Integration Guide
+sidebarTitle: Integration Guide
+description: Key concepts and best practices for integrating List lookup
+keywords: ["list lookup integration", "lists integration guide", "list lookup implementation"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-This page contains information on several tools and critical concepts that you should know as you integrate the List lookup endpoints into your system. We’ve broken the page into a couple of different sections:
+This guide covers the key concepts you need to integrate the List lookup endpoints into your application.
 
-* [Helpful tools](#helpful)
-* Key Concepts
-* [Authentication](#authentication)
-* [Developer portal, Projects, and Apps](#portal)
-* [Rate limits](#limits)
-* [Fields and expansions](#fields)
-* [Pagination](#pagination)
+---
 
-### Helpful tools
+## Authentication
 
-Before we dive into some key concepts that will help you integrate this endpoint, we recommend that you become familiar with:
+List lookup endpoints support multiple authentication methods:
 
-#### Postman
+| Method | Best for | Access to private Lists? |
+|:-------|:---------|:-------------------------|
+| [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) | Public List data | No |
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | User-facing apps | Yes (owned/followed) |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | Legacy integrations | Yes (owned/followed) |
 
-Postman is a great tool that you can use to test out an endpoint. Each Postman request includes every path and body parameter to help you quickly understand what is available to you. To learn more about our Postman collections, please visit our ["Using Postman"](/tutorials/postman-getting-started) page. 
+### Example request
 
-#### Code samples
+<CodeGroup dropdown>
 
-Are you interested in getting set up with this endpoint with some code in your preferred coding language? We’ve got a handful of different code samples available that you can use as a starting point on our [Github page](https://github.com/xdevplatform/Twitter-API-v2-sample-code).
+```bash cURL
+curl "https://api.x.com/2/lists/84839422?\
+list.fields=description,member_count,follower_count,private" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
 
-#### Third-party libraries
+```python Python SDK
+from xdk import Client
 
-Take advantage of one of our communities’ [third-party libraries](/x-api/tools-and-libraries/overview) to help you get started. You can find a library that works with the v2 endpoints by looking for the proper version tag.
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
 
-### Key concepts
+# Get a List by ID
+response = client.lists.get(
+    list_id="84839422",
+    list_fields=["description", "member_count", "follower_count", "private"]
+)
+print(response.data)
+```
 
-#### Authentication
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
-All X API v2 endpoints require you to authenticate your requests with a set of credentials, also known as keys and tokens. You can use either OAuth 1.0a User Context, App only or OAuth 2.0 Authorization Code with PKCE to authenticate your requests to these endpoints. . 
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
 
-[OAuth 1.0a User Context](/resources/fundamentals/authentication#oauth-1-0a-user-context), which means that you must use a set of API Keys and user Access Tokens to make a successful request. The access tokens must be associated with the user that you are making the request on behalf of. If you would like to generate a set of Access Tokens for another user, they must authorize your App using the [3-legged OAuth flow](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow).
+const response = await client.lists.get("84839422", {
+  listFields: ["description", "member_count", "follower_count", "private"],
+});
+console.log(response.data);
+```
 
-Please note that OAuth 1.0a can be difficult to use. If you are not familiar with this authentication method, we recommend that you use a [library](/x-api/tools-and-libraries/overview), use a tool like Postman, or use OAuth 2.0 to authenticate your requests.
+</CodeGroup>
 
-[OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) allows for greater control over an application’s scope, and authorization flows across multiple devices. OAuth 2.0 allows you to pick specific fine-grained scopes which give you specific permissions on behalf of a user. 
+---
 
-To enable OAuth 2.0 in your App, you must enable it in your’s App’s authentication settings found in the App settings section of the developer portal.
+## Endpoints overview
 
-[App only](/resources/fundamentals/authentication#bearer-token-also-known-as-app-only) just requires that you pass a [App only Access Token](/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token) with your request. You can either generate an App only token from directly within a developer App, or generate one using the [POST oauth2/token](/resources/fundamentals/authentication#post-oauth2-token) endpoint.
+| Method | Endpoint | Description |
+|:-------|:---------|:------------|
+| GET | [`/2/lists/:id`](/x-api/lists/get-list) | Get List by ID |
+| GET | [`/2/users/:id/owned_lists`](/x-api/users/get-owned-lists) | Get Lists owned by a user |
 
-#### Developer portal, Projects, and developer Apps
+---
 
-To retrieve a set of authentication credentials that will work with the X API v2 endpoints, you must [sign up for a developer account](https://developer.x.com/en/portal/petition/essential/basic-info), set up a [Project](/resources/fundamentals/projects) within that account, and created a [developer App](/resources/fundamentals/developer-apps) within that Project. You can then find your keys and tokens within your developer App.
- 
+## Fields and expansions
 
-#### Rate limits
+### Default response
 
-Every day, many thousands of developers make requests to the X API. To help manage the sheer volume of these requests, [rate limits](/x-api/fundamentals/rate-limits) are placed on each endpoint that limits the number of requests you can make on behalf of your app or on behalf of an authenticated user. 
+```json
+{
+  "data": {
+    "id": "84839422",
+    "name": "Tech News"
+  }
+}
+```
 
-These endpoints are rate limited at both the App-level and the user-level. The app rate limit means that you, the developer, can only make a certain number of requests to this endpoint over a given period of time from any given App (assumed by using either the API Key and API Secret Key, or the App only Access Token). The user rate limit means that the authenticated user that you are making the request on behalf of can only perform a List lookup a certain number of times across any developer App.
+### Available fields
 
-The chart below shows the rate limits for each endpoint.
+<Accordion title="list.fields">
+| Field | Description |
+|:------|:------------|
+| `created_at` | List creation timestamp |
+| `description` | List description |
+| `follower_count` | Number of followers |
+| `member_count` | Number of members |
+| `owner_id` | Owner's user ID |
+| `private` | Whether List is private |
+</Accordion>
 
-|     |     |     |
-| :--- | :--- | :--- |
-| **Endpoint** | **HTTP method** | **Rate limit** |
-| /2/lists/:id | GET | 75 requests per 15 minutes |
-| /2/users/:id/owned_lists | GET | 15 requests per 15 minutes |
+<Accordion title="user.fields (requires owner_id expansion)">
+| Field | Description |
+|:------|:------------|
+| `username` | Owner's @handle |
+| `name` | Owner's display name |
+| `verified` | Owner's verification status |
+| `profile_image_url` | Owner's avatar URL |
+</Accordion>
 
-Fields and expansions
+### Example with expansions
 
-The X API v2 GET endpoint allows users to select exactly which data they want to return from the API using a set of tools called `fields` and `expansions`. The `expansions` parameter allows you to expand objects referenced in the payload. For example, looking up a List by ID allows you to pull the following [expansions](/x-api/fundamentals/expansions):
+<CodeGroup dropdown>
 
-* `owner_id`
+```bash cURL
+curl "https://api.x.com/2/lists/84839422?\
+list.fields=description,member_count,follower_count,owner_id&\
+expansions=owner_id&\
+user.fields=username,verified" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
 
+```python Python SDK
+from xdk import Client
 
-The `fields` parameter allows you to select exactly which [fields](/x-api/fundamentals/fields) within the different data objects you would like to receive. These endpoints deliver List objects primarily. By default, the List object returns the `id`, and `name` fields. To receive additional fields such as `list.created_at` or `list.follower_count`, you will have to specifically request those using a list.fields parameter. 
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
 
-We’ve added a guide on using [fields and expansions](/x-api/fundamentals/data-dictionary#how-to-use-fields-and-expansions) together to our [X API v2 data dictionary](/x-api/fundamentals/data-dictionary).
+# Get List with owner expansion
+response = client.lists.get(
+    list_id="84839422",
+    list_fields=["description", "member_count", "follower_count", "owner_id"],
+    expansions=["owner_id"],
+    user_fields=["username", "verified"]
+)
 
- The chart below shows the field and expansions available for this endpoint group:
+print(response.data)
+print(response.includes)  # Contains owner user object
+```
 
-|     |     |     |
-| :--- | :--- | :--- |
-| **Endpoint** | **Fields** | **Expansions** |
-| /2/lists/:id | `list.fields`<br/><br/>`user.fields` | `owner_id` |
-| /2/users/:id/owned_lists | list.fields<br/><br/>user.fields | owner_id |
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
-#### Pagination
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
 
-Looking up user owned Lists can return a lot of data. To ensure we are returning consistent, high-performing results at any given time, we use pagination. Pagination is a feature in X API v2 endpoints that return more results than can be returned in a single response. When that happens, the data is returned in a series of 'pages'. Learn more about how to [paginate through results.](/x-api/fundamentals/pagination)
+const response = await client.lists.get("84839422", {
+  listFields: ["description", "member_count", "follower_count", "owner_id"],
+  expansions: ["owner_id"],
+  userFields: ["username", "verified"],
+});
+
+console.log(response.data);
+console.log(response.includes); // Contains owner user object
+```
+
+</CodeGroup>
+
+### Response with expansion
+
+```json
+{
+  "data": {
+    "id": "84839422",
+    "name": "Tech News",
+    "description": "Top tech journalists",
+    "member_count": 50,
+    "follower_count": 1250,
+    "owner_id": "2244994945"
+  },
+  "includes": {
+    "users": [
+      {
+        "id": "2244994945",
+        "username": "XDevelopers",
+        "verified": true
+      }
+    ]
+  }
+}
+```
+
+<Card title="Fields and expansions guide" icon="sliders" href="/x-api/fundamentals/fields">
+  Learn more about customizing responses
+</Card>
+
+---
+
+## Pagination
+
+When retrieving owned Lists, results are paginated:
+
+<CodeGroup dropdown>
+
+```bash cURL
+# First request
+curl "https://api.x.com/2/users/123/owned_lists?max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+
+# Subsequent request with pagination token
+curl "https://api.x.com/2/users/123/owned_lists?max_results=100&pagination_token=NEXT_TOKEN" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# The SDK handles pagination automatically
+all_lists = []
+
+for page in client.lists.get_user_owned_lists(user_id="123", max_results=100):
+    if page.data:
+        all_lists.extend(page.data)
+
+print(f"Found {len(all_lists)} lists")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+async function getAllOwnedLists(userId) {
+  const allLists = [];
+
+  // The SDK handles pagination automatically
+  const paginator = client.lists.getUserOwnedLists(userId, { maxResults: 100 });
+
+  for await (const page of paginator) {
+    if (page.data) {
+      allLists.push(...page.data);
+    }
+  }
+
+  return allLists;
+}
+
+// Usage
+const lists = await getAllOwnedLists("123");
+console.log(`Found ${lists.length} lists`);
+```
+
+</CodeGroup>
+
+<Card title="Pagination guide" icon="arrow-right" href="/x-api/fundamentals/pagination">
+  Learn more about pagination
+</Card>
+
+---
+
+## Private Lists
+
+- Private Lists are only visible to the owner
+- You must authenticate as the owner to retrieve private List details
+- The `private` field indicates whether a List is private
+
+---
+
+## Error handling
+
+| Status | Error | Solution |
+|:-------|:------|:---------|
+| 400 | Invalid request | Check List ID format |
+| 401 | Unauthorized | Verify authentication |
+| 403 | Forbidden | List may be private |
+| 404 | Not Found | List doesn't exist |
+| 429 | Too Many Requests | Wait and retry |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/x-api/lists/list-lookup/quickstart">
+    Make your first List lookup request
+  </Card>
+  <Card title="List Posts" icon="list" href="/x-api/lists/list-tweets/introduction">
+    Get Posts from a List
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/lists/get-list">
+    Full endpoint documentation
+  </Card>
+  <Card title="Sample code" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    Working code examples
+  </Card>
+</CardGroup>

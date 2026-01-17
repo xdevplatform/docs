@@ -1,90 +1,198 @@
 ---
-title: "Fields"
-keywords: ["fields", "tweet fields", "user fields", "field parameters", "API fields", "data fields", "customize response", "field selection"]
+title: Fields
+sidebarTitle: Fields
+description: Request specific data fields in API responses
+keywords: ["fields", "tweet fields", "user fields", "field parameters", "API fields", "data fields", "customize response"]
 ---
 
-The X API v2 endpoints are equipped with a set of parameters called *fields*, which allows you to select just the data that you want from each of the objects in your endpoint response.
+The X API v2 returns minimal data by default. Use **fields parameters** to request additional data for each object type.
 
-By default, the Post object only returns the `id` and the `text` fields, and for Posts created since September 29, 2022, the `edit_history_tweet_ids` field. If you need the Post's created date or public metrics, you will need to use the `tweet.fields` parameters to request them. This provides a higher degree of customization by enabling you to only request the fields you require depending on your use case. For example, you would include this query string in your request:
+---
 
-`?tweet.fields=created_at,public_metrics`
+## How fields work
 
-Each object has its own parameter which is used to specifically request the fields that are associated with that object. Here are the different fields parameters that are currently available:
-
-- [Post](/x-api/fundamentals/data-dictionary#tweet) → `tweet.fields`
-- [User](/x-api/fundamentals/data-dictionary#user) → `user.fields`
-- [Media](/x-api/fundamentals/data-dictionary#media) → `media.fields`
-- [Poll](/x-api/fundamentals/data-dictionary#poll) → `poll.fields`
-- [Place](/x-api/fundamentals/data-dictionary#place) → `place.fields`
-
-When using an endpoint that primarily returns a particular object, simply use the matching field parameter and specify the field(s) desired in a comma-separated list as the value to that parameter to retrieve those fields in the response.
-
-### Example
-
-If you are using the [GET /tweets/search/recent](/x-api/posts/recent-search) endpoint, you will primarily receive [Tweet objects](/x-api/fundamentals/data-dictionary#tweet) in that response. Without specifying any fields parameters, you will just receive the default values, `id` and `text`. If you are interested in receiving the public metrics of the Posts that are returned in the response, you will want to include the `tweet.fields` parameter in your request, with `public_metrics` set as the value.
-
-This request would look like the following. If you would like to use this request, make sure to replace `$BEARER_TOKEN` with your [Bearer Token](/resources/fundamentals/authentication) and send it using your command line tool.
+By default, a post lookup returns only `id`, `text`, and `edit_history_tweet_ids`. To get more data, add field parameters to your request:
 
 ```bash
-curl --request GET \
-  --url 'https://api.x.com/2/tweets/search/recent?query=from%3Atwitterdev&tweet.fields=public_metrics' \
-  --header 'Authorization: Bearer $BEARER_TOKEN'
+# Default response - minimal fields
+curl "https://api.x.com/2/tweets/1234567890" \
+  -H "Authorization: Bearer $TOKEN"
+
+# With additional fields
+curl "https://api.x.com/2/tweets/1234567890?tweet.fields=created_at,public_metrics,author_id" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-If you send this request in your terminal, then each of the Posts that return will include the following fields:
-```
-{
-   "data": {
-       "id": "1263150595717730305",
-       "public_metrics": {
-           "retweet_count": 12,
-           "reply_count": 14,
-           "like_count": 49,
-           "quote_count": 7
-       },
-       "text": "Do you 👀our new Tweet settings?\n\nWe want to know how and why you’d use a feature like this in the API. Get the details and let us know what you think👇\nhttps://t.co/RtMhhfAcIB https://t.co/8wxeZ9fJER"
-   }
-}
-```
+---
 
-If you would like to retrieve a set of fields from a secondary object that is associated with the primary object returned by an endpoint, you will need to include an additional expansions parameter. For example, if you were using the same GET search/tweets/recent endpoint as earlier, and you wanted to retrieve the author's profile description, you will have to pass the `expansions=author_id` and `user.fields=description` with your request. Here is an example of what this might look like. If you would like to try this request, make sure to replace the `$BEARER_TOKEN` with your [Bearer Token](/resources/fundamentals/authentication) before pasting it into your command line tool.
+## Available field parameters
+
+Each object type has its own fields parameter:
+
+| Object | Parameter | Documentation |
+|:-------|:----------|:--------------|
+| Post (Tweet) | `tweet.fields` | [Post fields](/x-api/fundamentals/data-dictionary#tweet) |
+| User | `user.fields` | [User fields](/x-api/fundamentals/data-dictionary#user) |
+| Media | `media.fields` | [Media fields](/x-api/fundamentals/data-dictionary#media) |
+| Poll | `poll.fields` | [Poll fields](/x-api/fundamentals/data-dictionary#poll) |
+| Place | `place.fields` | [Place fields](/x-api/fundamentals/data-dictionary#place) |
+
+---
+
+## Example: Post fields
+
+Request specific post fields with `tweet.fields`:
 
 ```bash
-  curl --request GET \
-  --url 'https://api.x.com/2/tweets/search/recent?query=from%3Atwitterdev&tweet.fields=public_metrics&expansions=author_id&user.fields=description' \
-  --header 'Authorization: Bearer $BEARER_TOKEN'
+curl "https://api.x.com/2/tweets/1234567890?tweet.fields=created_at,public_metrics,lang" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-If you specify this in the request, then each of the Posts that deliver will have the following fields, and the related [user object's](/x-api/fundamentals/data-dictionary#user) default and specified fields will return within `includes`. The user object can be mapped back to the corresponding Post(s) by matching the `tweet.author_id` and `users.id fields`.
+Response:
 
-```
+```json
 {
-  "data": [
-    {
-      "id": "1263150595717730305",
-      "author_id": "2244994945",
-      "text": "Do you 👀our new Tweet settings?\n\nWe want to know how and why you’d use a feature like this in the API. Get the details and let us know what you think👇\nhttps://t.co/RtMhhfAcIB https://t.co/8wxeZ9fJER",
-      "public_metrics": {
-        "retweet_count": 12,
-        "reply_count": 13,
-        "like_count": 51,
-        "quote_count": 7
-      }
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "edit_history_tweet_ids": ["1234567890"],
+    "created_at": "2024-01-15T12:00:00.000Z",
+    "lang": "en",
+    "public_metrics": {
+      "retweet_count": 10,
+      "reply_count": 5,
+      "like_count": 100,
+      "quote_count": 2
     }
-  ],
-  "includes": {
-    "users": [
-      {
-        "id": "2244994945",
-        "username": "TwitterDev",
-        "description": "The voice of the #TwitterDev team and your official source for updates, news, and events, related to the #TwitterAPI.",
-        "name": "Twitter Dev"
-      }
-    ]
   }
 }
 ```
 
-Bear in mind that you cannot request specific subfields (for example, `public_metrics.retweet_count`). All subfields will be returned when the top-level field (`public_metrics`) is specified. We have listed all possible fields that you can request in each endpoints' API reference page's parameters table. 
+---
 
-A full list of fields are listed in the [object model](/x-api/fundamentals/data-dictionary#tweet). To expand and request fields on an object that is not that endpoint’s primary resource, use the [expansions](/x-api/fundamentals/expansions) parameter with fields.
+## Example: User fields
+
+Request specific user fields with `user.fields`:
+
+```bash
+curl "https://api.x.com/2/users/by/username/xdevelopers?user.fields=created_at,description,public_metrics" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "xdevelopers",
+    "created_at": "2013-12-14T04:35:55.000Z",
+    "description": "The voice of the X Developer Platform",
+    "public_metrics": {
+      "followers_count": 570842,
+      "following_count": 2048,
+      "tweet_count": 14052,
+      "listed_count": 1672
+    }
+  }
+}
+```
+
+---
+
+## Fields for related objects
+
+To get fields on related objects (like the author of a post), you need two things:
+
+1. An **expansion** to include the related object
+2. The **fields parameter** for that object type
+
+```bash
+# Get post with author details
+curl "https://api.x.com/2/tweets/1234567890?expansions=author_id&user.fields=description,public_metrics" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "author_id": "2244994945"
+  },
+  "includes": {
+    "users": [{
+      "id": "2244994945",
+      "name": "X Developers",
+      "username": "xdevelopers",
+      "description": "The voice of the X Developer Platform",
+      "public_metrics": {
+        "followers_count": 570842,
+        "following_count": 2048
+      }
+    }]
+  }
+}
+```
+
+[Learn more about expansions →](/x-api/fundamentals/expansions)
+
+---
+
+## Common field combinations
+
+<Tabs>
+  <Tab title="Post analytics">
+```
+tweet.fields=created_at,public_metrics,possibly_sensitive
+```
+  </Tab>
+  <Tab title="User profiles">
+```
+user.fields=created_at,description,location,public_metrics,verified
+```
+  </Tab>
+  <Tab title="Full post context">
+```
+tweet.fields=created_at,author_id,conversation_id,in_reply_to_user_id,referenced_tweets
+expansions=author_id,referenced_tweets.id
+user.fields=username,name
+```
+  </Tab>
+  <Tab title="Media details">
+```
+tweet.fields=attachments
+expansions=attachments.media_keys
+media.fields=url,preview_image_url,alt_text,public_metrics
+```
+  </Tab>
+</Tabs>
+
+---
+
+## Important notes
+
+<Warning>
+**You cannot request subfields.** When you request `public_metrics`, you get all metrics (likes, reposts, replies, quotes). You can't request just `public_metrics.like_count`.
+</Warning>
+
+- Field order in responses may differ from request order
+- Missing fields in responses mean the value is `null` or empty
+- Some fields require specific authentication (e.g., private metrics need user context)
+- Check each endpoint's API reference for available fields
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Expansions" icon="expand" href="/x-api/fundamentals/expansions">
+    Include related objects in responses.
+  </Card>
+  <Card title="Data Dictionary" icon="book" href="/x-api/fundamentals/data-dictionary">
+    Complete field reference for all objects.
+  </Card>
+</CardGroup>

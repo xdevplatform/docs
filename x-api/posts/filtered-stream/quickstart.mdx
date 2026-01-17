@@ -1,201 +1,311 @@
 ---
 title: Quickstart
 sidebarTitle: Quickstart
+description: Connect to the filtered stream and receive real-time Posts
 keywords: ["filtered stream quickstart", "streaming quickstart", "filtered stream tutorial", "stream guide", "streaming example"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-## Getting started with the filtered stream endpoints
-
-This quick start guide will help you make your first request to the filtered stream endpoint group using a cURL request. cURL is a command line tool which allows you to make requests with minimal configuration.
-
-If you would like to see sample code in different languages, please visit our[X API v2 sample code](https://github.com/xdevplatform/Twitter-API-v2-sample-code) GitHub repository. 
+This guide walks you through connecting to the filtered stream to receive real-time Posts matching your filter rules.
 
 <Note>
 **Prerequisites**
 
-To complete this guide, you will need to have a set of [keys and tokens](/resources/fundamentals/authentication) to authenticate your request. You can generate these keys and tokens by following these steps:
-
-* [Sign up for a developer account](https://developer.x.com/en/apply-for-access) and receive approval.
-* Create a [Project](/resources/fundamentals/projects) and an associated [developer App](/resources/fundamentals/developer-apps) in the developer portal.
-* Navigate to your App's “Keys and tokens” page to generate the required credentials. Make sure to save all credentials in a secure location.
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- Your App's Bearer Token (found in the Developer Console under "Keys and tokens")
 </Note>
 
-### Steps to build a filtered stream request using cURL
+---
 
-**Step one: Create a rule**
+<Steps>
+  <Step title="Create a filter rule" icon="filter">
+    Rules define which Posts to receive. Use operators to match on keywords, hashtags, users, and more.
 
-Rules are made up of one or many different [operators](/x-api/posts/filtered-stream#building-rules-for-filtered-stream) that are combined using boolean logic and parentheses to help define which Posts will deliver to your stream. In this guide, we will filter the stream to find Posts that contain both the keyword “cat” and images. Here is our rule:
+    **Example rule:** Match Posts containing "cat" with images:
 
-```cat has:images
-```
+    ```
+    cat has:images
+    ```
 
-**Step two: Add a tag to your rule**
+    <Card title="Build a rule" icon="filter" href="/x-api/posts/filtered-stream/integrate/build-a-rule">
+      Learn rule syntax and operators
+    </Card>
+  </Step>
 
-You can add multiple concurrent rules to your stream. When you open your streaming connection, Posts that match any of these rules will flow through the same streaming connection. To ensure that you know which Post matches which rule, you can pass a tag along with your rule creation request. Each Post that matches that rule will then include a tag field within the Post payload noting which rule it matched. For this rule, we are going to assign the following tag:
+  <Step title="Add the rule to your stream" icon="plus">
+    Add your rule using the rules endpoint. Include a `tag` to identify which rule matched each Post:
 
-```cats with images
-```
+<CodeGroup dropdown>
 
-**Step three: Add your rule to the stream**
-
-This endpoint requires you to pass an application/JSON body along with this request that contains your rule and its tag. You will also notice that we have included the rule value and tag within an add object since we are trying to add this rule to the stream. This JSON body will look like this:
-
-```json
-{
-  "add": [
-    {
-      "value": "cat has:images",
-      "tag": "cats with images"
-    }
-  ]
-}
-```
-
-Now that you have fully set up this JSON body, you can add that to a cURL request, which will look like the following. This request isn't ready yet, so please hold off on submitting it until a later step.
-
-```json
-curl -X POST 'https://api.x.com/2/tweets/search/stream/rules' \
--H "Content-type: application/json" \
--H "Authorization: Bearer $APP_ACCESS_TOKEN" -d \
-'{
-  "add": [
-    {"value": "cat has:images", "tag": "cats with images"}
-  ]
-}'`
-```
-
-**Step four: Authenticate your request**
-
-Since the filtered stream rules endpoints require [OAuth 2.0 App-Only authentication](/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token), you will need to replace $APP\_ACCESS\_TOKEN in the cURL command from step three with the [App Access Token](/resources/fundamentals/authentication#using-and-generating-an-app-only-bearer-token) that you generated in the prerequisites. 
-
-**Step five: Add your rule to the stream**
-
-Next step is to execute your cURL request, which will add the rule to your stream. Copy and paste the cURL command into your command line interface and press "return". 
-
-If your cURL request was successful, you’ll receive a response containing data about your value, tag, and id (serves as a unique identifier for your rule). This response will look similar to this:
-
-```json
-{
-  "data": [
-    {
-      "value": "cat has:images",
-      "tag": "cats with images",
-      "id": "1273026480692322304"
-    }
-  ],
-  "meta": {
-    "sent": "2020-06-16T22:55:39.356Z",
-    "summary": {
-      "created": 1,
-      "not_created": 0,
-      "valid": 1,
-      "invalid": 0
-    }
-  }
-}
-```
-
-You can validate that your rule was added successfully by sending the following GET request to the rules endpoint, once again making sure to replace $APP\_ACCESS\_TOKEN with your token. This request will return a full list of all the rules that have been added to your stream.
-
-```bash
-curl -X GET 'https://api.x.com/2/tweets/search/stream/rules' \
--H "Authorization: Bearer $APP_ACCESS_TOKEN"
-```
-
-If your cURL request was successful, you should receive the following:
- 
-```json
-{
-	"data": [{
-		"id": "1273028376882589696",
-		"value": "cat has:images",
-		"tag": "cats with images"
-	}],
-	"meta": {
-		"sent": "2020-06-16T23:14:06.498Z"
-	}
-}
-```
-
-**Step six: Identify and specify which fields you would like to retrieve**
-
-If you connect to the stream after step five, you will receive the default [Post object](/x-api/fundamentals/data-dictionary#tweet) fields in your response: id , text, and edit\_history\_tweet_ids. If you would like to receive additional fields beyond these, you will have to specify those fields in your request with the [field](/x-api/fundamentals/fields) and/or [expansion](/x-api/fundamentals/expansions) parameters.
-
-For this exercise, we will request a three different sets of fields from different objects:
-
-1.  The additional tweet.created_at field in the primary Post objects.
-2.  The associated authors’ [user object’s](/x-api/fundamentals/data-dictionary#user) default fields for the returned Posts: id, name, and username
-3.  The additional  user.created_at field in the associated user objects.
-     
-
-To request these fields, you will need to pass the following in your request:
-
-|     |     |     |
-| :--- | :--- | :--- |
-| Key | Value | Returned fields |
-| tweet.fields | created_at | tweets.created_at |
-| expansions | author_id | includes.users.id, includes.users.name, includes.users.username |
-| user.fields | created_at | includes.users.created_at |
-
-Now that you know this, you can piece together your request URL to connect to the stream, which will look like this:
-
-
-```bash
-https://api.x.com/2/tweets/search/stream?tweet.fields=created_at&expansions=author_id&user.fields=created_at
-```
-
-**Step seven: Connect to the stream and review your response**
-
-Now that your rule is in place and you’ve specified which fields you want returned, you’re ready to connect to the stream, which will deliver Post objects that match the rule you’ve submitted. This is what the cURL command looks like once you’ve added the URL from step six into your request:
- 
-
-```bash
-curl -X GET -H "Authorization: Bearer $APP_ACCESS_TOKEN" "https://api.x.com/2/tweets/search/stream?tweet.fields=created_at&expansions=author_id&user.fields=created_at"
-```
-
-Once again, this request must be authenticated using OAuth 2.0 App-Only, so make sure to replace $APP\_ACCESS\_TOKEN with your credentials before copying and pasting it into your command line tool.
-
-Once you are connected to the filtered stream you will start to receive Posts that match your rules in the following JSON format:
- 
-
-```json
-{
-  "data": [
-    {
-      "author_id": "2244994945",
-      "created_at": "2022-09-14T19:00:55.000Z",
-      "id": "1228393702244134912",
-      "edit_history_tweet_ids": ["1228393702244134912"],
-      "text": "What did the developer write in their Valentine’s card?\n  \nwhile(true) {\n    I = Love(You);  \n}"
-    },
-    {
-      "author_id": "2244994945",
-      "created_at": "2022-09-12T17:09:56.000Z",
-      "id": "1227640996038684673",
-       "edit_history_tweet_ids": ["1227640996038684673"],
-      "text": "Doctors: Googling stuff online does not make you a doctor\n\nDevelopers: https://t.co/mrju5ypPkb"
-    },
-    {
-      "author_id": "2244994945",
-      "created_at": "2022-09-27T20:26:41.000Z",
-      "id": "1199786642791452673",
-      "edit_history_tweet_ids": ["1199786642791452673"],
-      "text": "C#"
-    }
-  ],
-  "includes": {
-    "users": [
-      {
-        "created_at": "2013-12-14T04:35:55.000Z",
-        "id": "2244994945",
-        "name": "Twitter Dev",
-        "username": "TwitterDev"
-      }
+```bash cURL
+curl -X POST "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Authorization: Bearer $BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "add": [
+      {"value": "cat has:images", "tag": "cats with images"}
     ]
-  }
+  }'
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Add a rule to the filtered stream
+response = client.filtered_stream.add_rules(
+    add=[{"value": "cat has:images", "tag": "cats with images"}]
+)
+
+for rule in response.data:
+    print(f"Rule added: {rule.id} - {rule.value}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Add a rule to the filtered stream
+const response = await client.filteredStream.addRules({
+  add: [{ value: "cat has:images", tag: "cats with images" }],
+});
+
+response.data?.forEach((rule) => {
+  console.log(`Rule added: ${rule.id} - ${rule.value}`);
+});
+```
+
+</CodeGroup>
+
+    **Response:**
+
+    ```json
+    {
+      "data": [
+        {
+          "id": "1273026480692322304",
+          "value": "cat has:images",
+          "tag": "cats with images"
+        }
+      ],
+      "meta": {
+        "sent": "2024-01-15T10:30:00.000Z",
+        "summary": {
+          "created": 1,
+          "not_created": 0,
+          "valid": 1,
+          "invalid": 0
+        }
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Verify your rules" icon="check">
+    List all active rules to confirm your rule was added:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get all active rules
+response = client.filtered_stream.get_rules()
+
+for rule in response.data:
+    print(f"Active rule: {rule.id} - {rule.value}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get all active rules
+const response = await client.filteredStream.getRules();
+
+response.data?.forEach((rule) => {
+  console.log(`Active rule: ${rule.id} - ${rule.value}`);
+});
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Connect to the stream" icon="plug">
+    Open a persistent connection to receive matching Posts:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/stream?\
+tweet.fields=created_at,author_id&\
+expansions=author_id&\
+user.fields=username" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Connect to the filtered stream
+for post in client.filtered_stream.stream(
+    tweet_fields=["created_at", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username"]
+):
+    print(f"New post: {post.data.text}")
+    print(f"Matching rules: {post.matching_rules}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Connect to the filtered stream
+const stream = client.filteredStream.stream({
+  tweetFields: ["created_at", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username"],
+});
+
+for await (const post of stream) {
+  console.log(`New post: ${post.data?.text}`);
+  console.log(`Matching rules: ${post.matching_rules}`);
 }
 ```
 
-If you would like to close your connection, you can press Control-C in your command line tool on either Mac or Windows systems to break the connection, or you can also close the window. 
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Process incoming Posts" icon="message">
+    Matching Posts stream as JSON objects:
+
+    ```json
+    {
+      "data": {
+        "id": "1234567890",
+        "text": "Look at this cute cat! 🐱",
+        "author_id": "9876543210",
+        "created_at": "2024-01-15T10:35:00.000Z",
+        "edit_history_tweet_ids": ["1234567890"]
+      },
+      "includes": {
+        "users": [
+          {
+            "id": "9876543210",
+            "username": "catperson"
+          }
+        ]
+      },
+      "matching_rules": [
+        {
+          "id": "1273026480692322304",
+          "tag": "cats with images"
+        }
+      ]
+    }
+    ```
+
+    <Tip>
+    The `matching_rules` array shows which rules matched the Post, using the tags you defined.
+    </Tip>
+  </Step>
+
+  <Step title="Delete rules (optional)" icon="trash">
+    Remove rules by their ID:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Authorization: Bearer $BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "delete": {
+      "ids": ["1273026480692322304"]
+    }
+  }'
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Delete rules by ID
+response = client.filtered_stream.delete_rules(
+    delete={"ids": ["1273026480692322304"]}
+)
+print(f"Deleted: {response.meta.summary.deleted}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Delete rules by ID
+const response = await client.filteredStream.deleteRules({
+  delete: { ids: ["1273026480692322304"] },
+});
+console.log(`Deleted: ${response.meta?.summary?.deleted}`);
+```
+
+</CodeGroup>
+
+  </Step>
+</Steps>
+
+---
+
+## Managing your connection
+
+<AccordionGroup>
+  <Accordion title="Keep-alive signals">
+    The stream sends blank lines (`\r\n`) every 20 seconds. If you don't receive data or a keep-alive for 20 seconds, reconnect.
+  </Accordion>
+
+  <Accordion title="Disconnecting">
+    Press `Ctrl+C` to close the connection, or close your terminal window.
+  </Accordion>
+
+  <Accordion title="Connection limits">
+    Only one connection per App is allowed. Opening a new connection will close any existing one.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Build a rule" icon="filter" href="/x-api/posts/filtered-stream/integrate/build-a-rule">
+    Learn rule syntax
+  </Card>
+  <Card title="Operator reference" icon="list-check" href="/x-api/posts/filtered-stream/integrate/operators">
+    All available operators
+  </Card>
+  <Card title="Handling disconnections" icon="plug" href="/x-api/posts/filtered-stream/integrate/handling-disconnections">
+    Reconnect gracefully
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/posts/filtered-stream">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

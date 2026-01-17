@@ -51,7 +51,7 @@ Both versions provide metadata that describes any edit history. Check out the [s
 
 **App and Project requirements**
 
-The X API v2 endpoints require that you use credentials from a [developer App](/resources/fundamentals/developer-apps) that is associated to a [Project](/resources/fundamentals/projects) when authenticating your requests. All X API v1.1 endpoints can use credentials from standalone Apps or Apps associated with a Project. 
+The X API v2 endpoints require that you use credentials from a [developer App](/resources/fundamentals/developer-apps) that is associated to a [Project](/resources/fundamentals/developer-apps) when authenticating your requests. All X API v1.1 endpoints can use credentials from Apps or Apps associated with an App. 
 
 
 **Response data format**
@@ -100,7 +100,7 @@ There are also a set of standard search Posts request parameters **not** suppor
 
 | **Standard v1.1 parameter** | **Details** |
 | :--- | :--- |
-| geocode | Search Posts at the Basic Access level does not support geo operators. |
+| geocode | Search Posts supports geo operators for location-based queries. |
 | locale | With standard search, this was used to specify the language of the query but never fully implemented. |
 | lang | Search Posts endpoints provide a lang query operator for matching on languages of interest. |
 | include_entities | Post entities are always included. |
@@ -160,25 +160,79 @@ These two rules have very different matching behavior. For the month of October 
 
 **The following section displays cURL requests for the standard v1.1 endpoint and its equivalent endpoint in v2.**
 
-The requests are made using [OAuth 2.0 App-Only](https://developer.x.com(/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token). In order to run the following cURL requests, you will need to replace ACCESS_TOKEN in the authorization header with your app access token. For v2 endpoints, your app access token must belong to a [developer App](/resources/fundamentals/developer-apps/overview) within a [Project](/resources/fundamentals/projects/overview). 
+The requests are made using [OAuth 2.0 App-Only](https://developer.x.com(/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token). In order to run the following cURL requests, you will need to replace ACCESS_TOKEN in the authorization header with your app access token. For v2 endpoints, your app access token must belong to a [developer App](/resources/fundamentals/developer-apps/overview) within a [Project](/resources/fundamentals/developer-apps/overview). 
 
 The response payload returned by the v1.1 endpoint will be different from the response payload returned by the v2 endpoint. With v2, the response will include the default fields, as well as any other fields requested with the [fields](/x-api/fundamentals/fields) and [expansions](/x-api/fundamentals/expansions) parameters. You can use these parameters to request a different set of fields to be returned.
 
-**Standard v1.1 [GET search/tweets](https://developer.x.com/en/docs/twitter-api/v1/tweets/search/api-reference/get-search-tweets) and v2 [GET tweets/search/recent](/x-api/posts/recent-search) endpoints**
+**Standard v1.1 `GET search/tweets` → v2 `GET tweets/search/recent`**
 
-      ```bash
-      curl --request GET \
-  --url 'https://api.x.com/1.1/search/tweets.json?q=from%3ATwitterDev%20-is%3Aretweet&count=100' \
+<CodeGroup dropdown>
+
+```bash cURL (v1.1)
+curl --request GET \
+  --url 'https://api.x.com/1.1/search/tweets.json?q=from%3AXDevelopers%20-is%3Aretweet&count=100' \
   --header 'Authorization: Bearer $ACCESS_TOKEN'
-  ```
+```
 
-
-      ```bash
-      curl --request GET \
-  --url 'https://api.x.com/2/tweets/search/recent?query=from%3ATwitterDev%20-is%3Aretweet&tweet.fields=created_at%2Cconversation_id%2Centities&max_results=100' \
+```bash cURL (v2)
+curl --request GET \
+  --url 'https://api.x.com/2/tweets/search/recent?query=from%3AXDevelopers%20-is%3Aretweet&tweet.fields=created_at%2Cconversation_id%2Centities&max_results=100' \
   --header 'Authorization: Bearer $ACCESS_TOKEN'
-  ```
+```
 
+```python Python (v2)
+import requests
+
+bearer_token = "YOUR_BEARER_TOKEN"
+url = "https://api.x.com/2/tweets/search/recent"
+
+params = {
+    "query": "from:XDevelopers -is:retweet",
+    "tweet.fields": "created_at,conversation_id,entities",
+    "max_results": 100
+}
+
+headers = {"Authorization": f"Bearer {bearer_token}"}
+response = requests.get(url, headers=headers, params=params)
+
+for post in response.json()["data"]:
+    print(f"{post['created_at']}: {post['text'][:50]}...")
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Search recent Posts - SDK handles pagination automatically
+for page in client.posts.search_recent(
+    query="from:XDevelopers -is:retweet",
+    tweet_fields=["created_at", "conversation_id", "entities"],
+    max_results=100
+):
+    for post in page.data:
+        print(f"{post.created_at}: {post.text[:50]}...")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Search recent Posts - SDK handles pagination automatically
+const paginator = client.posts.searchRecent("from:XDevelopers -is:retweet", {
+  tweetFields: ["created_at", "conversation_id", "entities"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.created_at}: ${post.text?.slice(0, 50)}...`);
+  });
+}
+```
+
+</CodeGroup>
 
 **Next steps**
 

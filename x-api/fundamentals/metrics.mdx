@@ -1,106 +1,221 @@
 ---
-title: "Metrics"
-keywords: ["metrics", "engagement metrics", "tweet metrics", "impressions", "retweets", "likes", "video views", "analytics", "public metrics", "private metrics", "organic metrics", "promoted metrics"]
+title: Metrics
+sidebarTitle: Metrics
+description: Access engagement metrics for posts and media
+keywords: ["metrics", "engagement metrics", "tweet metrics", "impressions", "likes", "retweets", "video views", "analytics"]
 ---
 
-## Overview
-The metrics field allows developers to access public and private engagement metrics for Post and media objects. Public metrics are accessible by anyone with a developer account, while private metrics are accessible from owned/authorized accounts (definition below). Metrics include the total count of impressions, Retweets, Quote Tweets, likes, replies, video views, video view quartiles, URL and profile link clicks for each Post specified in the request. There is also the option to view a breakdown of metrics earned in an organic or promoted context, if the Post was promoted as an [Ad](https://ads.x.com/).
+The X API provides engagement metrics for posts and media. Access public metrics with any authentication, or private metrics for your own content with user authentication.
 
-Public metrics can be requested with [App-only Token](/resources/fundamentals/authentication#oauth-2-0) authentication. Non-public metrics can be requested for owned/authorized Posts only, meaning developers need to authenticate using [OAuth 2.0](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-3) or [OAuth 1.0a](/resources/fundamentals/authentication#oauth-1-0a-2) user context authorization.
+---
 
-**Non-public, organic, and promoted metrics are only available for Posts created within the last 30 days.**
+## Metric types
 
-### Terminology
-- **Authorized account**: An X account that has authorized your [X developer app](/resources/fundamentals/developer-apps) by granting it access to that account (any [app permission level](/resources/fundamentals/developer-apps#app-permissions) will permit access to Post metrics).
-- **Owned account**: An X account linked to your [X developer app](/resources/fundamentals/developer-apps).
-- **Public metrics**: Totals that are available for anyone to access on [X](https://x.com/home), such as the number of likes and number of Retweets.
-- **Non-public metrics**: Totals not available for public viewing on [X](https://x.com/home), such as the number of impressions and video view quartiles. Requires [OAuth 2.0](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-3) or [OAuth 1.0a](/resources/fundamentals/authentication#oauth-1-0a-2) user context authentication.
-- **Organic metrics**: A grouping of public and non-public metrics attributed to an organic context (posted and viewed in a regular manner). Requires [OAuth 2.0](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-3) or [OAuth 1.0a](/resources/fundamentals/authentication#oauth-1-0a-2) user context authentication.
-- **Promoted metrics**: A grouping of public and non-public metrics attributed to a promoted context (posted or viewed as part of an Ads campaign). Requires [OAuth 2.0](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-3) or [OAuth 1.0a](/resources/fundamentals/authentication#oauth-1-0a-2) user context authentication and that the Post was promoted in an Ad.
+| Type | Authentication | Description |
+|:-----|:---------------|:------------|
+| **Public** | Bearer Token | Visible to anyone (likes, reposts, replies) |
+| **Non-public** | User context | Private metrics (impressions, clicks) |
+| **Organic** | User context | Metrics from non-promoted views |
+| **Promoted** | User context | Metrics from ad views |
 
-## Available Metrics
+<Note>
+**30-day limit**: Non-public, organic, and promoted metrics are only available for posts created within the last 30 days.
+</Note>
 
-| Metric               | API Representations                                                                                                                                                                                                                                     | Description                                                                                                                                                                                                                                                                                                                                                                                |
-|:----------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Impressions**      | `data.non_public_metrics.impression_count`, `data.organic_metrics.impression_count`, `data.promoted_metrics.impression_count`                                                                                                                           | A count of how many times the Post has been viewed (not unique by user). A view is counted if any part of the Post is visible on the screen. Requires OAuth 1.0a User Context authentication.                                                                                                               |
-| **Retweets**         | `data.public_metrics.retweet_count`, `data.organic_metrics.retweet_count`, `data.promoted_metrics.retweet_count`                                                                                                                                       | A count of how many times the Post has been Retweeted. Does not include Quote Tweets (“Retweets with comment”). To get the "Retweets and comments" total as displayed on X clients, add `retweet_count` and `quote_count`.                                           |
-| **Quote Tweets**     | `data.public_metrics.quote_count`                                                                                                                                                                                                                      | A count of how many times the Post has been Retweeted with a new comment (message). There are no Quote Tweets from a paid context, so all Quote Tweets are organic.                                                                                                                                           |
-| **Likes**            | `data.public_metrics.like_count`, `data.organic_metrics.like_count`, `data.promoted_metrics.like_count`                                                                                                                                                 | A count of how many times the Post has been liked. The `public_metrics` field returns the total count of likes from both organic and paid contexts to maintain consistency with counts shown publicly on X.                                                                                                   |
-| **Replies**          | `data.public_metrics.reply_count`, `data.organic_metrics.reply_count`, `data.promoted_metrics.reply_count`                                                                                                                                              | A count of how many times the Post has been replied to. The `public_metrics` field returns the total count of replies from both organic and paid contexts.                                                                                                                                                   |
-| **URL Link Clicks**  | `data.non_public_metrics.url_link_clicks`, `data.organic_metrics.url_link_clicks`, `data.promoted_metrics.url_link_clicks`                                                                                                                             | A count of the number of times a user clicks on a URL link or URL preview card in a Post. Requires OAuth 1.0a User Context authentication.                                                                                                                                                                  |
-| **User Profile Clicks** | `data.non_public_metrics.user_profile_clicks`, `data.organic_metrics.user_profile_clicks`, `data.promoted_metrics.user_profile_clicks`                                                                                                             | A count of the number of times a user clicks on portions of a Post: display name, user name, profile picture. Requires OAuth 1.0a User Context authentication.                                                                                                                                               |
-| **Video views**      | `includes.media.public_metrics.view_count`, `includes.media.organic_metrics.view_count`, `includes.media.promoted_metrics.view_count`                                                                                                                  | A count of how many times the video included in the Post has been viewed. This is the number of video views aggregated across all Posts in which the given video has been posted. Requires media expansion `expansions=attachment.media_keys`.                                                                |
-| **Video view quartiles** | `includes.media.non_public_metrics.playback_0_count`, `includes.media.non_public_metrics.playback_25_count`, `includes.media.non_public_metrics.playback_50_count`, `includes.media.non_public_metrics.playback_75_count`, `includes.media.non_public_metrics.playback_100_count` | The number of users who played through each quartile in a video. Requires OAuth 1.0a User Context authentication and media expansion `expansions=attachment.media_keys`.                                                                                                 |
+---
 
-## Requesting Metrics
+## Available metrics
 
-### Public Metrics
-In the following request, we are requesting public metrics on the Post and on the attached video with the following fields and expansion. Be sure to replace `$BEARER_TOKEN` with your own generated bearer token.
+### Post metrics
 
-- `tweet.fields=public_metrics`
-- `expansions=attachments.media_keys&media.fields=public_metrics`
+| Metric | Type | Field path |
+|:-------|:-----|:-----------|
+| Reposts | Public | `public_metrics.retweet_count` |
+| Quotes | Public | `public_metrics.quote_count` |
+| Likes | Public | `public_metrics.like_count` |
+| Replies | Public | `public_metrics.reply_count` |
+| Impressions | Non-public | `non_public_metrics.impression_count` |
+| URL clicks | Non-public | `non_public_metrics.url_link_clicks` |
+| Profile clicks | Non-public | `non_public_metrics.user_profile_clicks` |
 
-#### Sample Request
+### Media metrics (videos)
+
+| Metric | Type | Field path |
+|:-------|:-----|:-----------|
+| Views | Public | `public_metrics.view_count` |
+| Playback 0% | Non-public | `non_public_metrics.playback_0_count` |
+| Playback 25% | Non-public | `non_public_metrics.playback_25_count` |
+| Playback 50% | Non-public | `non_public_metrics.playback_50_count` |
+| Playback 75% | Non-public | `non_public_metrics.playback_75_count` |
+| Playback 100% | Non-public | `non_public_metrics.playback_100_count` |
+
+---
+
+## Requesting metrics
+
+### Public metrics (any auth)
+
 ```bash
-curl 'https://api.x.com/2/tweets?ids=1204084171334832128&tweet.fields=public_metrics&expansions=attachments.media_keys&media.fields=public_metrics' --header 'Authorization: Bearer $BEARER_TOKEN'
+curl "https://api.x.com/2/tweets/1234567890?tweet.fields=public_metrics" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-### Private Metrics (Non-public, Organic Metrics)
-The following request asks for non-public metrics with additional details on organic metrics for the Post and attached video. Since these fields are private and not available for public view on X, the request requires [OAuth 2.0](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-3) or [OAuth 1.0a](/resources/fundamentals/authentication#oauth-1-0a-2) user context authentication. Refer to our [guide](/resources/fundamentals/authentication#creating-a-signature) for generating the OAuth 1.0a signature needed below.
+Response:
 
-- `tweet.fields=non_public_metrics,organic_metrics`
-- `expansions=attachments.media_keys&media.fields=non_public_metrics,organic_metrics`
-
-#### Sample Request
-```bash
-curl 'https://api.x.com/2/tweets/1204084171334832128?tweet.fields=non_public_metrics,organic_metrics&media.fields=non_public_metrics,organic_metrics&expansions=attachments.media_keys' --header 'authorization: OAuth oauth_consumer_key="CONSUMER_API_KEY", oauth_nonce="OAUTH_NONCE", oauth_signature="OAUTH_SIGNATURE", oauth_signature_method="HMAC-SHA1", oauth_timestamp="OAUTH_TIMESTAMP", oauth_token="ACCESS_TOKEN", oauth_version="1.0"'
-```
-
-#### Sample Response
-```
+```json
 {
   "data": {
-    "attachments": {
-      "media_keys": ["13_1204080851740315648"]
-    },
-    "id": "1263145271946551300",
-    "non_public_metrics": {
-      "impression_count": 956,
-      "url_link_clicks": 9,
-      "user_profile_clicks": 34
-    },
-    "organic_metrics": {
-      "impression_count": 956,
-      "like_count": 49,
-      "reply_count": 2,
-      "retweet_count": 9,
-      "url_link_clicks": 9,
-      "user_profile_clicks": 34
-    },
-    "text": "test"
-  },
-  "includes": {
-    "media": [
-      {
-        "media_key": "13_1204080851740315648",
-        "non_public_metrics": {
-          "playback_0_count": 0,
-          "playback_100_count": 1,
-          "playback_25_count": 2,
-          "playback_50_count": 1,
-          "playback_75_count": 1
-        },
-        "organic_metrics": {
-          "playback_0_count": 0,
-          "playback_100_count": 1,
-          "playback_25_count": 2,
-          "playback_50_count": 1,
-          "playback_75_count": 1,
-          "view_count": 1
-        },
-        "type": "video"
-      }
-    ]
+    "id": "1234567890",
+    "text": "Hello world!",
+    "public_metrics": {
+      "retweet_count": 50,
+      "reply_count": 12,
+      "like_count": 234,
+      "quote_count": 5
+    }
   }
 }
 ```
+
+### Private metrics (user context)
+
+Requires OAuth 1.0a or OAuth 2.0 with user context for posts you own:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?tweet.fields=non_public_metrics,organic_metrics" \
+  -H "Authorization: OAuth oauth_consumer_key=...,oauth_token=..."
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "non_public_metrics": {
+      "impression_count": 5432,
+      "url_link_clicks": 89,
+      "user_profile_clicks": 156
+    },
+    "organic_metrics": {
+      "impression_count": 5432,
+      "like_count": 234,
+      "reply_count": 12,
+      "retweet_count": 50,
+      "url_link_clicks": 89,
+      "user_profile_clicks": 156
+    }
+  }
+}
+```
+
+---
+
+## Video metrics
+
+For video playback metrics, use the media expansion:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?\
+tweet.fields=attachments&\
+expansions=attachments.media_keys&\
+media.fields=public_metrics,non_public_metrics" \
+  -H "Authorization: OAuth ..."
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Check out this video!",
+    "attachments": {
+      "media_keys": ["13_9876543210"]
+    }
+  },
+  "includes": {
+    "media": [{
+      "media_key": "13_9876543210",
+      "type": "video",
+      "public_metrics": {
+        "view_count": 12543
+      },
+      "non_public_metrics": {
+        "playback_0_count": 12543,
+        "playback_25_count": 9876,
+        "playback_50_count": 7654,
+        "playback_75_count": 5432,
+        "playback_100_count": 3210
+      }
+    }]
+  }
+}
+```
+
+---
+
+## Organic vs. promoted metrics
+
+If a post was promoted as an ad, metrics split between organic and promoted views:
+
+| Context | Description |
+|:--------|:------------|
+| **Organic** | Metrics from normal timeline views |
+| **Promoted** | Metrics from paid ad impressions |
+| **Public** | Combined total (organic + promoted) |
+
+Request both to see the breakdown:
+
+```bash
+tweet.fields=public_metrics,organic_metrics,promoted_metrics
+```
+
+---
+
+## Metric definitions
+
+<Accordion title="Impressions">
+Count of times the post appeared on a user's screen. Not unique—the same user viewing twice counts as two impressions.
+</Accordion>
+
+<Accordion title="Repost count">
+Number of reposts (retweets). Does not include quote posts.
+</Accordion>
+
+<Accordion title="Quote count">
+Number of quote posts (reposts with comment). These are always organic.
+</Accordion>
+
+<Accordion title="Video views">
+Aggregated across all posts containing the video. A video reposted in multiple posts has one total view count.
+</Accordion>
+
+<Accordion title="Playback quartiles">
+Number of unique users who played through each percentage of the video. Useful for understanding drop-off rates.
+</Accordion>
+
+---
+
+## Requirements summary
+
+| Metric field | Authentication required |
+|:-------------|:-----------------------|
+| `public_metrics` | Bearer Token (any) |
+| `non_public_metrics` | User context (owned posts only) |
+| `organic_metrics` | User context (owned posts only) |
+| `promoted_metrics` | User context (promoted posts only) |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Data Dictionary" icon="book" href="/x-api/fundamentals/data-dictionary">
+    Complete field reference.
+  </Card>
+  <Card title="Authentication" icon="key" href="/resources/fundamentals/authentication/overview">
+    Set up user context auth.
+  </Card>
+</CardGroup>

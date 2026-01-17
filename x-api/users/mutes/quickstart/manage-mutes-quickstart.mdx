@@ -1,81 +1,192 @@
 ---
-title: Manage mutes
-sidebarTitle: Manage mutes
+title: Manage Mutes
+sidebarTitle: Manage Mutes
+description: Mute and unmute users using the X API
 keywords: ["manage mutes quickstart", "mute users quickstart", "manage mutes tutorial", "mute guide", "mutes quickstart"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-## Getting started with the manage mutes endpoints
+This guide walks you through muting and unmuting users using the X API.
 
-This quick start guide will help you make your first request to the manage mutes endpoints using [Postman](/tutorials/postman-getting-started).
-
-If you would like to see sample code in different languages, please visit our [X API v2 sample code](https://github.com/xdevplatform/Twitter-API-v2-sample-code) GitHub repository.
 <Note>
 **Prerequisites**
 
-To complete this guide, you will need to have a set of [keys and tokens](/resources/fundamentals/authentication) to authenticate your request. You can generate these keys and tokens by following these steps:
-
-* [Sign up for a developer account](https://developer.x.com/en/apply-for-access) and receive approval.
-* Create a [Project](/resources/fundamentals/projects) and an associated [developer App](/resources/fundamentals/developer-apps) in the developer portal.
-* Navigate to your App's “Keys and tokens” page to generate the required credentials. Make sure to save all credentials in a secure location.
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- User Access Token (OAuth 1.0a or OAuth 2.0 PKCE)
 </Note>
-### Steps to build a manage mutes request
 
-#### Step one: Start with a tool or library
+---
 
-There are several different tools, code examples, and libraries that you can use to make a request to this endpoint, but we will use the Postman tool here to simplify the process.
+## Mute a user
 
-To load the X API v2 Postman collection into your environment, please click on the following button:
+<Steps>
+  <Step title="Get your user ID">
+    You need your authenticated user's ID. You can find it using the [user lookup endpoint](/x-api/users/lookup/introduction) or from your Access Token (the numeric part is your user ID).
+  </Step>
 
-<Button href="https://app.getpostman.com/run-collection/9956214-784efcda-ed4c-4491-a4c0-a26470a67400">
-  Add X API v2 to Postman
-</Button>
-Once you have the X API v2 collection loaded in Postman, navigate to the “Mutes” folder, and select “Mute a user’s ID”.
- 
+  <Step title="Get the target user ID">
+    Find the user ID of the account you want to mute using the [user lookup endpoint](/x-api/users/lookup/introduction).
+  </Step>
 
-#### Step two: Authenticate your request
+  <Step title="Send the mute request">
 
-To properly make a request to the X API, you need to verify that you have permission. To do so with this endpoint, you must authenticate your request using either [OAuth 1.0a User Context](/resources/fundamentals/authentication) or [OAuth 2.0 Authorization Code with PKCE](resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2).
+<CodeGroup dropdown>
 
-In this example, we are going to use OAuth 1.0a User Context.
+```bash cURL
+curl -X POST "https://api.x.com/2/users/123456789/muting" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"target_user_id": "9876543210"}'
+```
 
-You must add your keys and tokens – specifically your API Key, API Secret Key, OAuth 1.0a user Access Token, and OAuth 1.0a user Access Token Secret – to Postman. You can do this by selecting the environment named “X API v2” in the top-right corner of Postman and adding your keys and tokens to the "initial value" and "current value" fields (by clicking the eye icon next to the environment dropdown).
+```python Python SDK
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
 
-These variables will automatically be pulled into the request's authorization tab if you've done this correctly.
- 
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
 
-#### Step three: Specify who is going to mute whom
+client = Client(auth=oauth1)
 
-Manage mutes endpoints require two IDs: one for the user (the user who wishes to mute or unmute another user) and the target user (the user that will be muted or unmuted). The user’s ID must correspond to the authenticating user’s ID, meaning that you must pass the Access Tokens associated with the user ID when authenticating your request. In this case, you can specify the ID belonging to your own user. You can find your ID in two ways:
+# Mute a user
+response = client.users.mute(
+    source_user_id="123456789",
+    target_user_id="9876543210"
+)
 
-1.  Using the [user lookup](/x-api/users/lookup/introduction) by username endpoint, you can pass a username and receive the id field. 
-2.  Looking at your Access Token, you will find that the numeric part is your user ID.
-     
+print(f"Muting: {response.data.muting}")
+```
 
-The target ID can be any valid user ID. In Postman, navigate to the "Params" tab, and enter your ID into the "Value" column of the `id` path variable. Navigate to the “Body” tab and ID of the user you wish to mute as the value for the target\_user\_id parameter. Be sure not to include any spaces before or after any ID.
+```javascript JavaScript SDK
+import { Client, OAuth1 } from "@xdevplatform/xdk";
 
-|     |     |
-| :--- | :--- |
-| **Key** | **Value** |
-| `id` | authenticated user ID |
-| target\_user\_id | the user ID you wish to mute |
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
 
-#### Step four: Make your request and review your response
+const client = new Client({ oauth1 });
 
-Once you have everything set up, hit the "Send" button, and you will receive a similar response to the following example response:
+// Mute a user
+const response = await client.users.mute("123456789", {
+  targetUserId: "9876543210",
+});
 
-      ```
-      { "data": { "muting": true } }
-      ```
+console.log(`Muting: ${response.data?.muting}`);
+```
 
+</CodeGroup>
 
-If you receive a "muting": true, then the id is successfully muting the target\_user\_id
+  </Step>
 
-To unmute the same user you can use the request entitled “Unmute a user ID”, which is also found in the “Mutes” folder of the X API v2 collection loaded in Postman. The source\_user\_id should be your user ID and target\_user\_id should be the user ID to unmute. You will not have to add this as a JSON body so you will want to make sure that you add in the requisite query params for source\_user\_id and target\_user\_id.
+  <Step title="Review the response">
+    ```json
+    {
+      "data": {
+        "muting": true
+      }
+    }
+    ```
+  </Step>
+</Steps>
 
-On a successful unmute, you will receive a similar response to the following example:
+---
 
-      ```
-      { "data": { "muting": false } }
-      ```
+## Unmute a user
+
+Remove a mute from a user:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X DELETE "https://api.x.com/2/users/123456789/muting/9876543210" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# Unmute a user
+response = client.users.unmute(
+    source_user_id="123456789",
+    target_user_id="9876543210"
+)
+
+print(f"Muting: {response.data.muting}")
+```
+
+```javascript JavaScript SDK
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// Unmute a user
+const response = await client.users.unmute("123456789", "9876543210");
+
+console.log(`Muting: ${response.data?.muting}`);
+```
+
+</CodeGroup>
+
+**Response:**
+
+```json
+{
+  "data": {
+    "muting": false
+  }
+}
+```
+
+---
+
+## Mute vs Block
+
+| Feature | Mute | Block |
+|:--------|:-----|:------|
+| See their Posts | No | No |
+| They see your Posts | Yes | No |
+| They can follow you | Yes | No |
+| They can DM you | Yes | No |
+| They know | No | Yes |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Mutes lookup" icon="volume-xmark" href="/x-api/users/mutes/quickstart/mutes-lookup">
+    Get your muted users
+  </Card>
+  <Card title="Blocks" icon="ban" href="/x-api/users/blocks/quickstart">
+    Block users instead
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/users/mute-user-by-user-id">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

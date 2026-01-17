@@ -1,111 +1,283 @@
 ---
-title: Integration guide
-sidebarTitle: Integration guide
+title: Integration Guide
+sidebarTitle: Integration Guide
+description: Key concepts and best practices for integrating Post lookup
 keywords: ["post lookup integration", "lookup integration guide", "lookup implementation", "lookup setup", "tweet lookup integration"]
 ---
 
 import { Button } from "/snippets/button.mdx"
 
-This page contains information on several tools and key concepts to help you integrate the Posts lookup endpoints into your system. We’ve organized the page into a few sections:
+This guide covers the key concepts you need to integrate the Post lookup endpoints into your application.
 
-- [Helpful tools](#helpful)
-- Key Concepts
-  - [Authentication](#authentication)
-  - [Developer portal, Projects, and Apps](#portal)
-  - [Rate limits](#limits)
-  - [Fields and expansions](#fields)
-  - [Post edits](#edits)
-  - [Edge cases](#edge)
+---
 
-## Helpful tools
+## Authentication
 
-Before we dive into some key concepts, we recommend familiarizing yourself with the following tools:
+All X API v2 endpoints require authentication. Choose the method that fits your use case:
 
-**Postman**  
-Postman is an excellent tool to test out an endpoint, including every path and body parameter to help you understand what’s available. Check out our [getting started with Postman guide](/tutorials/postman-getting-started) to learn more.
+| Method | Best for | Can access private metrics? |
+|:-------|:---------|:---------------------------|
+| [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) | Server-to-server, public data | No |
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | User-facing apps | Yes (for authorized user's Posts) |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | Legacy integrations | Yes (for authorized user's Posts) |
 
-**Code samples**  
-Find code samples for your preferred programming language on our [Github page](https://github.com/xdevplatform/Twitter-API-v2-sample-code).
+### App-Only authentication
 
-**Third-party libraries**  
-Utilize community-built [third-party libraries](/resources/tools-and-libraries) compatible with v2 endpoints.
+For public Post data, use a Bearer Token:
 
+<CodeGroup dropdown>
 
-## Key Concepts
+```bash cURL
+curl "https://api.x.com/2/tweets/1234567890" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
 
-### Authentication 
+```python Python SDK
+from xdk import Client
 
-All X API v2 endpoints require authenticated requests. You can authenticate with either:
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
 
-- [OAuth 1.0a User Context](/resources/fundamentals/authentication) using API Keys, Access Tokens, and additional parameters to [create an authorization header](/resources/fundamentals/authentication#authorizing-a-request).
-- [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) by passing an [App Access Token](/resources/fundamentals/authentication) with your request.
-- [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication) for greater control over app scope and multi-device authorization.
+# Get a single Post by ID
+response = client.posts.get("1234567890")
+print(response.data)
+```
 
-<Note>
-OAuth 1.0a can be challenging to implement. If unfamiliar, consider using a [library](/resources/tools-and-libraries) or OAuth 2.0 for requests. For private metrics or Posts, use OAuth 1.0a User Context or OAuth 2.0 Authorization Code with PKCE.
-</Note>
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+const response = await client.posts.get("1234567890");
+console.log(response.data);
+```
+
+</CodeGroup>
+
+### User Context authentication
+
+To access private metrics, authenticate on behalf of the Post author:
+
+<Warning>
+The following fields require User Context authentication:
+- `tweet.fields.non_public_metrics`
+- `tweet.fields.promoted_metrics`
+- `tweet.fields.organic_metrics`
+- `media.fields.non_public_metrics`
+- `media.fields.promoted_metrics`
+- `media.fields.organic_metrics`
+</Warning>
+
+---
+
+## Fields and expansions
+
+The X API v2 returns minimal data by default. Use `fields` and `expansions` to request exactly what you need.
+
+### Default response
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "edit_history_tweet_ids": ["1234567890"]
+  }
+}
+```
+
+### Available fields
+
+<Accordion title="tweet.fields">
+| Field | Description |
+|:------|:------------|
+| `created_at` | Post creation timestamp |
+| `author_id` | Author's user ID |
+| `public_metrics` | Like, retweet, reply, quote counts |
+| `entities` | Hashtags, mentions, URLs, cashtags |
+| `attachments` | Media keys, poll IDs |
+| `conversation_id` | Thread identifier |
+| `context_annotations` | Topic/entity classifications |
+| `in_reply_to_user_id` | User being replied to |
+| `lang` | Detected language |
+| `source` | Posting client |
+| `possibly_sensitive` | Sensitive content flag |
+| `reply_settings` | Who can reply |
+</Accordion>
+
+<Accordion title="user.fields (requires author_id expansion)">
+| Field | Description |
+|:------|:------------|
+| `username` | @handle |
+| `name` | Display name |
+| `profile_image_url` | Avatar URL |
+| `verified` | Verification status |
+| `description` | Bio |
+| `public_metrics` | Follower/following counts |
+| `created_at` | Account creation date |
+</Accordion>
+
+<Accordion title="media.fields (requires attachments.media_keys expansion)">
+| Field | Description |
+|:------|:------------|
+| `url` | Media URL |
+| `preview_image_url` | Thumbnail URL |
+| `type` | photo, video, animated_gif |
+| `duration_ms` | Video duration |
+| `height`, `width` | Dimensions |
+| `alt_text` | Accessibility text |
+</Accordion>
+
+### Example with fields
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/1234567890?\
+tweet.fields=created_at,public_metrics,entities&\
+expansions=author_id,attachments.media_keys&\
+user.fields=username,verified&\
+media.fields=url,type" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get a Post with additional fields and expansions
+response = client.posts.get(
+    "1234567890",
+    tweet_fields=["created_at", "public_metrics", "entities"],
+    expansions=["author_id", "attachments.media_keys"],
+    user_fields=["username", "verified"],
+    media_fields=["url", "type"]
+)
+
+print(response.data)
+print(response.includes)  # Contains expanded user and media objects
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+const response = await client.posts.get("1234567890", {
+  tweetFields: ["created_at", "public_metrics", "entities"],
+  expansions: ["author_id", "attachments.media_keys"],
+  userFields: ["username", "verified"],
+  mediaFields: ["url", "type"],
+});
+
+console.log(response.data);
+console.log(response.includes); // Contains expanded user and media objects
+```
+
+</CodeGroup>
+
+---
+
+## Post edits
+
+Posts can be edited up to 5 times within 30 minutes of creation.
+
+### How it works
+
+- Each edit creates a new Post ID
+- `edit_history_tweet_ids` contains all versions (oldest first)
+- The endpoint always returns the most recent version
+
+### Example response
+
+```json
+{
+  "data": {
+    "id": "1234567893",
+    "text": "Hello world! (edited twice)",
+    "edit_history_tweet_ids": [
+      "1234567890",
+      "1234567891",
+      "1234567893"
+    ]
+  }
+}
+```
 
 <Tip>
-**Please note**  
-> If you are requesting the following fields, OAuth 1.0a User Context or OAuth 2.0 Authorization Code is required:
->
-> - `tweet.fields.non_public_metrics`
-> - `tweet.fields.promoted_metrics`
-> - `tweet.fields.organic_metrics`
-> - `media.fields.non_public_metrics`
-> - `media.fields.promoted_metrics`
-> - `media.fields.organic_metrics`
+Posts retrieved after their 30-minute edit window represent the final version. For real-time use cases, be aware that recently-published Posts may still be edited.
 </Tip>
 
+---
 
-### Developer portal, Projects, and Apps
+## Error handling
 
-To obtain credentials for X API v2, you need:
+### Common errors
 
-1. An approved [developer account](/resources/fundamentals/developer-portal).
-2. A [Project](/resources/fundamentals/projects) within the developer account.
-3. A [developer App](/resources/fundamentals/developer-apps) within that Project, where keys and tokens can be found.
+| Status | Error | Solution |
+|:-------|:------|:---------|
+| 400 | Invalid request | Check parameter formatting |
+| 401 | Unauthorized | Verify authentication credentials |
+| 403 | Forbidden | Check App permissions |
+| 404 | Not Found | Post deleted or doesn't exist |
+| 429 | Too Many Requests | Wait and retry (see rate limits) |
 
+### Deleted or protected Posts
 
+If a Post is deleted or from a protected account you don't follow:
+- Single Post lookup returns `404`
+- Multi-Post lookup omits the Post from results with an `errors` array
 
-### Rate limits
+```json
+{
+  "data": [
+    { "id": "1234567890", "text": "Available post" }
+  ],
+  "errors": [
+    {
+      "resource_id": "1234567891",
+      "resource_type": "tweet",
+      "title": "Not Found Error",
+      "detail": "Could not find tweet with id: [1234567891]."
+    }
+  ]
+}
+```
 
-X API requests are subject to [rate limits](/resources/fundamentals/rate-limits) to manage volume. Limits apply at both the App and user levels:
+---
 
-- **App-level**: Limits the number of requests made per period by any app.
-- **User-level**: Limits how frequently an authenticated user can perform Post lookups across developer Apps.
+## Best practices
 
+<CardGroup cols={2}>
+  <Card title="Batch requests" icon="layer-group">
+    Use the multi-Post endpoint to fetch up to 100 Posts at once, reducing API calls.
+  </Card>
+  <Card title="Request only needed fields" icon="filter">
+    Specify only the fields you need to minimize response size and processing time.
+  </Card>
+  <Card title="Cache responses" icon="database">
+    Cache Post data locally to reduce repeated requests for the same content.
+  </Card>
+  <Card title="Handle edits" icon="clock-rotate-left">
+    For real-time apps, consider re-fetching Posts after the 30-minute edit window.
+  </Card>
+</CardGroup>
 
+---
 
-### Fields and expansions
+## Next steps
 
-The X API v2 allows selection of specific data fields using `fields` and `expansions`:
-
-- **Expansions**: Enable retrieval of additional related objects. Supported expansions include:
-  - `edit_history_tweet_ids`
-  - `attachments.poll_ids`
-  - `attachments.media_keys`
-  - `author_id`
-  - `entities.mentions.username`
-  - `geo.place_id`
-  - `in_reply_to_user_id`
-  - `referenced_tweets.id`
-  - `referenced_tweets.id.author_id`
-
-- **Fields**: Specify data fields within objects to return additional data. The Post object defaults to `id`, `text`, and `edit_history_tweet_ids`. Other options, like `tweet.created_at` and `tweet.entities`, must be explicitly requested.
-
-For more, refer to the fields and expansions guide in the [X API v2 data dictionary](/x-api/fundamentals/data-dictionary).
-
-
-
-### Post edits
-
-Eligible Posts can be edited up to five times within 30 minutes of publishing. The Posts lookup endpoint always provides the latest Post version. For near-real-time use cases, be aware of this time window. For more details, see [Edit Posts fundamentals](/x-api/fundamentals/edit-posts).
-
-
-
-### Edge cases
-
-- **Promoted metrics**: Requesting promoted metrics for non-promoted Posts returns an empty response.
-- **Truncated text**: Post text is truncated for Retweets. To retrieve full text, expand the referenced Post
+<CardGroup cols={2}>
+  <Card title="API Reference" icon="code" href="/x-api/posts/post-lookup-by-post-id">
+    Complete endpoint documentation
+  </Card>
+  <Card title="Data dictionary" icon="book" href="/x-api/fundamentals/data-dictionary">
+    All available objects and fields
+  </Card>
+  <Card title="Sample code" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    Working code examples
+  </Card>
+  <Card title="Error handling" icon="triangle-exclamation" href="/x-api/fundamentals/response-codes-and-errors">
+    Handle errors gracefully
+  </Card>
+</CardGroup>

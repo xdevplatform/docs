@@ -1,92 +1,168 @@
 ---
-title: Introduction
+title: Search Posts
 sidebarTitle: Introduction
+description: Search for Posts by keyword, hashtag, user, and more with powerful query operators
 keywords: ["search tweets", "search posts", "recent search", "full archive search", "tweet search", "search API", "search queries", "search operators", "historical search"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-Searching for Posts is an important feature used to surface X conversations about a specific topic or event. While this functionality is present in X, these endpoints provide greater flexibility and power when filtering for and ingesting Posts so you can find relevant data for your research more easily; build out near-real-time ‘listening’ applications; or generally explore, analyze, and/or act upon Posts related to a topic of interest. 
+The Search Posts endpoints let you find Posts matching specific criteria using powerful query operators. Search for keywords, hashtags, mentions, URLs, and more.
 
-We offer two endpoints that allow you to search for Posts: Recent search and full-archive search. Both of these REST endpoints share a common design and features, including their use of a single search query to filter for Posts around a specific topic. These search queries are created with a set of operators that match on Post and user attributes, such as message keywords, hashtags, and URLs. Operators can be combined into queries with boolean logic and parentheses to help refine the queries matching behavior. 
+## Overview
 
-Both the recent search and the full-archive search endpoints provide edited Post metadata. All objects for Posts created since September 29, 2022, include Post edit metadata, even if the Post was never edited. Each time a Post is edited, a new Post ID is created. A Post's edit history is documented by an array of Post IDs, starting with the original ID.
+X offers two search endpoints with different time ranges and access requirements:
 
-These endpoints will always return the most recent edit, along with any edit history. Any Post collected after its 30-minute edit window will represent its final version. To learn more about Edit Post metadata, check out the [Edit Posts fundamentals](/x-api/fundamentals/edit-posts) page.
+<CardGroup cols={2}>
+  <Card title="Recent Search" icon="clock">
+    Search Posts from the **last 7 days**. Available to all developers.
+  </Card>
+  <Card title="Full-Archive Search" icon="vault">
+    Search the **complete archive** back to 2006. Available to pay-per-use and Enterprise customers.
+  </Card>
+</CardGroup>
 
-Once you’ve set up your query and start receiving Posts, these endpoints support navigating the results both by time and Post ID ranges. This is designed to support two common use cases: 
+---
 
-* **Get historical**: Requests are for a period of interest, with no focus on the real-time nature of the data. A single request is made, and all matching data is delivered using pagination as needed. This is the default mode for Search Posts.
-* **Polling** or **listening**: Requests are made in a "any new Posts since my last request?" mode. Requests are made on a continual basis, and typically there is a use case focused on near real-time 'listening' for Posts of interest.
+## Use cases
 
-Many operators and query limits are exclusive to [Enterprise access](/x-api/getting-started/about-x-api), meaning that you must use keys and tokens from an App within a [Project](/resources/fundamentals/projects) with Enterprise access to utilize the additional functionality. You can learn more about this in the endpoint sections below.
+- **Brand monitoring** — Track mentions of your brand or products
+- **Trend analysis** — Analyze conversations around topics or events
+- **Research** — Gather data for academic or market research
+- **Real-time listening** — Build applications that react to new Posts
 
-Both the recent search and the full-archive search endpoints returned Posts contribute to the monthly [Post cap](/x-api/fundamentals/post-cap).
+---
 
-**Account setup**
+## Endpoints
 
-To access these endpoints, you will need:
+| Method | Endpoint | Description | Access |
+|:-------|:---------|:------------|:-------|
+| GET | [`/2/tweets/search/recent`](/x-api/posts/search-recent-posts) | Search Posts from last 7 days | All developers |
+| GET | [`/2/tweets/search/all`](/x-api/posts/search-all-posts) | Search complete Post archive | Pay-per-use, Enterprise |
 
-* An approved [developer account](https://developer.x.com/en/portal/petition/essential/basic-info).
-* To authenticate using the keys and tokens from a [developer App](/resources/fundamentals/developer-apps) that is located within a [Project](/resources/fundamentals/projects). 
+---
 
-Learn more about getting access to the X API v2 endpoints in our [getting started guide](/x-api/getting-started/getting-access).
+## Query operators
 
-## Recent search
+Build queries using operators that match on Post attributes:
 
-The recent search endpoint allows you to programmatically access filtered public Posts posted over the last week, and is available to all developers who have a developer account and are using keys and tokens from an [App](/resources/fundamentals/developer-apps) within a [Project](/resources/fundamentals/projects).
+```
+(AI OR "artificial intelligence") lang:en -is:retweet has:links
+```
 
-You can authenticate your requests with [OAuth 1.0a User Context](/resources/fundamentals/authentication), [OAuth 2.0 App-Only](/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token), or [OAuth 2.0 Authorization Code with PKCE](resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2). However, if you would like to receive private metrics, or a breakdown of organic and promoted metrics within your Post results, you will have to use OAuth 1.0a User Context or OAuth 2.0 Authorization Code with PKCE, and pass user Access Tokens that are associated with the user that published the given content. 
+<AccordionGroup>
+  <Accordion title="Keyword operators">
+    | Operator | Example | Description |
+    |:---------|:--------|:------------|
+    | Keyword | `python` | Match Posts containing the word |
+    | Phrase | `"machine learning"` | Match exact phrase |
+    | Hashtag | `#AI` | Match Posts with hashtag |
+    | Mention | `@XDevelopers` | Match Posts mentioning user |
+  </Accordion>
 
-This endpoint can deliver up to 100 Posts per request in reverse-chronological order, and [pagination](/x-api/posts/search/integrate/paginate) tokens are provided for paging through large sets of matching Posts. 
+  <Accordion title="User operators">
+    | Operator | Example | Description |
+    |:---------|:--------|:------------|
+    | `from:` | `from:elonmusk` | Posts by a user |
+    | `to:` | `to:XDevelopers` | Replies to a user |
+    | `retweets_of:` | `retweets_of:X` | Retweets of a user's Posts |
+  </Accordion>
 
-When using a Project with regular access, you can use the basic set of [operators](/x-api/posts/search/integrate/build-a-query) and can make queries up to 512 characters long. When using a Project with Enterprise access, you have access to additional operators. Projects with Enterprise Access can make queries up to 4096 characters long.
+  <Accordion title="Content operators">
+    | Operator | Example | Description |
+    |:---------|:--------|:------------|
+    | `has:images` | `cat has:images` | Posts with images |
+    | `has:videos` | `has:videos` | Posts with videos |
+    | `has:links` | `has:links` | Posts with links |
+    | `has:mentions` | `has:mentions` | Posts with mentions |
+    | `url:` | `url:github.com` | Posts with specific URL |
+  </Accordion>
 
-Learn more about [access levels](/x-api/getting-started/about-x-api).
+  <Accordion title="Filter operators">
+    | Operator | Example | Description |
+    |:---------|:--------|:------------|
+    | `lang:` | `lang:en` | Posts in a language |
+    | `-is:retweet` | `-is:retweet` | Exclude retweets |
+    | `-is:reply` | `-is:reply` | Exclude replies |
+    | `is:verified` | `is:verified` | Posts by verified users |
+  </Accordion>
+</AccordionGroup>
 
+<Card title="Full operator reference" icon="list-check" href="/x-api/posts/search/integrate/operators">
+  See all available operators and their access requirements
+</Card>
 
-## Full-archive search
+---
 
-The v2 full-archive search endpoint is only available to Projects with [Pro](/x-api/getting-started/about-x-api "Pro") access and [Enterprise](/x-api/getting-started/about-x-api) access. The endpoint allows you to programmatically access public Posts from the complete archive dating back to the first Post in March 2006, based on your search query.
+## Recent Search
 
-You can authenticate your requests to this endpoint using [OAuth 2.0 App-Only](/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token), and the [App Access Token](/resources/fundamentals/authentication#using-and-generating-an-app-only-bearer-token) must come from an App that is within a Project that has Pro or Enterprise access. Since you cannot make a request on behalf of other users (OAuth 1.0a User Context or OAuth 2.0 Authorization Code with PKCE) with this endpoint, you will not be able to pull private [metrics](/x-api/fundamentals/metrics). 
+Search Posts from the **last 7 days**. Available to all developers.
 
-This endpoint can deliver up to 500 Posts per request in reverse-chronological order, and [pagination](/x-api/posts/search/integrate/paginate) tokens are provided for paging through large sets of matching Posts.
+### Features
 
-**Note:** If requesting [annotations](/x-api/fundamentals/post-annotations) through the tweet.fields parameter, the max_results parameter is currently limited to a max value of 100. This may change in the future, but please be mindful of this limitation.
+- Up to 100 Posts per request
+- Pagination for large result sets
+- All core query operators
+- 512-character query length (4,096 for Enterprise)
 
-Since this endpoint is only available to those that have been approved for Pro and Enterprise access, you have access to the full set of search [operators](/x-api/posts/search/integrate/build-a-query) and can make queries up to 1024 characters long.
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/x-api/posts/search/quickstart/recent-search">
+    Make your first recent search request
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/posts/search-recent-posts">
+    Full endpoint documentation
+  </Card>
+</CardGroup>
 
-<Button href="/x-api/posts/search/quickstart/full-archive-search">
-  Quick start
-</Button>
-<br/>
-<Button href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
-  Sample code
-</Button>
-<br/>
-<Button href="https://github.com/xdevplatform/search-tweets-python">
-  Search Posts Python client
-</Button>
-<br/>
-<Button href="https://github.com/xdevplatform/search-tweets-ruby">
-  Search Posts Ruby client
-</Button>
-<br/>
-<Button href="https://app.getpostman.com/run-collection/9956214-784efcda-ed4c-4491-a4c0-a26470a67400">
-  Run in Postman
-</Button>
-<br/>
-<Button href="https://developer.x.com/apitools/api?endpoint=/2/tweets/search/recent&method=get">
-  Try with API Explorer
-</Button>
-<br/>
-<br/>
+---
 
-**Supporting resources**
+## Full-Archive Search
 
-[Learn how to use Postman to make requests](/tutorials/postman-getting-started)
+Search the **complete Post archive** dating back to March 2006.
 
-[Troubleshoot an error](https://developer.x.com/en/support/x-api)
+<Note>
+Full-archive search is available to pay-per-use and Enterprise customers.
+</Note>
 
-[Visit the API reference page](/x-api/posts/recent-search)
+### Features
+
+- Up to 500 Posts per request
+- Access to complete Post history
+- All query operators available
+- 1,024-character query length (4,096 for Enterprise)
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/x-api/posts/search/quickstart/full-archive-search">
+    Make your first full-archive search request
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/posts/search-all-posts">
+    Full endpoint documentation
+  </Card>
+</CardGroup>
+
+---
+
+## Getting started
+
+<Note>
+**Prerequisites**
+
+- An approved [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- A [Project and App](/resources/fundamentals/developer-apps) in the Developer Console
+- Your App's [keys and tokens](/resources/fundamentals/authentication)
+</Note>
+
+<CardGroup cols={2}>
+  <Card title="Build a query" icon="magnifying-glass" href="/x-api/posts/search/integrate/build-a-query">
+    Learn query syntax and operators
+  </Card>
+  <Card title="Pagination" icon="arrow-right" href="/x-api/posts/search/integrate/paginate">
+    Navigate through large result sets
+  </Card>
+  <Card title="Integration guide" icon="book" href="/x-api/posts/search/integrate/overview">
+    Key concepts and best practices
+  </Card>
+  <Card title="Sample code" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    Working code examples
+  </Card>
+</CardGroup>

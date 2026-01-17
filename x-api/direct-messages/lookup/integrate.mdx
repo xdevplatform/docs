@@ -1,184 +1,272 @@
 ---
-title: Integration guide
-sidebarTitle: Integration guide
-keywords: ["direct messages integration", "DM integration", "DM lookup integration", "direct message integration guide", "DM setup"]
+title: Integration Guide
+sidebarTitle: Integration Guide
+description: Key concepts and best practices for integrating DM lookup endpoints
+keywords: ["direct messages integration", "DM integration", "DM lookup integration"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-The Direct Messages endpoints v2 introduce conversations and conversation events as core X API objects, and make a distinction between 1-1 and group conversations. 1-1 conversations always have two, and only two, participants, while group conversations can have two or more and memberships that can change.   
+This guide covers the key concepts you need to integrate the Direct Messages lookup endpoints into your application.
+
+---
+
+## Authentication
+
+DM endpoints require user authentication to access private conversations:
+
+| Method | Description |
+|:-------|:------------|
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | Recommended |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | Legacy support |
+
+<Warning>
+App-Only authentication is not supported. All Direct Messages are private.
+</Warning>
+
+### Required scopes (OAuth 2.0)
+
+| Scope | Required for |
+|:------|:-------------|
+| `dm.read` | Reading DM events |
+| `tweet.read` | Required with dm.read |
+| `users.read` | Required with dm.read |
+
+---
+
+## Conversation types
+
+<CardGroup cols={2}>
+  <Card title="One-to-one" icon="message">
+    Always has exactly two participants. Conversation ID format: `{smaller_user_id}-{larger_user_id}`
+  </Card>
+  <Card title="Group" icon="comments">
+    Two or more participants. Membership can change over time.
+  </Card>
+</CardGroup>
+
+---
+
+## Event types
+
+| Event | Description | Key fields |
+|:------|:------------|:-----------|
+| `MessageCreate` | A message was sent | `text`, `sender_id` |
+| `ParticipantsJoin` | User joined group | `participant_ids`, `sender_id` |
+| `ParticipantsLeave` | User left group | `participant_ids` |
+
+### Example events
+
+<AccordionGroup>
+  <Accordion title="MessageCreate">
+```json
+{
+  "id": "1582838499983564806",
+  "event_type": "MessageCreate",
+  "text": "Hi everyone.",
+  "sender_id": "944480690",
+  "dm_conversation_id": "1578398451921985538",
+  "created_at": "2022-10-19T20:58:00.000Z"
+}
+```
+  </Accordion>
+
+  <Accordion title="ParticipantsJoin">
+```json
+{
+  "id": "1582835469712138240",
+  "event_type": "ParticipantsJoin",
+  "participant_ids": ["944480690"],
+  "sender_id": "17200003",
+  "dm_conversation_id": "1578398451921985538",
+  "created_at": "2022-10-19T20:45:58.000Z"
+}
+```
+  </Accordion>
+
+  <Accordion title="ParticipantsLeave">
+```json
+{
+  "id": "1582838535115067392",
+  "event_type": "ParticipantsLeave",
+  "participant_ids": ["944480690"],
+  "dm_conversation_id": "1578398451921985538",
+  "created_at": "2022-10-19T20:58:09.000Z"
+}
+```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Fields and expansions
+
+### Default fields
+
+| Event type | Default fields |
+|:-----------|:---------------|
+| MessageCreate | `id`, `event_type`, `text` |
+| ParticipantsJoin/Leave | `id`, `event_type`, `participant_ids` |
+
+### Available fields
 
-This page contains information on several tools and key concepts that you should be aware of as you integrate the Direct Messages lookup endpoints into your system. We’ve broken the page into two sections:
+| Field | Description | Events |
+|:------|:------------|:-------|
+| `dm_conversation_id` | Conversation ID | All |
+| `created_at` | Event timestamp | All |
+| `sender_id` | Who sent/invited | MessageCreate, Join |
+| `attachments` | Media attachments | MessageCreate |
+| `referenced_tweets` | Shared Posts | MessageCreate |
 
-* Key Concepts
-    * [Direct Message conversations](#direct-message-conversations)
-    * [Shared conversation and event IDs across v1.1 and v2](#shared-conversation-and-event-ids)
-    * [Direct Message event fields and expansions](#direct-message-event-fields-and-expansions)
-    * [Conversation event types](#conversation-event-types)
-    * [Authentication](#authentication)
-    * [Developer portal, Projects, and Apps](#developer-portal-projects-and-apps)
-    * [Rate limits](#rate-limits)
-    * [Pagination](#pagination)
-* [Helpful tools](#helpful-tools)
+### Available expansions
 
-### Key Concepts
+| Expansion | Returns |
+|:----------|:--------|
+| `sender_id` | User object for sender |
+| `participant_ids` | User objects for participants |
+| `attachments.media_keys` | Media objects |
+| `referenced_tweets.id` | Post objects |
 
-### Direct Message conversations
+### Example with expansions
 
-All Direct Messages are part of a Direct Message conversation. These conversations can be one-to-one conversations or group conversations. This launch provides the foundational endpoints needed to create Direct Messages and retrieve events associated with Direct Message conversations. All conversations have a unique dm\_conversation\_id, and the events that make up that conversation all have a unique dm\_event\_id.  
+<CodeGroup dropdown>
 
-The Direct Message lookup endpoints provide methods for retrieving events associated with conversations. These GET endpoints are used to retrieve the messages that make up a conversation, and for group conversations, can be used to understand who has joined and left group conversations.
+```bash cURL
+curl "https://api.x.com/2/dm_events?\
+dm_event.fields=created_at,sender_id,attachments&\
+expansions=sender_id,attachments.media_keys&\
+user.fields=username,profile_image_url&\
+media.fields=url,type" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
 
-This initial release of Direct Messages lookup includes three GET methods:
+```python Python SDK
+from xdk import Client
 
-* **GET /2/dm\_conversations/with/:participant\_id/dm_events** \- Retrieves Direct Message events associated with a one-to-one conversation. The :participant_id path parameter is the numeric User ID of the account having the conversation with the authenticated user making this request.  
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
 
-* **GET /2/dm\_conversations/:dm\_conversation\_id/dm\_events** \- Retrieves Direct Message events associated with a specific conversation ID, as indicated by the :dm\_conversation\_id path parameter. Both one-to-one and group conversations IDs are supported.  
+# Get DM events with expansions
+for page in client.dm_events.list(
+    dm_event_fields=["created_at", "sender_id", "attachments"],
+    expansions=["sender_id", "attachments.media_keys"],
+    user_fields=["username", "profile_image_url"],
+    media_fields=["url", "type"],
+    max_results=100
+):
+    for event in page.data:
+        print(f"Event: {event.event_type} - {event.text}")
+```
 
-* **GET /2/dm_events** \- Retrieves Direct Message events associated with the authenticating user, including both one-to-one and group conversations. Events from up to 30 days ago are available.  
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
 
-These GET endpoints all support retrieving dm_events by event type with an event_types request query parameters. Currently, there are three conversation event types supported:
+const paginator = client.dmEvents.list({
+  dmEventFields: ["created_at", "sender_id", "attachments"],
+  expansions: ["sender_id", "attachments.media_keys"],
+  userFields: ["username", "profile_image_url"],
+  mediaFields: ["url", "type"],
+  maxResults: 100,
+});
 
-* **MessageCreate** \- Created when a new Direct Message is created. This event object can include the time and text of the message, along with the account ID of who sent the message, and the conversation and event IDs. 
+for await (const page of paginator) {
+  page.data?.forEach((event) => {
+    console.log(`Event: ${event.event_type} - ${event.text}`);
+  });
+}
+```
 
-* **ParticipantsJoin** \- Created when a new participant joins a group conversation. This dm_event object includes the ID of the participant joining, along with the created\_at time and the sender\_id of the 'invite' event. 
+</CodeGroup>
 
-* **ParticipantsLeave** \- Created when a participant leaves a conversation.This event object includes the ID of the participant leaving, along with the time of the event. 
+---
 
+## Pagination
 
-For more information see the [Direct Messages lookup API References](/x-api/direct-messages/get-dm-events-for-a-dm-conversation).
+DM events are returned in reverse chronological order (newest first):
 
-### Shared conversation and event IDs across v1.1 and v2
+<CodeGroup dropdown>
 
-An important concept is that conversation and event IDs are shared across v1.1 and v2 versions of the X Platform. This means both versions can be used together. For example, the Direct Messages v1.1 endpoints provide methods for returning a single event and for deleting events, methods not yet available with v2. Since IDs are common across v1.1 and v2, you can make v1.1 requests based on IDs provided by v2, or by referencing conversation IDs displayed in conversation URLs on the X application.  
+```bash cURL
+# First request
+curl "https://api.x.com/2/dm_events?max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
 
-### Direct Message event fields and expansions
+# Subsequent request with pagination token
+curl "https://api.x.com/2/dm_events?max_results=100&pagination_token=NEXT_TOKEN" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
 
-The X API v2 allows users to select exactly which data they want to return from the API using a set of tools called fields and expansions. For example, Direct Message lookup endpoints support the following dm_events fields: 
+```python Python SDK
+from xdk import Client
 
-* id, event_type, and text are the defaults for MessageCreate events. 
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
 
-* id, event_type, and participant_ids are the defaults for ParticipantsJoin and ParticipantsLeave events.
+# The SDK handles pagination automatically
+all_events = []
 
-* dm\_conversation\_id and created_at are available for all events.
+for page in client.dm_events.list(max_results=100):
+    if page.data:
+        all_events.extend(page.data)
 
-* attachments and referenced_tweets are available for MessageCreate events. 
+print(f"Found {len(all_events)} DM events")
+```
 
-* sender_id is available for MessageCreate and ParticipantsJoin events. 
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
-* participant_ids is available for ParticipantsJoin and ParticipantsLeave events. 
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
 
+async function getAllDMEvents() {
+  const allEvents = [];
 
-In addition, the Direct Message lookup endpoints support the following [expansions](/x-api/fundamentals/expansions):
+  // The SDK handles pagination automatically
+  const paginator = client.dmEvents.list({ maxResults: 100 });
 
-* sender_id \- Expands the User object associated with who sent the message or who invited someone to the conversation. 
+  for await (const page of paginator) {
+    if (page.data) {
+      allEvents.push(...page.data);
+    }
+  }
 
-* referenced_tweets.id \- Expands the Post object if the Direct Message text includes a link to a Post. 
+  return allEvents;
+}
 
-* attachments.media_keys \- Expands the Media object if the Direct Message includes a media attachment. 
+// Usage
+const events = await getAllDMEvents();
+console.log(`Found ${events.length} DM events`);
+```
 
-* participant_ids \- Expands the User object associated with who joined or left a group conversation.
+</CodeGroup>
 
+<Note>
+Events from up to **30 days ago** are available.
+</Note>
 
-Since expansion include Posts, Users, and Media objects, you can also use the tweet.fields, user.fields, and media.fields request query parameters. See our guide on how to [use fields and expansions](/x-api/fundamentals/data-dictionary#how-to-use-fields-and-expansions) for more information.
+---
 
-### Conversation event types
+## ID compatibility with v1.1
 
-Below are example JSON objects for Direct Message the MessageCreate, ParticipantsJoin, and ParticipantsLeave event types. 
+Conversation and event IDs are shared between v1.1 and v2 endpoints. This means you can:
 
-Available dm_event object fields: id, text, event_type, dm\_conversation\_id, created_at, sender_id, attachments, referenced_tweets, participant_ids. See the the Fields and Expansion section for more details on selecting these fields in your requests. 
+- Use v2 to retrieve events, then use v1.1 to delete specific messages
+- Reference conversation IDs from x.com URLs in API requests
 
-Example MessageCreate event: 
+---
 
-With all the dm_event fields specified, here is the response for a simple text Direct Message: 
+## Next steps
 
-      `{
-    "text": "Hi everyone.",
-    "sender_id": "944480690",
-    "dm_conversation_id": "1578398451921985538",
-    "id": "1582838499983564806",
-    "event_type": "MessageCreate",
-    "created_at": "2022-10-19T20:58:00.000Z"
-}`
-
-
-Example ParticipantsJoin event:
-
-With all the dm_event fields specified, here is the response for a participant joining a conversation:
-
-      `{
-    "participant_ids": [
-        "944480690"
-    ],
-    "sender_id": "17200003",
-    "dm_conversation_id": "1578398451921985538",
-    "id": "1582835469712138240",
-    "event_type": "ParticipantsJoin",
-    "created_at": "2022-10-19T20:45:58.000Z"
-}`
-
-
-Example ParticipantsLeave event:
-
-With all the dm_event fields specified, here is the response for a participant leaving a conversation:
-
-      `{
-    "participant_ids": [
-        "944480690"
-    ],
-    "dm_conversation_id": "1578398451921985538",
-    "id": "1582838535115067392",
-    "event_type": "ParticipantsLeave",
-    "created_at": "2022-10-19T20:58:09.000Z"
-    }`
-
-
-### Authentication
-
-All X API v2 endpoints require for you to authenticate your requests with a set of credentials, also known as keys and tokens. All Direct Messages are private and require user authorization to access them. 
-
-These Direct Message endpoints require the use of [OAuth 2.0 Authorization Flow with PKCE](/x-api/posts/manage-tweets) or [1.0a User Context](/resources/fundamentals/authentication), which means that you must use a set of API keys and user Access Tokens to make a successful request. The Access Tokens must be associated with the user that you are requesting on behalf of. If you want to generate a set of Access Tokens for another user, they must authorize or authenticate your App using the [3-legged OAuth flow](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow).
-
-Please note that OAuth user-context can be tricky to use. If you are not familiar with this authentication method, we recommend using a [library](/x-api/tools-and-libraries/overview) or a tool like Postman to properly authenticate your requests. 
-
-[OAuth 2.0 Authorization Code with PKCE](resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) allows for greater control over an application’s scope, and authorization flows across multiple devices. OAuth 2.0 allows you to pick specific fine-grained scopes which give you specific permissions on behalf of a user. The Direct Messages lookup endpoints require these scopes:  dm.read, post.read, user.read
-
-To enable OAuth 2.0 in your App, you must enable it in your’s App’s authentication settings found in the App settings section of the developer portal.
-
-### Developer portal, Projects, and developer Apps
-
-To retrieve a set of authentication credentials that will work with the X API v2 endpoints, you must have an approved developer account, set up a Project within that account, and create a developer App within that Project. You can then find your keys and tokens within your developer App. 
-
-### Rate limits
-
-Everyday many thousands of developers make requests to the X API. To help manage the sheer volume of these requests, rate limits are placed on each endpoint that limits the number of requests that you can make on behalf of your app or on behalf of an authenticated user. 
-
-The Direct Message lookup endpoints are rate limited at the user-level, meaning that the authenticated user that you are making the request on behalf of can only make a certain number of requests with your X App. There is a user rate limit of 300 requests per 15 minutes for the GET methods. These rate limits are shared across the GET endpoints. 
-
-### Pagination
-
-These endpoints utilize pagination so that responses are returned quickly. In cases where there are more results than what can be sent in a single response (up to 100 events) you will need to paginate. Use the max_results parameter to identify how many results will return per page, and the pagination_token parameter to return the next page of results. You can learn more by reviewing our [pagination guide](/x-api/fundamentals/pagination).
-
-**Helpful tools**
-
-Here are some helpful tools we encourage you to explore as you work with the Direct Messages lookup endpoints: 
-
-****Postman****
-
-Postman is a great tool that you can use to test out an endpoint. Each Postman request includes every path and body parameter to help you quickly understand what is available to you. To learn more about our Postman collections, please visit our [Using Postman](/tutorials/postman-getting-started) page. 
-
-****Code samples****
-
-Python sample code for the v2 Direct Messages endpoints is available in our [X API v2 sample code GitHub](https://github.com/xdevplatform/Twitter-API-v2-sample-code) repository. The "Manage-Direct-Messages" folder contains examples for the POST methods, and the "Direct-Messages-lookup" folder contains examples for the GET methods.
-
-****XDev Software Development Kits (SDKs)****
-
-These [libraries](/x-api/tools-and-libraries/overview) are being updated for the v2 Direct Messages endpoints and should be ready soon:
-
-* [X API Java SDK](https://github.com/xdevplatform/twitter-api-java-sdk) \- Official Java SDK for the X API v2
-* [X API TypeScript/JavaScript SDK](https://github.com/xdevplatform/twitter-api-typescript-sdk) \- Official TS/JS SDK for the X API v2
-
-**Third-party libraries**
-
-There is a growing number of [third-party libraries](/x-api/tools-and-libraries/overview#community-tools-and-libraries-for-v2) developed by our community. These libraries are designed to help you get started, and several are expected to support v2 Direct Messages endpoints soon. You can find a library that works with the v2 endpoints by looking for the proper version tag.
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/x-api/direct-messages/lookup/quickstart">
+    Make your first DM lookup request
+  </Card>
+  <Card title="Send DMs" icon="paper-plane" href="/x-api/direct-messages/manage/introduction">
+    Send Direct Messages
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/direct-messages/get-dm-events">
+    Full endpoint documentation
+  </Card>
+  <Card title="Sample code" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    Working code examples
+  </Card>
+</CardGroup>

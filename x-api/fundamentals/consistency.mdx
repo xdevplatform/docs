@@ -1,108 +1,184 @@
 ---
-title: Consistency
-keywords: ["consistency", "API consistency", "uniform API", "consistent endpoints", "API design", "endpoint consistency"]
+title: API Consistency
+sidebarTitle: Consistency
+description: Consistent patterns across X API v2 endpoints
+keywords: ["consistency", "API consistency", "uniform API", "consistent endpoints", "API design"]
 ---
 
+X API v2 is designed with consistent patterns across all endpoints. Once you learn how one endpoint works, the same patterns apply everywhere.
 
-## Consistency across the X API v2 endpoints
+---
 
-One of the main aspects of the new v2 version of the X API is consistency across endpoints. This means that objects returned, features, and behaviors of the API are uniform across similar endpoints.
+## Consistent patterns
 
-You can expect the following elements to be the same across all endpoints:
+### URL structure
 
-### Path naming
+All v2 endpoints follow a predictable pattern:
 
-Path naming always includes the endpoint [version](/x-api/fundamentals/versioning), followed by the **resource**. Beyond that, the path can contain an **ID** that relates to the earlier resource, a **selection verb** which helps to determine which data to return (e.g., `search` or `sample`), a **delivery verb** which helps to determine how the data will deliver (e.g., `stream`), or other resources that have a **relationship** with the primary resource (e.g., `/user/12/tweets`). Finally, you can append a **query parameter** to the end if the endpoint includes any query parameters.
+```
+/version/resource/{id}?parameters
+/version/resource/verb?parameters
+```
 
-Here are some examples of how these path and query items could be organized:
+Examples:
 
-`/version/resource/id?param1=value&param2=value /version/resource/delivery/selection?param1=value&param2=value`
+```
+/2/tweets/1234567890                    # Get a specific post
+/2/tweets/search/recent                 # Search recent posts
+/2/users/by/username/xdevelopers        # Get user by username
+/2/users/1234/followers                 # Get user's followers
+```
 
+### Response structure
 
-Examples of actual requests:
-
-`/2/tweets/1067094924124872705?expansions=attachments.media_keys&tweet.fields=author_id /2/users/2244994945?user.fields=created_at,description /2/tweets/search/stream /2/tweets/search/recent?query=snow`
-
-
-### JSON Schema
-
-Responses to requests are defined using [JSON Schema](http://json-schema.org/). This means that requests consistently return sets of objects as arrays, with each element having an ID. Requests do not return maps with IDs as keys.
-
-### Response object and parameters
-
-The default object returned is the same for each endpoint of that object type:
-
-- `id` objects are always strings.
-- Parameters and response fields consistently use American-English spelling.
-- Fields are empty or not returned if there is no value.
-- The `entities` object only contains entities sourced from the Post text: this includes `urls`, `hashtags`, `mentions`, and `cashtags`.
-- All cards-related information, including the `media_keys` and `poll_ids` fields, are returned in the `attachments` object.
-
-Here is an example response object from the [single Post lookup](/x-api/posts/post-lookup-by-post-id) endpoint (with the [tweet.fields](/x-api/fundamentals/data-dictionary#tweet) parameter set to `author_id`, `entities`):
+All responses use the same top-level structure:
 
 ```json
 {
-   "data": {
-       "id": "1278747501642657792",
-       "text": "It's been a year since Twitter's Developer Labs launched.\n\nAs we build towards the next generation of the #TwitterAPI (coming VERY soon), see what we've learned and changed along the way. https://t.co/WvjuEWCa6G",
-       "author_id": "2244994945",
-       "entities": {
-           "urls": [
-               {
-                   "start": 188,
-                   "end": 211,
-                   "url": "https://t.co/WvjuEWCa6G",
-                   "expanded_url": "https://blog.x.com/developer/en_us/topics/tools/2020/a-year-with-twitter-developer-labs.html",
-                   "display_url": "blog.x.com/developer/en_u…",
-                   "images": [
-                       {
-                           "url": "https://pbs.twimg.com/news_img/1278747527043362816/7HQRkQeV?format=jpg&name=orig",
-                           "width": 1600,
-                           "height": 600
-                       },
-                       {
-                           "url": "https://pbs.twimg.com/news_img/1278747527043362816/7HQRkQeV?format=jpg&name=150x150",
-                           "width": 150,
-                           "height": 150
-                       }
-                   ],
-                   "status": 200,
-                   "title": "A year with Twitter Developer Labs: What we've learned and changed",
-                   "description": "Labs has been invaluable in helping us understand what works well and what doesn’t, what you liked and what you didn’t.",
-                   "unwound_url": "https://blog.x.com/developer/en_us/topics/tools/2020/a-year-with-twitter-developer-labs.html"
-               }
-           ],
-           "hashtags": [
-               {
-                   "start": 106,
-                   "end": 117,
-                   "tag": "TwitterAPI"
-               }
-           ]
-       }
-   }
+  "data": { ... },       // Primary object(s)
+  "includes": { ... },   // Expanded objects
+  "meta": { ... },       // Pagination, counts
+  "errors": [ ... ]      // Partial errors (if any)
 }
 ```
-### Authentication
 
-All X API v2 endpoints require authentication. Many of them accept the [OAuth 2.0 Bearer Token](/resources/fundamentals/authentication#oauth-2-0) method, requiring a Bearer Token with the request to the endpoint to make a successful request.
+### ID format
 
-For endpoints requiring authorization to create, manipulate, or retrieve data on behalf of another user, use [OAuth 1.0a User Context](/resources/fundamentals/authentication). This means providing your [developer App’s](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow) [API keys and tokens](/resources/fundamentals/authentication#api-key-and-secret) as well as a set of user [Access Tokens](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow) that you generate for the user on behalf of whom you’re making a request. The [3-legged OAuth flow](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow) can help you retrieve Access Tokens. Use a [tool or library](/x-api/tools-and-libraries/overview) that automatically builds this authorization header.
+All IDs are returned as strings to ensure language compatibility:
 
-More information on authentication can be found in our documentation on [authentication](/resources/fundamentals/authentication).
-
----
-
-### Fields
-
-The object returned on each endpoint is condensed. To allow developers more customization in the response they get back from the API, the [`fields`](/x-api/fundamentals/fields) parameter is used to request the fields desired. Fields will remain consistent across endpoints. The Post object will return the same fields across all endpoints where the Post object is returned. The same set of fields can be queried across similar endpoints.
-
-For example, the same Post fields can be queried in the [Posts lookup](/x-api/posts/lookup/introduction) and for the expanded pinned Post in the [Users lookup](/x-api/users/lookup/introduction).
+```json
+{
+  "id": "1234567890123456789",
+  "author_id": "2244994945"
+}
+```
 
 ---
 
-### Expansions
+## Fields and expansions
 
-Where appropriate, [expansions](/x-api/fundamentals/expansions) are available for all nested id fields (e.g., all fields named `*_id`, such as `author_id`). Expansions are also available for all fields that have an id that is not the top-level identifier of the current object. For example, in the [Posts lookup](/x-api/posts/lookup/introduction), the Post is the current object with field `id` as the top-level identifier. The `author_id` or `referenced_tweets.id` fields are available to expand into complete user or Post objects by adding these comma-separated values to the `expansions` parameter.
+The same [fields](/x-api/fundamentals/fields) and [expansions](/x-api/fundamentals/expansions) parameters work consistently:
 
-Please [report any inconsistencies](https://twitterdevfeedback.uservoice.com/) that you notice, related to these fields.
+| Object | Fields parameter | Works across |
+|:-------|:-----------------|:-------------|
+| Post | `tweet.fields` | All endpoints returning posts |
+| User | `user.fields` | All endpoints returning users |
+| Media | `media.fields` | All endpoints with media expansions |
+| Poll | `poll.fields` | All endpoints with poll expansions |
+| Place | `place.fields` | All endpoints with place expansions |
+
+---
+
+## Object schemas
+
+The same object type has the same fields regardless of which endpoint returns it:
+
+- A Post from search has the same fields as a Post from lookup
+- A User from followers has the same fields as a User from search
+- Expanded objects match their standalone counterparts
+
+---
+
+## Authentication
+
+All endpoints use the same authentication methods:
+
+| Method | Header format |
+|:-------|:--------------|
+| Bearer Token | `Authorization: Bearer {token}` |
+| OAuth 1.0a | `Authorization: OAuth {parameters}` |
+| OAuth 2.0 | `Authorization: Bearer {user_token}` |
+
+---
+
+## Error handling
+
+Errors follow a consistent format:
+
+```json
+{
+  "title": "Invalid Request",
+  "detail": "The query parameter is missing",
+  "type": "https://api.x.com/2/problems/invalid-request"
+}
+```
+
+[See all error types →](/x-api/fundamentals/response-codes-and-errors)
+
+---
+
+## Pagination
+
+All paginated endpoints use the same token system:
+
+| Parameter | Description |
+|:----------|:------------|
+| `max_results` | Results per page |
+| `pagination_token` | Token from `next_token` or `previous_token` |
+
+[Learn more about pagination →](/x-api/fundamentals/pagination)
+
+---
+
+## Naming conventions
+
+- American English spelling (`favorites` not `favourites`)
+- Snake_case for field names (`author_id`, `created_at`)
+- Consistent terminology (`retweet_count`, not `repost_count` in fields)
+
+---
+
+## Empty values
+
+Fields with no value are omitted rather than returned as `null`:
+
+```json
+// User without a bio
+{
+  "id": "1234",
+  "name": "Example User",
+  "username": "example"
+  // "description" is omitted, not null
+}
+```
+
+---
+
+## Entity consistency
+
+The `entities` object only contains entities parsed from text:
+
+- `urls`
+- `hashtags`
+- `mentions`
+- `cashtags`
+
+Media and polls are in `attachments`, not `entities`.
+
+---
+
+## What this means for you
+
+<CardGroup cols={2}>
+  <Card title="Learn once, use everywhere" icon="graduation-cap">
+    Patterns you learn on one endpoint apply to all endpoints.
+  </Card>
+  <Card title="Predictable responses" icon="square-check">
+    Same object types have same structures across the API.
+  </Card>
+  <Card title="Simpler code" icon="code">
+    Build reusable functions for common patterns.
+  </Card>
+  <Card title="Easier debugging" icon="bug">
+    Consistent error formats simplify troubleshooting.
+  </Card>
+</CardGroup>
+
+---
+
+## Report inconsistencies
+
+Found an inconsistency? Let us know:
+
+- [Developer Forum](https://devcommunity.x.com)
+- [Developer Feedback](https://t.co/devfeedback)

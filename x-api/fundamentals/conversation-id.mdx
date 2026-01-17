@@ -1,172 +1,188 @@
 ---
 title: Conversation ID
-keywords: ["conversation ID", "conversation threads", "reply threads", "thread tracking", "conversation tracking", "reply chains", "thread reconstruction"]
+sidebarTitle: Conversation ID
+description: Track and reconstruct conversation threads
+keywords: ["conversation ID", "conversation threads", "reply threads", "thread tracking", "conversation tracking"]
 ---
 
+Every reply on X belongs to a conversation thread. The `conversation_id` field lets you identify, track, and reconstruct entire conversation trees.
 
-### Conversation threads using the X API
-If you look at how conversations evolve on X, one Post can spark several conversation threads, each of which can grow in length and complexity as more people chime in. Identifying relationships between Posts and understanding conversation threads is a feature of the X API v2 payload and search capabilities. When Posts are posted in response to a Post (known as a reply), or in response to a reply, there is now a defined `conversation_id` on each reply, which matches the Post ID of the original Post that started the conversation.
+---
 
-Replies to a given Post, as well as replies to those replies, are all included in the conversation stemming from the single original Post. Regardless of how many reply threads result, they will all share a common `conversation_id` to the original Post that sparked the conversation. Using the X API v2, you can retrieve and reconstruct an entire conversation thread, allowing you to understand what is being said and how conversations and ideas evolve.
+## How it works
 
-#### Example conversation thread
-Below is an example conversation thread involving five different people, including one reply to a reply.
+When someone posts and others reply, all replies share the same `conversation_id`—the ID of the original post that started the conversation.
+
+```
+Original post (ID: 1234567890)  ← conversation_id for all replies
+├── Reply 1 (ID: 1234567891)    → conversation_id: 1234567890
+│   └── Reply to Reply 1        → conversation_id: 1234567890
+└── Reply 2 (ID: 1234567892)    → conversation_id: 1234567890
+    └── Reply to Reply 2        → conversation_id: 1234567890
+```
+
+No matter how deep the thread goes, all posts share the same `conversation_id`.
+
+---
+
+## Requesting conversation_id
+
+Add `conversation_id` to your `tweet.fields`:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567891?tweet.fields=conversation_id,in_reply_to_user_id,referenced_tweets" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "id": "1234567891",
+    "text": "@user Great point!",
+    "conversation_id": "1234567890",
+    "in_reply_to_user_id": "2244994945",
+    "referenced_tweets": [{
+      "type": "replied_to",
+      "id": "1234567890"
+    }]
+  }
+}
+```
+
+---
+
+## Getting a full conversation
+
+Use `conversation_id` as a search operator to retrieve all posts in a thread:
+
+```bash
+curl "https://api.x.com/2/tweets/search/recent?\
+query=conversation_id:1234567890&\
+tweet.fields=author_id,created_at,in_reply_to_user_id&\
+expansions=author_id" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+This returns all replies to the original post, sorted reverse-chronologically.
+
+---
+
+## Use cases
+
+<Tabs>
+  <Tab title="Thread reconstruction">
+Build the full conversation tree:
+
+```python
+import requests
+
+conversation_id = "1234567890"
+url = f"https://api.x.com/2/tweets/search/recent"
+params = {
+    "query": f"conversation_id:{conversation_id}",
+    "tweet.fields": "author_id,in_reply_to_user_id,referenced_tweets,created_at",
+    "max_results": 100
+}
+
+response = requests.get(url, headers=headers, params=params)
+replies = response.json()["data"]
+
+# Sort by created_at to get chronological order
+replies.sort(key=lambda x: x["created_at"])
+```
+  </Tab>
+  <Tab title="Conversation monitoring">
+Stream replies to specific conversations in real-time:
+
+```bash
+# Add a filtered stream rule for a conversation
+curl -X POST "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"add": [{"value": "conversation_id:1234567890"}]}'
+```
+  </Tab>
+  <Tab title="Conversation analytics">
+Count replies in a conversation:
+
+```bash
+curl "https://api.x.com/2/tweets/counts/recent?\
+query=conversation_id:1234567890" \
+  -H "Authorization: Bearer $TOKEN"
+```
+  </Tab>
+</Tabs>
+
+---
+
+## Related fields
+
+| Field | Description |
+|:------|:------------|
+| `conversation_id` | ID of the original post that started the thread |
+| `in_reply_to_user_id` | User ID of the post being replied to |
+| `referenced_tweets` | Array with `type: "replied_to"` and the parent post ID |
+
+---
+
+## Example: Full thread retrieval
 
 ```json
 {
   "data": [
     {
-      "conversation_id": "1279944223114900000",
-      "in_reply_to_user_id": "1102323333",
-      "author_id": "63044444",
-      "created_at": "2020-07-06T15:58:10.000Z",
-      "id": "1280169177479744444",
-      "referenced_tweets": [
-        {
-          "type": "replied_to",
-          "id": "1280155225706433333"
-        }
-      ],
-      "text": "@ThirdPerson333 @OriginalPerson000 Reply to the third reply!"
+      "id": "1234567893",
+      "text": "@user2 @user1 I agree with you both!",
+      "conversation_id": "1234567890",
+      "author_id": "3333333333",
+      "created_at": "2024-01-15T12:05:00.000Z",
+      "in_reply_to_user_id": "2222222222",
+      "referenced_tweets": [{"type": "replied_to", "id": "1234567892"}]
     },
     {
-      "conversation_id": "1279944223114900000",
-      "in_reply_to_user_id": "3001960000",
-      "author_id": "1102323333",
-      "created_at": "2020-07-06T15:02:44.000Z",
-      "id": "1280155225706433333",
-      "referenced_tweets": [
-        {
-          "type": "replied_to",
-          "id": "1279944223114900000"
-        }
-      ],
-      "text": "@OriginalPerson000 Third reply"
+      "id": "1234567892",
+      "text": "@user1 That's interesting!",
+      "conversation_id": "1234567890",
+      "author_id": "2222222222",
+      "created_at": "2024-01-15T12:03:00.000Z",
+      "in_reply_to_user_id": "1111111111",
+      "referenced_tweets": [{"type": "replied_to", "id": "1234567890"}]
     },
     {
-      "conversation_id": "1279944223114900000",
-      "in_reply_to_user_id": "3001960000",
-      "author_id": "199562222",
-      "created_at": "2020-07-06T15:02:36.000Z",
-      "id": "1280155190306340864",
-      "referenced_tweets": [
-        {
-          "type": "replied_to",
-          "id": "1279944223114900000"
-        }
-      ],
-      "text": "@OriginalPerson000 Second Reply"
-    }
-  ],
-  "includes": {
-    "users": [
-      {
-        "name": "Original person",
-        "id": "3001960000",
-        "username": "OriginalPerson000"
-      },
-      {
-        "name": "First person",
-        "id": "179201111",
-        "username": "FirstPerson111"
-      }
-    ]
-  },
-  "meta": {
-    "newest_id": "1280169177479744444",
-    "oldest_id": "1279945722494811111",
-    "result_count": 4
-  }
-}
-```
-Retrieving `conversation_id` as a `tweet.fields` parameter
-To request the `conversation_id` for all Posts returned on a v2 endpoint, add the tweet.fields=conversation_id field to the request parameters. The conversation_id field is always the Post ID of the original Post in the conversation reply thread. All Posts within the same reply thread, including reply threads that are created from earlier reply threads, will show the same conversation_id.
-
-### Request with `conversation_id` parameter
-```
-curl --request GET \
-  --url 'https://api.x.com/2/tweets?ids=1225917697675886593&tweet.fields=author_id,conversation_id,created_at,in_reply_to_user_id,referenced_tweets&expansions=author_id,in_reply_to_user_id,referenced_tweets.id&user.fields=name,username' \
-  --header 'Authorization: Bearer $ACCESS_TOKEN'
-```
-### Response
-```
-{
-  "data": [
-    {
-      "id": "1225917697675886593",
-      "text": "@TwitterEng *ahem* https://t.co/aroJHt2zQ1",
-      "created_at": "2020-02-07T23:02:10.000Z",
-      "author_id": "2244994945",
-      "in_reply_to_user_id": "6844292",
-      "conversation_id": "1225912275971657728",
-      "referenced_tweets": [
-        {
-          "type": "quoted",
-          "id": "1200517737669378053"
-        },
-        {
-          "type": "replied_to",
-          "id": "1225912275971657728"
-        }
-      ]
-    }
-  ],
-  "includes": {
-    "users": [
-      {
-        "username": "TwitterDev",
-        "name": "Twitter Dev",
-        "id": "2244994945"
-      },
-      {
-        "username": "TwitterEng",
-        "name": "Twitter Engineering",
-        "id": "6844292"
-      }
-    ],
-    "tweets": [
-      {
-        "id": "1200517737669378053",
-        "text": "|￣￣￣￣￣￣￣￣￣￣￣|\n             don't push            \n             to prod on            \n               Fridays                  \n|＿＿＿＿＿＿＿＿＿＿＿| \n(\\__/)",
-        "created_at": "2019-11-29T20:51:47.000Z",
-        "author_id": "2244994945",
-        "conversation_id": "1200517737669378053"
-      }
-    ]
-  }
-}
-```
-### Using `conversation_id` as a filter operator
-The `conversation_id` can be used as a search query parameter in recent search or as an operator within a rule for [filtered stream](/x-api/posts/filtered-stream/introduction). This will return the entire conversation thread of Posts either in real-time through filtered stream or in reverse chronological order from [search Tweets](/x-api/posts/search/introduction). You can also get a count of the Posts in a conversation using this operator with [Posts counts](/x-api/posts/counts/introduction).
-
-## Request to query by `conversation_id`
-```
-curl --request GET \
-  --url 'https://api.x.com/2/tweets/search/recent?query=conversation_id:1279940000004973111&tweet.fields=in_reply_to_user_id,author_id,created_at,conversation_id' \
-  --header 'Authorization: Bearer $ACCESS_TOKEN'
-```
-
-### Response
-_Note: Results for search Posts are in reverse chronological order._
-```
-{
-  "data": [
-    {
-      "id": "1280169000000704333",
-      "text": "@attributeisland @iterationjoe What beautiful creatures! Happy #seaturtleweek",
-      "conversation_id": "1279940000004973111",
-      "public_metrics": {
-        "retweet_count": 0,
-        "reply_count": 0,
-        "like_count": 7,
-        "quote_count": 0
-      }
+      "id": "1234567891",
+      "text": "@user1 Great point!",
+      "conversation_id": "1234567890",
+      "author_id": "4444444444",
+      "created_at": "2024-01-15T12:02:00.000Z",
+      "in_reply_to_user_id": "1111111111",
+      "referenced_tweets": [{"type": "replied_to", "id": "1234567890"}]
     }
   ],
   "meta": {
-    "newest_id": "1280169000000704333",
-    "oldest_id": "1279940000004973111",
-    "result_count": 5
+    "result_count": 3
   }
 }
 ```
+
+---
+
+## Notes
+
+- The original post's `conversation_id` equals its own `id`
+- `conversation_id` is available on all v2 endpoints that return posts
+- Use with [filtered stream](/x-api/posts/filtered-stream/introduction) to monitor conversations in real-time
+- Combine with [pagination](/x-api/fundamentals/pagination) for large threads
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Search posts" icon="magnifying-glass" href="/x-api/posts/search/introduction">
+    Search by conversation_id.
+  </Card>
+  <Card title="Filtered stream" icon="signal-stream" href="/x-api/posts/filtered-stream/introduction">
+    Monitor conversations in real-time.
+  </Card>
+</CardGroup>

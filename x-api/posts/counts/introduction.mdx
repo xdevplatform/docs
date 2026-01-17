@@ -1,61 +1,167 @@
 ---
-title: Introduction
+title: Post Counts
 sidebarTitle: Introduction
+description: Get Post volume data for queries without retrieving the Posts themselves
 keywords: ["tweet counts", "post counts", "count endpoint", "volume counts", "search volume", "tweet volume", "count API"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-The v2 Post counts endpoints allow developers to understand and retrieve the volume of data for a given query.  This can be beneficial for a number of reasons, including:
+The Post counts endpoints return the volume of Posts matching a query over time, without returning the Posts themselves. Use these endpoints to analyze trends, understand conversation size, and refine queries before searching.
 
-* Understand the Post volume for a keyword to build visualizations, such as trendlines.
+## Overview
 
-* Understanding the time period in which an event or conversation occurred, to ensure your query captures the relevant data
-* Understanding how many Posts a search query will return, in order to refine your query, before using the recent search or full-archive search endpoints.
-    **Please note:** The counts will not always match the result that will be returned from search endpoints because the search endpoints go through additional compliance that the counts endpoints do not go through
-* Understanding the size of the conversation around a topic, without actually having to pull the raw data, and put Posts against your monthly [Post cap](/x-api/fundamentals/post-cap). 
+<CardGroup cols={2}>
+  <Card title="Volume analysis" icon="chart-line">
+    Build trendlines and visualizations showing Post volume over time
+  </Card>
+  <Card title="Query refinement" icon="filter">
+    Estimate result size before running full search queries
+  </Card>
+  <Card title="Event detection" icon="calendar">
+    Identify when conversations peaked around events
+  </Card>
+  <Card title="Efficient research" icon="gauge-high">
+    Understand conversation scale without retrieving all Posts
+  </Card>
+</CardGroup>
 
-When developing a query, you will be limited to a certain query length and to specific operators based on your [access level](/x-api/getting-started/about-x-api). 
+---
 
-* If you are using a Project with Pro access, you can use all available operators, and use queries up to 1024 characters in length. 
+## Endpoints
 
-* If you are using a Project with Enterprise access, you can use all available operators, and use queries up to 4096 characters in length. 
+| Endpoint | Description | Access |
+|:---------|:------------|:-------|
+| GET [`/2/tweets/counts/recent`](/x-api/posts/get-count-of-recent-posts) | Count Posts from last 7 days | All developers |
+| GET [`/2/tweets/counts/all`](/x-api/posts/get-count-of-all-posts) | Count Posts from complete archive | Pay-per-use, Enterprise |
 
+---
 
-You can also specify the granularity (which can be day, hour, or minute) as well as the time period for which you need the Post counts (using the start_time and end_time parameters). The default time granularity that this endpoint uses is hour, which means if you do not specify the granularity parameter, the endpoint will give you the Post counts per hour, for the last 7 days.
+## Granularity options
+
+Specify how counts are grouped using the `granularity` parameter:
+
+| Granularity | Description | Use case |
+|:------------|:------------|:---------|
+| `minute` | Counts per minute | Real-time monitoring |
+| `hour` | Counts per hour (default) | Daily analysis |
+| `day` | Counts per day | Long-term trends |
+
+---
+
+## Recent counts
+
+Count Posts from the **last 7 days**. Available to all developers.
+
+### Features
+
+- Counts grouped by minute, hour, or day
+- Same query operators as recent search
+- 512-character query length
+
+### Example response
+
+```json
+{
+  "data": [
+    { "start": "2024-01-15T00:00:00.000Z", "end": "2024-01-15T01:00:00.000Z", "tweet_count": 1523 },
+    { "start": "2024-01-15T01:00:00.000Z", "end": "2024-01-15T02:00:00.000Z", "tweet_count": 1247 },
+    { "start": "2024-01-15T02:00:00.000Z", "end": "2024-01-15T03:00:00.000Z", "tweet_count": 892 }
+  ],
+  "meta": {
+    "total_tweet_count": 3662
+  }
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/x-api/posts/counts/quickstart/recent-tweet-counts">
+    Make your first recent counts request
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/posts/recent-post-counts">
+    Full endpoint documentation
+  </Card>
+</CardGroup>
+
+---
+
+## Full-archive counts
+
+Count Posts from the **complete archive** back to 2006.
+
 <Note>
-**Account setup**
-
-To access these endpoints, you will need:
-
-* An approved [developer account](https://developer.x.com/en/portal/petition/essential/basic-info).
-* To authenticate using the keys and tokens from a [developer App](/resources/fundamentals/developer-apps) that is located within a [Project](/resources/fundamentals/projects). 
-
-Learn more about getting access to the X API v2 endpoints in our [getting started guide](/x-api/getting-started/getting-access).
+Full-archive counts is available to pay-per-use and Enterprise customers.
 </Note>
-### Recent Post counts
 
-The recent Post counts endpoint allows you to programmatically retrieve the numerical count of Posts for a query, over the last seven days. This endpoint is available via to anyone using keys and tokens that are associated with an [App](/resources/fundamentals/developer-apps) within a [Project](/resources/fundamentals/projects) and uses [OAuth 2.0 App-Only](/resources/fundamentals/authentication#bearer-token-also-known-as-app-only) for authentication.
+### Features
 
-### Full-archive Post counts
+- Count historical Posts from any time period
+- All query operators available
+- 1,024-character query length (4,096 for Enterprise)
 
-The full-archive Post counts endpoint allows you to programmatically retrieve the numerical count of Posts for a query, from the entire archive of public Posts. Currently, this endpoint is only available to those that have been approved for [Academic Research or Enterprise access](/x-api/getting-started/about-x-api) and use the [OAuth 2.0 App-Only](/resources/fundamentals/authentication#bearer-token-also-known-as-app-only) for authentication.
+### Pagination
 
-One example: You could use the full-archive Post counts endpoint to see the number of Posts for the hashtag #SOSHurricaneHarvey per day between August and September 2017.
+Results paginate at 31 days per response:
+- **Day granularity**: 31 days per page
+- **Hour granularity**: 744 hours (31 days) per page
+- **Minute granularity**: 44,640 minutes (31 days) per page
 
-**Please note:** The counts endpoint paginates at 31 days per response. For example, setting a day granularity, will return the count of results per day for 31 days per page.  Setting an hour granularity, will return the count of results per hour for 744 (31 days x 24 hours) hours per page.  If you do not specify the granularity and time period, this endpoint will give you Post counts for a query per hour, for the last 30 days.
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/x-api/posts/counts/quickstart/full-archive-tweet-counts">
+    Make your first full-archive counts request
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/posts/full-archive-post-counts">
+    Full endpoint documentation
+  </Card>
+</CardGroup>
 
-<div className="flex space-x-4">
-<Button href="/x-api/posts/search/quickstart/full-archive-search">
-  Quick start
-</Button>
-<Button href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
-  Sample code
-</Button>
-<Button href="https://app.getpostman.com/run-collection/9956214-784efcda-ed4c-4491-a4c0-a26470a67400">
-  Run in Postman
-</Button>
-<Button href="https://developer.x.com/apitools/api?endpoint=/2/tweets/search/recent&method=get">
-  Try with API Explorer
-</Button>
-</div>
+---
+
+## Query operators
+
+Post counts use the same query syntax as search endpoints:
+
+```
+python lang:en -is:retweet
+```
+
+<Card title="Build a query" icon="magnifying-glass" href="/x-api/posts/counts/integrate/build-a-query">
+  Learn query syntax and operators
+</Card>
+
+---
+
+## Important notes
+
+<Note>
+**Counts vs search results**
+
+Counts may not exactly match search results. Search endpoints apply additional compliance filtering that counts endpoints do not perform.
+</Note>
+
+---
+
+## Getting started
+
+<Note>
+**Prerequisites**
+
+- An approved [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- A [Project and App](/resources/fundamentals/developer-apps) in the Developer Console
+- Your App's [Bearer Token](/resources/fundamentals/authentication)
+</Note>
+
+<CardGroup cols={2}>
+  <Card title="Recent counts quickstart" icon="clock" href="/x-api/posts/counts/quickstart/recent-tweet-counts">
+    Count Posts from the last 7 days
+  </Card>
+  <Card title="Full-archive quickstart" icon="vault" href="/x-api/posts/counts/quickstart/full-archive-tweet-counts">
+    Count historical Posts
+  </Card>
+  <Card title="Integration guide" icon="book" href="/x-api/posts/counts/integrate/overview">
+    Key concepts and best practices
+  </Card>
+  <Card title="Sample code" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    Working code examples
+  </Card>
+</CardGroup>

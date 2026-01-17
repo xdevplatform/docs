@@ -1,118 +1,175 @@
 ---
-title: Retweets lookup
-sidebarTitle: Retweets lookup
+title: Retweets Lookup
+sidebarTitle: Retweets Lookup
+description: Get users who Retweeted a Post
 keywords: ["retweets lookup", "retweets quickstart", "get retweets", "retweets tutorial", "retweets guide", "retweets example"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-### Getting started with the Retweets lookup endpoint
+This guide walks you through retrieving users who Retweeted a specific Post.
 
-This quick start guide will help you make your first request to the Retweets lookup endpoint using [Postman](/tutorials/postman-getting-started). If you would like to see sample code in different languages, please visit our [X API v2 sample code](https://github.com/xdevplatformTwitter-API-v2-sample-code) GitHub repository.
+<Note>
+**Prerequisites**
 
-#### Prerequisites
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- Your App's Bearer Token (for public data) or User Access Token (for private metrics)
+</Note>
 
-To complete this guide, you will need to have a set of [keys and tokens](/resources/fundamentals/authentication) to authenticate your request. You can generate these keys and tokens by following these steps:
+---
 
-* [Sign up for a developer account](https://developer.x.com/en/apply-for-access) and receive approval.
-* Create a [Project](/resources/fundamentals/projects) and an associated [developer App](/resources/fundamentals/developer-apps) in the developer portal.
-* Navigate to your App's “Keys and tokens” page to generate the required credentials. Make sure to save all credentials in a secure location.
+## Get users who Retweeted a Post
 
-#### Steps to build a Retweets lookup request
+<Steps>
+  <Step title="Find the Post ID">
+    Get the ID of the Post you want to look up Retweets for:
 
-**Step one: Start with a tool or library**
+    ```
+    https://x.com/XDevelopers/status/1354143047324299264
+                                    └── This is the Post ID
+    ```
+  </Step>
 
-There are several different tools, code examples, and libraries that you can use to make a request to this endpoint, but we will use the Postman tool here to simplify the process.
+  <Step title="Make the request">
 
-To load the X API v2 Postman collection into your environment, please click on the following button:
-<Button href="https://app.getpostman.com/run-collection/9956214-784efcda-ed4c-4491-a4c0-a26470a67400">
-  Add X API v2 to Postman
-</Button>
+<CodeGroup dropdown>
 
-Once you have the X API v2 collection loaded in Postman, navigate to the "Retweets" folder and select "Retweeted by.” 
-
-**Step two: Authenticate your request**
-
-To properly make a request to the X API, you need to verify that you have permission. To do so, this endpoint requires you to authenticate your request with either [OAuth 2.0 App-Only](/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token), [OAuth 2.0 Authorization Code with PKCE](resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2), or [OAuth 1.0a User Context](/resources/fundamentals/authentication) authentication methods.
-
-For simplicity's sake, we will utilize OAuth 2.0 App-Only with this request, but you will need to use one of the other authentication methods if you'd like to request private [metrics](/x-api/fundamentals/metrics) or Retweets. 
-
-To utilize OAuth 2.0 App-Only, you must add your keys and tokens, specifically the[App Access Token](/resources/fundamentals/authentication#using-and-generating-an-app-only-bearer-token) (also known as the App-only Bearer Token) to Postman. You can do this by selecting the environment named “X API v2” in the top-right corner of Postman and adding your keys and tokens to the "initial value" and "current value" fields (by clicking the eye icon next to the environment dropdown).
-
-These variables will automatically be pulled into the request's authorization tab if you've done this correctly.
- 
-
-**Step three: Specify a Post**
-
-With this endpoint, you must specify the Post ID that you want to get Retweeting users of.  You can find the ID of a Post by navigating to that Post on X and pulling the numerical code at the end of the URL. For example, the following URL's Post ID is 1354143047324299264.
-
-https://x.com/TwitterDev/status/1354143047324299264
-
-In Postman, navigate to the "Params" tab and enter this username into the "Value" column of the id path variable (at the bottom of the section), making sure to not include any spaces before or after usernames. 
-
-|     |     |
-| :--- | :--- |
-| **Key** | **Value** |
-| `id` | The Post ID you want to get the Reweeting users of |
-
-**Step four: Identify and specify which fields you would like to retrieve**
-
-If you click the "Send" button after step three, you will receive the default [user object](/x-api/fundamentals/data-dictionary#user) fields in your response: id, name, and username.
-
-If you would like to receive additional fields beyond id, name, and username, you will have to specify those fields in your request with the [fields](/x-api/fundamentals/fields) and/or [expansions](/x-api/fundamentals/expansions) parameters.
-
-For this exercise, we will request three additional sets of fields from different objects:
-
-1.  The additional user.created_at field in the primary user objects.
-2.  The associated pinned Posts’ object’s default fields for the returned users: id and text.
-3.  The additional  tweet.created_at field in the associated Post objects.
-
-In Postman, navigate to the "Params" tab and add the following key:value pair to the "Query Params" table:
-
-|     |     |     |
-| :--- | :--- | :--- |
-| **Key** | **Value** | **Returned fields** |
-| user.fields | created_at | user.created_at |
-| expansions | pinned\_tweet\_id | tweet.id, tweet.text |
-| tweet.fields | created_at | tweet.created_at |
-
-You should now see the following URL next to the "Send" button:
-
-      `https://api.x.com/2/tweets/1354143047324299264/retweeted_by?user.fields=created_at&expansions=pinned_tweet_id&tweet.fields=created_at`
-
-
-**Step five: Make your request and review your response**
-
-Once you have everything set up, hit the "Send" button and you will receive a similar response to the following example response:
-
+```bash cURL
+curl "https://api.x.com/2/tweets/1354143047324299264/retweeted_by?\
+user.fields=created_at,username,verified" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
 ```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get users who Retweeted a Post with pagination
+for page in client.posts.get_retweeted_by(
+    "1354143047324299264",
+    user_fields=["created_at", "username", "verified"]
+):
+    for user in page.data:
+        print(f"{user.username} - Joined: {user.created_at}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get users who Retweeted a Post with pagination
+const paginator = client.posts.getRetweetedBy("1354143047324299264", {
+  userFields: ["created_at", "username", "verified"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Joined: ${user.created_at}`);
+  });
+}
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Review the response">
+    ```json
+    {
+      "data": [
+        {
+          "created_at": "2008-12-04T18:51:57.000Z",
+          "id": "17874544",
+          "username": "TwitterSupport",
+          "name": "Twitter Support",
+          "verified": true
+        },
+        {
+          "created_at": "2007-02-20T14:35:54.000Z",
+          "id": "783214",
+          "username": "Twitter",
+          "name": "Twitter",
+          "verified": true
+        }
+      ],
+      "meta": {
+        "result_count": 2,
+        "next_token": "7140dibdnow9c7btw3z2vwioavpvutgzrzm9icis4ndix"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Include additional data
+
+Use expansions to get related data like pinned Posts:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/1354143047324299264/retweeted_by?\
+user.fields=created_at&\
+expansions=pinned_tweet_id&\
+tweet.fields=created_at" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get Retweeting users with expansions
+for page in client.posts.get_retweeted_by(
+    "1354143047324299264",
+    user_fields=["created_at"],
+    expansions=["pinned_tweet_id"],
+    tweet_fields=["created_at"]
+):
+    for user in page.data:
+        print(f"{user.username}")
+    # Pinned Posts are in page.includes.tweets
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get Retweeting users with expansions
+const paginator = client.posts.getRetweetedBy("1354143047324299264", {
+  userFields: ["created_at"],
+  expansions: ["pinned_tweet_id"],
+  tweetFields: ["created_at"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(user.username);
+  });
+  // Pinned Posts are in page.includes?.tweets
+}
+```
+
+</CodeGroup>
+
+### Response with expansion
+
+```json
 {
   "data": [
-    {
-      "created_at": "2008-12-04T18:51:57.000Z",
-      "id": "17874544",
-      "username": "TwitterSupport",
-      "name": "Twitter Support"
-    },
-    {
-      "created_at": "2007-02-20T14:35:54.000Z",
-      "id": "783214",
-      "username": "Twitter",
-      "name": "Twitter"
-    },
     {
       "pinned_tweet_id": "1389270063807598594",
       "created_at": "2018-11-21T14:24:58.000Z",
       "id": "1065249714214457345",
       "username": "TwitterSpaces",
       "name": "Spaces"
-    },
-    {
-      "pinned_tweet_id": "1293595870563381249",
-      "created_at": "2007-05-23T06:01:13.000Z",
-      "id": "6253282",
-      "username": "XAPI",
-      "name": "X API"
     }
   ],
   "includes": {
@@ -120,14 +177,25 @@ Once you have everything set up, hit the "Send" button and you will receive a si
       {
         "created_at": "2021-05-03T17:26:09.000Z",
         "id": "1389270063807598594",
-        "text": "now, everyone with 600 or more followers can host a Space.\n\nbased on what we've learned, these accounts are likely to have a good experience hosting because of their existing audience. before bringing the ability to create a Space to everyone, we’re focused on a few things. 🧵"
-      },
-      {
-        "created_at": "2020-08-12T17:11:04.000Z",
-        "id": "1293595870563381249",
-        "text": "X API v2: Early Access released\n\nToday we announced Early Access to the first endpoints of the new Twitter API!\n\n#TwitterAPI #EarlyAccess #VersionBump https://t.co/g7v3aeIbtQ"
+        "text": "now, everyone with 600 or more followers can host a Space..."
       }
     ]
   }
 }
 ```
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Manage Retweets" icon="retweet" href="/x-api/posts/retweets/quickstart/manage-retweets">
+    Retweet and undo Retweets
+  </Card>
+  <Card title="Quote Posts" icon="quote-left" href="/x-api/posts/quote-tweets/quickstart">
+    Get Quote Posts
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/posts/get-retweeted-by">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

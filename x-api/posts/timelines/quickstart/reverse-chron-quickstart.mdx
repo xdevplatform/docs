@@ -1,179 +1,232 @@
 ---
-title: Reverse Chronological
-sidebarTitle: Reverse Chronological
+title: Home Timeline Quickstart
+sidebarTitle: Home Timeline
+description: Get a user's home timeline in reverse chronological order
 keywords: ["home timeline", "reverse chronological", "home timeline quickstart", "timeline quickstart", "home timeline tutorial"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-## Getting started with reverse chronological home timeline
-
-This quick start guide will help you make your first request to one of the timelines endpoints with a set of specified fields using [Postman](/tutorials/postman-getting-started).
-
-If you would like to see sample code in different languages, please visit our [X API v2 sample code](https://github.com/xdevplatform/Twitter-API-v2-sample-code) GitHub repository. 
+This guide walks you through making your first request to the reverse chronological home timeline endpoint.
 
 <Note>
 **Prerequisites**
 
-To complete this guide, you will need to have a set of [keys and tokens](/resources/fundamentals/authentication) to authenticate your request. You can generate these keys and tokens by following these steps:
-
-* [Sign up for a developer account](https://developer.x.com/en/apply-for-access) and receive approval.
-* Create a [Project](/resources/fundamentals/projects) and an associated [developer App](/resources/fundamentals/developer-apps) in the developer portal.
-* Navigate to your App's “Keys and tokens” page to generate the required credentials. Make sure to save all credentials in a secure location.
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- User Access Tokens (this endpoint requires user authentication)
 </Note>
-**Steps to build a reverse chronological home timeline request**
 
-_For this example, we will make a request to the user Post timeline by ID endpoint, but you can apply the learnings from this quick start to user mention timelines requests as well. _
+---
 
-**Step one: Start with a tool or library**
+## Step 1: Get the user ID
 
-There are several different tools, code examples, and libraries that you can use to make a request to this endpoint, but we are going to use the Postman tool here to simplify the process.
+You need the user ID for the account whose home timeline you want to retrieve. Find it using the username lookup endpoint:
 
-To load X API v2 Postman collection into your environment, please click on the following button:
-<Button href="https://app.getpostman.com/run-collection/9956214-784efcda-ed4c-4491-a4c0-a26470a67400">
-  Add X API v2 to Postman
-</Button>
+<CodeGroup dropdown>
 
-Once you have the X API v2 collection loaded in Postman, navigate to the "Timelines" folder and find the "Reverse chronological home timeline" request.
+```bash cURL
+curl "https://api.x.com/2/users/by/username/XDevelopers" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
 
-**Step two: Authenticate your request**
+```python Python SDK
+from xdk import Client
 
-To properly make a request to the X API, you need to verify that you have permission. To do so with this endpoint, you must authenticate your request with either [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-3), or [OAuth 1.0a User Context](/resources/fundamentals/authentication) authentication methods. 
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
 
-You must add your keys and tokens to Postman. You can do this by selecting the environment named “X API v2” in the top-right corner of Postman and adding your keys and tokens to the "initial value" and "current value" fields (by clicking the eye icon next to the environment dropdown).
+response = client.users.get_by_username("XDevelopers")
+print(f"User ID: {response.data.id}")
+```
 
-These variables will automatically be pulled into the request's authorization tab if you've done this correctly.
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
-**Step three: Identify and specify which user from which you would like to retrieve their home timeline for**
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
 
-You must specify a user you would like to retrieve recent Posts for within the request. In this example, we will be passing a single user ID.
+const response = await client.users.getByUsername("XDevelopers");
+console.log(`User ID: ${response.data?.id}`);
+```
 
-User IDs are simply the numerical value that represents an account handle that you can find within an account's profile URL. For example, the following account’s username is `XDevelopers`.
+</CodeGroup>
 
-`https://x.com/XDevelopers`
+The response includes the user ID:
 
-To convert this username to the user ID, you will have to use the [users lookup endpoint](/x-api/users/lookup/introduction) with the username and find the numerical user ID in the payload. In the case of @XDevelopers, the user ID is 2244994945.
-
-In Postman, navigate to the "Params" tab and enter this user ID into the "Value" column of the id parameter.
-
-|     |     |
-| :--- | :--- |
-| **Key** | **Value** |
-| `id` | 2244994945 |
-
-**Step four: Identify and specify which fields you would like to retrieve**
-
-If you click the "Send" button after step three, you will receive the default [Post object](/x-api/fundamentals/data-dictionary#tweet) fields in your response: id, text, and edit\_history\_tweet_ids.
-
-If you would like to receive additional fields, you will have to specify those fields in your request with the [field](/x-api/fundamentals/fields) and/or [expansion](/x-api/fundamentals/expansions) parameters.
-
-For this exercise, we will request three additional different sets of fields from different objects:
-
-1.  The additional tweet.created_at field in the primary user objects.
-
-2.  The associated authors’ user object’s default fields for the returned Posts: id, name, and username
-3.  The additional user.created_at field in the associated user objects.
-     
-
-In Postman, navigate to the "Params" tab and add the following key:value pair to the "Query Params" table:
-
-|     |     |     |
-| :--- | :--- | :--- |
-| **Key** | **Value** | **Returned fields** |
-| `tweet.fields` | `created_at` | `tweets.created_at` |
-| `expansions` | `author_id` | `includes.users.id`, `includes.users.name`, `includes.users.username` |
-| `user.fields` | `created_at` | `includes.users.created_at` |
-| max_results | 5   |     |
-
-
-You should now see the following URL next to the "Send" button:
-
-      `https://api.x.com/2/users/:id/timelines/reverse_chronological?tweet.fields=created_at&expansions=author_id&user.fields=created_at&max_results=5`
-
-<Info>
-**Please note:**
-
-In Postman, the path parameter :id in the URL field will **not** automatically update to the value that you enter into the `id` params field, which is why the above URL includes `:id` and not 2244994945.
-</Info>
-**Step five: Make your request and review your response**
-
-Once you have everything set up, hit the "Send" button and you will receive the following response:
-
-```{
-	"data": [
-		{
-			"created_at": "2022-05-12T17:00:00.000Z",
-			"text": "Today marks the launch of Devs in the Details, a technical video series made for developers by developers building with the Twitter API.  🚀\n\nIn this premiere episode, @jessicagarson walks us through how she built @FactualCat #WelcomeToOurTechTalk\n⬇️\n\nhttps://t.co/nGa8JTQVBJ",
-			"author_id": "2244994945",
-			"id": "1524796546306478083"
-		},
-		{
-			"created_at": "2022-05-11T19:16:40.000Z",
-			"text": "📢 Join @jessicagarson @alanbenlee and @i_am_daniele tomorrow, May 12  | 5:30 ET / 2:30pm PT as they discuss the future of bots https://t.co/sQ2bIO1fz6",
-			"author_id": "2244994945",
-			"id": "1524468552404668416"
-		},
-		{
-			"created_at": "2022-05-09T20:12:01.000Z",
-			"text": "Do you make bots with the Twitter API? 🤖\n\nJoin @jessicagarson @alanbenlee and @iamdaniele on Thursday, May 12  | 5:30 ET / 2:30pm PT as they discuss the future of bots and answer any questions you might have. 🎙📆⬇️\n\nhttps://t.co/2uVt7hCcdG",
-			"author_id": "2244994945",
-			"id": "1523757705436958720"
-		},
-		{
-			"created_at": "2022-05-06T18:19:54.000Z",
-			"text": "If you’d like to apply, or would like to nominate someone else for the program, please feel free to fill out the following form:\n\nhttps://t.co/LUuWj24HLu",
-			"author_id": "2244994945",
-			"id": "1522642324781633536"
-		},
-		{
-			"created_at": "2022-05-06T18:19:53.000Z",
-			"text": "We’ve gone into more detail on each Insider in our forum post. \n\nJoin us in congratulating the new additions! 🥳\n\nhttps://t.co/0r5maYEjPJ",
-			"author_id": "2244994945",
-			"id": "1522642323535847424"
-		}
-	],
-	"includes": {
-		"users": [
-			{
-				"created_at": "2013-12-14T04:35:55.000Z",
-				"name": "Twitter Dev",
-				"username": "TwitterDev",
-				"id": "2244994945"
-			}
-		]
-	},
-	"meta": {
-		"result_count": 5,
-		"newest_id": "1524796546306478083",
-		"oldest_id": "1522642323535847424",
-		"next_token": "7140dibdnow9c7btw421dyz6jism75z99gyxd8egarsc4"
-	}
+```json
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "XDevelopers"
+  }
 }
 ```
 
+---
 
-**Step six: Paginate through your results**
+## Step 2: Request the home timeline
 
-In the previous response, you will find a meta data object at the bottom that includes the following fields:
+Make a GET request with the user ID and User Access Token:
 
-* oldest_id
-* newest_id
-* results_count
-* next_token
-* previous_token
+<CodeGroup dropdown>
 
-In step four, we passed a max_results value of 5, meaning that each page will only include up to five results. To access the additional pages of data, we will be taking the value of the next_token field from our last results and adding that string as the value of the pagination_token parameter on the Postman params page, keeping everything else constant. 
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/timelines/reverse_chronological" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
 
-|     |     |
-| :--- | :--- |
-| **Key** | **Value** |
-| `pagination_token` | t3buvdr5pujq9g7bggsnf3ep2ha28 |
+```python Python SDK
+from xdk import Client
 
-Once this is all set up, you can click "Send" again and you should receive the next page of results. 
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
 
-We have put together a guide on [pagination](/x-api/fundamentals/pagination) to further explain this concept. 
+# Get home timeline with pagination
+for page in client.posts.get_home_timeline("2244994945"):
+    for post in page.data:
+        print(post.text)
+```
 
-**Next steps**
-[Customize your request using the API Reference](/x-api/posts/timelines#api-reference-index)
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
-[Reach out to the community for help](https://devcommunity.x.com "Reach out to the community for help")
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get home timeline with pagination
+const paginator = client.posts.getHomeTimeline("2244994945");
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(post.text);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Step 3: Review the response
+
+```json
+{
+  "data": [
+    {
+      "id": "1524796546306478083",
+      "text": "Today marks the launch of Devs in the Details...",
+      "edit_history_tweet_ids": ["1524796546306478083"]
+    },
+    {
+      "id": "1524468552404668416",
+      "text": "Join us tomorrow for a discussion about bots...",
+      "edit_history_tweet_ids": ["1524468552404668416"]
+    }
+  ],
+  "meta": {
+    "result_count": 2,
+    "newest_id": "1524796546306478083",
+    "oldest_id": "1524468552404668416",
+    "next_token": "7140dibdnow9c7btw421dyz6jism75z99gyxd8egarsc4"
+  }
+}
+```
+
+---
+
+## Step 4: Add fields and expansions
+
+Request additional data with query parameters:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/timelines/reverse_chronological?\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id&\
+user.fields=username,verified&\
+max_results=10" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get home timeline with fields and expansions
+for page in client.posts.get_home_timeline(
+    "2244994945",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username", "verified"],
+    max_results=10
+):
+    for post in page.data:
+        print(f"{post.text[:50]}... - Likes: {post.public_metrics.like_count}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get home timeline with fields and expansions
+const paginator = client.posts.getHomeTimeline("2244994945", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username", "verified"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text?.slice(0, 50)}... - Likes: ${post.public_metrics?.like_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Step 5: Paginate through results
+
+The SDKs handle pagination automatically. For cURL, use the `next_token` from the response to get more results:
+
+```bash
+curl "https://api.x.com/2/users/2244994945/timelines/reverse_chronological?\
+max_results=10&\
+pagination_token=7140dibdnow9c7btw421dyz6jism75z99gyxd8egarsc4" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+---
+
+## Common parameters
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `max_results` | Results per page (1-100) | 10 |
+| `start_time` | Oldest Post timestamp (ISO 8601) | — |
+| `end_time` | Newest Post timestamp (ISO 8601) | — |
+| `since_id` | Return Posts after this ID | — |
+| `until_id` | Return Posts before this ID | — |
+| `exclude` | Exclude `retweets`, `replies`, or both | — |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="User mentions" icon="at" href="/x-api/posts/timelines/quickstart/user-mention-quickstart">
+    Get Posts mentioning a user
+  </Card>
+  <Card title="Integration guide" icon="book" href="/x-api/posts/timelines/integrate">
+    Key concepts and best practices
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/posts/reverse-chronological-timeline-by-user-id">
+    Full endpoint documentation
+  </Card>
+  <Card title="Pagination guide" icon="arrow-right" href="/x-api/fundamentals/pagination">
+    Navigate large result sets
+  </Card>
+</CardGroup>

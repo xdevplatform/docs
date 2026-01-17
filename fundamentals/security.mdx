@@ -1,98 +1,189 @@
 ---
 title: Security
-icon: lock
-keywords: ["security", "API security", "developer security", "secure coding", "OAuth security", "API keys security", "token security", "XSS", "CSRF", "SQL injection", "encryption", "TLS", "vulnerability reporting", "security best practices"]
+sidebarTitle: Security
+icon: shield-halved
+description: Security best practices for X API developers
+keywords: ["security", "API security", "OAuth security", "API keys security", "token security", "secure coding", "vulnerability reporting"]
 ---
 
-We believe privacy is a right, not a privilege, and it is built into the foundations of our company. By using the X developer platform and abiding by our developer policy, you play a critical role in making sure the platform serves the public conversation on X and safeguards our commitment to privacy.
+Building secure applications protects both your users and the X platform. This guide covers essential security practices for X API developers.
 
-We want to remind you of the importance of building securely in order to protect both your own and your apps' users' data. It is your responsibility to protect against the threat of security breaches, and we have a shared responsibility to protect the people who use X. This page describes expectations around building secure applications and keeping data and access as safe as possible.
+---
 
-<Note>Please be aware of the security technologies available for the X Developer Platform including [authentication](/resources/fundamentals/authentication), TLS, and [app permissions](/resources/fundamentals/developer-apps#app-permissions), as well as from the X user perspective for [using third party applications and sessions](https://help.x.com/en/managing-your-account/connect-or-revoke-access-to-third-party-apps).</Note>
+## Core requirements
 
-## Reporting security issues
+<CardGroup cols={2}>
+  <Card title="TLS required" icon="lock">
+    All API requests must use HTTPS. Plain HTTP is rejected.
+  </Card>
+  <Card title="Credential security" icon="key">
+    Never expose API keys or tokens in client-side code, logs, or repositories.
+  </Card>
+</CardGroup>
 
-X Developer Platform users must notify X no more than 48 hours after initial suspicion a security incident has occurred, through the [X's vulnerability reporting program](https://hackerone.com/twitter).
+---
 
-## Security best practices
+## Protecting credentials
 
-Please keep them in mind as you build on the X developer platform, and elsewhere across the internet.
+Your API keys and tokens are the keys to your app. Keep them secure:
 
-### Security by design
+<Steps>
+  <Step title="Use environment variables">
+    Store credentials in environment variables, not in code.
+    ```bash
+    export X_API_KEY="your-api-key"
+    export X_API_SECRET="your-api-secret"
+    ```
+  </Step>
+  <Step title="Never commit secrets">
+    Add credential files to `.gitignore`. Use tools like `git-secrets` to prevent accidental commits.
+  </Step>
+  <Step title="Rotate regularly">
+    Regenerate keys periodically and immediately if you suspect a compromise.
+  </Step>
+  <Step title="Use minimal permissions">
+    Only request the OAuth scopes your app actually needs.
+  </Step>
+</Steps>
 
-Consider hiring security professionals to do a threat model audit and/or penetration test. A good security firm will dig deep to uncover issues. Read more about how X has adopted this mindset [here in our blog post](https://blog.x.com/en_us/topics/company/2019/privacy_data_protection.html).
+### If credentials are compromised
 
-Additionally, X holds all partners accountable for the following:
+1. **Regenerate immediately** in the [Developer Console](https://console.x.com)
+2. **Revoke old tokens** — regenerating automatically invalidates old credentials
+3. **Audit usage** — check for unauthorized API activity
+4. **Update your app** — deploy new credentials to all environments
 
-- Maintain code within a secure repository.
-- Perform risk analysis throughout the Systems development life cycle (SDLC) process.
-- Ensure security issues are identified and mitigated throughout SDLC.
-- Ensure there exists segregation of environments throughout the SDLC process.
-- Ensure all test defects are fixed, re-tested and closed out.
+---
 
-### Monitor and get alerted
-
-If you think there's an issue with your web app, how do you find out for sure? Be sure to keep good logs, and that you are notified of critical exceptions and errors. You may want to put together a dashboard of critical statistics so that you can see at a glance if something is going wrong.
-
-### Create a reporting channel
-
-Make it easy for your users to contact you about potential security issues that they've experienced with your app. If an issue is discovered which affects X users and data, it's your responsibility to [report this issue to X](#report) as well.  Have an action plan/process ready for notifying affected users, should a security incident occur.
-
-### Adequate testing
-
-Ensure that your end-to-end tests are thorough and updated to include expected failures for security scenarios such as unauthorized access. Put yourself in an attacker's mindset and set up system tests that are expected to block an attacker gaining unauthorized access to X data or authorized functionality.
-
-### Securing API keys and tokens
-
-As a developer on the X platform, you have programmatic access to both your data and your users data stored by X, assuming they've authorized your developer App.  All API requests must be [authenticated](/resources/fundamentals/authentication) using OAuth with your developer App's key and secret and in some cases an authorizing user's [access tokens](/resources/fundamentals/authentication). It is your responsibility to keep your credentials safe.
-
-Some suggested best practices include the following:
-
-- Create a password/token refresh rotation.
-- Always encrypt sensitive data as needed and to not decrypt data too far upstream.
-- Store your users' access tokens in an encrypted store.
-- [Regenerate](/resources/fundamentals/authentication#regenerate-api-keys-and-tokens) or [invalidate](/resources/fundamentals/authentication#post-oauth2-invalidate-token) keys and tokens if you believe they have been compromised.
-
-For more discussion on debugging and building with OAuth for X please visit the community forum's [security category](https://devcommunity.x.com/c/oauth/12).
+## Application security
 
 ### Input validation
 
-Don't assume that your users will provide you with valid, trustworthy data. Sanitize all data coming from your users that can end up in X API requests. Allowlist the types of input that are acceptable to your application and discard everything that isn't on the allowlist.
+Never trust user input. Validate and sanitize all data before using it:
 
-### Encrypted communication
+```python
+# Bad - vulnerable to injection
+query = f"from:{user_input}"
 
-X requires all API requests to be made over TLS. Communication made to your own servers should also be encrypted wherever possible.
+# Good - validate input first
+import re
+if re.match(r'^[a-zA-Z0-9_]{1,15}$', user_input):
+    query = f"from:{user_input}"
+```
 
-### Exposed debugging information
+### Output encoding
 
-Be sure that you're not exposing sensitive X data or credentials through debugging screens/logs. Some web frameworks make it easy to access debugging information if your application is not properly configured. For desktop and mobile developers, it's easy to accidentally ship a build with debugging flags or symbols enabled. Build checks for these configurations into your deployment/build process. Additionally, if sharing stack traces or crash dumps for reporting, ensure that private X users' data are redacted.
+Escape X API data before displaying in HTML to prevent XSS:
 
-### Unfiltered input, unescaped output
+```javascript
+// Bad - vulnerable to XSS
+element.innerHTML = tweet.text;
 
-One easy-to-remember approach to input validation is FIEO: Filter Input, Escape Output
+// Good - escape HTML
+element.textContent = tweet.text;
+```
 
-Filter anything from outside your application, including X API data, cookie data, user-supplied form input, URL parameters, data from databases, etc. Escape all output being sent by your application, including SQL sent to your database server, HTML to you send to users' browsers, JSON output sent to other systems, and commands sent to shell programs.
+### Common vulnerabilities to prevent
 
-### Cross-site scripting (XSS)
-
-[XSS](https://owasp.org/) attacks are, by most measures, the most common form of security problem on the web. If an attacker can get their own JavaScript code into your application, they can do bad things. Anywhere you store and display untrusted, user-supplied data needs to be checked, sanitized, and HTML escaped. Getting this right is hard, because hackers have [many different ways to land XSS attacks](https://www.owasp.org/index.php/Types_of_Cross-Site_Scripting). Your language or web development framework probably has a popular, well-tested mechanism for defending against cross-site scripting; please make use of it.
-
-### SQL injection
-
-If your application makes use of a database, you need to be aware of [SQL injection](http://en.wikipedia.org/wiki/SQL_injection). Anywhere you accept input is a potential target for an attacker to break out of their input field and into your database. Use database libraries that protect against SQL injection in a systematic way. If you break out of that approach and write custom SQL, write aggressive tests to be sure you aren't exposing yourself to this form of attack. The two main approaches to defending against SQL injection are escaping before constructing your SQL statement, and using parameterized input to create statements. The latter is recommended, as it's less prone to programmer error.
-
-### Cross-site request forgery (CSRF)
-
-Are you sure that requests to your application are coming from your application? [CSRF](http://en.wikipedia.org/wiki/Cross-site_request_forgery) attacks exploit this lack of knowledge by forcing logged-in users of your site to silently open URLs that perform actions. In the case of a developer App, this could mean that attackers are using your app to force users to post unwanted Tweets or follow spam accounts.
-
-The most thorough way to deal with CSRF is to include a random token in every form that's stored someplace trusted; if a form doesn't have the right token, throw an error. Modern web frameworks have systematic ways of handling this, and might even be doing it by default if you're lucky. A simple preventative step (but by no means the only step you should take) is to make any actions that create, modify, or destroy data require a POST request.
-
-### Lack of rate limiting
-
-Use CAPTCHAs where appropriate to slow down potential spammers and attackers.
+| Vulnerability | Prevention |
+|:--------------|:-----------|
+| **XSS** | Escape all user-generated content before rendering |
+| **CSRF** | Use anti-CSRF tokens in forms; verify OAuth state parameter |
+| **SQL Injection** | Use parameterized queries, never concatenate user input |
+| **Open redirects** | Validate callback URLs against an allowlist |
 
 ---
 
-<Info>
-If you've discovered a security issue that directly affects X itself, we have a [bug bounty program for vulnerabilities](https://hackerone.com/twitter).
-</Info>
+## OAuth security
+
+### State parameter
+
+Always use the `state` parameter in OAuth flows to prevent CSRF:
+
+```python
+import secrets
+
+# Generate state before authorization
+state = secrets.token_urlsafe(32)
+session['oauth_state'] = state
+
+# Verify state after callback
+if request.args.get('state') != session.get('oauth_state'):
+    abort(403)  # State mismatch - possible CSRF
+```
+
+### Token storage
+
+| Token type | Storage recommendation |
+|:-----------|:-----------------------|
+| **Access tokens** | Encrypted database or secure vault |
+| **Refresh tokens** | Encrypted database with additional access controls |
+| **Bearer tokens** | Environment variables or secure configuration |
+
+---
+
+## Secure development practices
+
+<CardGroup cols={2}>
+  <Card title="Security audits" icon="magnifying-glass">
+    Conduct regular security reviews and penetration testing.
+  </Card>
+  <Card title="Dependency scanning" icon="box">
+    Keep dependencies updated. Use tools to detect vulnerable packages.
+  </Card>
+  <Card title="Logging" icon="file-lines">
+    Log security events but never log credentials or sensitive data.
+  </Card>
+  <Card title="Monitoring" icon="chart-line">
+    Set up alerts for unusual API usage patterns.
+  </Card>
+</CardGroup>
+
+---
+
+## Reporting security issues
+
+If you discover a security vulnerability affecting X:
+
+<Warning>
+**Report within 48 hours.** X Developer Platform users must notify X no more than 48 hours after suspecting a security incident.
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="X Bug Bounty" icon="bug" href="https://hackerone.com/twitter">
+    Report vulnerabilities in X's systems through HackerOne.
+  </Card>
+  <Card title="Your app incident" icon="triangle-exclamation" href="https://hackerone.com/twitter">
+    If your app using X data is breached, report through the same channel.
+  </Card>
+</CardGroup>
+
+---
+
+## Compliance checklist
+
+<Accordion title="Security requirements for X API developers">
+- [ ] All API requests use TLS/HTTPS
+- [ ] Credentials stored securely (not in code or logs)
+- [ ] User tokens encrypted at rest
+- [ ] Input validation on all user-supplied data
+- [ ] Output encoding to prevent XSS
+- [ ] CSRF protection on OAuth flows
+- [ ] Security logging enabled (without sensitive data)
+- [ ] Incident response plan documented
+- [ ] Dependencies regularly updated
+- [ ] Minimal OAuth scopes requested
+</Accordion>
+
+---
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Authentication guide" icon="key" href="/resources/fundamentals/authentication/overview">
+    Implement OAuth correctly.
+  </Card>
+  <Card title="App permissions" icon="shield-check" href="/resources/fundamentals/developer-apps#app-permissions">
+    Configure minimal required permissions.
+  </Card>
+</CardGroup>

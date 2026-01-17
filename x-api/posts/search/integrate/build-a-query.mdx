@@ -1,225 +1,285 @@
 ---
 title: Build a query
 sidebarTitle: Build a query
+description: Learn how to build search queries using operators
 keywords: ["build query", "search query", "query builder", "search operators", "query syntax", "build search query", "query guide"]
 ---
 
-## Building queries for Search Posts
+The search endpoints accept a single query with a GET request and return a set of historical Posts that match the query. Queries are made up of operators that match on a variety of Post attributes.
 
-The search endpoints accept a single query with a GET request and return a set of historical Posts that match the query.  Queries are made up of operators that are used to match on a variety of Post attributes. 
+---
 
-### Table of contents
+## Query limitations
 
-* [Building a query](#build)
-* [Query limitations](#limits)
-* [Operator availability](#availability)
-* [Operator types: standalone and conjunction-required](#types)
-* [Boolean operators and grouping](#boolean)
-* [Order of operations](#order-of-operations)
-* [Punctuation, diacritics, and case sensitivity](#punctuation)
-* [Specificity and efficiency](#specificity)
-* [Quote Tweet matching behavior](#quote-tweets)
-* [Iteratively building a query](#iterative)
-* [Adding a query to your request](#adding-a-query)
-* [Query examples](#examples)
-* [List of operators](#list)
+Your queries will be limited depending on which [access level](/x-api/getting-started/about-x-api) you are using:
 
+| Access level | Recent search | Full-archive search |
+| :--- | :--- | :--- |
+| Self-serve | 512 characters | 1,024 characters |
+| Enterprise | 4,096 characters | 4,096 characters |
 
-### Building a query
+---
 
-#### Query limitations
+## Operator availability
 
-Your queries will be limited depending on which [access level](/x-api/getting-started/about-x-api) you are using. 
+While most operators are available to any developer, some are reserved for certain access levels:
 
-If you have Basic or Pro access, your query can be 512 characters long for recent search endpoint. 
+* **Core operators:** Available when using any [Project](/resources/fundamentals/developer-apps)
+* **Advanced operators:** Available when using a Project with certain access levels
 
-If you have Pro access, your query can be 1,024 characters long for full archive search endpoint. 
+See the complete [list of operators](/x-api/posts/search/integrate/operators) for availability details.
 
-#### Operator availability
+---
 
-While most operators are available to any developer, there are several that are reserved for certain access levels. We list which access level each operator is available to in the [list of operators](/x-api/posts/search/integrate/operators) table using the following labels:
+## Operator types: standalone and conjunction-required
 
-* **Core operators:** Available when using any [Project](/resources/fundamentals/projects).
-* **Advanced operators:** Available when using a Project with certain access level
+**Standalone operators** can be used alone or together with any other operators (including those that require conjunction).
 
-#### Operator types: standalone and conjunction-required
+For example, this query works because `#hashtag` is a standalone operator:
 
-**Standalone operators** can be used alone or together with any other operators (including those that require conjunction).
-
-For example, the following query will work because it uses the `#hashtag` operator, which is standalone:
-
-`#xapiv2`
-
-**Conjunction-required** operators cannot be used by themselves in a query; they can only be used when at least one standalone operator is included in the query. This is because using these operators alone would be far too general, and would match on an extremely high volume of Posts.
-
-For example, the following queries are not supported since they contain only conjunction-required operators:
-
-`has:media`
-
-`has:links OR is:retweet`
-
-If we add in a standalone operator, such as the phrase `"X data"`, the query would then work properly. 
-
-`"X data" has:mentions (has:media OR has:links)`
-
-#### Boolean operators and grouping
-
-If you would like to string together multiple operators in a single query, you have the following tools at your disposal:
-
-|     |     |
-| :--- | :--- |
-| **AND logic** | Successive operators with a space between them will result in boolean "AND" logic, meaning that Posts will match only if both conditions are met. For example, `snow day #NoSchool` will match Posts containing the terms snow and day and the hashtag #NoSchool. |
-| **OR logic** | Successive operators with OR between them will result in OR logic, meaning that Posts will match if either condition is met. For example, specifying `grumpy OR cat OR #meme` will match any Posts containing at least the terms grumpy or cat, or the hashtag #meme. |
-| **NOT logic, negation** | Prepend a dash (-) to a keyword (or any operator) to negate it (NOT). For example, `cat #meme -grumpy` will match Posts containing the hashtag #meme and the term cat, but only if they do not contain the term grumpy. One common query clause is `-is:retweet`, which will not match on Retweets, thus matching only on original Posts, Quote Tweets, and replies. All operators can be negated, but negated operators cannot be used alone. |
-| **Grouping** | You can use parentheses to group operators together. For example, `(grumpy cat) OR (#meme has:images)` will return either Posts containing the terms grumpy and cat, or Posts with images containing the hashtag #meme. Note that ANDs are applied first, then ORs are applied. |
-
-**A note on negations**
-
-The operators `-is:nullcast` must always be negated.
-
-Negated operators cannot be used alone.
-
-Do not negate a set of operators grouped together in a set of parentheses. Instead, negate each individual operator. For example, instead of using `skiing -(snow OR day OR noschool)`, we suggest that you use `skiing -snow -day -noschool`. 
-
-#### Order of operations
-
-When combining AND and OR functionality, the following order of operations will dictate how your query is evaluated.
-
-1.  Operators connected by AND logic are combined first
-2.  Then, operators connected with OR logic are applied
-
-
-For example:
-
-* `apple OR iphone ipad` would be evaluated as `apple OR (iphone ipad)`
-* `ipad iphone OR android` would be evaluated as `(iphone ipad) OR android`
-
-To eliminate uncertainty and ensure that your query is evaluated as intended, group terms together with parentheses where appropriate. 
-
-For example:
-
-* `(apple OR iphone) ipad`
-* `iphone (ipad OR android)`
-
-#### Punctuation, diacritics, and case sensitivity
-
-If you specify a keyword or hashtag query with character accents or diacritics, it will match Post text that contains both the term with the accents and diacritics, as well as those terms with normal characters. For example, queries with a keyword `Diacrítica` or hashtag `#cumpleaños` will match _Diacrítica_ or _#cumpleaños_, as well as with _Diacritica_ or _#cumpleanos_ without the tilde í or eñe.
-
-Characters with accents or diacritics are treated the same as normal characters and are not treated as word boundaries. For example, a query with the keyword `cumpleaños` would only match activities containing the word _cumpleaños_ and would not match activities containing _cumplea_, _cumplean_, or _os_.
-
-All operators are evaluated in a case-insensitive manner. For example, the query `cat` will match Posts with all of the following: _cat_, _CAT_, _Cat_.
-
-The [filtered stream](/x-api/posts/filtered-stream) matching behavior acts differently from Search Posts. When [building a filtered stream rule](/x-api/posts/filtered-stream#building-rules-for-filtered-stream), know that keywords and hashtags that include accents and diacritics will only match on terms that also include the accent and diacritic, and will not match on terms that use normal characters instead. 
-
-For example, filtered stream rules that include a keyword `Diacrítica` or hashtag `#cumpleaños` will only match the terms _Diacrítica_ and _#cumpleaños_, and will not match on _Diacritica_ or _#cumpleanos_ without the tilde í or eñe
-
-#### Specificity and efficiency
-
-When you start to build your query, it is important to keep a few things in mind.
-
-* Using broad, standalone operators for your query such as a single keyword or #hashtag is generally not recommended since it will likely match on a massive volume of Posts. Creating a more robust query will result in a more specific set of matching Posts, and will hopefully reduce the amount of noise in the payload that you will need to sift through to find valuable insights. 
-    * For example, if your query was just the keyword `happy` you will likely get anywhere from 200,000 - 300,000 Posts per day.
-    * Adding more conditional operators narrows your search results, for example `(happy OR happiness) place_country:GB -birthday -is:retweet`
-* Writing efficient queries is also beneficial for staying within the characters query length restriction. The character count includes the entire query string including spaces and operators.
-    * For example, the following query is 59 characters long: `(happy OR happiness) place_country:GB -birthday -is:retweet`
-
-#### Quote Tweet matching behavior
-
-When using the Search Posts endpoints, operators will not match on the content from the original Post that was quoted, but will match on the content included in the Quote Tweet.
-
-However, please note that [filtered stream](/x-api/posts/filtered-stream) will match on both the content from the original P that was quoted and the Quote Tweet's content.
-
-#### Iteratively building a query
-
-##### Test your query early and often
-
-Getting a query to return the "right" results the first time is rare. There is so much on X that may or may not be obvious at first and the query syntax described above may be hard to match to your desired search. As you build a query, it is important for you to periodically test it out.
-
-For this section, we are going to start with the following query and adjust it based on the results that we receive during our test: 
-
-`happy OR happiness`
-
-##### Use results to narrow the query
-
-As you test the query, you should scan the returned Posts to see if they include the data that you are expecting and hoping to receive. Starting with a broad query and a superset of Post matches allows you to review the result and narrow the query to filter out undesired results.  
-
-When we tested the example query, we noticed that we were getting Po in a variety of different languages. In this situation, we want to only receive Posts that are in english, so we’re going to add the `lang:` operator:
-
-`(happy OR happiness) lang:en`
-
-The test delivered a number of Posts wishing people a happy birthday, so we are going to add `-birthday` as a negated keyword operator. We also want to only receive original Posts, so we’ve added the negated `-is:retweet` operator:
-
-`(happy OR happiness) lang:en -birthday -is:retweet`
-
-##### Adjust for inclusion where needed
-
-If you notice that you are not receiving data that you expect and know that there are existing Posts that should return, you may need to broaden your query by removing operators that may be filtering out the desired data. 
-
-For our example, we noticed that there were other Posts in our personal timeline that expressed the emotion that we are looking for and weren’t included in the test results. To ensure we have greater coverage, we are going to add the keywords, `excited` and `elated`.
-
-`(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet`
-
-##### Adjust for popular trends/bursts over the time period
-
-Trends come and go on X quickly. Maintaining your query should be an active process. If you plan to use a query for a while, we suggest that you periodically check in on the data that you are receiving to see if you need to make any adjustments.
-
-In our example, we notice that we started to receive some Posts that are wishing people a “happy holidays”. Since we don’t want these Posts included in our results, we are going to add a negated `-holidays` keyword.
-
-`(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet -holidays`
-
-### Adding a query to your request
-
-To add your query to your request, you must use the `query` parameter. As with any query parameters, you must make sure to HTTP encode the query that you developed.
-
-Here is an example of what this might look like using a cURL command, with an additional `tweet.fields` and `max_results` parameter included. If you would like to use this command, please make sure to replace `$BEARER_TOKEN` with your own [Bearer Token](/resources/fundamentals/authentication#oauth-2-0):
-
-```bash
-curl https://api.x.com/2/tweets/search/recent?query=cat%20has%3Amedia%20-grumpy&tweet.fields=created_at&max_results=100 -H "Authorization: Bearer $BEARER_TOKEN"
+```
+#xapiv2
 ```
 
-### Query examples
+**Conjunction-required operators** cannot be used by themselves in a query; they can only be used when at least one standalone operator is included. This is because using these operators alone would match an extremely high volume of Posts.
 
-#### Tracking a natural disaster
+For example, the following queries are **not supported** since they contain only conjunction-required operators:
 
-The following query matched on original Posts coming from weather agencies and gauges that discuss Hurricane Harvey, which hit Houston in 2017.
+```
+has:media
+```
 
-Here is what the query would look like without the HTTP encoding:
+```
+has:links OR is:retweet
+```
 
-`has:geo (from:NWSNHC OR from:NHC\_Atlantic OR from:NWSHouston OR from:NWSSanAntonio OR from:USGS\_TexasRain OR from:USGS_TexasFlood OR from:JeffLindner1) -is:retweet`
+If we add a standalone operator, such as the phrase `"X data"`, the query works properly:
 
-And here is what the query would look like with the HTTP encoding, the query parameter, and the recent search URI:
+```
+"X data" has:mentions (has:media OR has:links)
+```
 
-`https://api.x.com/2/tweets/search/recent?query=-is%3Aretweet%20has%3Ageo%20(from%3ANWSNHC%20OR%20from%3ANHC\_Atlantic%20OR%20from%3ANWSHouston%20OR%20from%3ANWSSanAntonio%20OR%20from%3AUSGS\_TexasRain%20OR%20from%3AUSGS_TexasFlood%20OR%20from%3AJeffLindner1)`
+---
 
-#### Reviewing the sentiment of a conversation
+## Boolean operators and grouping
 
-The next rule could be used to better understand the sentiment of the conversation developing around the hashtag, _#nowplaying_, but scoped to just Posts published within North America.
+String together multiple operators using these tools:
 
-Here is what the two different queries, one for positive and one for negative, would look like without the HTTP encoding:
+| Operator | Description | Example |
+| :--- | :--- | :--- |
+| **AND** (space) | Posts must match both conditions | `snow day #NoSchool` matches Posts with "snow" AND "day" AND #NoSchool |
+| **OR** | Posts must match either condition | `grumpy OR cat OR #meme` matches Posts with "grumpy" OR "cat" OR #meme |
+| **NOT** (dash) | Exclude Posts matching this condition | `cat #meme -grumpy` matches Posts with "cat" and #meme but NOT "grumpy" |
+| **Grouping** (parentheses) | Group operators together | `(grumpy cat) OR (#meme has:images)` matches either group |
 
-`#nowplaying (happy OR exciting OR excited OR favorite OR fav OR amazing OR lovely OR incredible) (place\_country:US OR place\_country:MX OR place_country:CA) -horrible -worst -sucks -bad -disappointing`
+<Note>
+**A note on negations**
 
-`#nowplaying (horrible OR worst OR sucks OR bad OR disappointing) (place\_country:US OR place\_country:MX OR place_country:CA) -happy -exciting -excited -favorite -fav -amazing -lovely -incredible`
+- The operator `-is:nullcast` must always be negated
+- Negated operators cannot be used alone
+- Do not negate grouped operators. Instead of `skiing -(snow OR day OR noschool)`, use `skiing -snow -day -noschool`
+</Note>
 
-And here is what the query would look like with the HTTP encoding, the query parameter, and the recent search URI:
+---
 
-`https://api.x.com/2/tweets/search/recent?query=%23nowplaying%20(happy%20OR%20exciting%20OR%20excited%20OR%20favorite%20OR%20fav%20OR%20amazing%20OR%20lovely%20OR%20incredible)%20(place\_country%3AUS%20OR%20place\_country%3AMX%20OR%20place_country%3ACA)%20-horrible%20-worst%20-sucks%20-bad%20-disappointing`
+## Order of operations
 
-`https://api.x.com/2/tweets/search/recent?query=%23nowplaying%20(horrible%20OR%20worst%20OR%20sucks%20OR%20bad%20OR%20disappointing)%20(place\_country%3AUS%20OR%20place\_country%3AMX%20OR%20place_country%3ACA)%20-happy%20-exciting%20-excited%20-favorite%20-fav%20-amazing%20-lovely%20-incredible`
+When combining AND and OR:
 
-#### Find Posts that relate to a specific Post annotation
+1. Operators connected by AND logic are combined first
+2. Then, operators connected with OR logic are applied
 
-This rule was built to search for original Posts that included an image of a pet that is not a cat, where the language identified in the Post is Japanese. To do this, we used the `context:` operator to take advantage of the [Post annotation](/x-api/fundamentals/post-annotations) functionality. We first used the [Post lookup](/x-api/posts/lookup/introduction) endpoint and the `tweet.fields=context_annotations` fields parameter to identify which domain.entity IDs we need to use in our query:
+**Examples:**
 
-* Posts that relate to cats return `domain` 66 (Interests and Hobbies category) with entity 852262932607926273 (Cats). 
-* Posts that relate to pets return `domain` 65 (Interests and Hobbies Vertical) with entity 852262932607926273 (Pets). 
+| Query | Evaluated as |
+| :--- | :--- |
+| `apple OR iphone ipad` | `apple OR (iphone ipad)` |
+| `ipad iphone OR android` | `(iphone ipad) OR android` |
 
-Here is what the query would look like without the HTTP encoding:
+To eliminate uncertainty, use parentheses:
 
-`context:65.852262932607926273 -context:66.852262932607926273 -is:retweet has:images lang:ja`
+```
+(apple OR iphone) ipad
+```
 
-And here is what the query would look like with the HTTP encoding, the query parameter, and the recent search URI:
+```
+iphone (ipad OR android)
+```
 
-`https://api.x.com/2/tweets/search/recent?query=context%3A65.852262932607926273%20-context%3A66.852262932607926273%20-is%3Aretweet%20has%3Aimages%20lang%3Aja`
+---
 
-Try out the [query builder tool](https://developer.x.com/apitools/query?query=) for additional support.
+## Punctuation, diacritics, and case sensitivity
+
+**Diacritics:** Search queries with accents or diacritics match Posts both with and without the accents. For example, `Diacrítica` matches both _Diacrítica_ and _Diacritica_.
+
+**Case sensitivity:** All operators are case-insensitive. The query `cat` matches _cat_, _CAT_, and _Cat_.
+
+<Note>
+**Filtered stream behaves differently**
+
+When [building filtered stream rules](/x-api/posts/filtered-stream/integrate/build-a-rule), keywords with accents only match Posts that also include the accent. For example, `Diacrítica` only matches _Diacrítica_, not _Diacritica_.
+</Note>
+
+---
+
+## Quote Tweet matching
+
+When using Search Posts, operators match on the Quote Tweet's content but **not** on the content from the original Post that was quoted.
+
+<Note>
+[Filtered stream](/x-api/posts/filtered-stream/introduction) behaves differently—it matches on both the Quote Tweet and the original Post's content.
+</Note>
+
+---
+
+## Specificity and efficiency
+
+<Warning>
+Using broad operators like a single keyword or hashtag is not recommended—it will match a massive volume of Posts and quickly consume your usage limits.
+</Warning>
+
+**Tips for building effective queries:**
+
+1. **Start specific, then broaden** — Create targeted queries that return relevant results
+2. **Use multiple operators** — Combine operators to narrow results
+3. **Watch your character count** — The entire query string counts toward the limit
+
+**Example progression:**
+
+```
+# Too broad - 200,000+ Posts per day
+happy
+
+# Better - adds language filter and exclusions
+(happy OR happiness) lang:en -birthday -is:retweet
+
+# Even better - 59 characters, more specific
+(happy OR happiness) place_country:GB -birthday -is:retweet
+```
+
+---
+
+## Iteratively building a query
+
+### Step 1: Start with a basic query
+
+```
+happy OR happiness
+```
+
+### Step 2: Test and narrow based on results
+
+We noticed Posts in many languages. Add a language filter:
+
+```
+(happy OR happiness) lang:en
+```
+
+We're getting birthday wishes. Exclude them and Retweets:
+
+```
+(happy OR happiness) lang:en -birthday -is:retweet
+```
+
+### Step 3: Broaden for better coverage
+
+We want to capture more sentiment. Add related keywords:
+
+```
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet
+```
+
+### Step 4: Adjust for trends
+
+Holiday Posts are appearing. Exclude them:
+
+```
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet -holidays
+```
+
+---
+
+## Adding a query to your request
+
+Use the `query` parameter and HTTP encode your query:
+
+```bash
+curl "https://api.x.com/2/tweets/search/recent?\
+query=cat%20has%3Amedia%20-grumpy&\
+tweet.fields=created_at&\
+max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+---
+
+## Query examples
+
+### Tracking a natural disaster
+
+Match Posts from weather agencies about Hurricane Harvey:
+
+**Query:**
+
+```
+has:geo (from:NWSNHC OR from:NHC_Atlantic OR from:NWSHouston OR from:NWSSanAntonio OR from:USGS_TexasRain OR from:USGS_TexasFlood OR from:JeffLindner1) -is:retweet
+```
+
+**Full request URL:**
+
+```
+https://api.x.com/2/tweets/search/recent?query=has%3Ageo%20(from%3ANWSNHC%20OR%20from%3ANHC_Atlantic%20OR%20from%3ANWSHouston%20OR%20from%3ANWSSanAntonio%20OR%20from%3AUSGS_TexasRain%20OR%20from%3AUSGS_TexasFlood%20OR%20from%3AJeffLindner1)%20-is%3Aretweet
+```
+
+### Sentiment analysis for #nowplaying
+
+**Positive sentiment:**
+
+```
+#nowplaying (happy OR exciting OR excited OR favorite OR fav OR amazing OR lovely OR incredible) (place_country:US OR place_country:MX OR place_country:CA) -horrible -worst -sucks -bad -disappointing
+```
+
+**Negative sentiment:**
+
+```
+#nowplaying (horrible OR worst OR sucks OR bad OR disappointing) (place_country:US OR place_country:MX OR place_country:CA) -happy -exciting -excited -favorite -fav -amazing -lovely -incredible
+```
+
+### Using Post annotations
+
+Find Japanese Posts about pets (not cats) with images using the `context:` operator:
+
+First, use [Post lookup](/x-api/posts/lookup/introduction) with `tweet.fields=context_annotations` to identify domain.entity IDs:
+
+- Cats: `domain` 66, `entity` 852262932607926273
+- Pets: `domain` 65, `entity` 852262932607926273
+
+**Query:**
+
+```
+context:65.852262932607926273 -context:66.852262932607926273 -is:retweet has:images lang:ja
+```
+
+---
+
+## Tools
+
+<Card title="Query Builder Tool" icon="wrench" href="https://developer.x.com/apitools/query?query=">
+  Build and test your queries interactively
+</Card>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Operators reference" icon="list" href="/x-api/posts/search/integrate/operators">
+    Complete list of available operators
+  </Card>
+  <Card title="Search quickstart" icon="rocket" href="/x-api/posts/search/quickstart/recent-search">
+    Make your first search request
+  </Card>
+  <Card title="Integration guide" icon="book" href="/x-api/posts/search/integrate/overview">
+    Full integration documentation
+  </Card>
+</CardGroup>

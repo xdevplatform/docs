@@ -51,7 +51,7 @@ Both versions provide metadata that describes any edit history. Check out the Po
 
 #### App and Project Requirements
 
-X API v2 endpoints require credentials from a [developer App](/resources/fundamentals/developer-apps) associated with a [Project](/resources/fundamentals/projects) for authentication. X API v1.1 endpoints can use credentials from standalone Apps or Apps associated with a Project.
+X API v2 endpoints require credentials from a [developer App](/resources/fundamentals/developer-apps) associated with a [Project](/resources/fundamentals/developer-apps) for authentication. X API v1.1 endpoints can use credentials from Apps or Apps associated with an App.
 
 #### Response Data Format
 
@@ -96,36 +96,151 @@ Certain standard v1.1 parameters are **not** supported in X API v2:
 | `include_card_uri`  | Adds `card_uri` when an ads card is attached.                                                                               |
 | `map`               | Returns the Post ID and error message for unavailable Posts in X API v2, as opposed to nullified fields in v1.1.            |
 
-### CURL Requests
+### Code Examples
 
-The following cURL requests show standard v1.1 endpoints and their v2 equivalents. Replace `ACCESS_TOKEN` in the header with your app access token. For v2 endpoints, the token must belong to a [developer App](/resources/fundamentals/developer-apps/overview) within a [Project](/resources/fundamentals/projects/overview).
+The following examples show standard v1.1 endpoints and their v2 equivalents. Replace credentials with your actual tokens. For v2 endpoints, the token must belong to a [developer App](/resources/fundamentals/developer-apps/overview) within a [Project](/resources/fundamentals/developer-apps/overview).
 
 The response payloads from v1.1 will differ from v2. With v2, you can request different fields with the [fields](/x-api/fundamentals/fields) and [expansions](/x-api/fundamentals/expansions) parameters.
 
-**Standard v1.1 `GET statuses/lookup` and v2 `GET /tweets` endpoints**
+**Multiple Posts lookup: v1.1 `GET statuses/lookup` → v2 `GET /tweets`**
 
-```bash
+<CodeGroup dropdown>
+
+```bash cURL (v1.1)
 curl --request GET \
   --url 'https://api.x.com/1.1/statuses/lookup.json?id=1460323737035677698%2C1460323743339741184' \
   --header 'Authorization: Bearer $ACCESS_TOKEN'
-  ```
-  
-  ```
-  curl --request GET \
+```
+
+```bash cURL (v2)
+curl --request GET \
   --url 'https://api.x.com/2/tweets?ids=1460323737035677698%2C1460323743339741184&tweet.fields=created_at&expansions=author_id&user.fields=created_at' \
   --header 'Authorization: Bearer $ACCESS_TOKEN'
-  ```
-
-
-**Standard v1.1 `GET statuses/show/:id` and v2 `GET /tweets/:id` endpoints**
 ```
+
+```python Python (v2)
+import requests
+
+bearer_token = "YOUR_BEARER_TOKEN"
+url = "https://api.x.com/2/tweets"
+
+params = {
+    "ids": "1460323737035677698,1460323743339741184",
+    "tweet.fields": "created_at",
+    "expansions": "author_id",
+    "user.fields": "created_at"
+}
+
+headers = {"Authorization": f"Bearer {bearer_token}"}
+response = requests.get(url, headers=headers, params=params)
+
+print(response.json())
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get multiple Posts by IDs with fields and expansions
+response = client.posts.get_posts(
+    ids=["1460323737035677698", "1460323743339741184"],
+    tweet_fields=["created_at"],
+    expansions=["author_id"],
+    user_fields=["created_at"]
+)
+
+for post in response.data:
+    print(f"Post: {post.text}")
+    print(f"Created at: {post.created_at}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get multiple Posts by IDs with fields and expansions
+const response = await client.posts.getPosts({
+  ids: ["1460323737035677698", "1460323743339741184"],
+  tweetFields: ["created_at"],
+  expansions: ["author_id"],
+  userFields: ["created_at"],
+});
+
+response.data?.forEach((post) => {
+  console.log(`Post: ${post.text}`);
+  console.log(`Created at: ${post.created_at}`);
+});
+```
+
+</CodeGroup>
+
+**Single Post lookup: v1.1 `GET statuses/show/:id` → v2 `GET /tweets/:id`**
+
+<CodeGroup dropdown>
+
+```bash cURL (v1.1)
 curl --request GET \
   --url 'https://api.x.com/1.1/statuses/show.json?id=1460323737035677698' \
   --header 'Authorization: Bearer $ACCESS_TOKEN'
 ```
 
-```
+```bash cURL (v2)
 curl --request GET \
   --url 'https://api.x.com/2/tweets/1460323737035677698?tweet.fields=created_at&expansions=author_id&user.fields=created_at' \
   --header 'Authorization: Bearer $ACCESS_TOKEN'
 ```
+
+```python Python (v2)
+import requests
+
+bearer_token = "YOUR_BEARER_TOKEN"
+url = "https://api.x.com/2/tweets/1460323737035677698"
+
+params = {
+    "tweet.fields": "created_at",
+    "expansions": "author_id",
+    "user.fields": "created_at"
+}
+
+headers = {"Authorization": f"Bearer {bearer_token}"}
+response = requests.get(url, headers=headers, params=params)
+
+print(response.json())
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get a single Post by ID
+response = client.posts.get(
+    "1460323737035677698",
+    tweet_fields=["created_at"],
+    expansions=["author_id"],
+    user_fields=["created_at"]
+)
+
+print(f"Post: {response.data.text}")
+print(f"Created at: {response.data.created_at}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get a single Post by ID
+const response = await client.posts.get("1460323737035677698", {
+  tweetFields: ["created_at"],
+  expansions: ["author_id"],
+  userFields: ["created_at"],
+});
+
+console.log(`Post: ${response.data?.text}`);
+console.log(`Created at: ${response.data?.created_at}`);
+```
+
+</CodeGroup>

@@ -1,116 +1,164 @@
 ---
-title: Manage bookmarks
-sidebarTitle: Manage bookmarks
+title: Manage Bookmarks
+sidebarTitle: Manage Bookmarks
+description: Add and remove bookmarks using the X API
 keywords: ["manage bookmarks quickstart", "bookmark quickstart", "bookmark tutorial", "bookmark guide", "bookmarks quickstart"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-## Getting started with the manage Bookmarks endpoints
+This guide walks you through adding and removing bookmarks using the X API.
 
-This quick start guide will help you make your first request to the manage Bookmarks endpoints using [Postman](/tutorials/postman-getting-started).
-
-If you would like to see sample code in different languages, please visit our [X API v2 sample code](https://github.com/xdevplatform/Twitter-API-v2-sample-code) GitHub repository. 
 <Note>
 **Prerequisites**
 
-To complete this guide, you will need to have a set of [keys and tokens](/resources/fundamentals/authentication) to authenticate your request. You can generate these keys and tokens by following these steps:
-
-* [Sign up for a developer account](https://developer.x.com/en/apply-for-access) and receive approval.
-* Create a [Project](/resources/fundamentals/projects) and an associated [developer App](/resources/fundamentals/developer-apps) in the developer portal.
-* Navigate to your App's “Keys and tokens” page to generate the required credentials. Make sure to save all credentials in a secure location.
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- User Access Token with `bookmark.write` scope (OAuth 2.0 PKCE)
 </Note>
 
-### Steps to build a manage Bookmarks request
+---
 
-**Step one: Start with a tool or library**
+## Add a bookmark
 
-There are several different tools, code examples, and libraries that you can use to make a request to this endpoint, but we are going to use the Postman tool here to simplify the process.
+<Steps>
+  <Step title="Get your user ID">
+    You need your authenticated user's ID. You can find it using the `/2/users/me` endpoint or the [user lookup endpoint](/x-api/users/lookup/introduction).
+  </Step>
 
-To load the X API v2 Postman collection into your environment, please click on the following button:
+  <Step title="Get the Post ID">
+    Find the Post ID in the URL when viewing a Post:
 
-<Button href="https://app.getpostman.com/run-collection/9956214-784efcda-ed4c-4491-a4c0-a26470a67400">
-  Add X API v2 to Postman
-</Button>
-Once you have the X API v2 collection loaded in Postman, navigate to the “Bookmarks” folder, and select “Create a Bookmark”.
+    ```
+    https://x.com/XDevelopers/status/1460323737035677698
+                                    └── This is the Post ID
+    ```
+  </Step>
 
-**Step two: Authenticate your request**
+  <Step title="Add the bookmark">
 
-To make a successful request to this endpoint, you will need to use [OAuth 2.0 Authorization Code Flow with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-3). You can generate an access token within Postman. 
+<CodeGroup dropdown>
 
-If you go to the tab entitled “Authorization” and select “OAuth 2.0”.
-
-In this tab, be sure to follow these steps:
-
-1.  Name your token
-
-2.  Select the Grant Type as Authorization Code (with PKCE)
-
-3.  Update the parameters:
-
-    **Callback URL** - [https://www.example.com](https://www.example.com/)
-
-    This should be matching the callback URL you set in your auth settings page in the Developer Portal.
-
-    **Auth URL** - [https://x.com/i/oauth2/authorize](https://x.com/i/oauth2/authorize)
-
-    **Access Token URL** - [https://api.x.com/2/oauth2/token](https://api.x.com/2/oauth2/token)
-
-    **Client ID** \- Cut and paste OAuth 2.0 client ID from the Developer Portal
-
-    **Client Secret **- Cut and paste OAuth 2.0 client ID from the Developer Portal. You will need this only if you are using an App type that is a confidential client.
-
-4.  Update the scopes with the following values: post.read users.read bookmark.write
-
-5.  Populate the field state with “State”
-
-6.  Click where it says “Generate Token”
-
-7.  Press the save icon to save the folder changes.
-
-
-You may get a message that you are not logged into X. If you get this error, you will need to log in to the X account inside of Postman you are trying to post on behalf of.
-
-**Step three: Specify a user**
-
-With this endpoint, you must specify the user ID whose followers you would like to receive in the response. For example, the user ID for @XDevelopers is `2244994945`.
-
-In Postman, navigate to the “Params” tab and enter the ID of yourself or an authenticated user as the value for the id parameter.
-
-|     |     |     |
-| :--- | :--- | :--- |
-|     | Key | Value |
-|     | id  | `2244994945` |
-
-**Step four: Specify Specify a Post you want to Bookmark**
-
-You will want to navigate to the “Body” tab and make sure the Post ID is set to the one you are looking to save to your Bookmarks. The JSON payload should look similar to the one below.
-
-      ```
-      {"tweet_id": "1460323737035677698"}
-      ```
-
-
-**Step five: Make your request and review your response**
-
-Once you have everything set up, hit the "Send" button, and you will receive a similar response to the following example response:
-
+```bash cURL
+curl -X POST "https://api.x.com/2/users/2244994945/bookmarks" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"tweet_id": "1460323737035677698"}'
 ```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Add a bookmark
+response = client.bookmarks.create(
+    user_id="2244994945",
+    tweet_id="1460323737035677698"
+)
+
+print(f"Bookmarked: {response.data.bookmarked}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Add a bookmark
+const response = await client.bookmarks.create("2244994945", {
+  tweetId: "1460323737035677698",
+});
+
+console.log(`Bookmarked: ${response.data?.bookmarked}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Review the response">
+    ```json
+    {
+      "data": {
+        "bookmarked": true
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Remove a bookmark
+
+Delete a Post from your bookmarks:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X DELETE "https://api.x.com/2/users/2244994945/bookmarks/1460323737035677698" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Remove a bookmark
+response = client.bookmarks.delete(
+    user_id="2244994945",
+    tweet_id="1460323737035677698"
+)
+
+print(f"Bookmarked: {response.data.bookmarked}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Remove a bookmark
+const response = await client.bookmarks.delete("2244994945", "1460323737035677698");
+
+console.log(`Bookmarked: ${response.data?.bookmarked}`);
+```
+
+</CodeGroup>
+
+**Response:**
+
+```json
 {
-   "data": {
-       "bookmarked": true
-   }
+  "data": {
+    "bookmarked": false
+  }
 }
 ```
 
+---
 
-To delete a Post, select the “Remove a Bookmark” request also found in the “Bookmarks” folder of the X API v2 collection loaded in Postman. You will first want to specify the user ID of the user you are making a request on behalf of as the value for the “`id`” column. This endpoint also requires the ID of the Post you wish to delete. Then, in the “Params” tab, enter the ID of the Post you wish to delete as the value for the “`tweet_id`” column. 
+## Required scopes
 
-When you have a successful delete request, you will receive a response similar to the following example: 
-```
-{
-   "data": {
-       "bookmarked": false
-   }
-}
-```
+When using OAuth 2.0 PKCE, your access token must have these scopes:
+
+| Scope | Description |
+|:------|:------------|
+| `bookmark.write` | Add and remove bookmarks |
+| `tweet.read` | Read Post data |
+| `users.read` | Read user data |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Bookmarks lookup" icon="bookmark" href="/x-api/posts/bookmarks/quickstart/bookmarks-lookup">
+    Get your bookmarked Posts
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/posts/add-post-to-bookmarks">
+    Full endpoint documentation
+  </Card>
+</CardGroup>
