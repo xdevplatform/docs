@@ -12,7 +12,7 @@ jobs:
   update-docs:
     runs-on: ubuntu-latest
     permissions:
-        contents: write
+      contents: write
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -22,8 +22,25 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Fetch Latest OpenAPI Specification
-        run: curl -o openapi.json https://api.twitter.com/2/openapi.json
+      - name: Install Puppeteer
+        run: npm install puppeteer
+
+      - name: Fetch Latest OpenAPI Specification with Puppeteer
+        run: |
+          cat << EOF > fetch-openapi.js
+          const puppeteer = require('puppeteer');
+          const fs = require('fs/promises');
+
+          (async () => {
+            const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+            const page = await browser.newPage();
+            const response = await page.goto('https://api.twitter.com/2/openapi.json', { waitUntil: 'networkidle0' });
+            const body = await response.text();
+            await fs.writeFile('openapi.json', body);
+            await browser.close();
+          })();
+          EOF
+          node fetch-openapi.js
 
       - name: Remove Existing api-reference Directory
         run: rm -rf api-reference
