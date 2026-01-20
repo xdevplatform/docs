@@ -1,199 +1,223 @@
 ---
-title: Response codes and errors
-sidebarTitle: Response codes
-keywords: ["response codes", "error codes", "HTTP status codes", "API errors", "error handling", "debugging", "error messages", "status codes"]
+title: Response Codes & Errors
+sidebarTitle: Response Codes
+description: HTTP status codes and error handling for the X API
+keywords: ["response codes", "error codes", "HTTP status codes", "API errors", "error handling", "debugging"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-The X API provides the following response and error codes to help understand and debug in the moment. Use the debugging guide and error index below for additional context.
+The X API uses standard HTTP status codes. Successful requests return 2xx codes; errors return 4xx or 5xx codes with details in the response body.
 
-Successful responses are indicated with a 200-series HTTP code and a JSON-based payload containing the object(s) requested, created, modified, or deleted along with an expression of the server's interpretation of your request.
+---
 
-Error responses are served with a non-200-series HTTP code. Different error codes indicate different reasons for an error. The X API attempts to return appropriate [HTTP status codes](https://en.wikipedia.org/wiki/List_of_HTTP_status_codes) for every request.
+## HTTP status codes
 
-## X API v2 HTTP status codes
+### Success codes
 
-| Code | Text | Description | Troubleshooting tips |
-| :--- | :--- | :---------- | :------------------- |
-| 200 | OK | The request was successful! | |
-| 400 | Bad Request	| The request was invalid or cannot be otherwise served. An accompanying error message will explain further. Requests without authentication or with invalid query parameters are considered invalid and will yield this response. | Double check the format of your JSON query. For example, if your rule contains double-quote characters associated with an exact-match or other operator, you may need to escape them using a backslash to distinguish them from the structure of the JSON format. |
-| 401 | Unauthorized | There was a problem authenticating your request. This could be due to missing or incorrect authentication credentials. This may also be returned in other undefined circumstances. | Check that you are using the correct [authentication method](https://docs.x.com/resources/fundamentals/authentication/overview) and that your credentials are correct. |
-| 403 | Forbidden | The request is understood, but it has been refused or access is not allowed. An accompanying error message will explain why. | Check that your developer account includes access to the endpoint you’re trying to use. You may also need to get your App allowlisted (e.g. Engagement API or Ads API) or sign up for access. |
-| 404 | Not Found | The URI requested is invalid or the resource requested, such as a user, does not exist. | Check that you are using valid parameters and the correct URI for the endpoint you’re using. |
-| 409 | Connection Exception | Returned when attempting to connect to a filtered stream that has no rules. | Check that you have created at least one rule on the stream you are connecting to. Filtered stream will only return Posts that match an active rule. If there are no rules, the stream will not return any Posts. |
-| 429 | Too Many Requests | Returned when a request cannot be served due to the App's [rate limit](/resources/fundamentals/rate-limits) or [Post cap](/x-api/fundamentals/post-cap) having been exhausted. See [Rate Limiting](/resources/fundamentals/rate-limits). | Check the number of requests per timeframe allowed with the endpoint you’re using. Wait for the timeframe to reset. Space out your requests to ensure you don’t hit rate limits or upgrade to the next available data plan. |
-| 500 | Internal Server Error | Something is broken. This is usually a temporary error, for example in a high load situation or if an endpoint is temporarily having issues. | Check the X API [status page](/status) or the [developer community forum](https://devcommunity.x.com/) in case others are having similar issues, or simply wait and try again later. |
-| 501 | Unimplemented | The X API does not support this endpoint and cannot fulfill the request. |  |
-| 503 | Service Unavailable | The X servers are up, but overloaded with requests. Try again later. | Check the X API [status page](/status) or the [developer community forum](https://devcommunity.x.com/) in case others are having similar issues, or simply wait and try again later. |
+| Code | Meaning | Description |
+|:-----|:--------|:------------|
+| **200** | OK | Request successful |
+| **201** | Created | Resource created (POST requests) |
+| **204** | No Content | Success with no response body (DELETE requests) |
 
-When an error is incurred during a request, detailed information about the error is returned in the response body to aid in diagnosing the problem. A type field, which is a URI, indicates the nature of the problem, while additional fields provide details about the problem. The type, title, and detail fields will always be returned in these bodies (see table below). Any additional fields, as in the example below, will vary depending on the type of the error.
+### Client error codes
+
+| Code | Meaning | Common causes |
+|:-----|:--------|:--------------|
+| **400** | Bad Request | Invalid JSON, malformed query, missing required parameters |
+| **401** | Unauthorized | Invalid or missing authentication credentials |
+| **403** | Forbidden | Valid auth but no permission for this resource or action |
+| **404** | Not Found | Resource doesn't exist or has been deleted |
+| **409** | Conflict | Stream has no rules (filtered stream only) |
+| **429** | Too Many Requests | Rate limit or usage cap exceeded |
+
+### Server error codes
+
+| Code | Meaning | What to do |
+|:-----|:--------|:-----------|
+| **500** | Internal Server Error | Wait and retry; check [status page](/status) |
+| **502** | Bad Gateway | Wait and retry |
+| **503** | Service Unavailable | X is overloaded; wait and retry |
+| **504** | Gateway Timeout | Wait and retry |
+
+---
+
+## Error response format
+
+Error responses include structured details:
 
 ```json
 {
-  "client_id": "101010101",
-  "required_enrollment": "Standard Basic",
-  "registration_url": "https://developer.twitter.com/en/account",
-  "title": "Client Forbidden",
-  "detail": "This request must be made using an approved developer account that is enrolled in the requested endpoint. Learn more by visiting our documentation.",
-  "reason": "client-not-enrolled",
-  "type": "https://api.x.com/2/problems/client-forbidden"
+  "title": "Invalid Request",
+  "detail": "The 'query' parameter is required.",
+  "type": "https://api.x.com/2/problems/invalid-request"
 }
 ```
 
+| Field | Description |
+|:------|:------------|
+| `type` | URI identifying the error type |
+| `title` | Short error description |
+| `detail` | Specific explanation for this error |
+
+Additional fields may be present depending on the error type.
+
+---
+
+## Error types
+
+| Type | Description |
+|:-----|:------------|
+| `about:blank` | Generic error (see HTTP status code) |
+| `.../invalid-request` | Malformed request or invalid parameters |
+| `.../resource-not-found` | Post, user, or other resource doesn't exist |
+| `.../not-authorized-for-resource` | No access to private/protected content |
+| `.../client-forbidden` | App not enrolled or lacks required access |
+| `.../usage-capped` | Usage cap exceeded |
+| `.../rate-limit-exceeded` | Rate limit exceeded |
+| `.../streaming-connection` | Stream connection problem |
+| `.../rule-cap` | Too many filtered stream rules |
+| `.../invalid-rules` | Rule syntax error |
+| `.../duplicate-rules` | Rule already exists |
+
+---
+
 ## Partial errors
 
-In some cases you may see the errors detailed above in a response that returned a 200 status code. In those cases, the endpoint is designed to return the data that it can, while providing detailed errors about what it could not return.
+Some requests can partially succeed. A 200 response may include both `data` and `errors`:
 
-For example, the [Posts lookup endpoint](/x-api/posts/lookup/introduction) allows a X [developer App](/resources/fundamentals/developer-apps#overview) to request more than one ID. If some of those Posts are available, but one of them has been deleted, the available Posts would be returned in the data field of the response. An additional errors field would be returned in the payload, indicating which requested Post(s) could not be returned. The same format is used as full request errors to make diagnosing issues easier.
-
-### Error information
-
-Each problem type indicates the nature of the problem encountered. A full list of problems that you can run into can be found in our [API specification](https://api.x.com/2/openapi.json) as well.
-
-The X API attempts to return appropriate [HTTP status codes](https://en.wikipedia.org/wiki/List_of_HTTP_status_codes) for every request.
-
-| Title | Type | Description |
-| :--- | :--- | :--- |
-| Generic Problem | `about:blank` | A generic problem with no additional information beyond that provided by the HTTP status code. |
-| Invalid Request Problem | `https://api.X.com/2/problems/invalid-request` | A problem that indicates this request is invalid. If your request takes a POST body, ensure the contents is valid JSON and matches the [OpenAPI spec](https://api.x.com/2/openapi.json). |
-| Resource Not Found Problem | `https://api.X.com/2/problems/resource-not-found` | A problem that indicates that a given Post, User, etc. does not exist. |
-| Resource Unauthorized Problem | `https://api.X.com/2/problems/not-authorized-for-resource` | A problem that indicates you are not allowed to see a particular Post, User, etc. |
-| Client Forbidden Problem | `https://api.X.com/2/problems/client-forbidden` | A problem that indicates your client is forbidden from making this request. |
-| Disallowed Resource Problem | `https://api.X.com/2/problems/disallowed-resource` | A problem that indicates that the resource requested violates the precepts of this API. |
-| Unsupported Authentication Problem | `https://api.X.com/2/problems/unsupported-authentication` | A problem that indicates that the authentication used is not supported. |
-| Usage Capped Problem | `https://api.X.com/2/problems/usage-capped` | A problem that indicates that a usage cap has been exceeded. |
-| Connection Exception Problem | `https://api.X.com/2/problems/streaming-connection` | A problem that indicates something is wrong with the connection. |
-| Client Disconnected Problem | `https://api.X.com/2/problems/client-disconnected` | Your client has gone away. |
-| Operational Disconnect Problem | `https://api.X.com/2/problems/operational-disconnect` | You have been disconnected for operational reasons. |
-| Rule Cap Problem | `https://api.X.com/2/problems/rule-cap` | You have exceeded the maximum number of rules. |
-| Rule Length Problem | `https://api.X.com/2/problems/rule-length` | You have exceeded the maximum number of characters allowed on your query or rule based on your access level. See [access levels](/x-api/getting-started/about-x-api#x-api-access-levels-and-versions). |
-| Invalid Rules Problem | `https://api.X.com/2/problems/invalid-rules` | The rule you have submitted is invalid. |
-| Duplicate Rules Problem | `https://api.X.com/2/problems/duplicate-rules` | The rule you have submitted is a duplicate. |
-
-## Troubleshooting tips
-
-<Accordion title="Debugging your code">
-
-When building an application, it's normal to run into errors or unexpected issues from time to time. Below are some tips for how you can debug your code: 
-
-Start by breaking down the issue into smaller parts to identify where the problem lies. For example, if you’re integrating a REST or a streaming endpoint, the issue could lie with any of the following items:
-
-- The endpoint requires proper [authentication](/resources/fundamentals/authentication/overview).
-- The endpoint requires valid parameters and headers. Any filtering rules are built using the correct operators and proper [syntax](/x-api/enterprise-gnip-2.0/fundamentals/rules-filtering#building-rules-and-queries).
-- The endpoint's URI must be correct and, in the case of REST endpoints, the correct HTTP method must be used.
-- The data or resource you are trying to access is not accessible to you (for example, private data is only available to authenticated users).
-- Your current data package gives you access to certain endpoints only and to specific rate limits. Check out your [developer portal](https://developer.x.com/en/portal/products) for more details.
-- Your code uses a third-party library to integrate the endpoint in your code.
-- Your code needs to successfully parse the endpoint response.
-
-Read the accompanying error message. This should give you a good indication of what the problem is. Use the tables in the [error and response codes section](#x-api-http-status-codes) for troubleshooting tips specific to each error code.
-
-For REST endpoints, you can use a REST client like [Postman](https://www.postman.com/) or [Insomnia](https://insomnia.rest/) to validate steps (1) to (5) above (review our ["Getting started with Postman"](/tutorials/postman-getting-started) guide). If the request with the REST client returns a 200 success status code, you can assume that the issue lies with your code or the library that you are using; not with the endpoint request itself.
-
-For streaming endpoints, you can use cURL (a command-line tool for getting or sending requests using the URL syntax) to check if the issue lies with the request to the endpoint (steps (1) to (5) above) or with your code itself (steps (6) to (7) above).
-</Accordion>
-
-<Accordion title="Authentication issues">
-- Check that you are using the proper [authentication method](/resources/fundamentals/authentication/overview) required for the endpoint. This can be identified via the endpoint’s API reference page.
-- Check that your authentication credentials are correct. You can check or regenerate your App keys and tokens in the [Apps section](https://developer.x.com/en/portal/projects-and-apps) of your developer dashboard (under “Details”).
-- Check that you have properly [authorized your OAuth 1.0a request](/resources/fundamentals/authentication/oauth-1-0a/authorizing-a-request) with `oauth_nonce`, `oauth_signature`, and `oauth_timestamp` for your request.
-- If the issue persists, consider using an OAuth library, a REST client like [Postman](https://www.postman.com/) or [Insomnia](https://insomnia.rest/), or [xurl](https://github.com/xdevplatform/xurl).
-
-Review our [guide on authentication](/resources/fundamentals/authentication/overview) for additional information on all of the above.
-</Accordion>
-
-<Accordion title="Rate limiting and Post cap issues">
-
-A 429 error can deliver if you hit a rate limit for a given endpoint, or if you hit a Post cap.
-
-If the specific ‘Too many requests’ error is returned, you hit the endpoint's rate limit. In other words, you've exceeded the maximum number of requests allowed for an endpoint per specified time period. 
-
-Note that rate limits are set per-App and per-user levels. 
-
-- **X App level** indicates the number of requests allowed when using OAuth 2.0 App-Only, where rate limits are determined globally for the entire App. For example, if a method allows for 15 requests per rate limit window, then it allows you to make 15 requests per window on behalf of your X App. This limit is considered completely separately from the user-level limit. Read more in our guide on [OAuth 2.0 App-Only](/resources/fundamentals/authentication/oauth-2-0/application-only).
-- **User-context level** indicates the number of requests that can be made per user Access Token when using OAuth 1.0a User Context or OAuth 2.0 Authorization Code with PKCE. For example, if a method allows for 15 requests per rate limit window, then it allows 15 requests per window and per user Access Token. Read more in our guide on how to obtain a user’s Access Tokens with [OAuth 1.0a](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens) and [OAuth 2.0](/resources/fundamentals/authentication/oauth-2-0/user-access-token).
-
-Start by checking the rate limits for the endpoint you are using. You can find this information in the endpoint's API reference page and in the new developer portal dashboard.
-
-Review our documentation for additional information on rate limits, including how to use HTTP headers to track where your App is at for a given rate limit, how to recover from a rate limit 429 error code, and tips to avoid being rate limited in the first place:
-
-- [Rate limits for v2 endpoints](/x-api/fundamentals/rate-limits)
-
-If you've received the specific "Usage cap exceeded: Monthly product cap" error, that means you've hit the Post cap for your access level. We have plenty of details on what these [Post caps](/x-api/fundamentals/post-cap) are on our documentation page.
-</Accordion>
-
-<Accordion title="Missing Post issues">
-
-Follow the steps below, if you expected a Post to be returned, but it wasn’t delivered by the endpoint.
-
-- Check your rule to ensure that you are using the correct [operators](/x-api/enterprise-gnip-2.0/fundamentals/rules-filtering#enterprise-operators) and [syntax](/x-api/enterprise-gnip-2.0/fundamentals/rules-filtering#building-rules-and-queries). Break the rule into smaller clauses to ensure that you are using the correct syntax.
-- If the account from which the Post was sent was [protected](https://help.twitter.com/en/safety-and-security/public-and-protected-tweets) at the time the Post was created, the Post won’t be returned - even if the account is public at the time of the request to the endpoint. You can typically check this using [X Advanced Search](https://x.com/search-advanced): if a Post is not surfaced using the X Advanced Search functionality, you should assume that it won’t be returned by the endpoint.
-
-The following steps apply to streaming endpoints only:
-
-- Were you connected to the stream when the Post was sent? Remember that the timestamp delivered in the Post object indicates time in UTC. If you experienced a disconnect when the Post was sent, review the [recovery and redundancy features](/x-api/posts/filtered-stream/integrate/recovery-and-redundancy-features#recovery-and-redundancy) available to backfill any missed data.
-- Was your rule in place when the Post was sent? Remember that the timestamp delivered in the Post object indicates time in UTC.
-</Accordion>
-
-<Accordion title="Full buffer disconnect issues">
-You may get one of the following errors when your stream is not keeping up with the speed at which we are delivering data and your App isn't consuming the data from the stream fast enough:
-
-```
-This stream has been disconnected because your client was unable to keep up with us.
+```json
+{
+  "data": [
+    {"id": "123", "text": "Hello"}
+  ],
+  "errors": [
+    {
+      "resource_id": "456",
+      "resource_type": "tweet",
+      "title": "Not Found Error",
+      "detail": "Could not find tweet with id: [456].",
+      "type": "https://api.x.com/2/problems/resource-not-found"
+    }
+  ]
+}
 ```
 
-```
-This stream has been disconnected for operational reasons.
-```
+This happens when requesting multiple resources and some are unavailable.
 
-We allow delivery to get behind for a period of time, and we have a temporary staging buffer amount for each stream on our side; but if you don't catch up, we initiate a disconnect to allow you to reconnect at the current point in time. Please note that this may lead to data loss (for data that is within the buffer at the time of the full buffer disconnect).
+---
 
-These can occur around large spikes in data. Generally, we recommend using a buffer process for consuming data quickly that is separate from the processing process.
+## Troubleshooting common errors
 
-If you are an enterprise customer using v1.1 endpoints, you can find out more about optimizing your App to prevent disconnects like this in our articles on [connection](/x-api/enterprise-gnip-2.0/powertrack-api#disconnections-explained) and on consuming streaming data [here](https://developer.x.com/en/docs/tutorials/consuming-streaming-data) and [here](/x-api/enterprise-gnip-2.0/powertrack-api#planning-for-high-volume-social-data-events).
+<Accordion title="401 Unauthorized">
+**Check your authentication:**
+- Verify you're using the correct authentication method for the endpoint
+- Ensure credentials haven't been regenerated
+- Check the `Authorization` header format
+- For OAuth 1.0a, verify signature calculation
 
-There is a range of tools available for retrieving missed Posts due to a disconnect, including the ones listed below. Note that the following tools are only available with v1.1 endpoints at enterprise level of access.
-
-- [**Redundant Connections**](/x-api/enterprise-gnip-2.0/powertrack-api#recovery-and-redundancy-features) - With multiple connections, consume the stream from multiple servers to prevent missed data when one is disconnected.
-- [**Replay**](/x-api/enterprise-gnip-2.0/powertrack-api#recovery-and-redundancy-features) - Recover data from within the last 5 days using a separate stream.
-- [**Backfill**](/x-api/enterprise-gnip-2.0/powertrack-api#recovery-and-redundancy-features) - Reconnect within 5 minutes and start from where you left off.
-- **Historical PowerTrack** - Recover data from the entire X archive.
+[Authentication guide →](/resources/fundamentals/authentication/overview)
 </Accordion>
 
-## Get help
+<Accordion title="403 Forbidden">
+**Check your access:**
+- Verify your app has access to this endpoint
+- Some endpoints require specific enrollment or approval
+- User-context endpoints need appropriate OAuth scopes
+- The resource may be private or protected
+</Accordion>
 
-The X community forum is available for you to ask technical questions about the X developer platform. This is a discussions forum where you will find questions by other developers and technical information on a variety of topics related to using the X API.
+<Accordion title="429 Too Many Requests">
+**Rate limited:**
+- Check `x-rate-limit-reset` header for when to retry
+- Implement exponential backoff
+- Consider caching responses
+- Spread requests across the time window
 
-We encourage you to join the conversation by responding to questions and engaging in conversations on our forum. X employees are also there to provide support.
+[Rate limits guide →](/x-api/fundamentals/rate-limits)
+</Accordion>
 
-<Button href="https://devcommunity.x.com/">
-  X community forum
-</Button>
+<Accordion title="400 Bad Request">
+**Fix your request:**
+- Validate JSON syntax
+- Check for missing required parameters
+- Verify parameter types (strings vs. numbers)
+- Escape special characters in queries
+</Accordion>
 
-### Before you post a question
+<Accordion title="Missing expected posts">
+**Check these factors:**
+- Protected accounts' posts are only visible with authorization
+- Deleted posts return 404
+- Some posts are withheld in certain regions
+- Verify search query syntax is correct
+</Accordion>
 
-- Search the X developer documentation for information relating to your issue
-- Search the community forum for similar questions by other developers
-- Review the community forum guidelines
+<Accordion title="Stream disconnections">
+**Handle reconnection:**
+- Implement automatic reconnect with backoff
+- Use recovery features for missed data
+- Check for full-buffer disconnects (client not consuming fast enough)
+- Verify at least one stream rule exists
 
-### When you post a question, make sure to include the following information
+[Streaming guide →](/x-api/posts/filtered-stream/integrate/handling-disconnections)
+</Accordion>
 
-- A description of the problem
-- The API call being made (include headers, if possible)
-- The X response returned (include any error messages)
-- What you expected to receive instead
-- List of steps taken to troubleshoot the issue
-- List of steps required to reproduce the issue
-- If relevant, the time frame during which an issue occurred 
-- If relevant, the App ID, Post ID, etc.
-- Any relevant code sample or screenshots
+---
 
-Please only include one topic/question per post.
+## Rate limit headers
 
-If you have feature requests or feedback, please submit these through the [X Developer Platform Feedback Form](https://t.co/devfeedback). 
+Every response includes rate limit information:
 
-For Policy-related issues, such as App suspension, please contact [Policy support](https://help.twitter.com/forms/platform).
+```
+x-rate-limit-limit: 900
+x-rate-limit-remaining: 847
+x-rate-limit-reset: 1705420800
+```
 
-For X-related issues, such as login and account support, please use the [X Help Desk](https://help.twitter.com/en/contact-us).
+| Header | Description |
+|:-------|:------------|
+| `x-rate-limit-limit` | Max requests in current window |
+| `x-rate-limit-remaining` | Requests remaining |
+| `x-rate-limit-reset` | Unix timestamp when window resets |
 
+---
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Check status codes" icon="square-check">
+    Always check HTTP status before parsing the response body.
+  </Card>
+  <Card title="Handle partial errors" icon="triangle-exclamation">
+    Check for `errors` array even in 200 responses.
+  </Card>
+  <Card title="Implement retry logic" icon="arrows-rotate">
+    Use exponential backoff for 429 and 5xx errors.
+  </Card>
+  <Card title="Log request details" icon="file-lines">
+    Include request ID and timestamp for debugging.
+  </Card>
+</CardGroup>
+
+---
+
+## Getting help
+
+When posting questions about errors, include:
+
+- The API endpoint URL
+- Request headers (sanitize credentials)
+- Full error response
+- What you expected to happen
+- Steps you've tried
+
+<CardGroup cols={2}>
+  <Card title="Developer Forum" icon="comments" href="https://devcommunity.x.com">
+    Ask questions and search solutions.
+  </Card>
+  <Card title="API Status" icon="signal" href="/status">
+    Check for known issues.
+  </Card>
+</CardGroup>

@@ -1,148 +1,257 @@
 ---
 title: Quickstart
 sidebarTitle: Quickstart
-keywords: ["blocks quickstart", "block users quickstart", "blocks tutorial", "block guide", "blocks quickstart guide"]
+description: Block and unblock users, and retrieve your block list
+keywords: ["blocks quickstart", "block users quickstart", "blocks tutorial", "block guide"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-## Getting started with the blocks lookup endpoint
+This guide walks you through blocking and unblocking users, and retrieving your block list.
 
-This quick start guide will help you make your first request to the blocks lookup endpoint using [Postman](/tutorials/postman-getting-started).
-
-If you would like to see sample code in different languages, please visit our [X API v2 sample code](https://github.com/xdevplatform/Twitter-API-v2-sample-code) GitHub repository.
 <Note>
-### Prerequisites
+**Prerequisites**
 
-To complete this guide, you will need to have a set of [keys and tokens](/resources/fundamentals/authentication) to authenticate your request. You can generate these keys and tokens by following these steps:
-
-* [Sign up for a developer account](https://developer.x.com/en/apply-for-access) and receive approval.
-* Create a [Project](/resources/fundamentals/projects) and an associated [developer App](/resources/fundamentals/developer-apps) in the developer portal.
-* Navigate to your App's “Keys and tokens” page to generate the required credentials. Make sure to save all credentials in a secure location.
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- User Access Token (OAuth 1.0a or OAuth 2.0 PKCE)
 </Note>
-### Steps to build a blocks lookup request
 
-#### Step one: Start with a tool or library
+---
 
-There are several different tools, code examples, and libraries that you can use to make a request to this endpoint, but we will use the Postman tool here to simplify the process.
+## Get blocked users
 
-To load the X API v2 Postman collection into your environment, please click on the following button:
+<Steps>
+  <Step title="Get your user ID">
+    You need your authenticated user's ID to retrieve your block list. You can get it from the `/2/users/me` endpoint or use the ID from your tokens.
+  </Step>
 
-<Button href="https://app.getpostman.com/run-collection/9956214-784efcda-ed4c-4491-a4c0-a26470a67400">
-  Add X API v2 to Postman
-</Button>
-Once you have the X API v2 collection loaded in Postman, navigate to the “Blocks” folder, and select “Blocks Lookup”.
- 
+  <Step title="Request your block list">
 
-#### Step two: Authenticate your request
+<CodeGroup dropdown>
 
-To properly make a request to the X API, you need to verify that you have permission. To do so with this endpoint, you must authenticate your request using either [OAuth 1.0a User Context](/resources/fundamentals/authentication) or [OAuth 2.0 Authorization Code with PKCE](resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2).
-
-In this example, we are going to use OAuth 1.0a User Context.
-
-You must add your keys and tokens – specifically your API Key, API Secret Key, OAuth 1.0a user Access Token, and OAuth 1.0a user Access Token Secret – to Postman. You can do this by selecting the environment named “X API v2” in the top-right corner of Postman and adding your keys and tokens to the "initial value" and "current value" fields (by clicking the eye icon next to the environment dropdown).
-
-These variables will automatically be pulled into the request's authorization tab if you've done this correctly.
- 
-
-#### Step three: Specify a user
-
-With this endpoint, you must specify your user ID or the user ID of an authenticated user to see who you have blocked.
-
-In Postman, navigate to the "Params" tab and enter this username into the "Value" column of the id path variable (at the bottom of the section), making sure to not include any spaces before or after usernames.
- 
-
-|     |     |
-| :--- | :--- |
-| **Key** | **Value** |
-| `id` | (your user ID) |
-| max_results | 5   |
-
-#### Step four: Identify and specify which fields you would like to retrieve
-
-If you click the "Send" button after step three, you will receive the default [user object](/x-api/fundamentals/data-dictionary#user) fields in your response: id, name, and username.
-
-If you would like to receive additional fields beyond id, name, and username, you will have to specify those fields in your request with the [fields](/x-api/fundamentals/fields) and/or [expansions](/x-api/fundamentals/expansions) parameters.
-
-For this exercise, we will request three additional sets of fields from different objects:
-
-1.  The additional user.created_at field in the primary user objects.
-2.  The associated pinned Posts’ object’s default fields for the returned users: id and text.
-3.  The additional  tweet.created_at field in the associated Post objects.
-
-In Postman, navigate to the "Params" tab and add the following key:value pair to the "Query Params" table:
-
-|     |     |     |
-| :--- | :--- | :--- |
-| **Key** | **Value** | **Returned fields** |
-| user.fields | created_at | user.created_at |
-| expansions | pinned\_tweet\_id | tweet.id, tweet.text |
-| tweet.fields | created_at | includes.tweets.created_at |
-
-You should now see a similar URL with your own user ID instead of TwitterDev’s URL next to the "Send" button:
-
-      ```
-      https://api.x.com/2/users/2244994945/blocking?user.fields=created_at&expansions=pinned_tweet_id&tweet.fields=created_at
-      ```
-
-#### Step five: Make your request and review your response
-
-Once you have everything set up, hit the "Send" button and you will receive a similar response to the following example response:
-
+```bash cURL
+curl "https://api.x.com/2/users/123456789/blocking?\
+user.fields=username,verified,created_at&\
+max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
 ```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get blocked users with pagination
+for page in client.users.get_blocking(
+    "123456789",
+    user_fields=["username", "verified", "created_at"],
+    max_results=100
+):
+    for user in page.data:
+        print(f"{user.username} - Created: {user.created_at}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get blocked users with pagination
+const paginator = client.users.getBlocking("123456789", {
+  userFields: ["username", "verified", "created_at"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Created: ${user.created_at}`);
+  });
+}
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Review the response">
+    ```json
     {
-  "data": [
-    {
-      "created_at": "2008-12-04T18:51:57.000Z",
-      "id": "17874544",
-      "username": "TwitterSupport",
-      "name": "Twitter Support"
-    },
-    {
-      "created_at": "2007-02-20T14:35:54.000Z",
-      "id": "783214",
-      "username": "Twitter",
-      "name": "Twitter"
-    },
-    {
-      "pinned_tweet_id": "1389270063807598594",
-      "created_at": "2018-11-21T14:24:58.000Z",
-      "id": "1065249714214457345",
-      "username": "TwitterSpaces",
-      "name": "Spaces"
-    },
-    {
-      "pinned_tweet_id": "1293595870563381249",
-      "created_at": "2007-05-23T06:01:13.000Z",
-      "id": "6253282",
-      "username": "XAPI",
-      "name": "X API"
-    }
-  ],
-  "includes": {
-    "tweets": [
-      {
-        "created_at": "2021-05-03T17:26:09.000Z",
-        "id": "1389270063807598594",
-        "text": "now, everyone with 600 or more followers can host a Space.\n\nbased on what we've learned, these accounts are likely to have a good experience hosting because of their existing audience. before bringing the ability to create a Space to everyone, we’re focused on a few things. 🧵"
-      },
-      {
-        "created_at": "2020-08-12T17:11:04.000Z",
-        "id": "1293595870563381249",
-        "text": "X API v2: Early Access released\n\nToday we announced Early Access to the first endpoints of the new Twitter API!\n\n#TwitterAPI #EarlyAccess #VersionBump https://t.co/g7v3aeIbtQ"
+      "data": [
+        {
+          "id": "17874544",
+          "name": "Example User",
+          "username": "example_user",
+          "verified": false,
+          "created_at": "2008-12-04T18:51:57.000Z"
+        }
+      ],
+      "meta": {
+        "result_count": 1,
+        "next_token": "abc123"
       }
-    ]
-  }
-  ```
+    }
+    ```
+  </Step>
+</Steps>
 
-#### Step six: Paginate through your results
+---
 
-You may notice that there is a meta object located at the bottom of the response. If you received a next_token, this signals that there is another page of results that we can retrieve. To pull the next page of results, you will pull the value of the next_token field and add it to the request as the value to an additional pagination_token parameter.
- 
+## Block a user
 
-|     |     |
-| :--- | :--- |
-| **Key** | **Value** |
-| pagination_token | 1D3PU6DRII9HEZZZ |
+<Steps>
+  <Step title="Identify the target user">
+    Get the user ID of the account you want to block.
+  </Step>
 
-If you send the request after adding this additional parameter, the next five results will be delivered with the subsequent payload since we specified max_results as 5 in step three. You can continue to repeat this process until all results have been returned, but you can also use the max_results parameter to request up to 1000 users per request, so you don’t have to paginate through results quite as much.
+  <Step title="Send a block request">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/users/123456789/blocking" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"target_user_id": "9876543210"}'
+```
+
+```python Python SDK
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# Block a user
+response = client.users.block(
+    source_user_id="123456789",
+    target_user_id="9876543210"
+)
+print(f"Blocking: {response.data.blocking}")
+```
+
+```javascript JavaScript SDK
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// Block a user
+const response = await client.users.block("123456789", {
+  targetUserId: "9876543210",
+});
+console.log(`Blocking: ${response.data?.blocking}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Confirm the block">
+    ```json
+    {
+      "data": {
+        "blocking": true
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Unblock a user
+
+<Steps>
+  <Step title="Send an unblock request">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X DELETE "https://api.x.com/2/users/123456789/blocking/9876543210" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# Unblock a user
+response = client.users.unblock(
+    source_user_id="123456789",
+    target_user_id="9876543210"
+)
+print(f"Blocking: {response.data.blocking}")
+```
+
+```javascript JavaScript SDK
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// Unblock a user
+const response = await client.users.unblock("123456789", "9876543210");
+console.log(`Blocking: ${response.data?.blocking}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Confirm the unblock">
+    ```json
+    {
+      "data": {
+        "blocking": false
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Mutes" icon="volume-xmark" href="/x-api/users/mutes/introduction">
+    Mute users instead of blocking
+  </Card>
+  <Card title="Follows" icon="user-plus" href="/x-api/users/follows/introduction">
+    Manage follows
+  </Card>
+  <Card title="Integration guide" icon="book" href="/x-api/users/blocks/integrate">
+    Key concepts and best practices
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/users/get-blocking">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

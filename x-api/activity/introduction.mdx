@@ -1,126 +1,103 @@
 ---
-title: "Introduction"
-sidebarTitle: "Introduction"
-keywords: ["activity API","X Activity API","activity events","profile updates","user activity","real-time events","activity stream"]
+title: Activity Stream
+sidebarTitle: Introduction
+description: Stream real-time account activity events
+keywords: ["activity stream", "real-time activity", "account activity", "activity API", "event stream"]
 ---
 
-The X Activity API (XAA) endpoint group allows developers to tap in to activity events happening on the X Platform.
+import { Button } from '/snippets/button.mdx';
 
-A developer can subscribe to events they are interested in such as `ProfileBioUpdate`, `ProfilePictureUpdate` etc. and filter for the User ID whose events they want. The matching events for that User ID will be delivered to your app with sub-second latency.
+The Activity Stream endpoint provides real-time delivery of account activity events for subscribed users. Receive events when users post, like, follow, receive DMs, and more.
 
-<Warning>
-  The X Activity API is available as an open beta. While in open beta, please expect potential bugs, breaking changes, or incomplete features.
+## Overview
 
-  Your feedback is invaluable—report issues via our [developer community forums](https://devcommunity.x.com/).
-</Warning>
+<CardGroup cols={2}>
+  <Card title="Real-time" icon="bolt">
+    Events delivered instantly
+  </Card>
+  <Card title="Comprehensive" icon="list">
+    Posts, likes, follows, DMs, and more
+  </Card>
+  <Card title="Subscription-based" icon="bell">
+    Subscribe to user activity
+  </Card>
+  <Card title="Webhook delivery" icon="webhook">
+    Events delivered to your server
+  </Card>
+</CardGroup>
 
-## Delivery Mechanisms
+---
 
-The X Activity API currently supports the following delivery mechanisms to send events to your app:
+## Event types
 
-- Persistent HTTP stream
-- [Webhook](/x-api/webhooks/introduction)
+| Event | Description |
+|:------|:------------|
+| `tweet_create_events` | User posts a new Post |
+| `favorite_events` | User likes a Post |
+| `follow_events` | User follows or is followed |
+| `direct_message_events` | User sends or receives a DM |
+| `block_events` | User blocks or unblocks |
+| `mute_events` | User mutes or unmutes |
 
-## Supported Event Types
+---
 
-Currently, X Activity API supports the following event types, organized by category:
+## Endpoints
 
-### Profile Events
+| Method | Endpoint | Description |
+|:-------|:---------|:------------|
+| GET | [`/2/activity/stream`](/x-api/activity/activity-stream) | Connect to activity stream |
+| POST | [`/2/activity/subscriptions`](/x-api/activity/create-x-activity-subscription) | Create a subscription |
+| GET | [`/2/activity/subscriptions`](/x-api/activity/get-x-activity-subscriptions) | List subscriptions |
+| PUT | [`/2/activity/subscriptions/:id`](/x-api/activity/update-x-activity-subscription) | Update a subscription |
+| DELETE | [`/2/activity/subscriptions/:id`](/x-api/activity/deletes-x-activity-subscription) | Delete a subscription |
 
-Profile events are triggered when a user makes changes to their profile information.
+---
 
-| Event Name                   | Description                                         | Filters   |
-| ---------------------------- | --------------------------------------------------- | --------- |
-| `profile.update.bio`           | Fired when a user updates their profile bio         | `user_id` |
-| `profile.update.profile_picture`       | Fired when a user updates their profile picture     | `user_id` |
-| `profile.update.banner_picture`        | Fired when a user updates their profile banner      | `user_id` |
-| `profile.update.geo`           | Fired when a user updates their profile location    | `user_id` |
-| `profile.update.url`           | Fired when a user updates their profile website URL | `user_id` |
-| `profile.update.screenname`    | Fired when a user updates their display name        | `user_id` |
-| `profile.update.verified_badge` | Fired when a user updates their verified badge      | `user_id` |
+## How it works
 
-### Follow Events
+1. **Create subscription** — Subscribe to a user's activity
+2. **Connect to stream** — Establish persistent connection
+3. **Receive events** — Get real-time activity events
+4. **Process events** — Handle events in your application
 
-Follow events are triggered when a user follows or unfollows another user.
+---
 
-| Event Name | Description                           | Filters   |
-| ---------- | ------------------------------------- | --------- |
-| `follow.follow`  | Fired when a user follows another user | `user_id` |
-| `follow.unfollow`  | Fired when a user unfollows another user | `user_id` |
+## Example: Connect to stream
 
-<Note>
-  **Enterprise Only:** Follow events are only available to select Enterprise and Partner tier accounts at this time.
-</Note>
+```python
+import requests
 
-### News Events
+def stream_activity(bearer_token):
+    url = "https://api.x.com/2/activity/stream"
+    headers = {"Authorization": f"Bearer {bearer_token}"}
+    
+    response = requests.get(url, headers=headers, stream=True)
+    
+    for line in response.iter_lines():
+        if line:
+            print(line.decode("utf-8"))
+```
 
-News events provide updates on news topics and headlines curated by Grok.
+---
 
-| Event Name | Description                           | Filters   |
-| ---------- | ------------------------------------- | --------- |
-| `news.new`  | New grok-curated news and headlines | `keyword` |
-
-<Note>
-  **Enterprise Only:** News events are only available to select Enterprise and Partner tier accounts at this time.
-</Note>
-
-In future releases, XAA will expand to support additional event types including social interactions, content engagement, monetization features, and more. We will continue to update our docs when new event types become available.
-
-<Note>
-  **Note:** XAA does not deliver posts. For real-time post delivery, see our [Filtered Stream](/x-api/posts/filtered-stream/introduction) endpoint, which allows developers to filter for and stream posts in real-time.
-</Note>
-
-## Event Privacy and Authentication
-
-The X Activity API distinguishes between **public events** and **private events** as at parity with the X app as explained below.
-
-### Public Events
-
-Public events are activities that a public user account perform publicly that are visible to all X users. These events are visible to all users on the X platform and don't require OAuth authentication from the user in order to view.
-
-**Current public events:**
-
-- Profile updates (bio, picture, banner, location, URL, username changes)
-
-For these public events, you can create subscriptions by specifying the user ID in your filter and receive them via XAA.
-
-### Private Events
-
-Private events are activities that require explicit user consent through OAuth authentication. A User has to authenticate via X and give explicit permission to a developer app to access these events.
-
-**Authentication requirements for private events:**
-
-- The user must authenticate your application via OAuth 2.0
-- Your application must obtain appropriate OAuth scopes
-- The user must explicitly grant permission for your app to access these events
-- Subscriptions for private events can only be created for users who have authorized your application
-
-## Subscription Limits
-
-The X Activity API has different subscription limits based on your account tier:
-
-| Package Tier | Maximum Subscriptions |
-| ------------ | --------------------- |
-| Free         | Not Available         |
-| Basic        | 50                    |
-| Pro          | 2500                  |
-| Enterprise   | 50,000                |
-| Partner      | 100,000               |
+## Getting started
 
 <Note>
-  **Account setup**
+**Prerequisites**
 
-  To access these endpoints, you will need:
-
-  - An approved [developer account](https://developer.x.com/en/portal/petition/essential/basic-info).
-  - To authenticate using the keys and tokens from a [developer App](/resources/fundamentals/developer-apps) that is located within a [Project](/resources/fundamentals/projects).
-
-  Learn more about getting access to the X API v2 endpoints in our [getting started guide](/x-api/getting-started/getting-access).
+- An approved [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- A [Project and App](/resources/fundamentals/developer-apps) in the Developer Console
+- Your App's [Bearer Token](/resources/fundamentals/authentication)
 </Note>
 
-<div className="flex">
-<Button href="/x-api/posts/filtered-stream/quickstart">
-  Quick start
-</Button>
-
-</div>
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/x-api/activity/quickstart">
+    Set up your first subscription
+  </Card>
+  <Card title="Account Activity API" icon="bell" href="/x-api/account-activity/introduction">
+    Webhook-based alternative
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/activity/activity-stream">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

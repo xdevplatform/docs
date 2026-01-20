@@ -1,181 +1,226 @@
 ---
 title: Expansions
-keywords: ["expansions", "expand objects", "object expansion", "nested objects", "related objects", "expand users", "expand media", "expand tweets"]
+sidebarTitle: Expansions
+description: Include related objects in API responses
+keywords: ["expansions", "expand objects", "object expansion", "nested objects", "related objects"]
 ---
 
+Expansions let you include related objects in a single API response. Instead of making multiple requests, get a post and its author, media, or referenced posts in one call.
 
-With expansions, developers can expand objects referenced in the payload. Objects available for expansion are referenced by ID. For example, the `referenced_tweets.id` and `author_id` fields returned in the [Posts lookup](/x-api/posts/lookup/introduction) payload can be expanded into complete objects. If you would like to request fields related to the user that posted that Post, or the media, poll, or place that was included in that Post, you will need to pass the related expansion query parameter in your request to receive that data in your response. Currently, v2 endpoints that return Posts, Users, Lists, Spaces, and Direct Message event objects all support expansions (see examples below).
+---
 
-When including an expansion in your request, we will include that expanded object’s default fields within the same response. It helps return additional data in the same response without the need for separate requests. If you would like to request additional [fields](/x-api/fundamentals/fields) related to the expanded object, you can include the field parameter associated with that expanded object, along with a comma-separated list of fields that you would like to receive in your response. Please note fields are not always returned in the same order they were requested in the query.
+## How expansions work
 
-The Post payload below contains reference IDs for complementary objects we can expand on, including the `author_id` of who posted the Post, the `id` of a *referenced* Post, and a `media_key` for a media attachment.
+When you request an expansion, the API includes the full object in the `includes` section of the response:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?expansions=author_id" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Response:
 
 ```json
 {
-    "data": {
-        "attachments": {
-            "media_keys": ["16_1211797899316740096"]
-        },
-        "author_id": "2244994945",
-        "id": "1212092628029698048",
-        "referenced_tweets": [
-            {
-                "type": "replied_to",
-                "id": "1212092627178287104"
-            }
-        ],
-        "text": "We believe the best future version of our API will come from building it with YOU. Here’s to another great year with everyone who builds on the Twitter platform. We can’t wait to continue working with you in the new year. https://t.co/yvxdK6aOo2"
-    }
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "author_id": "2244994945"
+  },
+  "includes": {
+    "users": [{
+      "id": "2244994945",
+      "name": "X Developers",
+      "username": "xdevelopers"
+    }]
+  }
 }
 ```
-### Available Expansions for Post Payloads
 
-| Expansion                      | Description                                                                        |
-|:--------------------------------|:------------------------------------------------------------------------------------|
-| `author_id`                    | Returns a user object representing the Post's author                               |
-| `referenced_tweets.id`         | Returns a Post object that this Post is referencing (either as a Retweet, Quoted Tweet, or reply) |
-| `edit_history_tweet_ids`       | Returns Post objects that are part of a Post's edit history                        |
-| `in_reply_to_user_id`          | Returns a user object representing the Post author this requested Post is a reply of |
-| `attachments.media_keys`       | Returns a media object representing the images, videos, GIFs included in the Post  |
-| `attachments.poll_ids`         | Returns a poll object containing metadata for the poll included in the Post        |
-| `geo.place_id`                 | Returns a place object containing metadata for the location tagged in the Post     |
-| `entities.mentions.username`   | Returns a user object for the user mentioned in the Post                          |
-| `referenced_tweets.id.author_id` | Returns a user object for the author of the referenced Post                      |
+The `author_id` in `data` links to the user object in `includes`.
 
-### Available Expansion for User Payloads
+---
 
-| Expansion          | Description                                               |
-|:--------------------|:-----------------------------------------------------------|
-| `pinned_tweet_id`  | Returns a Post object representing the Post pinned to the top of the user’s profile |
+## Post expansions
 
-### Available Expansions for Direct Message Event Payloads
+| Expansion | Returns | Use case |
+|:----------|:--------|:---------|
+| `author_id` | User object | Get post author details |
+| `referenced_tweets.id` | Post object(s) | Get quoted/replied-to posts |
+| `referenced_tweets.id.author_id` | User object(s) | Get authors of referenced posts |
+| `in_reply_to_user_id` | User object | Get user being replied to |
+| `attachments.media_keys` | Media object(s) | Get images, videos, GIFs |
+| `attachments.poll_ids` | Poll object | Get poll options and votes |
+| `geo.place_id` | Place object | Get location details |
+| `entities.mentions.username` | User object(s) | Get mentioned users |
+| `edit_history_tweet_ids` | Post object(s) | Get previous versions of edited posts |
 
-| Expansion                | Description                                                              |
-|:--------------------------|:--------------------------------------------------------------------------|
-| `attachments.media_keys` | Returns a Media object that was attached to a Direct Message             |
-| `referenced_tweets.id`   | Returns a Post object that was referenced in a Direct Message            |
-| `sender_id`              | Returns a User object representing the author of a Direct Message and who invited a participant to join a conversation |
-| `participant_ids`        | Returns a User object representing a participant that joined or left a conversation |
+---
 
-### Available Expansions for Spaces Payloads
+## User expansions
 
-| Expansion          | Description                                               |
-|:--------------------|:-----------------------------------------------------------|
-| `invited_user_ids` | Returns User objects representing what accounts were invited |
-| `speaker_ids`      | Returns User objects representing what accounts spoke during a Space |
-| `creator_id`       | Returns a User object representing what account created the Space |
-| `host_ids`         | Returns User objects representing what accounts were set up as hosts |
-| `topics_ids`       | Returns topic descriptions that were set up by the creator |
+| Expansion | Returns | Use case |
+|:----------|:--------|:---------|
+| `pinned_tweet_id` | Post object | Get user's pinned post |
 
-### Available Expansion for Lists Payloads
+---
 
-| Expansion   | Description                                                    |
-|:-------------|:----------------------------------------------------------------|
-| `owner_id`  | Returns a User object representing what account created and maintains the List |
+## Space expansions
 
-## Expanding the Media Object
+| Expansion | Returns | Use case |
+|:----------|:--------|:---------|
+| `creator_id` | User object | Get Space creator |
+| `host_ids` | User object(s) | Get Space hosts |
+| `speaker_ids` | User object(s) | Get Space speakers |
+| `invited_user_ids` | User object(s) | Get invited users |
 
-In the following request, we are requesting the `geo.place_id` expansion to include alongside the default Post fields:
+---
 
-**Sample Request**
+## DM expansions
+
+| Expansion | Returns | Use case |
+|:----------|:--------|:---------|
+| `sender_id` | User object | Get message sender |
+| `participant_ids` | User object(s) | Get conversation participants |
+| `attachments.media_keys` | Media object | Get attached media |
+| `referenced_tweets.id` | Post object | Get referenced post |
+
+---
+
+## List expansions
+
+| Expansion | Returns | Use case |
+|:----------|:--------|:---------|
+| `owner_id` | User object | Get list owner |
+
+---
+
+## Combining with fields
+
+Expansions return default fields for each object. To get additional fields, combine expansions with field parameters:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?\
+expansions=author_id,attachments.media_keys&\
+user.fields=description,public_metrics&\
+media.fields=url,alt_text" \
+  -H "Authorization: Bearer $TOKEN"
 ```
-{`curl 'https://api.x.com/2/tweets/:ID?expansions=geo.place_id' --header 'Authorization: Bearer $ACCESS_TOKEN'`}
-```
 
-**Sample Response**
+Response:
 
-```
-{`{
+```json
+{
   "data": {
-      "geo": {
-          "place_id": "01a9a39529b27f36"
-      },
-      "id": "ID",
-      "text": "Test"
+    "id": "1234567890",
+    "text": "Check out this image!",
+    "author_id": "2244994945",
+    "attachments": {
+      "media_keys": ["3_1234567890"]
+    }
   },
   "includes": {
-      "places": [
-          {
-              "full_name": "Manhattan, NY",
-              "id": "01a9a39529b27f36"
-          }
-      ]
+    "users": [{
+      "id": "2244994945",
+      "name": "X Developers",
+      "username": "xdevelopers",
+      "description": "The voice of the X Developer Platform",
+      "public_metrics": {
+        "followers_count": 570842
+      }
+    }],
+    "media": [{
+      "media_key": "3_1234567890",
+      "type": "photo",
+      "url": "https://pbs.twimg.com/media/example.jpg",
+      "alt_text": "Example image"
+    }]
   }
-}`}
-
+}
 ```
 
-## Expanding the Poll Object
+---
 
-In the following request, we are requesting the `attachments.poll_ids` expansion to include alongside the default Post fields:
+## Multiple expansions
 
-**Sample Request**
+Request multiple expansions as a comma-separated list:
 
-<CodeBlock language="bash">
-{`curl 'https://api.x.com/2/tweets/1199786642791452673?expansions=attachments.poll_ids' --header 'Authorization: Bearer $ACCESS_TOKEN'`}
-</CodeBlock>
-
-**Sample Response**
-
-```
-{`{
-  "data": {
-      "attachments": {
-          "poll_ids": ["1199786642468413448"]
-      },
-      "id": "1199786642791452673",
-      "text": "C#"
-  },
-  "includes": {
-      "polls": [
-          {
-              "id": "1199786642468413448",
-              "options": [
-                  {
-                      "position": 1,
-                      "label": "“C Sharp”",
-                      "votes": 795
-                  },
-                  {
-                      "position": 2,
-                      "label": "“C Hashtag”",
-                      "votes": 156
-                  }
-              ]
-          }
-      ]
-  }
-}`}
-```
-## Expanding the Place Object
-
-In the following request, we are requesting the `geo.place_id` expansion to include alongside the default Post fields:
-
-**Sample Request**
-
-<CodeBlock language="bash">
-{`curl 'https://api.x.com/2/tweets/:ID?expansions=geo.place_id' --header 'Authorization: Bearer $ACCESS_TOKEN'`}
-</CodeBlock>
-
-**Sample Response**
-
-```s
-{`{
-  "data": {
-      "geo": {
-          "place_id": "01a9a39529b27f36"
-      },
-      "id": "ID",
-      "text": "Test"
-  },
-  "includes": {
-      "places": [
-          {
-              "full_name": "Manhattan, NY",
-              "id": "01a9a39529b27f36"
-          }
-      ]
-  }
-}`}
+```bash
+expansions=author_id,referenced_tweets.id,attachments.media_keys
 ```
 
+---
+
+## Common patterns
+
+<Tabs>
+  <Tab title="Full post context">
+Get a post with author, media, and referenced posts:
+
+```bash
+expansions=author_id,attachments.media_keys,referenced_tweets.id
+tweet.fields=created_at,public_metrics,conversation_id
+user.fields=username,name,profile_image_url
+media.fields=url,preview_image_url,type
+```
+  </Tab>
+  <Tab title="Conversation thread">
+Get replies with their authors:
+
+```bash
+expansions=author_id,in_reply_to_user_id,referenced_tweets.id
+tweet.fields=conversation_id,in_reply_to_user_id,created_at
+user.fields=username,name
+```
+  </Tab>
+  <Tab title="User with pinned post">
+Get a user profile with their pinned post:
+
+```bash
+expansions=pinned_tweet_id
+user.fields=description,public_metrics,verified
+tweet.fields=created_at,public_metrics
+```
+  </Tab>
+</Tabs>
+
+---
+
+## Linking data and includes
+
+The objects in `includes` don't contain position information. Link them using IDs:
+
+```python
+# Python example
+response = api_call()
+post = response["data"]
+users = {u["id"]: u for u in response["includes"]["users"]}
+
+# Get the author
+author = users.get(post["author_id"])
+print(f"{author['name']} said: {post['text']}")
+```
+
+```javascript
+// JavaScript example
+const { data: post, includes } = response;
+const users = Object.fromEntries(
+  includes.users.map(u => [u.id, u])
+);
+
+const author = users[post.author_id];
+console.log(`${author.name} said: ${post.text}`);
+```
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Fields" icon="list" href="/x-api/fundamentals/fields">
+    Request specific fields for each object.
+  </Card>
+  <Card title="Data Dictionary" icon="book" href="/x-api/fundamentals/data-dictionary">
+    Complete object schemas.
+  </Card>
+</CardGroup>

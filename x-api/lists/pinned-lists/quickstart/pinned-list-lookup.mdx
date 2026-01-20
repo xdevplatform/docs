@@ -1,88 +1,136 @@
 ---
-title: Pinned list lookup
-sidebarTitle: Pinned list lookup
+title: Pinned Lists Lookup
+sidebarTitle: Pinned Lists Lookup
+description: Get a user's pinned Lists
 keywords: ["pinned list lookup quickstart", "pinned list lookup", "pinned lists quickstart", "list lookup quickstart"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
+This guide walks you through retrieving a user's pinned Lists.
+
 <Note>
-**Please note:** This guide assumes you have completed the prerequisites from the [quick start overview](/x-api/lists/pinned-lists#getting-started-with-the-pinned-list-endpoint-group).
+**Prerequisites**
+
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- User Access Token (OAuth 1.0a or OAuth 2.0 PKCE)
 </Note>
-### Steps to build a pinned List lookup request
 
-**Step one: Choose the List endpoint collection from Postman**
+---
 
-Once you have the X API v2 collection loaded in Postman, navigate to the “List” folder, select another folder “Pinned Lists”, and then choose "User's pinned Lists".
- 
+## Get pinned Lists
 
-**Step two: Identify and specify the user**
+<Steps>
+  <Step title="Get your user ID">
+    You need your authenticated user's ID. You can find it using the [user lookup endpoint](/x-api/users/lookup/introduction) or from your Access Token (the numeric part is your user ID).
+  </Step>
 
-In order to retrieve a user’s pinned List, you must specify their user ID within the request. The user ID must correspond to the authenticating user’s ID, meaning that you must pass the Access Tokens associated with the user ID when authenticating your request. In this example, you can specify the ID belonging to your own user. You can find your ID in two ways:
+  <Step title="Request pinned Lists">
 
-1.  Using the [users lookup](/x-api/users/lookup/introduction) by username endpoint, you can pass a username and receive the id field.
-2.  Looking at your Access Token, you will find that the numeric part is your user ID.
+<CodeGroup dropdown>
 
-In Postman, navigate to the "Params" tab and enter this user ID into the "Value" column of the `id` parameter.
-
-|     |     |
-| :--- | :--- |
-| **Key** | **Value** |
-| `id` | 2244994945 (user ID) |
-
-**Step three: Identify and specify which fields you would like to retrieve**
-
-If you click the "Send" button after step three, you will receive the default [List object](/x-api/fundamentals/data-dictionary#list) fields in your response: `id` and `name`.
-
-If you would like to receive additional fields beyond `id` and `name`, you will have to specify those fields in your request with the [`field`](/x-api/fundamentals/fields) and/or [`expansion`](/x-api/fundamentals/expansions) parameters.
-
-For this exercise, we will request a three additional sets of fields from different objects:
-
-* The additional `follower_count` field in the primary List object.
-* The full [user object](/x-api/fundamentals/data-dictionary#user) using the expansion parameter.
-* The additional  `tweet.created_at` field in the associated user object.
-
-
-In Postman, navigate to the "Params" tab and add the following key:value pair to the "Query Params" table:
-
-|     |     |     |
-| :--- | :--- | :--- |
-| Key | Value | Returned fields |
-| list.fields | follower_count | `follower_count` |
-| expansions | owner_id | `includes.users.id,  <br/>includes.users.name,  <br/>includes.users.username` |
-| user.fields | created_at | `includes.users.created_at` |
-
-You should now see a similar URL next to the “Send” button:
-
-      `https://api.x.com/2/users/2244994945/pinned_lists?expansions=owner_id&list.fields=follower_count&user.fields=created_at`
-
-
-**Step four: Make your request and review your response**
-
-Once you have everything set up, hit the "Send" button, and you will receive a similar response to the following example response:
-
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/pinned_lists?\
+list.fields=follower_count,member_count,owner_id&\
+expansions=owner_id&\
+user.fields=created_at,username" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
 ```
-{
-  "data": [
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get pinned Lists
+response = client.lists.get_pinned(
+    "2244994945",
+    list_fields=["follower_count", "member_count", "owner_id"],
+    expansions=["owner_id"],
+    user_fields=["created_at", "username"]
+)
+
+for lst in response.data:
+    print(f"{lst.name} - {lst.follower_count} followers")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get pinned Lists
+const response = await client.lists.getPinned("2244994945", {
+  listFields: ["follower_count", "member_count", "owner_id"],
+  expansions: ["owner_id"],
+  userFields: ["created_at", "username"],
+});
+
+response.data?.forEach((lst) => {
+  console.log(`${lst.name} - ${lst.follower_count} followers`);
+});
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Review the response">
+    ```json
     {
-      "follower_count": 0,
-      "id": "1454155907651158017",
-      "name": "test list",
-      "owner_id": "2244994945"
-    }
-  ],
-  "includes": {
-    "users": [
-      {
-        "username": "TwitterDev",
-        "id": "2244994945",
-        "created_at": "2013-12-14T04:35:55.000Z",
-        "name": "Twitter Dev"
+      "data": [
+        {
+          "id": "1454155907651158017",
+          "name": "Tech News",
+          "follower_count": 150,
+          "member_count": 25,
+          "owner_id": "2244994945"
+        }
+      ],
+      "includes": {
+        "users": [
+          {
+            "id": "2244994945",
+            "username": "XDevelopers",
+            "name": "X Developers",
+            "created_at": "2013-12-14T04:35:55.000Z"
+          }
+        ]
+      },
+      "meta": {
+        "result_count": 1
       }
-    ]
-  },
-  "meta": {
-    "result_count": 1
-  }
-}
-```
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Available List fields
+
+| Field | Description |
+|:------|:------------|
+| `description` | List description |
+| `owner_id` | Owner's user ID |
+| `private` | Whether List is private |
+| `member_count` | Number of members |
+| `follower_count` | Number of followers |
+| `created_at` | List creation date |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Manage pinned Lists" icon="thumbtack" href="/x-api/lists/pinned-lists/quickstart/manage-pinned-lists">
+    Pin and unpin Lists
+  </Card>
+  <Card title="List lookup" icon="list" href="/x-api/lists/list-lookup/quickstart">
+    Get List details
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/lists/get-users-pinned-lists">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

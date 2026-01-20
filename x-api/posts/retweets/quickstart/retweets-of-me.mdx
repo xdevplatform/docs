@@ -1,65 +1,194 @@
 ---
 title: Retweets of Me
 sidebarTitle: Retweets of Me
+description: Get your Posts that have been Retweeted
 keywords: ["retweets of me", "reposts of me", "my retweets", "retweets quickstart", "retweets tutorial", "retweets guide"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-The Reposts of Me lookup allows you to see which of your own Posts have been shared by others.
+This guide walks you through retrieving your Posts that have been Retweeted by others.
 
-This provides users with insight into which of their Posts are being shared and resonating with their audience, which can help facilitate more targeted interactions and content strategy adjustments.
+<Note>
+**Prerequisites**
 
-#### Authentication
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- User Access Token (OAuth 1.0a or OAuth 2.0 PKCE)
+</Note>
 
-Since you are making requests on behalf of a user, you must authenticate these endpoints with either [OAuth 1.0a User Context](/resources/fundamentals/authentication) or [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2), and utilize the user Access Tokens associated with the user you are making the request on behalf of. You can generate this user Access Token using the [3-legged OAuth flow](https://developer.x.com/resources/fundamentals/authentication/obtaining-user-access-tokens) (OAuth 1.0a) or using the [Authorization Code with PKCE grant flow](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-3) (OAuth 2.0).
+---
 
-#### Making a request
+## Why use Retweets of Me?
 
-Once a user has authenticated with your app, you can call the Retweets of Me API on behalf of user as shown below:
+The Retweets of Me endpoint helps you:
 
-      ```bash
-      curl 'https://api.x.com/2/users/reposts_of_me' --header 'Authorization: ••••••'
-      ```
+- **Track engagement** — See which of your Posts are being shared
+- **Understand resonance** — Learn what content resonates with your audience
+- **Inform strategy** — Adjust your content strategy based on sharing patterns
 
+---
 
-If the request is successful, you should see the JSON response as shown below:
+## Get your Retweeted Posts
 
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/reposts_of_me?\
+tweet.fields=created_at,public_metrics&\
+max_results=10" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
 ```
-{
-   "data": [
-       {
-           "text": "ever wanted to discover trends.. before they’re trends?\n\nsign up to Premium+ to access Radar\n\nhttps://t.co/7a3JzBb855 https://t.co/rwNogVs0Wi",
-           "edit_history_tweet_ids": [
-               "1848781937210802364"
-           ],
-           "id": "1848781937210802364"
-       },
-       {
-           "text": "want to be mysterious so bad but also love oversharing on x dot com",
-           "edit_history_tweet_ids": [
-               "1847990559081648620"
-           ],
-           "id": "1847990559081648620"
-       },
-       {
-           "text": "post",
-           "edit_history_tweet_ids": [
-               "1847990269125226937"
-           ],
-           "id": "1847990269125226937"
-       },
-       {
-           "text": "posting is just journaling with an audience",
-           "edit_history_tweet_ids": [
-               "1847429017932026009"
-           ],
-           "id": "1847429017932026009"
-       },
-   ],
-   "meta": {
-       "result_count": 4,
-       "next_token": "7140dibdnow9c7btw481s8m561gat797rboud5r80xvzm"
-   }
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get your Posts that have been Retweeted
+for page in client.posts.get_reposts_of_me(
+    tweet_fields=["created_at", "public_metrics"],
+    max_results=10
+):
+    for post in page.data:
+        print(f"{post.text[:50]}... - Retweets: {post.public_metrics.retweet_count}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get your Posts that have been Retweeted
+const paginator = client.posts.getRepostsOfMe({
+  tweetFields: ["created_at", "public_metrics"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text?.slice(0, 50)}... - Retweets: ${post.public_metrics?.retweet_count}`);
+  });
 }
 ```
+
+</CodeGroup>
+
+---
+
+## Response
+
+```json
+{
+  "data": [
+    {
+      "id": "1848781937210802364",
+      "text": "ever wanted to discover trends.. before they're trends?...",
+      "created_at": "2024-01-15T10:30:00.000Z",
+      "public_metrics": {
+        "retweet_count": 42,
+        "reply_count": 5,
+        "like_count": 156,
+        "quote_count": 8
+      },
+      "edit_history_tweet_ids": ["1848781937210802364"]
+    },
+    {
+      "id": "1847990559081648620",
+      "text": "posting is just journaling with an audience",
+      "created_at": "2024-01-14T15:20:00.000Z",
+      "public_metrics": {
+        "retweet_count": 28,
+        "reply_count": 12,
+        "like_count": 89,
+        "quote_count": 3
+      },
+      "edit_history_tweet_ids": ["1847990559081648620"]
+    }
+  ],
+  "meta": {
+    "result_count": 2,
+    "next_token": "7140dibdnow9c7btw481s8m561gat797rboud5r80xvzm"
+  }
+}
+```
+
+---
+
+## Filter by time range
+
+Get Retweeted Posts from a specific period:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/reposts_of_me?\
+start_time=2024-01-01T00%3A00%3A00Z&\
+end_time=2024-01-31T23%3A59%3A59Z&\
+tweet.fields=created_at,public_metrics" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get Retweeted Posts from a time range
+for page in client.posts.get_reposts_of_me(
+    start_time="2024-01-01T00:00:00Z",
+    end_time="2024-01-31T23:59:59Z",
+    tweet_fields=["created_at", "public_metrics"]
+):
+    for post in page.data:
+        print(f"{post.created_at}: {post.text[:50]}...")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get Retweeted Posts from a time range
+const paginator = client.posts.getRepostsOfMe({
+  startTime: "2024-01-01T00:00:00Z",
+  endTime: "2024-01-31T23:59:59Z",
+  tweetFields: ["created_at", "public_metrics"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.created_at}: ${post.text?.slice(0, 50)}...`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Common parameters
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `max_results` | Results per page (1-100) | 10 |
+| `start_time` | Oldest Post timestamp (ISO 8601) | — |
+| `end_time` | Newest Post timestamp (ISO 8601) | — |
+| `pagination_token` | Token for next page | — |
+| `tweet.fields` | Additional Post fields | `id`, `text` |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Retweets lookup" icon="retweet" href="/x-api/posts/retweets/quickstart/retweets-lookup">
+    See who Retweeted a Post
+  </Card>
+  <Card title="Manage Retweets" icon="share" href="/x-api/posts/retweets/quickstart/manage-retweets">
+    Retweet and undo Retweets
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/posts/reposts-of-me">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

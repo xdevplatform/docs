@@ -1,85 +1,308 @@
 ---
 title: Quickstart
 sidebarTitle: Quickstart
-keywords: ["follows quickstart", "follow quickstart", "manage follows quickstart", "follow tutorial", "follow guide", "follow relationships quickstart"]
+description: Get followers and following lists, and manage follows
+keywords: ["follows quickstart", "followers quickstart", "following tutorial", "follows guide"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-## Getting started with the manage follows endpoints
+This guide walks you through retrieving followers and following lists, and managing follows.
 
-This quick start guide will help you make your first request to the manage follows endpoints using [Postman](/tutorials/postman-getting-started).
-
-If you would like to see sample code in different languages, please visit our [X API v2 sample code](https://github.com/xdevplatform/Twitter-API-v2-sample-code) GitHub repository. 
 <Note>
-### Prerequisites
+**Prerequisites**
 
-To complete this guide, you will need to have a set of [keys and tokens](/resources/fundamentals/authentication) to authenticate your request. You can generate these keys and tokens by following these steps:
-
-* [Sign up for a developer account](https://developer.x.com/en/apply-for-access) and receive approval.
-* Create a [Project](/resources/fundamentals/projects) and an associated [developer App](/resources/fundamentals/developer-apps) in the developer portal.
-* Navigate to your App's “Keys and tokens” page to generate the required credentials. Make sure to save all credentials in a secure location.
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- Your App's Bearer Token (for lookups)
+- User Access Token (for managing follows)
 </Note>
-### Steps to build a manage follows request
 
-#### Step one: Start with a tool or library
+---
 
-There are several different tools, code examples, and libraries that you can use to make a request to this endpoint, but we are going to use the Postman tool here to simplify the process.
+## Get a user's followers
 
-To load the X API v2 Postman collection into your environment, please click on the following button:
+Retrieve the list of users following a specific user:
 
-<Button href="https://app.getpostman.com/run-collection/9956214-784efcda-ed4c-4491-a4c0-a26470a67400">
-  Add X API v2 to Postman
-</Button>
-Once you have the X API v2 collection loaded in Postman, navigate to the “Follows” folder, and select “Follow a user ID”.
- 
+<CodeGroup dropdown>
 
-#### Step two: Authenticate your request
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/followers?\
+user.fields=username,verified,public_metrics&\
+max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
 
-To properly make a request to the X API, you need to verify that you have permission. To do so with this endpoint, you must authenticate your request using either [OAuth 1.0a User Context](/resources/fundamentals/authentication) or [OAuth 2.0 Authorization Code with PKCE](resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2).
+```python Python SDK
+from xdk import Client
 
-In this example, we are going to use OAuth 1.0a User Context.
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
 
-You must add your keys and tokens – specifically your API Key, API Secret Key, OAuth 1.0a user Access Token, and OAuth 1.0a user Access Token Secret – to Postman. You can do this by selecting the environment named “X API v2” in the top-right corner of Postman and adding your keys and tokens to the "initial value" and "current value" fields (by clicking the eye icon next to the environment dropdown).
+# Get a user's followers with pagination
+for page in client.users.get_followers(
+    "2244994945",
+    user_fields=["username", "verified", "public_metrics"],
+    max_results=100
+):
+    for user in page.data:
+        print(f"{user.username} - Followers: {user.public_metrics.followers_count}")
+```
 
-These variables will automatically be pulled into the request's authorization tab if you've done this correctly.
- 
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
-#### Step three: Specify who is going to follow whom
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
 
-Manage follows endpoints take two IDs: one for the source user (the user who wishes to follow or unfollow another user) and the target user (the user that will be followed or unfollowed). The source user’s ID must correspond to the user ID of the authenticating user. In this case, you can specify the ID belonging to your own user. You can find your ID in two ways:
+// Get a user's followers with pagination
+const paginator = client.users.getFollowers("2244994945", {
+  userFields: ["username", "verified", "public_metrics"],
+  maxResults: 100,
+});
 
-1.  Using the [user lookup by username](/x-api/users/user-lookup-by-id) endpoint, you can pass a username and receive the id field. 
-2.  Looking at your Access Token, you will find that the numeric part is your user ID.
-     
-
-The target ID can be any valid user ID. For example the user ID for @XDevelopers is 2244994945.
-
-In Postman, navigate to the "Params" tab, and enter your ID into the "Value" column of the id path variable. Navigate to the “Body” tab and and 2244994945 (the user ID for @XDevelopers) as the value for the target\_user\_id parameter. Making sure to not include any spaces before or after any ID.
-
-|     |     |
-| :--- | :--- |
-| **Key** | **Value** |
-| `id` | (your user ID) |
-| target\_user\_id | 2244994945 |
-
-
-If you click the "Send" button, you will receive a response object containing the status of the relationship:
-
-* If you receive a "following": true, then the id is successfully following the target\_user\_id.
-* If you receive a "pending": true, then the target\_user\_id is protected and must accept your follow request.
-
-####
-Step four: Make your request and review your response
-
-Once you have everything set up, hit the "Send" button and you will receive the following response:
-```{
-    "data": {
-        "following": true,
-        "pending_follow": false
-    }
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Followers: ${user.public_metrics?.followers_count}`);
+  });
 }
 ```
 
+</CodeGroup>
 
-Similarly, if you were trying to unfollow a user, you would use the "Unfollow a user ID" request within the same Postman collection. However, both the source\_user\_id and target\_user\_id parameters should be passed as path variables using the unfollow endpoint. 
+### Response
+
+```json
+{
+  "data": [
+    {
+      "id": "1234567890",
+      "name": "Developer",
+      "username": "dev_user",
+      "verified": false,
+      "public_metrics": {
+        "followers_count": 500,
+        "following_count": 200,
+        "tweet_count": 1500
+      }
+    }
+  ],
+  "meta": {
+    "result_count": 1,
+    "next_token": "abc123"
+  }
+}
+```
+
+---
+
+## Get who a user follows
+
+Retrieve the list of users that a specific user follows:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/following?\
+user.fields=username,verified&\
+max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get users that a user follows
+for page in client.users.get_following(
+    "2244994945",
+    user_fields=["username", "verified"],
+    max_results=100
+):
+    for user in page.data:
+        print(f"{user.username} - Verified: {user.verified}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get users that a user follows
+const paginator = client.users.getFollowing("2244994945", {
+  userFields: ["username", "verified"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Verified: ${user.verified}`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Follow a user
+
+Follow a user on behalf of the authenticated user:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/users/123456789/following" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"target_user_id": "2244994945"}'
+```
+
+```python Python SDK
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# Follow a user
+response = client.users.follow(
+    source_user_id="123456789",
+    target_user_id="2244994945"
+)
+print(f"Following: {response.data.following}")
+```
+
+```javascript JavaScript SDK
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// Follow a user
+const response = await client.users.follow("123456789", {
+  targetUserId: "2244994945",
+});
+console.log(`Following: ${response.data?.following}`);
+```
+
+</CodeGroup>
+
+### Response
+
+```json
+{
+  "data": {
+    "following": true,
+    "pending_follow": false
+  }
+}
+```
+
+<Note>
+If the target account is protected, `pending_follow` will be `true` until the follow request is approved.
+</Note>
+
+---
+
+## Unfollow a user
+
+Unfollow a user on behalf of the authenticated user:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X DELETE "https://api.x.com/2/users/123456789/following/2244994945" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# Unfollow a user
+response = client.users.unfollow(
+    source_user_id="123456789",
+    target_user_id="2244994945"
+)
+print(f"Following: {response.data.following}")
+```
+
+```javascript JavaScript SDK
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// Unfollow a user
+const response = await client.users.unfollow("123456789", "2244994945");
+console.log(`Following: ${response.data?.following}`);
+```
+
+</CodeGroup>
+
+### Response
+
+```json
+{
+  "data": {
+    "following": false
+  }
+}
+```
+
+---
+
+## Common parameters
+
+| Parameter | Description |
+|:----------|:------------|
+| `max_results` | Results per page (1-1000, default 100) |
+| `pagination_token` | Token for next page |
+| `user.fields` | Additional user fields |
+| `expansions` | Related objects to include |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="User lookup" icon="user" href="/x-api/users/lookup/introduction">
+    Look up user profiles
+  </Card>
+  <Card title="Blocks" icon="ban" href="/x-api/users/blocks/introduction">
+    Block and unblock users
+  </Card>
+  <Card title="Mutes" icon="volume-xmark" href="/x-api/users/mutes/introduction">
+    Mute and unmute users
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/users/followers-lookup">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

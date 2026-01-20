@@ -1,96 +1,369 @@
 ---
-title: Integration guide
-sidebarTitle: Integration guide
-keywords: ["user lookup integration", "users integration guide", "user lookup setup", "users integration", "user lookup implementation"]
+title: Integration Guide
+sidebarTitle: Integration Guide
+description: Key concepts and best practices for integrating User lookup
+keywords: ["user lookup integration", "users integration guide", "user lookup implementation"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-This page contains information on several tools and key concepts that you should be aware of as you integrate the users lookup endpoints into your system. We’ve broken the page into a couple of different sections:
+This guide covers the key concepts you need to integrate the User lookup endpoints into your application.
 
-* [Helpful tools](#helpful)
-* Key Concepts
-* [Authentication](#authentication)
-* [Developer portal, Projects, and Apps](#portal)
-* [Rate limits](#limits)
-* [Fields and expansions](#fields)
-* [Edge cases](#edge)
+---
 
-### Helpful tools
+## Authentication
 
-Before we dive into some key concepts that will help you integrate this endpoint, we recommend that you become familiar with:
+All X API v2 endpoints require authentication. Choose the method that fits your use case:
 
-#### Postman
+| Method | Best for | Can access private metrics? |
+|:-------|:---------|:---------------------------|
+| [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) | Server-to-server, public data | No |
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | User-facing apps | Yes (for authorized user's data) |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | Legacy integrations | Yes (for authorized user's data) |
 
-Postman is a great tool that you can use to test out an endpoint. Each Postman request includes every path and body parameter to help you quickly understand what is available to you. To learn more about our Postman collections, please visit our ["Using Postman"](/tutorials/postman-getting-started) page. 
+### App-Only authentication
 
-#### Code samples
+For public user data, use a Bearer Token:
 
-Interested in getting set up with this endpoint with some code in your preferred coding language? We’ve got a handful of different code samples available that you can use as a starting point on our [Github page](https://github.com/xdevplatform/Twitter-API-v2-sample-code).
+<CodeGroup dropdown>
 
-#### Third-party libraries
+```bash cURL
+curl "https://api.x.com/2/users/by/username/XDevelopers" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
 
-Take advantage of one of our communities’ [third-party libraries](/x-api/tools-and-libraries/overview) to help you get started. You can find a library that works with the v2 endpoints by looking for the proper version tag.
+```python Python SDK
+from xdk import Client
 
-### Key concepts
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
 
-#### Authentication
+# Get user by username
+response = client.users.get_by_username("XDevelopers")
+print(response.data)
+```
 
-All X API v2 endpoints require requests to be [authenticated](/resources/fundamentals/authentication) with a set of credentials, also known as keys and tokens. You can use either OAuth 1.0a User Context, App only, or OAuth 2.0 Authorization Code with PKCE to authenticate requests to these endpoints. 
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
-[OAuth 1.0a User Context](/resources/fundamentals/authentication#oauth-1-0a-2) requires you to utilize your API Keys, user Access Tokens, and a handful of other parameters to [create an authorization header](/resources/fundamentals/authentication#authorizing-a-request), which you will then pass with your request. The Access Tokens must be associated with the user that you are making the request on behalf of. If you would like to generate a set of Access Tokens for another user, they must authorize your App using the [3-legged OAuth flow](https://developer-staging.x.com/resources/fundamentals/authentication/obtaining-user-access-tokens). 
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
 
-Please note that OAuth 1.0a can be difficult to use. If you are not familiar with this authentication method, we recommend that you use a [library](/x-api/tools-and-libraries/overview), use a tool like Postman, or use OAuth 2.0 to authenticate your requests. If you would like to request a Post or private metrics from these endpoints, you will need to use a either OAuth 1.0a User Context or OAuth 2.0 Authorization Code with PKCE, which will ensure that you have the proper permissions from the user that owns that content.
- 
+const response = await client.users.getByUsername("XDevelopers");
+console.log(response.data);
+```
 
-[App only](/resources/fundamentals/authentication#bearer-token-also-known-as-app-only) just requires that you pass an [App only Access Token](/resources/fundamentals/authentication#bearer-token-also-known-as-app-only) with your request. You can either generate an App only Access Token from directly within a developer App, or generate one using the [POST oauth2/token](/resources/fundamentals/authentication#post-oauth2-token) endpoint.
+</CodeGroup>
 
-[OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) allows for greater control over an application’s scope, and authorization flows across multiple devices. OAuth 2.0 allows you to pick specific fine-grained scopes which give you specific permissions on behalf of a user. 
+### User Context authentication
 
-To enable OAuth 2.0 in your App, you must enable it in your’s App’s authentication settings found in the App settings section of the developer portal.
+Required for the authenticated user endpoint (`/2/users/me`):
 
-**Please note**
+<CodeGroup dropdown>
 
-If you are requesting the following fields, OAuth 1.0a User Context or OAuth 2.0 Authorization Code is required: 
+```bash cURL
+curl "https://api.x.com/2/users/me" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
 
-* tweet.fields.non\_public\_metrics
-* tweet.fields.promoted_metrics
-* tweet.fields.organic_metrics
+```python Python SDK
+from xdk import Client
 
-#### Developer portal, Projects, and developer Apps
+# Using OAuth 2.0 user access token
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
 
-To retrieve a set of authentication credentials that will work with the X API v2 endpoints, you must [sign up for a developer account](https://developer.x.com/en/portal/petition/essential/basic-info), set up a [Project](/resources/fundamentals/projects) within that account, and created a [developer App](/resources/fundamentals/developer-apps) within that Project. You can then find your keys and tokens within your developer App. 
- 
+# Get authenticated user's profile
+response = client.users.get_me()
+print(response.data)
+```
 
-#### Rate limits
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
-Every day, many thousands of developers make requests to the X API. To help manage the sheer volume of these requests, [rate limits](/x-api/fundamentals/rate-limits) are placed on each endpoint that limits the number of requests that you can make on behalf of your app or on behalf of an authenticated user. 
+// Using OAuth 2.0 user access token
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
 
-The user lookup endpoints are rate limited at both the app-level and the user-level. However, the authenticated user lookup endpoint is rate limited at the user-level
+const response = await client.users.getMe();
+console.log(response.data);
+```
 
-The app-level rate limit means that you, the developer, can only make a certain number of requests to this endpoint over a given period of time from any given App (assumed by the keys and tokens that you are using. The user-level rate limit means that the authenticated user that you are making the request on behalf of can only perform a certain number of times across any developer App.
+</CodeGroup>
 
-The chart below shows the rate limits for each endpoint.
+<Warning>
+The `/2/users/me` endpoint only works with User Context authentication. App-Only tokens will return an error.
+</Warning>
 
-|     |     |     |
-| :--- | :--- | :--- |
-| **Endpoint** | **HTTP method** | **Rate limit / Level** |
-| /2/users | GET | 900 requests per 15 minutes / App and User |
-| /2/users/:id | GET | 900 requests per 15 minutes / App and User |
-| /2/users/by | GET | 900 requests per 15 minutes / App and User |
-| /2/users/by/username/:username | GET | 900 requests per 15 minutes / App and User |
-| /2/users/me | GET | 75 requests per 15 minutes / User |
+---
 
-#### Fields and expansions
+## Fields and expansions
 
-The X API v2 allows users to select exactly which data they want to return from the API using a set of tools called fields and expansions. The expansion parameter allows you to expand objects referenced in the payload. For example, this endpoint allows you to use the pinned\_tweet\_id expansion.
+The X API v2 returns minimal data by default. Use `fields` and `expansions` to request exactly what you need.
 
-The fields parameter allows you to select exactly which [fields](/x-api/fundamentals/fields) within the different data objects you would like to receive. These endpoints delivers user objects primarily. By default, the user object returns the id, name, and username fields. To receive additional fields such as user.created_at or user.location, you will have to specifically request those using a fields parameter. Some important fields that you may want to consider using in your integration are our Post poll data, metrics, annotations, and conversation ID fields.
+### Default response
 
-We’ve added a guide on how to [use fields and expansions](/x-api/fundamentals/data-dictionary#how-to-use-fields-and-expansions) in our [X API v2 data dictionary](/x-api/fundamentals/data-dictionary).
+```json
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "XDevelopers"
+  }
+}
+```
 
+### Available fields
 
-#### Edge cases
+<Accordion title="user.fields">
+| Field | Description |
+|:------|:------------|
+| `created_at` | Account creation timestamp |
+| `description` | User bio |
+| `entities` | Parsed URLs in bio |
+| `location` | User-defined location |
+| `pinned_tweet_id` | Pinned Post ID |
+| `profile_image_url` | Avatar URL |
+| `protected` | Whether account is protected |
+| `public_metrics` | Follower/following counts |
+| `url` | Website URL |
+| `verified` | Verification status |
+| `withheld` | Withholding information |
+</Accordion>
 
-* Post text is truncated for Retweets. The short term workaround is to expand the referenced Post and retrieve the full text from the expansion. This is a bug that we will fix in the future.
+<Accordion title="tweet.fields (requires pinned_tweet_id expansion)">
+| Field | Description |
+|:------|:------------|
+| `created_at` | Post creation timestamp |
+| `text` | Post content |
+| `public_metrics` | Engagement counts |
+| `entities` | Hashtags, mentions, URLs |
+</Accordion>
 
+### Example with fields
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/by/username/XDevelopers?\
+user.fields=created_at,description,public_metrics,verified&\
+expansions=pinned_tweet_id&\
+tweet.fields=created_at,public_metrics" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get user with additional fields and expansions
+response = client.users.get_by_username(
+    "XDevelopers",
+    user_fields=["created_at", "description", "public_metrics", "verified"],
+    expansions=["pinned_tweet_id"],
+    tweet_fields=["created_at", "public_metrics"]
+)
+
+print(response.data)
+print(response.includes)  # Contains expanded pinned tweet
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+const response = await client.users.getByUsername("XDevelopers", {
+  userFields: ["created_at", "description", "public_metrics", "verified"],
+  expansions: ["pinned_tweet_id"],
+  tweetFields: ["created_at", "public_metrics"],
+});
+
+console.log(response.data);
+console.log(response.includes); // Contains expanded pinned tweet
+```
+
+</CodeGroup>
+
+### Response with expansions
+
+```json
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "XDevelopers",
+    "created_at": "2013-12-14T04:35:55.000Z",
+    "verified": true,
+    "pinned_tweet_id": "1234567890",
+    "public_metrics": {
+      "followers_count": 583423,
+      "following_count": 2048,
+      "tweet_count": 14052
+    }
+  },
+  "includes": {
+    "tweets": [
+      {
+        "id": "1234567890",
+        "text": "Welcome to the X Developer Platform!",
+        "created_at": "2024-01-15T10:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+<Card title="Fields and expansions guide" icon="sliders" href="/x-api/fundamentals/fields">
+  Learn more about customizing responses
+</Card>
+
+---
+
+## Batch lookups
+
+Look up multiple users in a single request:
+
+<CodeGroup dropdown>
+
+```bash cURL (by IDs)
+curl "https://api.x.com/2/users?ids=2244994945,783214,6253282&\
+user.fields=username,verified" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```bash cURL (by usernames)
+curl "https://api.x.com/2/users/by?usernames=XDevelopers,X,XAPI&\
+user.fields=username,verified" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get multiple users by IDs
+response = client.users.get_users(
+    ids=["2244994945", "783214", "6253282"],
+    user_fields=["username", "verified"]
+)
+for user in response.data:
+    print(f"{user.username}: {user.verified}")
+
+# Get multiple users by usernames
+response = client.users.get_users_by_usernames(
+    usernames=["XDevelopers", "X", "XAPI"],
+    user_fields=["username", "verified"]
+)
+for user in response.data:
+    print(f"{user.username}: {user.verified}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get multiple users by IDs
+const byIds = await client.users.getUsers({
+  ids: ["2244994945", "783214", "6253282"],
+  userFields: ["username", "verified"],
+});
+byIds.data.forEach((user) => {
+  console.log(`${user.username}: ${user.verified}`);
+});
+
+// Get multiple users by usernames
+const byUsernames = await client.users.getUsersByUsernames({
+  usernames: ["XDevelopers", "X", "XAPI"],
+  userFields: ["username", "verified"],
+});
+byUsernames.data.forEach((user) => {
+  console.log(`${user.username}: ${user.verified}`);
+});
+```
+
+</CodeGroup>
+
+<Tip>
+Batch requests are limited to 100 users. Use multiple requests for larger datasets.
+</Tip>
+
+---
+
+## Error handling
+
+### Common errors
+
+| Status | Error | Solution |
+|:-------|:------|:---------|
+| 400 | Invalid request | Check parameter formatting |
+| 401 | Unauthorized | Verify authentication credentials |
+| 403 | Forbidden | Check App permissions |
+| 404 | Not Found | User doesn't exist or was suspended |
+| 429 | Too Many Requests | Wait and retry (see rate limits) |
+
+### Suspended or deleted users
+
+If a user is suspended or deleted:
+- Single user lookup returns `404`
+- Multi-user lookup omits the user from results with an `errors` array
+
+```json
+{
+  "data": [
+    { "id": "2244994945", "username": "XDevelopers" }
+  ],
+  "errors": [
+    {
+      "resource_id": "1234567890",
+      "resource_type": "user",
+      "title": "Not Found Error",
+      "detail": "Could not find user with id: [1234567890]."
+    }
+  ]
+}
+```
+
+### Protected users
+
+For protected accounts you don't follow:
+- Basic info (id, name, username) is available
+- Protected content (pinned Post) may be restricted
+- `protected: true` indicates the account status
+
+---
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Batch requests" icon="layer-group">
+    Use multi-user endpoints to fetch up to 100 users at once, reducing API calls.
+  </Card>
+  <Card title="Request only needed fields" icon="filter">
+    Specify only the fields you need to minimize response size.
+  </Card>
+  <Card title="Cache user data" icon="database">
+    Cache user profiles locally to reduce repeated requests.
+  </Card>
+  <Card title="Handle errors gracefully" icon="triangle-exclamation">
+    Check for partial errors in batch responses.
+  </Card>
+</CardGroup>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="API Reference" icon="code" href="/x-api/users/get-user-by-id">
+    Complete endpoint documentation
+  </Card>
+  <Card title="Data dictionary" icon="book" href="/x-api/fundamentals/data-dictionary">
+    All available objects and fields
+  </Card>
+  <Card title="Sample code" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    Working code examples
+  </Card>
+  <Card title="Error handling" icon="triangle-exclamation" href="/x-api/fundamentals/response-codes-and-errors">
+    Handle errors gracefully
+  </Card>
+</CardGroup>

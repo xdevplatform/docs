@@ -1,21 +1,108 @@
 ---
 title: X IDs
-icon: id-card-clip
-keywords: ["X IDs", "Twitter IDs", "user ID", "tweet ID", "snowflake ID", "64-bit integers", "ID format", "ID string", "unique identifiers"]
+sidebarTitle: X IDs
+icon: fingerprint
+description: Understanding unique identifiers in the X API
+keywords: ["X IDs", "Twitter IDs", "user ID", "tweet ID", "snowflake ID", "64-bit integers", "ID format", "unique identifiers"]
 ---
 
-Each object within X - a Tweet, Direct Message, User, List, and so on - has a unique ID.
+Every object in the X API—posts, users, lists, DMs, spaces—has a unique ID. Understanding how these IDs work helps you build reliable integrations.
 
-At the very beginning of the platform, these IDs were small enough numbers that they could be generated sequentially. Over time, to accommodate growth, the IDs moved from being 32-bit, to 64-bit. Today, X IDs are unique 64-bit unsigned integers, which are based on time, instead of being sequential. The full ID is composed of a timestamp, a worker number, and a sequence number. X developed an internal service known as "Snowflake" in order to consistently generate these IDs ([read more about this on the X blog](https://blog.x.com/engineering/en_us/a/2010/announcing-snowflake.html)).
+---
 
-Numbers as large as 64-bits can cause issues with programming languages that represent integers with fewer than 64-bits. An example of this is JavaScript, where integers are limited to 53-bits in size. In order to provide a workaround for this, in the original designs of the X API (v1/1.1), ID values were returned in two formats: both as integers, and as strings.
+## ID format
 
-```json
-{"id": 10765432100123456789, "id_str": "10765432100123456789"}
+X IDs are **64-bit unsigned integers** generated using a system called "Snowflake." Each ID encodes:
+
+- **Timestamp** — When the object was created
+- **Worker number** — Which server generated the ID
+- **Sequence number** — Order within that millisecond
+
+This means IDs are roughly time-ordered: higher IDs generally represent newer objects.
+
+<Tip>
+IDs are globally unique across all of X, not just within a single object type.
+</Tip>
+
+---
+
+## String vs. integer representation
+
+<Warning>
+**Always use string IDs in your code.** Some programming languages (like JavaScript) can't accurately represent 64-bit integers.
+</Warning>
+
+In JavaScript, integers are limited to 53 bits. This causes precision loss with large IDs:
+
+```javascript
+// This loses precision!
+const id = 10765432100123456789;
+console.log(id.toString()); // "10765432100123458000" — wrong!
+
+// Use strings instead
+const id = "10765432100123456789";
+console.log(id); // "10765432100123456789" — correct!
 ```
 
-If you run the command `(10765432100123456789).toString()` in a browser JavaScript console, the result will be `"10765432100123458000"` - the 64-bit integer loses accuracy as a result of the translation (this is sometimes called "munging" - a destructive change to a piece of data).
+### API versions
 
-In X APIs up to version 1.1, you should always use the string representation of the number to avoid losing accuracy.
+| Version | ID format |
+|:--------|:----------|
+| **X API v2** | IDs are returned as strings by default |
+| **X API v1.1** | Returns both `id` (integer) and `id_str` (string) — always use `id_str` |
 
-In newer versions of the API, all large integer values are represented as strings by default.
+---
+
+## Working with IDs
+
+### Storing IDs
+
+Store IDs as strings or 64-bit integers in your database:
+
+| Database | Recommended type |
+|:---------|:-----------------|
+| PostgreSQL | `BIGINT` or `TEXT` |
+| MySQL | `BIGINT UNSIGNED` or `VARCHAR(20)` |
+| MongoDB | String |
+| SQLite | `TEXT` (SQLite integers max at 63 bits) |
+
+### Comparing IDs
+
+When comparing IDs for chronological ordering:
+
+```python
+# Python - safe for 64-bit integers
+if int(id1) > int(id2):
+    print("id1 is newer")
+
+# JavaScript - compare as strings (lexicographically works for same-length IDs)
+# Or use BigInt
+if (BigInt(id1) > BigInt(id2)) {
+    console.log("id1 is newer");
+}
+```
+
+---
+
+## Common ID types
+
+| Object | Example ID | Notes |
+|:-------|:-----------|:------|
+| Post (Tweet) | `1234567890123456789` | Also called Tweet ID |
+| User | `2244994945` | Older accounts have shorter IDs |
+| List | `1234567890` | |
+| Space | `1YqGodQbNXDxv` | Alphanumeric, not Snowflake format |
+| DM Event | `1234567890123456789` | |
+
+---
+
+## Related resources
+
+<CardGroup cols={2}>
+  <Card title="Data Dictionary" icon="book" href="/x-api/fundamentals/data-dictionary">
+    See ID fields for each object type.
+  </Card>
+  <Card title="Post Lookup" icon="magnifying-glass" href="/x-api/posts/lookup/introduction">
+    Retrieve posts by ID.
+  </Card>
+</CardGroup>

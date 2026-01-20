@@ -1,146 +1,265 @@
 ---
-title: Overview
+title: Integration Guide
 sidebarTitle: Overview
+description: Key concepts and best practices for integrating Search Posts
 keywords: ["search integration", "search overview", "search guide", "search implementation", "tweet search integration"]
 ---
 
-## How to integrate with the Search Posts endpoints
+This guide covers the key concepts you need to integrate the Search Posts endpoints into your application.
 
-This page contains information on several tools and key concepts that you should be aware of as you integrate the recent search or full archive search endpoints into your system. We’ve split the page into the following sections:
+---
 
-* [Helpful tools](#helpful-tools)
-* Key concepts
-    * [Authentication](#authentication)
-    * [Developer portal, Projects, and Apps](#developer-portal)
-    * [Rate limits](#rate-limits)
-    * [Fields and expansions](#fields-expansions)
-    * [Metrics](#metrics)
-    * [Building search queries](#queries)
-    * [Pagination](#pagination)
-    * [Post caps](#tweet-caps) 
+## Authentication
 
-    * [Post edits](#tweet-edits) 
+### Recent search
 
+Recent search supports multiple authentication methods:
 
-### Helpful tools
+| Method | Use case |
+|:-------|:---------|
+| [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) | Public Post data |
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | Private metrics |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | Private metrics |
 
-Before we start to explore some key concepts, we recommend that you use one of the following tools or code samples to start testing the functionality of these endpoints.
+### Full-archive search
 
-#### Code samples
+Full-archive search only supports [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) authentication.
 
-Interested in getting set up with these endpoints with some code in your preferred coding language? We’ve got a handful of different code samples available that you can use as a starting point on our [GitHub page](https://github.com/xdevplatform/Twitter-API-v2-sample-code), including a [Python client](https://github.com/xdevplatform/search-tweets-python) and a [Ruby client](https://github.com/xdevplatform/search-tweets-ruby).
+<Warning>
+Private metrics (`non_public_metrics`, `organic_metrics`, `promoted_metrics`) are not available with full-archive search because it only supports App-Only authentication.
+</Warning>
 
-#### Libraries
+---
 
-Take advantage of one of our many [community third-party libraries](/x-api/tools-and-libraries/overview) to help you get started. You can find a library that works with the v2 endpoints by looking for the appropriate version tag.
+## Building queries
 
-#### Postman
+Queries use operators to match Posts. Combine operators with boolean logic:
 
-Postman is a great tool that you can use to test out these endpoints. Each Postman request includes all of the given endpoint’s parameters to help you quickly understand what is available to you. To learn more about our Postman collections, please visit our [Using Postman](/tutorials/postman-getting-started) page.
- 
+```
+(AI OR "machine learning") lang:en -is:retweet has:links
+```
 
-### Key concepts
+### Query length limits
 
-#### Authentication
+| Access level | Recent search | Full-archive search |
+|:-------------|:--------------|:--------------------|
+| Self-serve | 512 chars | 1,024 chars |
+| Enterprise | 4,096 chars | 4,096 chars |
 
-All X API v2 endpoints require you to authenticate your requests with a set of credentials, also known as keys and tokens. You can use either OAuth 1.0a User Context, OAuth 2.0 App-Only, or OAuth 2.0 Authorization Code with PKCE to authenticate your requests to the recent search endpoint. You must use OAuth 2.0 App-Only when using the full archive search endpoint.
+### Operator types
 
-[OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-3) just requires that you pass an [OAuth 2.0 App Access Token](/resources/fundamentals/authentication#bearer-token-also-known-as-app-only) with your request. You can either generate an App Access Token from directly within a developer App, or generate one using the [POST oauth2/token](/resources/fundamentals/authentication#post-oauth2-token) endpoint.
+| Type | Description | Example |
+|:-----|:------------|:--------|
+| **Standalone** | Can be used alone | `#python`, `from:user` |
+| **Conjunction-required** | Must be used with a standalone operator | `has:media`, `is:retweet` |
 
-[OAuth 1.0a User Context](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow) requires you to utilize your API Keys, user Access Tokens, and a handful of other parameters to [create an authorization header](https://developer-staging.x.com/resources/fundamentals/authentication/authorizing-a-request), which you will then pass with your request. The Access Tokens must be associated with the user that you are making the request on behalf of. If you would like to generate a set of Access Tokens for another user, they must authorize your App using the [3-legged OAuth flow](https://developer-staging.x.com/resources/fundamentals/authentication/obtaining-user-access-tokens). 
+<Card title="Build a query" icon="magnifying-glass" href="/x-api/posts/search/integrate/build-a-query">
+  Learn query syntax in detail
+</Card>
 
-Please note that OAuth 1.0a can be difficult to use. If you are not familiar with this authentication method, we recommend that you use a [library](/x-api/tools-and-libraries/overview), use a tool like Postman, or use OAuth 2.0 to authenticate your requests. If you would like to request a Post or private metrics from these endpoints, you will need to use a either OAuth 1.0a User Context or OAuth 2.0 Authorization Code with PKCE, which will ensure that you have the proper permissions from the user that owns that content.
+<Card title="Operator reference" icon="list-check" href="/x-api/posts/search/integrate/operators">
+  See all available operators
+</Card>
 
-[OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) allows for greater control over an application’s scope, and authorization flows across multiple devices. OAuth 2.0 allows you to pick specific fine-grained scopes which give you specific permissions on behalf of a user. 
+---
 
-To enable OAuth 2.0 in your App, you must enable it in your’s App’s authentication settings found in the App settings section of the developer portal.
+## Fields and expansions
 
-<Note>
-**Please note**
+By default, the response includes only `id`, `text`, and `edit_history_tweet_ids`. Use parameters to request additional data.
 
-If you are requesting the following [fields](/x-api/fundamentals/fields), OAuth 1.0a User Context or OAuth 2.0 Authorization Code is required: 
+### Example request
 
-* tweet.fields.non_public_metrics
-* tweet.fields.promoted_metrics
-* tweet.fields.organic_metrics
-* media.fields.non_public_metrics
-* media.fields.promoted_metrics
-* media.fields.organic_metrics
-</Note>
-####
-Developer portal, Projects, and developer Apps
+<CodeGroup dropdown>
 
-To work with any X API v2 endpoints, you must have [signed up for a developer account](https://developer.x.com/en/portal/petition/essential/basic-info), set up a Project within that account, and created a developer App within that Project. Your keys and tokens within that developer App will work for these search endpoints.
+```bash cURL
+curl "https://api.x.com/2/tweets/search/recent?\
+query=python&\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id,attachments.media_keys&\
+user.fields=username,verified&\
+media.fields=url,type" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
 
-You can use keys and tokens from a Project with any [access level](/x-api/getting-started/about-x-api) to make requests to the recent search endpoint. However, you will need to use Project with the Pro or Enterprise access level to make requests to the full archive search endpoint. If you have [Enterprise access](/x-api/getting-started/getting-access), you will have access to additional functionality, including the availability of additional operators and longer query lengths.
- 
+```python Python SDK
+from xdk import Client
 
-#### Rate limits
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
 
-Every day, many thousands of developers make requests to the X API. To help manage the volume, [rate limits](/x-api/fundamentals/rate-limits) are placed on each endpoint that limits the number of requests that every developer can make on behalf of an app or on behalf of an authenticated user.
+# Search recent Posts
+for page in client.posts.search_recent(
+    query="python",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id", "attachments.media_keys"],
+    user_fields=["username", "verified"],
+    media_fields=["url", "type"],
+    max_results=100
+):
+    for post in page.data:
+        print(f"{post.text} - Likes: {post.public_metrics.like_count}")
+```
 
-There are different rate limits applied for these endpoints depending on which authentication method is being used. The app-level rate limits apply to an App making requests using OAuth 2.0 App-Only, whereas the user-level rate limit applies to requests being made on behalf of the specific authorizing user using OAuth 1.0a User Context or OAuth 2.0 Authorization Code with PKCE. These two rate limits are based on the frequency of requests within a 15-minute window.
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
-For example, an app using OAuth 2.0 App-Only auth to make requests to the recent search endpoint can make 450 requests (including pagination requests) within a 15-minute timeframe. That same app, within the same 15-minute timeframe and with two different authenticated users (using OAuth 1.0a User Context or OAuth 2.0 Authorization Code with PKCE) can make up to 180 requests (including pagination requests) to the recent search endpoint for each authenticated user.
- 
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
 
-#### Fields and expansions
+// Search recent Posts
+const paginator = client.posts.searchRecent("python", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id", "attachments.media_keys"],
+  userFields: ["username", "verified"],
+  mediaFields: ["url", "type"],
+  maxResults: 100,
+});
 
-The X API v2 allows you to select exactly which data you want returned from the API using [fields](/x-api/fundamentals/fields) and [expansions](/x-api/fundamentals/expansions). The expansion parameter allows you to expand objects referenced in the payload. For example, this endpoint allows you to request poll, place, media, and other objects using the expansions parameter.
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text} - Likes: ${post.public_metrics?.like_count}`);
+  });
+}
+```
 
-The fields parameters allows you to select exactly which fields within the different data objects you would like to receive. By default, the primary Post object returned by these endpoints include the id and text fields (in addition to edit_history_tweet_ids for Posts created after that feature was launched). To receive additional fields such as author_id or public_metrics, you will have to specifically request those using the fields parameters. Some important fields that you may want to consider using in your integration are our poll data, [metrics](/x-api/fundamentals/metrics), [Post annotations](/x-api/fundamentals/post-annotations), and [conversation ID](/x-api/fundamentals/conversation-id) fields.
+</CodeGroup>
 
-We’ve added a guide on how to [use fields and expansions together](/x-api/fundamentals/data-dictionary#how-to-use-fields-and-expansions) to our [X API v2 data dictionary](/x-api/fundamentals/data-dictionary).
- 
+### Available expansions
 
-#### Metrics
+| Expansion | Returns |
+|:----------|:--------|
+| `author_id` | Author's user object |
+| `attachments.media_keys` | Attached media objects |
+| `attachments.poll_ids` | Attached poll objects |
+| `referenced_tweets.id` | Quoted or replied-to Posts |
+| `geo.place_id` | Place objects |
+| `entities.mentions.username` | Mentioned user objects |
 
-The X API v2 endpoints allow you to request metrics directly from the returned objects, assuming you pass the proper [fields](/x-api/fundamentals/fields) with your request.
+<Card title="Fields and expansions guide" icon="sliders" href="/x-api/fundamentals/fields">
+  Learn more about customizing responses
+</Card>
 
-There are some limitations with Post metrics that you should be aware of, specifically related to user privacy and the following response fields:
+---
 
-* tweet.fields.non_public_metrics
-* tweet.fields.promoted_metrics
-* tweet.fields.organic_metrics
-* media.fields.non_public_metrics
-* media.fields.promoted_metrics
-* media.fields.organic_metrics
+## Pagination
 
+Search endpoints return results in pages. Use the `next_token` from the response to fetch additional pages.
 
-The noted fields include private metrics data, meaning you must be authorized by the Post's publisher to retrieve this data on their behalf when using the recent search endpoint, meaning you must use [OAuth 1.0a User Context](/resources/fundamentals/authentication). Since you can only use this authentication method using recent search, you will not be able to retrieve these metrics via the full archive search endpoint.
+### How it works
 
-For example, in order to receive `non_public_metrics` for user ID 1234's Posts, you will need to include access tokens associated with that user in your request. You can have users authorize your app and receive a set of access tokens associated with them by using the [3-legged OAuth flow](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow).
+1. Make your initial request with `max_results`
+2. Check the `meta` object for `next_token`
+3. Include `next_token` in subsequent requests
+4. Repeat until no `next_token` is returned
 
-All `non_public_metrics`, `organic_metrics`, and promoted_metrics are only available for Posts created in the last 30 days. This means that when you are requesting the noted fields, the results will automatically adjust to only include Posts from the last 30 days.
+### Example
 
-If these noted fields are requested, only Posts that are authored by the authenticated user will be returned, all other Posts will receive an error message.
- 
+<CodeGroup dropdown>
 
-#### Building search queries
+```bash cURL
+# First request
+curl "https://api.x.com/2/tweets/search/recent?query=python&max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
 
-The central feature of these endpoints is their use of a single search query to filter the Posts that deliver to you. These queries are made up of operators that match on Post and user attributes, such as message keywords, hashtags, and URLs. Operators can be combined into queries with boolean logic and parentheses to help refine the query's matching behavior.
+# Subsequent request with pagination token
+curl "https://api.x.com/2/tweets/search/recent?query=python&max_results=100&next_token=NEXT_TOKEN" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
 
-You can use our guide on [how to build a query](/x-api/posts/search/integrate/build-a-query) to learn more.
+```python Python SDK
+from xdk import Client
 
-#### Pagination
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
 
-These endpoints utilize pagination so that responses are returned quickly. In cases where there are more results than what can be sent in a single response (up to 100 Posts for recent search and 500 for full-archive search) you will need to paginate. Use the max_results parameter to identify how many results will return per page, and the pagination_token parameter to return the next page of results. You can learn more by reviewing our [pagination guide](/x-api/fundamentals/pagination).
+# The SDK handles pagination automatically
+all_posts = []
 
+for page in client.posts.search_recent(query="python", max_results=100):
+    if page.data:
+        all_posts.extend(page.data)
 
-#### Post caps
+print(f"Found {len(all_posts)} posts")
+```
 
-The Search Posts endpoints are limited in the number of Posts that they can return in a given month, regardless of pagination.
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
-Regardless of which search endpoint you use, the Posts returned will count towards the Project-level [Post caps](/x-api/fundamentals/post-cap). Usage is shown in the developer portal, and the 'month' starts on your subscription renewal day shown on the [developer portal dashboard](https://developer.x.com/en/portal/dashboard).
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
 
-**Post edits**
+async function getAllResults(query) {
+  const allPosts = [];
 
-Posts that are eligible for edits can be edited up to five times in the 30 minutes after the original Post was published. The search endpoints will always provide the latest version of the Post. If you only request Posts that were published 30 or more minutes ago, you will always receive the final version of the Post. However, if you have a near-real-time use case, and are querying Posts published within the last thirty minutes, those Posts could have been edited after you received them. These Posts can be rehydrated with search, or the Post Lookup endpoint to confirm their final state. To learn more about how Post edits work, see the [Post edits fundamentals](/x-api/fundamentals/edit-posts) page.  
+  // The SDK handles pagination automatically
+  const paginator = client.posts.searchRecent(query, { maxResults: 100 });
 
-**Next steps**
+  for await (const page of paginator) {
+    if (page.data) {
+      allPosts.push(...page.data);
+    }
+  }
 
-[Make your first request to a Search Posts endpoint](/x-api/posts/search/quickstart/recent-search)
+  return allPosts;
+}
 
-[See a full list of parameters, fields, and more in our API Reference pages](/x-api/posts/recent-search)
+// Usage
+const posts = await getAllResults("python");
+console.log(`Found ${posts.length} posts`);
+```
 
-[Get support or troubleshoot an error](https://developer.x.com/en/support/x-api)
+</CodeGroup>
+
+<Card title="Pagination guide" icon="arrow-right" href="/x-api/posts/search/integrate/paginate">
+  Learn more about pagination
+</Card>
+
+---
+
+## Post edits
+
+Posts can be edited up to 5 times within 30 minutes. The search endpoints always return the most recent version.
+
+### Considerations
+
+- `edit_history_tweet_ids` contains all Post IDs (oldest first)
+- Posts fetched after the 30-minute window represent the final version
+- For near-real-time use cases, recently-published Posts may still be edited
+
+<Card title="Edit Posts fundamentals" icon="clock-rotate-left" href="/x-api/fundamentals/edit-posts">
+  Learn more about Post edits
+</Card>
+
+---
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Start specific" icon="crosshairs">
+    Use multiple operators to narrow results and reduce noise.
+  </Card>
+  <Card title="Test iteratively" icon="flask">
+    Start broad, then refine based on results.
+  </Card>
+  <Card title="Handle pagination" icon="arrow-right">
+    Implement proper pagination for large result sets.
+  </Card>
+  <Card title="Cache results" icon="database">
+    Store results locally to avoid repeated requests.
+  </Card>
+</CardGroup>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Build a query" icon="magnifying-glass" href="/x-api/posts/search/integrate/build-a-query">
+    Master query syntax
+  </Card>
+  <Card title="Operator reference" icon="list-check" href="/x-api/posts/search/integrate/operators">
+    All available operators
+  </Card>
+  <Card title="Pagination" icon="arrow-right" href="/x-api/posts/search/integrate/paginate">
+    Handle large result sets
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/posts/recent-search">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

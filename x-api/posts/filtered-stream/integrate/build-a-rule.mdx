@@ -1,203 +1,222 @@
 ---
 title: Build a rule
 sidebarTitle: Build a rule
+description: Learn how to build filtered stream rules using operators
 keywords: ["build rule", "filter rules", "stream rules", "rule builder", "filtered stream rules", "create rule", "rule guide"]
 ---
 
-## Building rules for filtered stream
+The filtered stream endpoints deliver Posts that match a set of rules applied to the stream. Rules are made up of operators that match on a variety of Post attributes.
 
-The filtered stream endpoints deliver filtered Posts to you that match on a set of rules that are applied to the stream. Rules are made up of operators that are used to match on a variety of Post attributes.
+Multiple rules can be applied using the [POST /tweets/search/stream/rules](/x-api/posts/filtered-stream#post-2-tweets-search-stream-rules) endpoint. Once you've added rules and connected using [GET /tweets/search/stream](/x-api/posts/filtered-stream#get-2-tweets-search-stream), only Posts matching your rules will be delivered. You do not need to disconnect to add or remove rules.
 
-Multiple rules can be applied to a stream using the [POST /tweets/search/stream/rules](/x-api/posts/filtered-stream#post-2-tweets-search-stream-rules) endpoint. Once you’ve added rules and connect to your stream using the [GET /tweets/search/stream](/x-api/posts/filtered-stream#get-2-tweets-search-stream) endpoint, only those Posts that match your rules will be delivered through a persistent streaming connection. You do not need to disconnect from your stream to add or remove rules. 
+---
 
-### Table of contents
+## Rule limitations
 
-* [Building a rule](#building-a-rule)
-    * [Rule limitations](#rule-limitations)
-    * [Operator availability](#operator-availability)
-    * [Operator types: standalone and conjunction-required](#operator-types-standalone-and-conjunction-required)
-    * [Boolean operators and grouping](#boolean-operators-and-grouping)
-    * [Order of operations](#order-of-operations)
-    * [Punctuation, diacritics, and case sensitivity](#punctuation-diacritics-and-case-sensitivity)
-    * [Specificity and efficiency](#specificity-and-efficiency)
-    * [Iteratively building a rule](#iteratively-building-a-rule)
-    * [Adding and removing rules](#adding-and-removing-rules)
-    * [Rule examples](#rule-examples)
+Limits on the number of rules depend on your [access level](/x-api/getting-started/about-x-api). See the [filtered stream introduction](/x-api/posts/filtered-stream/introduction) for specific limits.
 
-### Building a rule
+---
 
-#### Rule limitations
-
-Limits on the number of rules will depend on which [access level](/x-api/getting-started/about-x-api) is applied to your [Project](/resources/fundamentals/projects).
-
-You can see how these limits apply via the [filtered stream introduction](/x-api/posts/filtered-stream) page.
-
-#### Operator types: standalone and conjunction-required
+## Operator types: standalone and conjunction-required
 
 **Standalone operators** can be used alone or together with any other operators (including those that require conjunction).
 
-For example, the following rule will work because it uses the `#hashtag` operator, which is standalone:
+For example, this rule works because `#hashtag` is a standalone operator:
 
-`#xapiv2`
+```
+#xapiv2
+```
 
-**Conjunction required** operators cannot be used by themselves in a rule; they can only be used when at least one standalone operator is included in the rule. This is because using these operators alone would be far too general, and would match on an extremely high volume of Posts.
+**Conjunction-required operators** cannot be used by themselves in a rule; they can only be used when at least one standalone operator is included. This is because using these operators alone would match an extremely high volume of Posts.
 
-For example, the following rules are not supported since they contain only conjunction required operators:
+For example, the following rules are **not supported** since they contain only conjunction-required operators:
 
-`has:media`
+```
+has:media
+```
 
-`has:links OR is:retweet`
+```
+has:links OR is:retweet
+```
 
-If we add in a standalone operator, such as the phrase `"X data"`, the rule would then work properly. 
+If we add a standalone operator, such as the phrase `"X data"`, the rule works properly:
 
-`"X data" has:mentions (has:media OR has:links)`
+```
+"X data" has:mentions (has:media OR has:links)
+```
 
-#### Boolean operators and grouping
+---
 
-If you would like to string together multiple operators in a single rule, you have the following tools at your disposal:
+## Boolean operators and grouping
 
-|     |     |
-| :--- | :--- |
-| **AND logic** | Successive operators **with a space between them** will result in boolean "AND" logic, meaning that Posts will match only if both conditions are met. For example, `snow day #NoSchool` will match Posts containing the terms snow and day and the hashtag #NoSchool. |
-| **OR logic** | Successive operators with OR between them will result in OR logic, meaning that Posts will match if either condition is met. For example, specifying `grumpy OR cat OR #meme` will match any Posts containing at least the terms grumpy or cat, or the hashtag #meme. |
-| **NOT logic, negation** | Prepend a dash (-) to a keyword (or any operator) to negate it (NOT). For example, `cat #meme -grumpy` will match Posts containing the hashtag #meme and the term cat, but only if they do not contain the term grumpy. One common rule clause is `-is:retweet`, which will not match on Retweets, thus matching only on original Posts, Quote Tweets, and replies. All operators can be negated, but negated operators cannot be used alone. |
-| **Grouping** | You can use parentheses to group operators together. For example, `(grumpy cat) OR (#meme has:images)` will return either Posts containing the terms grumpy and cat, or Posts with images containing the hashtag #meme. Note that ANDs are applied first, then ORs are applied. |
+String together multiple operators using these tools:
+
+| Operator | Description | Example |
+| :--- | :--- | :--- |
+| **AND** (space) | Posts must match both conditions | `snow day #NoSchool` matches Posts with "snow" AND "day" AND #NoSchool |
+| **OR** | Posts must match either condition | `grumpy OR cat OR #meme` matches Posts with "grumpy" OR "cat" OR #meme |
+| **NOT** (dash) | Exclude Posts matching this condition | `cat #meme -grumpy` matches Posts with "cat" and #meme but NOT "grumpy" |
+| **Grouping** (parentheses) | Group operators together | `(grumpy cat) OR (#meme has:images)` matches either group |
 
 <Note>
 **A note on negations**
 
-All operators can be negated except for `sample:`, and `-is:nullcast` must always be negated. Negated operators cannot be used alone.
-
-Do not negate a set of operators grouped together in a set of parentheses. Instead, negate each individual operator.
-
-For example, instead of using `skiing -(snow OR day OR noschool)`, we suggest that you use `skiing -snow -day -noschool`. 
+- All operators can be negated except for `sample:`
+- The operator `-is:nullcast` must always be negated
+- Negated operators cannot be used alone
+- Do not negate grouped operators. Instead of `skiing -(snow OR day OR noschool)`, use `skiing -snow -day -noschool`
 </Note>
 
-#### Order of operations
+---
 
-When combining AND and OR functionality, the following order of operations will dictate how your rule is evaluated.
+## Order of operations
 
-1.  Operators connected by AND logic are combined first
-2.  Then, operators connected with OR logic are applied
+When combining AND and OR:
 
+1. Operators connected by AND logic are combined first
+2. Then, operators connected with OR logic are applied
 
+**Examples:**
 
-For example:
+| Query | Evaluated as |
+| :--- | :--- |
+| `apple OR iphone ipad` | `apple OR (iphone ipad)` |
+| `ipad iphone OR android` | `(iphone ipad) OR android` |
 
-* `apple OR iphone ipad` would be evaluated as `apple OR (iphone ipad)`
-* `ipad iphone OR android` would be evaluated as `(iphone ipad) OR android`
+To eliminate uncertainty, use parentheses:
 
-
-
-To eliminate uncertainty and ensure that your rule is evaluated as intended, group terms together with parentheses where appropriate. 
-
-For example:
-
-* `(apple OR iphone) ipad`
-* `iphone (ipad OR android)`
-
-#### Punctuation, diacritics, and case sensitivity
-
-If you specify a keyword or hashtag rule with character accents or diacritics, it will match Posts that contain the exact word with proper accents or diacritics, but not those that have the proper letters, but without the accent or diacritic. 
-
-For example, rules with the keyword `diacrítica` or hashtag `#cumpleaños` will match Posts that contain _diacrítica_ or _#cumpleaños_ because they include the accent or diacritic. However, these rules will not match Posts that contain _Diacritica_ or _#cumpleanos_ without the tilde í or eñe.
-
-
-Characters with accents or diacritics are treated the same as normal characters and are not treated as word boundaries. For example, a rule with the keyword _cumpleaños_ would only match Posts containing the word _cumpleaños_ and would not match Posts containing _cumplea_, _cumplean_, or _os_.
-
-All operators are evaluated in a case-insensitive manner. For example, the rule cat will match all of the following: _cat_, _CAT_, _Cat_.
-
-<Note>
-The [Search Posts](/x-api/posts/search/introduction) matching behavior acts differently from filtered stream. When [building a Search Posts query](/x-api/posts/search/integrate/build-a-query), know that keywords and hashtags that include accents or diacritics will match both the term with the accents and diacritics, as well as with normal characters. 
-
-For example, Search Posts queries that include a keyword `Diacrítica` or hashtag `#cumpleaños` will match both _Diacrítica_ and _#cumpleaños_, as well as _Diacritica_ or _#cumpleanos_ without the tilde í or eñe.
-</Note>
-
-#### Specificity and efficiency
-
-When you start to build your rule, it is important to keep a few things in mind.
-
-* Using broad, standalone operators for your rule such as a single keyword or #hashtag is generally not recommended since it will likely match on a massive volume of Posts. Creating a more robust rule will result in a more specific set of matching Posts, and will hopefully reduce the amount of noise in the payload that you will need to sift through to find valuable insights. 
-    * For example, if your rule was just the keyword `happy` you will likely get anywhere from 200,000 - 300,000 Posts per day.
-    * Adding more conditional operators narrows your search results, for example `(happy OR happiness) place_country:GB -birthday -is:retweet`
-* Writing efficient rules is also beneficial for staying within the characters rule length restriction. The character count includes the entire rule string including spaces and operators.
-    * For example, the following rule is 59 characters long: `(happy OR happiness) place_country:GB -birthday -is:retweet`
-
-#### Quote Tweet matching behavior
-
-When using the filtered stream endpoints, operators will match on both the content from the original Post that was quoted, as well as the content included in the Quote Tweet.
-
-However, please note that the [Search Posts](/x-api/posts/search/introduction) endpoints will not match on the content from the original Post that was quoted, but will match on the Quote Tweet's content.
-
-#### Iteratively building a rule
-
-##### Test your rule early and often
-
-Getting a rule to return the "right" results the first time is rare. There is so much on X that may or may not be obvious at first and the rule syntax described above may be hard to match to your desired search. As you build a rule, it is important for you to periodically test it out with the stream endpoint to see what data it returns. You can also test with one of the [Search Post](/x-api/posts/search/introduction) endpoints, assuming the operators that you are using are also available via that endpoint. 
-
-For this section, we are going to start with the following rule and adjust it based on the results that we receive during our test: 
-
-`happy OR happiness`
-
-##### Use results to narrow the rule
-
-As you test the rule, you should scan the returned Posts to see if they include the data that you are expecting and hoping to receive. Starting with a broad rule and a superset of Post matches allows you to review the result and narrow the rule to filter out undesired results.  
-
-When we tested the example rule, we noticed that we were getting Posts in a variety of different languages. In this situation, we want to only receive Posts that are in english, so we’re going to add the `lang:` operator:
-
-`(happy OR happiness) lang:en`
-
-The test delivered a number of Posts wishing people a happy birthday, so we are going to add `-birthday` as a negated keyword operator. We also want to only receive original Posts, so we’ve added the negated `-is:retweet` operator:
-
-`(happy OR happiness) lang:en -birthday -is:retweet`
-
-##### Adjust for inclusion where needed
-
-If you notice that you are not receiving data that you expect and know that there are existing Posts that should return, you may need to broaden your rule by removing operators that may be filtering out the desired data. 
-
-For our example, we noticed that there were other Posts in our personal timeline that expressed the emotion that we are looking for and weren’t included in the test results. To ensure we have greater coverage, we are going to add the keywords, `excited` and `elated`.
-
-`(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet`
-
-##### Adjust for popular trends/bursts over the time period
-
-Trends come and go on X quickly. Maintaining your rule should be an active process. If you plan to use a single rule for a while, we suggest that you periodically check in on the data that you are receiving to see if you need to make any adjustments.
-
-In our example, we notice that we started to receive some Posts that are wishing people a “happy holidays”. Since we don’t want these Posts included in our results, we are going to add a negated `-holidays` keyword.
-
-`(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet -holidays`
-
-#### Adding and removing rules
-
-You will be using the [POST /2/tweets/search/stream/rules](/x-api/posts/filtered-stream#post-2-tweets-search-stream-rules) endpoint when both adding and deleting rules from your stream.
-
-To add one or more rule to your stream, submit an `add` JSON body with an array that contains the value parameter including the rule, and the optional `tag` parameter including free-form text that you can use to [identify which returned Posts match this rule](/x-api/posts/filtered-stream#matching-returned-posts-to-their-associated-rule). 
-
-For example, if you were trying to add a set of rules to your stream, your cURL command might look like this:
-
-```bash
-curl -X POST 'https://api.x.com/2/tweets/search/stream/rules' \
--H "Content-type: application/json" \
--H "Authorization: Bearer $ACCESS_TOKEN" -d \
-'{
-  "add": [
-    {"value": "cat has:media", "tag": "cats with media"},
-    {"value": "cat has:media -grumpy", "tag": "happy cats with media"},
-    {"value": "meme", "tag": "funny things"},
-    {"value": "meme has:images"}
-  ]
-}'
+```
+(apple OR iphone) ipad
 ```
 
-Similarly, to remove one or more rules from your stream, submit a `delete` JSON body with the array of that contains the `id` parameter including the rule IDs that you would like to delete.
+```
+iphone (ipad OR android)
+```
 
-For example, if you were trying to remove a set of rules from your stream, your cURL command might look like this:
+---
+
+## Punctuation, diacritics, and case sensitivity
+
+**Diacritics:** Filtered stream rules with accents only match Posts that also include the accent. For example, `diacrítica` matches _diacrítica_ but **not** _diacritica_.
+
+**Case sensitivity:** All operators are case-insensitive. The rule `cat` matches _cat_, _CAT_, and _Cat_.
+
+<Note>
+**Search Posts behaves differently**
+
+When [building search queries](/x-api/posts/search/integrate/build-a-query), keywords with accents match Posts both with and without the accents. For example, `Diacrítica` matches both _Diacrítica_ and _Diacritica_.
+</Note>
+
+---
+
+## Quote Tweet matching
+
+When using filtered stream, operators match on both the Quote Tweet's content **and** the content from the original Post that was quoted.
+
+<Note>
+[Search Posts](/x-api/posts/search/introduction) behaves differently—it only matches on the Quote Tweet's content, not the original Post.
+</Note>
+
+---
+
+## Specificity and efficiency
+
+<Warning>
+Using broad operators like a single keyword or hashtag is not recommended—it will match a massive volume of Posts and quickly consume your connection.
+</Warning>
+
+**Tips for building effective rules:**
+
+1. **Start specific, then broaden** — Create targeted rules that return relevant results
+2. **Use multiple operators** — Combine operators to narrow results
+3. **Watch your character count** — The entire rule string counts toward the limit
+
+**Example progression:**
+
+```
+# Too broad - 200,000+ Posts per day
+happy
+
+# Better - adds language filter and exclusions
+(happy OR happiness) lang:en -birthday -is:retweet
+
+# Even better - 59 characters, more specific
+(happy OR happiness) place_country:GB -birthday -is:retweet
+```
+
+---
+
+## Iteratively building a rule
+
+### Step 1: Start with a basic rule
+
+```
+happy OR happiness
+```
+
+### Step 2: Test and narrow based on results
+
+We noticed Posts in many languages. Add a language filter:
+
+```
+(happy OR happiness) lang:en
+```
+
+We're getting birthday wishes. Exclude them and Retweets:
+
+```
+(happy OR happiness) lang:en -birthday -is:retweet
+```
+
+### Step 3: Broaden for better coverage
+
+We want to capture more sentiment. Add related keywords:
+
+```
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet
+```
+
+### Step 4: Adjust for trends
+
+Holiday Posts are appearing. Exclude them:
+
+```
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet -holidays
+```
+
+---
+
+## Adding and removing rules
+
+Use [POST /2/tweets/search/stream/rules](/x-api/posts/filtered-stream#post-2-tweets-search-stream-rules) to add or remove rules.
+
+### Adding rules
+
+Submit an `add` JSON body with the `value` (the rule) and optional `tag` (to identify matching Posts):
 
 ```bash
-curl -X POST 'https://api.x.com/2/tweets/search/stream/rules' \
-  -H "Content-type: application/json" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" -d \
-  '{
+curl -X POST "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -d '{
+    "add": [
+      {"value": "cat has:media", "tag": "cats with media"},
+      {"value": "cat has:media -grumpy", "tag": "happy cats with media"},
+      {"value": "meme", "tag": "funny things"},
+      {"value": "meme has:images"}
+    ]
+  }'
+```
+
+### Removing rules
+
+Submit a `delete` JSON body with the rule IDs to remove:
+
+```bash
+curl -X POST "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -d '{
     "delete": {
       "ids": [
         "1165037377523306498",
@@ -207,49 +226,69 @@ curl -X POST 'https://api.x.com/2/tweets/search/stream/rules' \
   }'
 ```
 
-We have sample code in different languages available via our [Github](https://github.com/xdevplatform/Twitter-API-v2-sample-code/tree/master/Filtered-Stream). 
+---
 
-#### Rule examples
+## Rule examples
 
-##### Tracking a natural disaster
+### Tracking a natural disaster
 
-The following rule matched on Posts coming from weather agencies and gauges that discuss Hurricane Harvey, which hit Houston in 2017. Notice the use of the [matching rules](/x-api/posts/filtered-stream#matching-returned-posts-to-their-associated-rule) tag, and the JSON format that you will need to use when submitting the rule to the [POST /2/tweets/search/stream/rules endpoint](/x-api/posts/filtered-stream#post-2-tweets-search-stream-rules).
-
-```json
-{
-    "value": "-is:retweet has:geo (from:NWSNHC OR from:NHC_Atlantic OR from:NWSHouston OR from:NWSSanAntonio OR from:USGS_TexasRain OR from:USGS_TexasFlood OR from:JeffLindner1)",
-    "tag": "theme:info has:geo original from weather agencies and gauges"
-}
-```
-
-##### Reviewing the sentiment of a conversation
-
-The next rule could be used to better understand the sentiment of the conversation developing around the hashtag, _#nowplaying_, but only from Posts published within North America.
+Match Posts from weather agencies about Hurricane Harvey:
 
 ```json
 {
-    "value": "#nowplaying (happy OR exciting OR excited OR favorite OR fav OR amazing OR lovely OR incredible) (place_country:US OR place_country:MX OR place_country:CA) -horrible -worst -sucks -bad -disappointing",
-    "tag": "#nowplaying positive"
-},
-{
-    "value": "#nowplaying (horrible OR worst OR sucks OR bad OR disappointing) (place_country:US OR place_country:MX OR place_country:CA) -happy -exciting -excited -favorite -fav -amazing -lovely -incredible",
-    "tag": "#nowplaying negative"
+  "value": "-is:retweet has:geo (from:NWSNHC OR from:NHC_Atlantic OR from:NWSHouston OR from:NWSSanAntonio OR from:USGS_TexasRain OR from:USGS_TexasFlood OR from:JeffLindner1)",
+  "tag": "Hurricane Harvey - weather agencies with geo"
 }
 ```
 
-##### Find Posts that relate to a specific Post annotation
+### Sentiment analysis for #nowplaying
 
-This rule was built to search for original Posts that included an image of a pet that is not a cat, where the language identified in the Post is Japanese. To do this, we used the `context:` operator to take advantage of the [Post annotation](/x-api/fundamentals/post-annotations) functionality. We first used the [Post lookup](/x-api/posts/lookup/introduction) endpoint and the `tweet.fields=context_annotations` fields parameter to identify which domain.entity IDs we need to use in our query:
-
-* Posts that relate to cats return `domain` 66 (Interests and Hobbies category) with `entity` 852262932607926273 (Cats). 
-* Posts that relate to pets return `domain` 65 (Interests and Hobbies Vertical) with `entity` 852262932607926273 (Pets). 
-     
-
-Here is what the rule would look like:
+**Positive sentiment:**
 
 ```json
 {
-    "value": "context:65.852262932607926273 -context:66.852262932607926273 -is:retweet has:images lang:ja",
-    "tag": "Japanese pets with images - no cats"
+  "value": "#nowplaying (happy OR exciting OR excited OR favorite OR fav OR amazing OR lovely OR incredible) (place_country:US OR place_country:MX OR place_country:CA) -horrible -worst -sucks -bad -disappointing",
+  "tag": "#nowplaying positive"
 }
 ```
+
+**Negative sentiment:**
+
+```json
+{
+  "value": "#nowplaying (horrible OR worst OR sucks OR bad OR disappointing) (place_country:US OR place_country:MX OR place_country:CA) -happy -exciting -excited -favorite -fav -amazing -lovely -incredible",
+  "tag": "#nowplaying negative"
+}
+```
+
+### Using Post annotations
+
+Find Japanese Posts about pets (not cats) with images using the `context:` operator:
+
+First, use [Post lookup](/x-api/posts/lookup/introduction) with `tweet.fields=context_annotations` to identify domain.entity IDs:
+
+- Cats: `domain` 66, `entity` 852262932607926273
+- Pets: `domain` 65, `entity` 852262932607926273
+
+```json
+{
+  "value": "context:65.852262932607926273 -context:66.852262932607926273 -is:retweet has:images lang:ja",
+  "tag": "Japanese pets with images - no cats"
+}
+```
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Operators reference" icon="list" href="/x-api/posts/filtered-stream/integrate/operators">
+    Complete list of available operators
+  </Card>
+  <Card title="Filtered stream quickstart" icon="rocket" href="/x-api/posts/filtered-stream/quickstart">
+    Connect to your stream
+  </Card>
+  <Card title="Sample code" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code/tree/master/Filtered-Stream">
+    Code examples in multiple languages
+  </Card>
+</CardGroup>

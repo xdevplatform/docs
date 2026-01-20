@@ -1,75 +1,215 @@
 ---
-title: Authenticated user lookup
-sidebarTitle: Authenticated user lookup
-keywords: ["authenticated user lookup quickstart", "get authenticated user quickstart", "me endpoint quickstart", "authenticated user tutorial"]
+title: Authenticated User Quickstart
+sidebarTitle: Authenticated User
+description: Get the currently authenticated user's profile
+keywords: ["authenticated user", "me endpoint", "current user", "authenticated lookup"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-## Getting started with the Authenticated User Lookup endpoint
+This guide walks you through retrieving the currently authenticated user's profile using the `/me` endpoint.
 
-This quick start guide will help you make your first request to the authenticated user lookup endpoint using Postman.
-
-Please visit our [X API v2 sample code](https://github.com/xdevplatform/Twitter-API-v2-sample-code) GitHub repository if you want to see sample code in different languages.
 <Note>
-### Prerequisites
+**Prerequisites**
 
-To complete this guide, you will need to have a set of [keys and tokens](/resources/fundamentals/authentication) to authenticate your request. You can generate these keys and tokens by following these steps:
-
-* [Sign up for a developer account](https://developer.x.com/en/apply-for-access) and receive approval.
-* Create a [Project](/resources/fundamentals/projects) and an associated [developer App](/resources/fundamentals/developer-apps) in the developer portal.
-* Navigate to your App's “Keys and tokens” page to generate the required credentials. Make sure to save all credentials in a secure location.
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- User Access Token (OAuth 1.0a or OAuth 2.0 PKCE)
 </Note>
-### Steps to build an authenticated user lookup request
 
-#### Step one: Start with a tool or library
+---
 
-There are several different tools, code examples, and libraries that you can use to make a request to this endpoint, but we will use the Postman tool here to simplify the process.
+## Get the authenticated user
 
-To load the X API v2 Postman collection into your environment, please click on the following button:
+Make a request to the `/me` endpoint with a User Access Token:
 
-<Button href="https://app.getpostman.com/run-collection/9956214-784efcda-ed4c-4491-a4c0-a26470a67400">
-  Add X API v2 to Postman
-</Button>
-Once you have the X API v2 collection loaded in Postman, navigate to the “Authenticated User Lookup” folder, and select “Lookup an Authenticated User”.
+<CodeGroup dropdown>
 
-#### Step two: Authenticate your request
+```bash cURL
+curl "https://api.x.com/2/users/me?\
+user.fields=created_at,description,verified,public_metrics,profile_image_url" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
 
-To properly make a request to the X API, you need to verify that you have permission. To do so with this endpoint, you must authenticate your request using either [OAuth 1.0a User Context](/resources/fundamentals/authentication) or [OAuth 2.0 Authorization Code with PKCE](resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2).
+```python Python SDK
+from xdk import Client
 
-In this example, we are going to use OAuth 1.0a User Context.
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
 
-You must add your keys and tokens – specifically your API Key, API Secret Key, OAuth 1.0a user Access Token, and OAuth 1.0a user Access Token Secret – to Postman. You can do this by selecting the environment named “X API v2” in the top-right corner of Postman and adding your keys and tokens to the "initial value" and "current value" fields (by clicking the eye icon next to the environment dropdown).
+# Get the authenticated user
+response = client.users.get_me(
+    user_fields=["created_at", "description", "verified", "public_metrics", "profile_image_url"]
+)
 
-These variables will automatically be pulled into the request's authorization tab if you've done this correctly.
- 
+print(f"Username: {response.data.username}")
+print(f"ID: {response.data.id}")
+print(f"Followers: {response.data.public_metrics.followers_count}")
+```
 
-##### Step three: Determine which user fields you want to retrieve
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
-If you click the "Send" button after step three, you will receive the default [user object](/x-api/fundamentals/data-dictionary#user) fields in your response: id, name, and username.
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
 
-If you would like to receive additional fields beyond id, name, and username, you will have to specify those fields in your request with the [field](/x-api/fundamentals/fields) and/or [expansion](/x-api/fundamentals/expansions) parameters.
+// Get the authenticated user
+const response = await client.users.getMe({
+  userFields: ["created_at", "description", "verified", "public_metrics", "profile_image_url"],
+});
 
-For this exercise, we will request three additional sets of fields from different objects:
+console.log(`Username: ${response.data?.username}`);
+console.log(`ID: ${response.data?.id}`);
+console.log(`Followers: ${response.data?.public_metrics?.followers_count}`);
+```
 
-1.  The additional user.created_at field in the primary user objects.
+</CodeGroup>
 
-2.  The associated pinned Posts’ object’s default fields for the returned users: id and text.
+---
 
-3.  The additional tweet.created_at field in the associated Post objects.
+## Response
 
+```json
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "XDevelopers",
+    "created_at": "2013-12-14T04:35:55.000Z",
+    "description": "The voice of the X developer community",
+    "verified": true,
+    "profile_image_url": "https://pbs.twimg.com/profile_images/...",
+    "public_metrics": {
+      "followers_count": 583423,
+      "following_count": 2048,
+      "tweet_count": 14052,
+      "listed_count": 1672
+    }
+  }
+}
+```
 
-In Postman, navigate to the "Params" tab and add the following key:value pair to the "Query Params" table:
+---
 
-|     |     |     |
-| :--- | :--- | :--- |
-| **Key** | **Value** | **Returned fields** |
-| user.fields | created_at | user.created_at |
-| expansions | pinned\_tweet\_id | includes.tweets.id,  <br/>includes.tweets.text |
-| tweet.fields | created\_at, author\_id | includes.tweets.created\_at, includes\_tweets.author_id |
+## Use case
 
-You should now see a similar URL next to the “Send” button:
+The `/me` endpoint is essential when:
 
-      ```
-      https://api.x.com/2/users/me?user.fields=created_at&expansions=pinned_tweet_id&tweet.fields=author_id,created_at
-      ```
+- **Verifying authentication** — Confirm the user is properly authenticated
+- **Getting the user ID** — Retrieve the authenticated user's ID for other API calls
+- **Personalizing experiences** — Display the user's profile in your app
+- **On behalf of requests** — Know who you're making requests for
+
+---
+
+## Include pinned Post
+
+Request the user's pinned Post:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/me?\
+user.fields=pinned_tweet_id&\
+expansions=pinned_tweet_id&\
+tweet.fields=created_at,text" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get authenticated user with pinned Post
+response = client.users.get_me(
+    user_fields=["pinned_tweet_id"],
+    expansions=["pinned_tweet_id"],
+    tweet_fields=["created_at", "text"]
+)
+
+print(f"Username: {response.data.username}")
+# Pinned Post is in response.includes.tweets
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get authenticated user with pinned Post
+const response = await client.users.getMe({
+  userFields: ["pinned_tweet_id"],
+  expansions: ["pinned_tweet_id"],
+  tweetFields: ["created_at", "text"],
+});
+
+console.log(`Username: ${response.data?.username}`);
+// Pinned Post is in response.includes?.tweets
+```
+
+</CodeGroup>
+
+### Response with expansion
+
+```json
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "XDevelopers",
+    "pinned_tweet_id": "1234567890"
+  },
+  "includes": {
+    "tweets": [
+      {
+        "id": "1234567890",
+        "text": "Welcome to my profile!",
+        "created_at": "2024-01-01T00:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Available fields
+
+| Field | Description |
+|:------|:------------|
+| `created_at` | Account creation date |
+| `description` | User bio |
+| `profile_image_url` | Avatar URL |
+| `verified` | Verification status |
+| `public_metrics` | Follower/following counts |
+| `location` | User-defined location |
+| `url` | User's website |
+| `protected` | Protected account status |
+| `pinned_tweet_id` | Pinned Post ID |
+
+---
+
+## Authentication requirement
+
+<Warning>
+The `/me` endpoint requires User Context authentication. App-Only (Bearer Token) authentication is not supported.
+</Warning>
+
+Use either:
+- [OAuth 1.0a User Context](/resources/fundamentals/authentication)
+- [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2)
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="User lookup" icon="users" href="/x-api/users/lookup/quickstart/user-lookup">
+    Look up other users
+  </Card>
+  <Card title="Integration guide" icon="book" href="/x-api/users/lookup/integrate">
+    Key concepts and best practices
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/users/authenticated-user-lookup">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

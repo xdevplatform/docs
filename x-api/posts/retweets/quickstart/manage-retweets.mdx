@@ -1,101 +1,185 @@
 ---
 title: Manage Retweets
 sidebarTitle: Manage Retweets
+description: Retweet and undo Retweets using the X API
 keywords: ["manage retweets", "retweet posts", "unretweet", "retweet quickstart", "retweet tutorial", "retweet guide"]
 ---
 
 import { Button } from '/snippets/button.mdx';
 
-### Getting started with the manage Retweets endpoints
+This guide walks you through Retweeting and undoing Retweets using the X API.
 
-This quick start guide will help you make your first request to the manage Retweets endpoints using Postman.
+<Note>
+**Prerequisites**
 
-If you would like to see sample code in different languages, please visit our [X API v2 sample code](https://github.com/xdevplatform/Twitter-API-v2-sample-code) GitHub repository. 
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- User Access Token (OAuth 1.0a or OAuth 2.0 PKCE)
+</Note>
 
-#### Prerequisites
+---
 
-To complete this guide, you will need to have a set of [keys and tokens](/resources/fundamentals/authentication) to authenticate your request. You can generate these keys and tokens by following these steps:
+## Retweet a Post
 
-* [Sign up for a developer account](https://developer.x.com/en/apply-for-access) and receive approval.
-* Create a [Project](/resources/fundamentals/projects) and an associated [developer App](/resources/fundamentals/developer-apps) in the developer portal.
-* Navigate to your App's “Keys and tokens” page to generate the required credentials. Make sure to save all credentials in a secure location.
+<Steps>
+  <Step title="Get your user ID">
+    You need your authenticated user's ID. You can find it using the [user lookup endpoint](/x-api/users/lookup/introduction) or from your Access Token (the numeric part is your user ID).
+  </Step>
 
-#### Steps to build a manage Retweets request
+  <Step title="Get the Post ID">
+    Find the Post ID in the URL when viewing a Post:
 
-**Step one: Start with a tool or library**
+    ```
+    https://x.com/XDevelopers/status/1228393702244134912
+                                    └── This is the Post ID
+    ```
+  </Step>
 
-There are several different tools, code examples, and libraries that you can use to make a request to this endpoint, but we are going to use the Postman tool here to simplify the process.
+  <Step title="Send the Retweet request">
 
-To load the X API v2 Postman collection into your environment, please click on the following button:
+<CodeGroup dropdown>
 
-<Button href="https://app.getpostman.com/run-collection/9956214-784efcda-ed4c-4491-a4c0-a26470a67400">
-  Add X API v2 to Postman
-</Button>
-Once you have the X API v2 collection loaded in Postman, navigate to the “Retweets” folder, and select “Retweet a Post”.
- 
-
-Step two: Authenticate your request
-
-To properly make a request to the X API, you need to verify that you have permission. To do so with this endpoint, you must authenticate your request using either [OAuth 1.0a User Context](/resources/fundamentals/authentication) or [OAuth 2.0 Authorization Code with PKCE](resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2).
-
-In this example, we are going to use OAuth 1.0a User Context.
-
-You must add your keys and tokens – specifically your API Key, API Secret Key, OAuth 1.0a user Access Token, and OAuth 1.0a user Access Token Secret – to Postman. You can do this by selecting the environment named “X API v2” in the top-right corner of Postman and adding your keys and tokens to the "initial value" and "current value" fields (by clicking the eye icon next to the environment dropdown).
-
-These variables will automatically be pulled into the request's authorization tab if you've done this correctly.
-
-
-**Step three: Specify which Post you are going to Retweet**
-
-Manage Retweets endpoints require two IDs: one for the user who wishes to Retweet or undo a Retweet and the id of the Post.
-
-The user’s ID must correspond to the authenticating user’s ID, meaning that you must pass the [Access Tokens](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow) associated with the user ID when authenticating your request.  In this case, you can specify the ID belonging to your own user. You can find your ID in two ways:
-
-1.  Using the [user lookup by username](/x-api/users/user-lookup-by-username) endpoint, you can pass a username and receive the id field. 
-2.  Looking at your Access Token, you will find that the numeric part is your user ID.
-     
-
-You also must specify a Post that you want to Retweet. You can find the Post ID by navigating to X.com and clicking on a Post and then looking in the URL. For example, the following URL's Post ID is 1228393702244134912.
-
-https://x.com/TwitterDev/status/1228393702244134912
-
-In Postman, navigate to the "Params" tab, and enter your ID into the "Value" column of the id path variable. and enter the ID of the Post you wish to Retweet as the value for thetweet_id parameter. Be sure not to include any spaces before or after any ID.
-
-|     |     |
-| :--- | :--- |
-| **Key** | **Value** |
-| `id` | (your user ID) |
-| tweet_id | (the ID of the Tweet you want to Retweet) |
-
-
-If you click the "Send" button, you will receive a response object containing the status of the relationship:
-
-* If you receive a "retweeted": true, then the id is successfully Retweeting the tweet_id.
-     
-
-**Step four: Make your request and review your response**
-
-Once you have everything set up, hit the "Send" button and you will receive the following response:
-
+```bash cURL
+curl -X POST "https://api.x.com/2/users/123456789/retweets" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"tweet_id": "1228393702244134912"}'
 ```
-{
-    "data": {
+
+```python Python SDK
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# Retweet a Post
+response = client.posts.retweet(
+    user_id="123456789",
+    tweet_id="1228393702244134912"
+)
+
+print(f"Retweeted: {response.data.retweeted}")
+```
+
+```javascript JavaScript SDK
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// Retweet a Post
+const response = await client.posts.retweet("123456789", {
+  tweetId: "1228393702244134912",
+});
+
+console.log(`Retweeted: ${response.data?.retweeted}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Review the response">
+    ```json
+    {
+      "data": {
         "retweeted": true
+      }
     }
-}
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Undo a Retweet
+
+Remove a Retweet:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X DELETE "https://api.x.com/2/users/123456789/retweets/1228393702244134912" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
 ```
 
+```python Python SDK
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
 
-If you receive a `"retweeted": true` has successfully Retweeted the `tweet_id`
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
 
-If you wish to undo a Retweet by the same user you can use the request entitled “Undo a Retweet”, which is also found in the “Retweets” folder of the X API v2 collection loaded in Postman. The `id` should be your user ID and `source_tweet_id` should be the Post ID to undo the Retweet of. You will not have to add this as a JSON body so you will want to make sure that you add in the requisite query params for id and `source_tweet_id`. 
+client = Client(auth=oauth1)
 
-On a successful undoing of a Retweet, you will receive a similar response to the following example:
+# Undo a Retweet
+response = client.posts.unretweet(
+    user_id="123456789",
+    tweet_id="1228393702244134912"
+)
 
+print(f"Retweeted: {response.data.retweeted}")
 ```
+
+```javascript JavaScript SDK
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// Undo a Retweet
+const response = await client.posts.unretweet("123456789", "1228393702244134912");
+
+console.log(`Retweeted: ${response.data?.retweeted}`);
+```
+
+</CodeGroup>
+
+**Response:**
+
+```json
 {
   "data": {
     "retweeted": false
   }
 }
 ```
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Retweets lookup" icon="retweet" href="/x-api/posts/retweets/quickstart/retweets-lookup">
+    Get users who Retweeted a Post
+  </Card>
+  <Card title="Quote Posts" icon="quote-left" href="/x-api/posts/quote-tweets/quickstart">
+    Get Quote Posts
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/posts/retweet-a-post">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

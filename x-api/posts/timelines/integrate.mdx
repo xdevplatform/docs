@@ -1,159 +1,338 @@
 ---
-title: Integration guide
-sidebarTitle: Integration guide
+title: Integration Guide
+sidebarTitle: Integration Guide
+description: Key concepts and best practices for integrating Timelines endpoints
 keywords: ["timeline integration", "timeline guide", "timeline implementation", "home timeline integration", "user timeline integration"]
 ---
 
-## How to integrate with the Timelines endpoints
+This guide covers the key concepts you need to integrate the Timelines endpoints into your application.
+
+---
+
+## Authentication
+
+### Endpoint requirements
 
-This page contains information on several tools and key concepts that you should be aware of as you integrate the timelines endpoints into your system. We’ve split the page into the following sections:
+| Endpoint | App-Only | User Context |
+|:---------|:---------|:-------------|
+| User Posts timeline | ✓ | ✓ |
+| User mentions timeline | ✓ | ✓ |
+| Home timeline | — | ✓ (required) |
 
-* [Helpful tools](#helpful-tools)
-* Key Concepts
-    * [Authentication](#authentication)
-    * [Developer portal, Projects, and Apps](#portal)
-    * [Rate limits](#rate-limits)
-    * [Fields and expansions](#fields)
-    * [Post metrics](/x-api/posts/timelines#timelines-integration-guide)
-    * [Pagination](#pagination)
-    * [Filtering results](#filtering)
-    * [Post caps and volume of Posts returned](#caps)
-    * [Edit Posts](#edits)
-    * [Edge cases](#edge)[](#edge)
+### Private metrics
 
-### Helpful tools
+To access private metrics, you must authenticate on behalf of the Post author:
 
-Before we explore some key concepts, we recommend that you use one of the following tools or code samples to start testing the functionality of these endpoints.
+<Warning>
+These fields require User Context authentication:
+- `tweet.fields.non_public_metrics`
+- `tweet.fields.promoted_metrics`
+- `tweet.fields.organic_metrics`
+- `media.fields.non_public_metrics`
+- `media.fields.promoted_metrics`
+- `media.fields.organic_metrics`
+</Warning>
 
-**Code samples**
+---
 
-Interested in getting set up with these endpoints with some code in your preferred coding language? We’ve got a handful of different code samples available that you can use as a starting point on our [GitHub page](https://github.com/xdevplatform/Twitter-API-v2-sample-code).
+## Fields and expansions
 
-**Libraries**
+By default, responses include only `id`, `text`, and `edit_history_tweet_ids`. Request additional data:
 
-Take advantage of one of our many [community third-party libraries](/x-api/tools-and-libraries/overview) to help you get started. You can find a library that works with the v2 endpoints by looking for the proper version tag.
+### Example request
 
-**Postman**
+<CodeGroup dropdown>
 
-Postman is a great tool that you can use to test out these endpoints. Each Postman request includes every path and body parameter to help you quickly understand what is available to you. To learn more about our Postman collections, please visit our [Using Postman](/tutorials/postman-getting-started) page.
+```bash cURL
+curl "https://api.x.com/2/users/123/tweets?\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id,attachments.media_keys&\
+user.fields=username,verified&\
+media.fields=url,type" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
 
-### Key concepts
+```python Python SDK
+from xdk import Client
 
-**Authentication**
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
 
-All X API v2 endpoints require requests to be [authenticated](/resources/fundamentals/authentication) with a set of credentials, also known as keys and tokens. You can use either OAuth 1.0a User Context or OAuth 2.0 Authorization Code with PKCE to authenticate requests to these endpoints. You can use OAuth 2.0 App-Only for user Posts timeline and user mentions timeline.
+# Get user's Posts timeline
+for page in client.posts.get_user_posts(
+    user_id="123",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id", "attachments.media_keys"],
+    user_fields=["username", "verified"],
+    media_fields=["url", "type"],
+    max_results=100
+):
+    for post in page.data:
+        print(f"{post.text} - {post.public_metrics}")
+```
 
-[OAuth 1.0a User Context](/resources/fundamentals/authentication#oauth-1-0a-2) requires you to utilize your API Keys, user Access Tokens, and a handful of other parameters to [create an authorization header](https://developer-staging.x.com/resources/fundamentals/authentication/authorizing-a-request), which you will then pass with your request. The Access Tokens must be associated with the user that you are making the request on behalf of. If you would like to generate a set of Access Tokens for another user, they must authorize your App using the [3-legged OAuth flow](https://developer-staging.x.com/resources/fundamentals/authentication/obtaining-user-access-tokens). 
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
-Please note that OAuth 1.0a can be difficult to use. If you are not familiar with this authentication method, we recommend that you use a [library](/x-api/tools-and-libraries/overview), use a tool like Postman, or use OAuth 2.0 to authenticate your requests. If you would like to request a Post or private metrics from these endpoints, you will need to use a either OAuth 1.0a User Context or OAuth 2.0 Authorization Code with PKCE, which will ensure that you have the proper permissions from the user that owns that content.
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
 
-[OAuth 2.0 App-Only](/resources/fundamentals/authentication#bearer-token-also-known-as-app-only) just requires that you pass an [OAuth 2.0 App Access Token](/resources/fundamentals/authentication#bearer-token-also-known-as-app-only) with your request. You can either generate an App Access Token from directly within a developer App, or generate one using the [POST oauth2/token](/resources/fundamentals/authentication#post-oauth2-token) endpoint. You can use this for user Posts timeline or user mention timeline.
+// Get user's Posts timeline with pagination
+const paginator = client.posts.getUserPosts("123", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id", "attachments.media_keys"],
+  userFields: ["username", "verified"],
+  mediaFields: ["url", "type"],
+  maxResults: 100,
+});
 
-[OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-3) allows for greater control over an application’s scope, and authorization flows across multiple devices. OAuth 2.0 allows you to pick specific fine-grained scopes which give you specific permissions on behalf of a user. 
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text} - ${JSON.stringify(post.public_metrics)}`);
+  });
+}
+```
 
-To enable OAuth 2.0 in your App, you must enable it in your’s App’s authentication settings found in the App settings section of the developer portal.
+</CodeGroup>
 
-<Info>
-**Please note**
+### Key fields
 
-If you are requesting the following [fields](/x-api/fundamentals/fields), OAuth 1.0a User Context or OAuth 2.0 Authorization Code is required: 
+| Field | Description |
+|:------|:------------|
+| `created_at` | Post creation timestamp |
+| `public_metrics` | Engagement counts |
+| `conversation_id` | Thread identifier |
+| `context_annotations` | Topic classifications |
+| `entities` | Hashtags, mentions, URLs |
 
-* `tweet.fields.non_public_metrics`
-* `tweet.fields.promoted_metrics`
-* `tweet.fields.organic_metrics`
-* `media.fields.non_public_metrics`
-* `media.fields.promoted_metrics`
-* `media.fields.organic_metrics`
-</Info>
-**[](/x-api/fundamentals/pagination)Developer portal, Projects, and developer Apps**
+<Card title="Fields and expansions guide" icon="sliders" href="/x-api/fundamentals/fields">
+  Learn more about customizing responses
+</Card>
 
-To work with any X API v2 endpoints, you must [sign up for a developer account](https://developer.x.com/en/portal/petition/essential/basic-info), set up a [Project](/resources/fundamentals/projects) within that account, and created a [developer App](/resources/fundamentals/developer-apps) within that Project. Your keys and tokens within that developer App will work for these timelines endpoints.
+---
 
+## Pagination
 
-**Rate limits**
+Timelines return up to 100 Posts per request. Use pagination for larger result sets.
 
-Every day, many thousands of developers make requests to the X API. To help manage the volume, [rate limits](/x-api/fundamentals/rate-limits) are placed on each endpoint that limits the number of requests that every developer can make on behalf of an app or on behalf of an authenticated user. 
+### How it works
 
-There are different rate limits applied for these endpoints depending on which authentication method is being used. The app-level rate limits apply to an App making requests using OAuth 2.0 App-Only, whereas the user-level rate limit applies to requests being made on behalf of the specific authorizing user using OAuth 1.0a User Context. These two rate limits are based on the frequency of requests within a 15-minute window.
+1. Make initial request with `max_results`
+2. Get `next_token` from the `meta` object
+3. Include `pagination_token` in next request
+4. Repeat until no `next_token` is returned
 
-For example, an app using OAuth 2.0 App-Only auth for both of these timelines endpoints, can make 1500 requests (including pagination requests) to the user Post timeline, and 450 requests (including pagination requests) to the user mention timeline within a 15-minute timeframe.  That same app, within the same 15-minute timeframe, with two different authorized users (using OAuth 1.0a User Context) can make 900 requests (including pagination requests) to the user Post timeline, and 180 requests (including pagination requests) to the user mention timeline for each authenticated user. 
+### Example
 
-Reverse chronological home timeline has a per-user rate limit of 180 requests per a 15 min window. With this endpoint you can return every Post created on a timeline over the last 7 days as well as the most recent 800 regardless of creation date.
+<CodeGroup dropdown>
 
-**Fields and expansions**
+```bash cURL
+# First request
+curl "https://api.x.com/2/users/123/tweets?max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
 
-The X API v2 allows you to select exactly which data you want returned from the API using [fields](/x-api/fundamentals/fields) and [expansions](/x-api/fundamentals/expansions). The expansion parameter allows you to expand objects referenced in the payload. For example, this endpoint allows you to request poll, place, media, and other objects using the expansions parameter.
+# Subsequent request with pagination token
+curl "https://api.x.com/2/users/123/tweets?max_results=100&pagination_token=NEXT_TOKEN" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
 
-The fields parameter allows you to select exactly which fields within the different data objects you would like to receive. By default, the primary Post object returned by these endpoints include the id and text fields. To receive additional fields such as author_id or public_metrics, you will have to specifically request those using the fields parameters. Some important fields that you may want to consider using in your integration are our poll data, [metrics](/x-api/fundamentals/metrics), [Post annotations](/x-api/fundamentals/post-annotations), and [conversation ID](/x-api/fundamentals/conversation-id) fields.
+```python Python SDK
+from xdk import Client
 
-We’ve added a guide on [how to use fields and expansions](/x-api/fundamentals/data-dictionary#how-to-use-fields-and-expansions) together to our [X API v2 data dictionary](/x-api/fundamentals/data-dictionary).
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
 
+# The SDK handles pagination automatically
+all_posts = []
 
-**Post metrics**
+for page in client.posts.get_user_posts(user_id="123", max_results=100):
+    if page.data:
+        all_posts.extend(page.data)
 
-The X API v2 endpoints allow you to request Post metrics directly from the returned Post object, assuming you pass the proper fields with your request.
+print(f"Found {len(all_posts)} posts")
+```
 
-There are some limitations with Post metrics that you should be aware of, specifically related to user privacy and the following response fields:
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
-* `tweet.fields.non_public_metrics`
-* `tweet.fields.promoted_metrics`
-* `tweet.fields.organic_metrics`
-* `media.fields.non_public_metrics`
-* `media.fields.promoted_metrics`
-* `media.fields.organic_metrics`
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
 
+async function getAllTimelinePosts(userId) {
+  const allPosts = [];
 
-The noted fields include private metrics data, meaning you must be authorized by the Post's publisher to retrieve this data on their behalf when using the user Post timeline endpoint, meaning you must use [OAuth 1.0a User Context](/resources/fundamentals/authentication) or [OAuth 2.0 Authorization Code Flow with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-3).
+  // The SDK handles pagination automatically with async iteration
+  const paginator = client.posts.getUserPosts(userId, { maxResults: 100 });
 
-For example, in order to receive `non_public_metrics` for user ID 1234's user Post timeline you will need to include access tokens associated with that user in your request. You can have users authorize your app and receive a set of access tokens associated with them by using the [3-legged OAuth flow](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow). 
+  for await (const page of paginator) {
+    if (page.data) {
+      allPosts.push(...page.data);
+    }
+  }
 
-If you are using user mention timeline, the noted fields will not be available unless the mentioning author has authorized your App to access their private metrics data and you are using that user’s access tokens when making the request with OAuth 1.0a User Context.
+  return allPosts;
+}
 
-All `non_public_metrics`, organic_metrics, and promoted_metrics are only available for Posts created in the last 30 days. This means that when you are requesting the noted fields, the results will automatically adjust to only include Posts from the last 30 days.
+// Usage
+const posts = await getAllTimelinePosts("123");
+console.log(`Found ${posts.length} posts`);
+```
 
-If these noted fields are requested, only Posts that are authored by the authenticated user will be returned, all other Posts will receive an error message.
+</CodeGroup>
 
+<Card title="Pagination guide" icon="arrow-right" href="/x-api/fundamentals/pagination">
+  Learn more about pagination
+</Card>
 
-**Pagination**
+---
 
-These endpoints utilize pagination so that responses are returned quickly. In cases where there are more results than what can be sent in a single response (up to 100 Posts for the timelines endpoints) you will need to paginate. Use the max_results parameter to identify how many results will return per page, and the pagination_token parameter return the next page of results. You can learn more by reviewing our [pagination guide](/x-api/fundamentals/pagination).
+## Filtering results
 
+### Time-based filtering
 
-**Filtering results**
+| Parameter | Description |
+|:----------|:------------|
+| `start_time` | Oldest Post timestamp (ISO 8601) |
+| `end_time` | Newest Post timestamp (ISO 8601) |
+| `since_id` | Return Posts after this ID |
+| `until_id` | Return Posts before this ID |
 
-These endpoints include several parameters that you can use to filter results. Using start_date and end_date, you can narrow down results to a specific timeframe. If you’d rather use POst IDs to select a specific set of Posts, you can use the since_id and until_id. The user Posts timeline also has an exclude parameter that can remove Retweets and Replies from your results. 
+### Exclude parameter
 
+Remove specific Post types from results:
 
-**Post caps and volume of Posts returned**
+<CodeGroup dropdown>
 
-The user Post timeline and user mention timeline endpoints are limited in the number of Posts that they can return in a given month. The reverse chronological home timeline endpoint is not subject to this limitation.
+```bash cURL
+curl "https://api.x.com/2/users/123/tweets?exclude=retweets,replies" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
 
-Regardless of which timelines endpoint you use, the Posts returned will count towards the Project-level [Post caps](/x-api/fundamentals/post-cap). Usage is shown in the developer portal, and the 'month' starts on your subscription renewal day shown on the [developer portal dashboard](https://developer.x.com/en/portal/dashboard). 
+```python Python SDK
+from xdk import Client
 
-The user Post timeline endpoint will only return the most recent 3200 Posts posted to a user’s timeline. Setting start_time and end_time to a time period that includes Posts beyond the 3200 most recent, you will receive a successful response, but no Posts.
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
 
-It is also important to note that, if you pass the excludes=replies with your user Post timeline requests, only the most recent 800 Posts will be returned.
+# Exclude retweets and replies
+for page in client.posts.get_user_posts(
+    user_id="123",
+    exclude=["retweets", "replies"]
+):
+    for post in page.data:
+        print(post.text)
+```
 
-The user mention timeline endpoint will only return the most recent 800 Post mentions.
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
 
-The reverse chronological home timeline endpoint returns the last 3200 Posts.
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
 
+// Exclude retweets and replies
+const paginator = client.posts.getUserPosts("123", {
+  exclude: ["retweets", "replies"],
+});
 
-**Post edits**
+for await (const page of paginator) {
+  page.data?.forEach((post) => console.log(post.text));
+}
+```
 
-Posts that are eligible for edits can be edited up to five times in the 30 minutes after the original Post was published. The search endpoints will always provide the latest version of the Post. If you only request Posts that were published 30 or more minutes ago, you will always receive the final version of the Post. However, if you have a near-real-time use case, and are querying Posts published within the last thirty minutes, those Posts could have been edited after you received them. These Posts can be rehydrated with search, or the Pos Lookup endpoint to confirm their final state. To learn more about how Post edits work, see the [Edit Posts fundamentals](/x-api/fundamentals/edit-posts) page.  
+</CodeGroup>
 
-**Edge cases**
+| Value | Effect |
+|:------|:-------|
+| `retweets` | Exclude retweets |
+| `replies` | Exclude replies |
 
-* When requesting non-public metrics on the User Post timeline endpoint for Posts that are older than 30 days, you may see a next_token in the response with a result count of 0. To avoid encountering this issue, ensure that the timeframe requested with the non\_public\_metrics parameter is within the most recent 30 days. Additionally, the max_results minimum value should be 10. These may help to avoid this scenario, but this could still occur.
-* Requesting promoted metrics for Posts that were not promoted returns an empty response, instead of Post data. Our team is currently working on fixing this issue.
+---
 
-* For a Retweet that contains Post body text greater than 140 characters in length, the text field will be truncated instead of returning the full Post text. The short term workaround is to expand the referenced Post and retrieve the full text from the expansion. This is a bug that we will fix in the future.
+## Volume limits
 
-**Next steps**
+Each timeline has maximum retrieval limits:
 
-[Make your first request to a Timelines endpoint]/x-api/posts/timelines#getting-started-with-reverse-chronological-home-timeline "Make your first request to a Timelines endpoint")
+| Endpoint | Maximum Posts |
+|:---------|:--------------|
+| User Posts timeline | 3,200 most recent |
+| User Posts (exclude=replies) | 800 most recent |
+| User mentions timeline | 800 most recent |
+| Home timeline | 3,200 or 7 days |
 
-[See a full list of parameters, fields, and more in our API Reference pages](/x-api/posts/timelines#api-reference-index)
+<Note>
+Requesting Posts beyond these limits returns a successful response with no data.
+</Note>
 
-[Get support or troubleshoot an error](https://developer.x.com/en/support/x-api)
+---
+
+## Post edits
+
+Posts can be edited up to 5 times within 30 minutes. Timeline endpoints always return the most recent version.
+
+### Considerations
+
+- Posts older than 30 minutes represent their final version
+- Near-real-time use cases should account for potential edits
+- Use Post lookup to verify final state if needed
+
+<Card title="Edit Posts fundamentals" icon="clock-rotate-left" href="/x-api/fundamentals/edit-posts">
+  Learn more about Post edits
+</Card>
+
+---
+
+## Post metrics
+
+### Public metrics
+
+Available for all Posts with App-Only or User Context authentication:
+
+```json
+{
+  "public_metrics": {
+    "retweet_count": 156,
+    "reply_count": 23,
+    "like_count": 892,
+    "quote_count": 12
+  }
+}
+```
+
+### Private metrics
+
+Requires User Context authentication from the Post author:
+
+- Only available for Posts from the last 30 days
+- Only returned for Posts authored by the authenticated user
+- Returns error for other users' Posts
+
+---
+
+## Edge cases
+
+<Accordion title="Non-public metrics and pagination">
+When requesting non-public metrics for Posts older than 30 days, you may receive a `next_token` with `result_count: 0`. To avoid this:
+- Keep requests within the last 30 days
+- Use `max_results` of at least 10
+</Accordion>
+
+<Accordion title="Promoted metrics for non-promoted Posts">
+Requesting promoted metrics for Posts that weren't promoted returns an empty response. This is a known issue.
+</Accordion>
+
+<Accordion title="Truncated Retweet text">
+For Retweets with text over 140 characters, the text field is truncated. Use the `referenced_tweets.id` expansion to get the full text.
+</Accordion>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Home timeline quickstart" icon="house" href="/x-api/posts/timelines/quickstart/reverse-chron-quickstart">
+    Get a user's home feed
+  </Card>
+  <Card title="Mentions quickstart" icon="at" href="/x-api/posts/timelines/quickstart/user-mention-quickstart">
+    Get mentions for a user
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/posts/user-posts-timeline-by-user-id">
+    Full endpoint documentation
+  </Card>
+  <Card title="Pagination" icon="arrow-right" href="/x-api/fundamentals/pagination">
+    Handle large result sets
+  </Card>
+</CardGroup>
