@@ -1,0 +1,160 @@
+---
+title: Handling disconnections
+sidebarTitle: Handling disconnections
+description: Best practices for detecting and recovering from streaming disconnections
+keywords: ["streaming disconnections", "handle disconnections", "reconnect stream", "stream reconnection", "disconnection handling", "stream errors"]
+---
+
+Learn how to handle disconnections when using X streaming endpoints including [Filtered Stream](/x-api/posts/filtered-stream/introduction), [Volume Streams](/x-api/posts/volume-streams/introduction), [Powerstream](/x-api/powerstream/introduction), and [Compliance Streams](/x-api/compliance/streams/introduction).
+
+## What is a disconnection?
+
+Establishing a connection to streaming APIs means making a very long-lived HTTPS request and parsing the response incrementally. When connecting to a streaming endpoint, you should form an HTTPS request and consume the resulting stream for as long as practical.
+
+X servers will hold the connection open indefinitely, barring:
+
+- Server-side errors
+- Excessive client-side lag
+- Network issues
+- Routine server maintenance
+- Duplicate logins
+
+With streaming connections, disconnections **will** occur and should be expected. Your application must include reconnection logic.
+
+---
+
+## Why connections disconnect
+
+Possible reasons for disconnections:
+
+| Reason | Description |
+|:-------|:------------|
+| Authentication error | Wrong token or incorrect authentication method |
+| Server restart | Code deploy on X side — should be expected and designed around |
+| Client too slow | Your client isn't keeping up with volume. The server-side message queue grows too large and the connection closes |
+| Quota exceeded | Your account exceeded daily/monthly Post quota |
+| Too many connections | You have too many active redundant connections |
+| Sudden read stop | The rate of Posts being read drops suddenly |
+| Network issues | Connectivity problems between server and client |
+| Server maintenance | Temporary server-side issue or scheduled maintenance (check the [status page](https://api.twitterstat.us/)) |
+
+---
+
+## Common disconnection errors
+
+### Operational disconnect
+
+```json
+{
+  "errors": [{
+    "title": "operational-disconnect",
+    "disconnect_type": "UpstreamOperationalDisconnect",
+    "detail": "This stream has been disconnected upstream for operational reasons.",
+    "type": "https://api.x.com/2/problems/operational-disconnect"
+  }]
+}
+```
+
+### Too many connections
+
+```json
+{
+  "title": "ConnectionException",
+  "detail": "This stream is currently at the maximum allowed connection limit.",
+  "connection_issue": "TooManyConnections",
+  "type": "https://api.x.com/2/problems/streaming-connection"
+}
+```
+
+---
+
+## Detecting disconnections
+
+The streaming endpoints provide a 20-second keep-alive heartbeat (a newline character). Use this signal to detect disconnections:
+
+1. Your code should detect when fresh content and the heartbeat stop arriving
+2. If no data is received for 20 seconds, trigger reconnection logic
+3. Some HTTP clients allow you to specify a read timeout — set this to 20 seconds
+
+---
+
+## Reconnection strategy
+
+Once an established connection drops, attempt to reconnect immediately. If the reconnect fails, use backoff strategies based on the error type:
+
+### TCP/IP network errors
+
+Back off **linearly**. These problems are generally temporary.
+
+- Increase delay by 250ms each attempt
+- Maximum delay: 16 seconds
+
+### HTTP errors
+
+Back off **exponentially** for HTTP errors where reconnecting is appropriate.
+
+- Start with 5 second wait
+- Double each attempt
+- Maximum delay: 320 seconds
+
+### Rate limit errors (HTTP 429)
+
+Back off **exponentially** with longer initial wait.
+
+- Start with 1 minute wait
+- Double each attempt
+- Each 429 received increases the wait time until rate limiting expires
+
+---
+
+## Rate limits and usage
+
+Streaming connection responses return three headers to help you understand limits:
+
+| Header | Description |
+|:-------|:------------|
+| `x-rate-limit-limit` | Number of allotted requests during the 15-minute window |
+| `x-rate-limit-remaining` | Requests made so far in the 15-minute window |
+| `x-rate-limit-reset` | UNIX timestamp when the window resets |
+
+To track how many Posts have been delivered, implement metering logic on the client side so consumption can be measured and paused if needed.
+
+---
+
+## Reconnection best practices
+
+### Use a FIFO queue architecture
+
+Your stream client should insert incoming Posts into a first-in, first-out (FIFO) queue or similar memory structure. A separate process/thread should consume Posts from that queue for parsing and storage. This design scales efficiently when Post volumes change dramatically.
+
+### Test backoff strategies
+
+Test your backoff implementation using invalid authorization credentials and examine reconnect attempts. A good implementation will not receive any 429 responses.
+
+### Issue alerts for multiple reconnects
+
+If your client reaches its upper threshold of time between reconnects, send notifications so you can triage connection issues.
+
+### Handle DNS changes
+
+Ensure your client process honors DNS Time To Live (TTL). Some stacks cache resolved addresses for the process duration and won't pick up DNS changes within the TTL. Aggressive caching leads to service disruptions as X shifts load between IP addresses.
+
+### Set User-Agent header
+
+Include your client's version in the `User-Agent` HTTP header. This is critical for diagnosing issues on X's end. If your environment precludes setting `User-Agent`, use the `x-user-agent` header instead.
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Recovery and redundancy" icon="shield" href="/x-api/fundamentals/recovery-and-redundancy">
+    Recover missed data after disconnections
+  </Card>
+  <Card title="Consuming streaming data" icon="stream" href="/x-api/fundamentals/consuming-streaming-data">
+    Build robust streaming clients
+  </Card>
+  <Card title="High volume capacity" icon="gauge-high" href="/x-api/fundamentals/high-volume-capacity">
+    Handle high throughput streams
+  </Card>
+</CardGroup>
