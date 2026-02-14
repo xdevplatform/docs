@@ -1,0 +1,224 @@
+---
+title: "Scripting: Events"
+sidebarTitle: "Scripting: Events"
+---
+
+The X for Websites JavaScript fires events on initialization and after a viewer interacts with a widget. Enhance your application and analytics by tapping into widget events.
+
+Note that Web Intent events fire when the interaction occurs, not after the action completes.
+
+Bind a X widget event in your JavaScript code by registering a callback function with `twttr.events.bind`.
+
+```javascript
+twttr.events.bind(
+  'click',
+  function (ev) {
+    console.log(ev);
+  }
+);
+```
+
+## The Intent Event Object
+
+When a detectable action occurs within a Web Intent or widget, an object representing the event is passed to your JavaScript callback. Intent Event objects include the following data:
+
+### Intent event object properties
+
+| Property | Data Type    | Description                                                                                                           |
+|----------|--------------|-----------------------------------------------------------------------------------------------------------------------|
+| `target` | `HTMLElement` | The DOM node where the widget is instantiated. Most likely an iframe, but may also be the original embed code element if the widget failed to initialize, or another sandboxed element. Use this value to differentiate between different intents or buttons on the same page. |
+| `region` | `String`     | Extended detail indicating where in a widget the event originated. For example, button or count components of Post button or Follow button integrations, or Post actions within an embedded Post. |
+| `data`   | `Object`     | Key/value pairs relevant to the event.                                                                                |
+
+## Waiting for Asynchronous Resources
+
+Loading the widgets.js file asynchronously will require you to wait before binding events: the functions you are calling do not yet exist. You will need to wrap your event bindings in a callback function such as the twttr.ready asynchronous function queue which will be invoked once everything has loaded. All event examples below assume you have wrapped those event bindings in this callback.
+
+```javascript
+twttr.ready(
+  function (twttr) {
+    // bind events here
+  }
+);
+```
+
+## Available Events
+
+### loaded
+
+Occurs after `twttr.widgets.load` has initialized widgets in a page. Includes an array of references to the newly created widget nodes.
+
+```javascript
+twttr.events.bind(
+  'loaded',
+  function (event) {
+    event.widgets.forEach(function (widget) {
+      console.log("Created widget", widget.id);
+    });
+  }
+);
+```
+
+### rendered
+
+Occurs after an individual widget in a page is rendered. Includes a reference to the newly created widget node. Occurs at the same time as `loaded`, but for each individual widget. Also triggered when creating a widget with a factory function.
+
+```javascript
+twttr.events.bind(
+  'rendered',
+  function (event) {
+    console.log("Created widget", event.target.id);
+  }
+);
+```
+
+### tweet
+
+This event will be triggered when the user clicks a Post Web Intent.
+
+Includes a Post in reply to an [embedded Post](/x-for-websites/timelines/overview) or a Post displayed in an [embedded Timeline](/x-for-websites/timelines/overview).
+
+```javascript
+twttr.events.bind(
+  'tweet',
+  function (event) {
+    // Do something there
+  }
+);
+```
+
+### follow
+
+This event will populate the followed `user_id` or `screen_name` in the event object’s data argument, depending on the parameters you provided in the web intent.
+
+```javascript
+twttr.events.bind(
+  'follow',
+  function (event) {
+    var followedUserId = event.data.user_id;
+    var followedScreenName = event.data.screen_name;
+  }
+);
+```
+
+### retweet
+
+This event will populate the original Post that was reposted's `source_tweet_id` in the event object’s data argument.
+
+```javascript
+twttr.events.bind(
+  'retweet',
+  function(event) {
+    var repostedPostId = event.data.source_tweet_id;
+  }
+);
+```
+
+### like
+
+This event will populate the liked `tweet_id` in the event object’s data argument.
+
+```javascript
+twttr.events.bind(
+  'like',
+  function(event) {
+    var likedPostId = event.data.tweet_id;
+  }
+);
+```
+
+### click
+
+Receive an event when the user invokes a Web Intent from within an embedded widget.
+
+## Example: Detecting Events for Web Analytics
+
+
+It’s easy to capture these events and pipe them to your web analytics solution. Please note that you’ll need to be using HTTP or HTTPs protocols on the hosting page for these events.
+
+```javascript
+// Log any kind of Web Intent event to Google Analytics
+// Category: "twitter_web_intents"
+// Action: Intent Event Type
+// Label: Identifier for action taken: tweet_id, screen_name/user_id, click region
+
+// First, load the widgets.js file asynchronously
+window.twttr = (function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0],
+    t = window.twttr || {};
+  if (d.getElementById(id)) return;
+  js = d.createElement(s);
+  js.id = id;
+  js.src = "https://platform.x.com/widgets.js";
+  fjs.parentNode.insertBefore(js, fjs);
+
+  t._e = [];
+  t.ready = function(f) {
+    t._e.push(f);
+  };
+
+  return t;
+}(document, "script", "twitter-wjs"));
+
+// Define our custom event handlers
+function clickEventToAnalytics (intentEvent) {
+  if (!intentEvent) return;
+  var label = intentEvent.region;
+  pageTracker._trackEvent('twitter_web_intents', intentEvent.type, label);
+}
+
+function postIntentToAnalytics (intentEvent) {
+  if (!intentEvent) return;
+  var label = "tweet";
+  pageTracker._trackEvent(
+    'twitter_web_intents',
+    intentEvent.type,
+    label
+  );
+}
+
+function likeIntentToAnalytics (intentEvent) {
+  postIntentToAnalytics(intentEvent);
+}
+
+function repostIntentToAnalytics (intentEvent) {
+  if (!intentEvent) return;
+  var label = intentEvent.data.source_tweet_id;
+  pageTracker._trackEvent(
+    'twitter_web_intents',
+    intentEvent.type,
+    label
+  );
+}
+
+function followIntentToAnalytics (intentEvent) {
+  if (!intentEvent) return;
+  var label = intentEvent.data.user_id + " (" + intentEvent.data.screen_name + ")";
+  pageTracker._trackEvent(
+    'twitter_web_intents',
+    intentEvent.type,
+    label
+  );
+}
+
+// Wait for the asynchronous resources to load
+twttr.ready(function (twttr) {
+  // Now bind our custom intent events
+  twttr.events.bind('click', clickEventToAnalytics);
+  twttr.events.bind('tweet', postIntentToAnalytics);
+  twttr.events.bind('retweet', repostIntentToAnalytics);
+  twttr.events.bind('like', likeIntentToAnalytics);
+  twttr.events.bind('follow', followIntentToAnalytics);
+});
+```
+
+## Supplemental Events Resources and Examples
+
+- [Google Analytics Event Tracking Guide](http://code.google.com/apis/analytics/docs/tracking/eventTrackerGuide.html)
+- [Google Analytics SocialWidgetTracker plugin](https://github.com/googleanalytics/autotrack/blob/master/lib/plugins/social-widget-tracker.js)
+- [X Intent Events with Google Analytics using _gaq.push();](http://null-uk.com/55090968) by [@nulluk](http://x.com/intent/user?screen_name=nulluk)
+- [An optimized approach to Google Analytics integration](https://gist.github.com/1004702) by [@yahel](https://x.com/yahel)
+
+These functions make it possible to integrate X user’s content into your site dynamically in a JavaScript application, and integrate user interactions into your own application experience.
+
+Please ask questions and share your code and examples in the [developer forum](https://devcommunity.x.com/). You may also refer to the main [X for Websites documentation](/x-for-websites/overview).

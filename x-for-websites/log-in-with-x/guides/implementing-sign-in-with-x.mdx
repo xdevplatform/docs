@@ -1,0 +1,145 @@
+---
+title: Implementing Sign in with X
+sidebarTitle: Implementing Sign in with X
+---
+
+## Overview
+
+The [browser](/x-for-websites/log-in-with-x/guides/browser-sign-in-flow) and [mobile web](/x-for-websites/log-in-with-x/guides/mobile-sign-in-flow) implementations of [Sign in with X](/x-for-websites/log-in-with-x/login-in-with-x) are based on OAuth. This page demonstrates the requests needed to obtain an access token for the sign in flow.
+
+To use the “Sign in with X flow, please go to your X app settings and ensure that the “Allow this app to be used to Sign in with X?” option is enabled.
+
+This page assumes that the reader knows how to sign requests using the OAuth 1.0a protocol. If you want to know how to sign a request, read the [Authorizing a request](/fundamentals/authentication/oauth-1-0a/authorizing-a-request) page.
+
+If you want to check the signing of the requests on this page, the consumer secret used is:
+
+```
+L8qq9PZyRg6ieKGEKhZolGC0vJWLw8iEJ88DRdyOg
+```
+
+This value has been disabled and will not work for real requests.
+
+## Step 1: Obtaining a request token
+
+To start a sign-in flow, your X app must obtain a request token by sending a signed message to [POST oauth / request_token](/fundamentals/authentication/api-reference). The only unique parameter in this request is `oauth_callback`, which must be a URL-encoded version of the URL you wish your user to be redirected to when they complete step 2. The remaining parameters are added by the OAuth signing process.
+
+<Note>
+**Please note** - Any callback URL that you use with the [POST oauth / request_token](/fundamentals/authentication/api-reference) endpoint will have to be whitelisted within the X app settings in the developer console.
+</Note>
+
+### Example request (Authorization header has been wrapped):
+
+```
+POST /oauth/request_token HTTP/1.1
+User-Agent: themattharris' HTTP Client
+Host: api.x.com
+Accept: */*
+Authorization:
+        OAuth oauth_callback="http%3A%2F%2Flocalhost%2Fsign-in-with-x%2F",
+              oauth_consumer_key="cChZNFj6T5R0TigYB9yd1w",
+              oauth_nonce="ea9ec8429b68d6b77cd5600adbbb0456",
+              oauth_signature="F1Li3tvehgcraF8DMJ7OyxO4w9Y%3D",
+              oauth_signature_method="HMAC-SHA1",
+              oauth_timestamp="1318467427",
+              oauth_version="1.0"
+```
+
+Your app should examine the HTTP status of the response. Any value other than `200` indicates a failure. The body of the response will contain the `oauth_token`, `oauth_token_secret`, and `oauth_callback_confirmed` parameters. Your app should verify that `oauth_callback_confirmed` is true and store the other two values for the next steps.
+
+### Example response (response body has been wrapped):
+
+```
+HTTP/1.1 200 OK
+Date: Thu, 13 Oct 2011 00:57:06 GMT
+Status: 200 OK
+Content-Type: text/html; charset=utf-8
+Content-Length: 146
+Pragma: no-cache
+Expires: Tue, 31 Mar 1981 05:00:00 GMT
+Cache-Control: no-cache, no-store, must-revalidate, pre-check=0, post-check=0
+Vary: Accept-Encoding
+Server: tfe
+
+oauth_token=NPcudxy0yU5T3tBzho7iCotZ3cnetKwcTIRlX0iwRl0&
+oauth_token_secret=veNRnAWe6inFuo8o2u8SLLZLjolYDmDP7SzL0YfYI&
+oauth_callback_confirmed=true
+```
+
+## Step 2: Redirecting the user
+
+The next step is to direct the user to X so that they may complete the appropriate flow, as described in [Browser sign-in flow](/x-for-websites/log-in-with-x/guides/browser-sign-in-flow). Direct the user to [GET oauth / authenticate](/fundamentals/authentication/api-reference), and the request token obtained in step 1 should be passed as the `oauth_token` parameter.
+
+The most seamless way for a website to implement this would be to issue an HTTP 302 redirect as the response to the original “sign in” request. Mobile and desktop apps should open a new browser window or direct to the URL via an embedded web view.
+
+### Example URL to redirect to:
+
+```
+https://api.x.com/oauth/authenticate?oauth_token=NPcudxy0yU5T3tBzho7iCotZ3cnetKwcTIRlX0iwRl0
+```
+
+The sign in endpoint will behave in one of three ways depending on the user’s status:
+
+1. **Signed in and approved**: If the user is signed in on x.com and has already approved the calling application, they will be immediately authenticated and returned to the callback URL with a valid OAuth request token. The redirect to x.com is not obvious to the user.
+2. **Signed in but not approved**: If the user is signed in to x.com but has not approved the calling application, a request to share access with the calling application will be shown. After accepting the authorization request, the user will be redirected to the callback URL with a valid OAuth request token.
+3. **Not signed in**: If the user is not signed in on x.com, they will be prompted to enter their credentials and grant access for the application to access their information on the same screen. Once signed in, the user will be returned to the callback URL with a valid OAuth request token.
+
+Upon a successful authentication, your `callback_url` would receive a request containing the `oauth_token` and `oauth_verifier` parameters. Your application should verify that the token matches the request token received in step 1.
+
+### Request from client’s redirect (querystring parameters wrapped):
+
+```
+GET /sign-in-with-x/?
+        oauth_token=NPcudxy0yU5T3tBzho7iCotZ3cnetKwcTIRlX0iwRl0&
+        oauth_verifier=uw7NjWHT6OJ1MpJOXsHfNxoAhPKpgI8BlYDhxEjIBY HTTP/1.1
+Host: localhost
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/535.5 (KHTML, like Gecko) Chrome/16.0.891.1 Safari/535.5
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Referer: http://localhost/sign-in-with-x/
+Accept-Encoding: gzip,deflate,sdch
+Accept-Language: en-US,en;q=0.8
+Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.3
+```
+
+## Step 3: Converting the request token to an access token
+
+To render the request token into a usable access token, your application must make a request to the [POST oauth / access_token](/fundamentals/authentication/api-reference) endpoint, containing the `oauth_verifier` value obtained in step 2. The request token is also passed in the `oauth_token` portion of the header, but this will have been added by the signing process.
+
+### Example request (Authorization header wrapped):
+
+```
+POST /oauth/access_token HTTP/1.1
+User-Agent: themattharris' HTTP Client
+Host: api.x.com
+Accept: */*
+Authorization: OAuth oauth_consumer_key="cChZNFj6T5R0TigYB9yd1w",
+                     oauth_nonce="a9900fe68e2573b27a37f10fbad6a755",
+                     oauth_signature="39cipBtIOHEEnybAR4sATQTpl2I%3D",
+                     oauth_signature_method="HMAC-SHA1",
+                     oauth_timestamp="1318467427",
+                     oauth_token="NPcudxy0yU5T3tBzho7iCotZ3cnetKwcTIRlX0iwRl0",
+                     oauth_version="1.0"
+Content-Length: 57
+Content-Type: application/x-www-form-urlencoded
+
+oauth_verifier=uw7NjWHT6OJ1MpJOXsHfNxoAhPKpgI8BlYDhxEjIBY
+```
+
+A successful response contains the `oauth_token`, `oauth_token_secret` parameters. The token and token secret should be stored and used for future authenticated requests to the X API. To determine the identity of the user, use [GET account / verify_credentials](/fundamentals/authentication/api-reference).
+
+### Example response (response body has been wrapped):
+
+```
+HTTP/1.1 200 OK
+Date: Thu, 13 Oct 2011 00:57:08 GMT
+Status: 200 OK
+Content-Type: text/html; charset=utf-8
+Content-Length: 157
+Pragma: no-cache
+Expires: Tue, 31 Mar 1981 05:00:00 GMT
+Cache-Control: no-cache, no-store, must-revalidate, pre-check=0, post-check=0
+Vary: Accept-Encoding
+Server: tfe
+
+oauth_token=7588892-kagSNqWge8gB1WwE3plnFsJHAZVfxWD7Vb57p0b4&
+oauth_token_secret=PbKfYqSryyeKDWz4ebtY3o5ogNLG11WJuZBc9fQrQo
+```

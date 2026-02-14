@@ -1,0 +1,258 @@
+---
+title: "Scripting: Factory Functions"
+sidebarTitle: "Scripting: Factory Functions"
+---
+
+If you’re integrating your site with X using [X for Websites](/x-for-websites/overview) and [Web Intents](/x-for-websites/web-intents/overview), you can dynamically generate widgets using JavaScript functions.
+
+X for Websites products—Post buttons, Follow buttons, embedded Posts and timelines—are all loaded using a JavaScript utility named `widgets-js`. When adding an X widget to your page, this JavaScript file is included in the HTML embed code, or you can directly include `https://platform.x.com/widgets.js` in your page. (See the [X for Websites set-up documentation](/x-for-websites/javascript-api/guides/set-up-x-for-websites) for a recommended code snippet.)
+
+By default, `widgets-js` will find mark-up in a page and convert basic, functional mark-up into rich interactive widgets. In addition, there are a number of functions of `widgets-js` that allow you to work with X content dynamically:
+
+## Creating widgets at runtime with factory functions
+
+Widgets can be generated at runtime, without requiring an HTML embed code. A set of factory functions can generate any widget type:
+
+- [twttr.widgets.createShareButton](/x-for-websites/post-button/guides/javascript-factory-function)
+- [twttr.widgets.createFollowButton](/x-for-websites/follow-button/guides/javascript-factory-function-follow-button)
+- [twttr.widgets.createHashtagButton](/x-for-websites/post-button/guides/hashtag-button)
+- [twttr.widgets.createMentionButton](/x-for-websites/x-button/guides/mention-button)
+- [twttr.widgets.createTimeline](/x-for-websites/timelines/overview)
+- [twttr.widgets.createTweet](/x-for-websites/post-button/overview)
+
+### Buttons
+
+`createShareButton`, `createFollowButton`, `createHashtagButton`, and `createMentionButton` take similar arguments.
+
+#### Primary argument
+
+The first argument is required, and is unique to the button type. Provide a string representing one of:
+
+- `url`: The URL to be shared.
+- `screen_name`: The screen_name of a user to be followed, or mentioned.
+- `hashtag`: Hashtag to be posted and displayed on the button.
+
+#### Additional Arguments:
+
+- `target`: **Required**. The element in which to render the widget.
+- `options`: _Optional_. An object hash of additional options to configure the widget.
+
+<Note>
+Widgets usually render as iframe elements. When an iframe is moved within the DOM the browser will reload its content. For buttons this can waste bandwidth, while for Posts and timelines this will cause dynamically injected content to be lost. Use the target argument to render widgets into their final location in a page. If you need to delay the display of a widget, use CSS to position the widget off-screen until needed.
+</Note>
+
+Every `create` function returns a `Promise`. You can execute code after a widget has been created by passing a callback to:
+
+```javascript
+twttr.widgets.createFoo()
+  .then(function (element) {
+    console.log("Widget created.")
+  });
+```
+
+When fulfilled, the promise will pass a reference to a newly created widget element to the chained callback.
+
+### Examples
+
+Create a share button for a URL:
+
+```javascript
+twttr.widgets.createShareButton(
+  '/',
+  document.getElementById('new-button'),
+  {
+    count: 'none',
+    text: 'Sharing a URL using the Post Button'
+  }).then(function (el) {
+    console.log("Button created.")
+  });
+```
+
+Create a Follow button for a user:
+
+```javascript
+twttr.widgets.createFollowButton(
+  'endform',
+  document.getElementById('new-button'),
+  {
+    size: 'large'
+  }).then(function (el) {
+    console.log("Follow button created.")
+  });
+```
+
+### Options
+
+Additional configuration and options can be passed to the factory functions, as in the above examples.
+
+**Additional configuration for all widgets**
+
+| Option   | Values                                      | Default     | Notes                                                                                           |
+|----------|---------------------------------------------|-------------|-------------------------------------------------------------------------------------------------|
+| `lang`   | An ISO 639-1 language code                  | `en`        | The language in which to render a widget, if supported (see the [Translation Center](http://translate.x.com/)). |
+| `dnt`    | `true`, `false`                             | `false`     | When set to `true`, the embed and its embedded page on your site are not used for purposes that include [personalized suggestions](https://support.x.com/articles/20169421) and [personalized ads](https://support.x.com/articles/20170405). |
+| `related`| Any comma-separated list of valid X screen names | `Undefined` | A list of X screen names to be suggested for following after a Post or Post action is posted. |
+| `via`    | Any valid X screen name                     | `Undefined` | An X user mentioned in the default Post text as `via@user` where appropriate.            |
+
+**Additional configuration options for button widgets**
+
+| Option | Values                  | Default                                      | Notes                                                                 |
+|--------|-------------------------|----------------------------------------------|-----------------------------------------------------------------------|
+| `align`| `left`, `right`         | Locale dependent (`left` or `right`, depending on the text direction of the language) | The alignment of the button within an iframe; use this to ensure flush layout when aligning buttons |
+| `size` | `medium`, `large`       | `medium`                                     |                                                                       |
+
+**Post button additional options**
+
+| Option     | Values                          | Default     | Notes                                                                |
+|------------|---------------------------------|-------------|----------------------------------------------------------------------|
+| `text`     | Any string                      | `Undefined` | The default, highlighted text a user sees in the Post web intent     |
+| `hashtags` | A comma-separated list of hashtags | `Undefined` | A list of hashtags to be appended to default Post text where appropriate. |
+
+### Posts
+
+`createTweet` takes the ID for a Post, and then the same additional arguments as for buttons.
+
+#### Arguments
+
+- `tweetId`: The ID of a Post to be rendered. (This should be provided as a `String`, since X IDs are generated from 64-bit integers, and JavaScript integers are limited to 53 bits.)
+- `target`: **Required**. The element in which to render the widget.
+- `options`: _Optional_. A hash of additional options to configure the widget.
+
+#### Examples
+
+Create an embedded Post for [a Post from the US Department of Interior](https://x.com/Interior/status/511181794914627584):
+
+```javascript
+twttr.widgets.createTweet(
+  '511181794914627584',
+  document.getElementById('first-tweet'),
+  {
+    align: 'left'
+  })
+  .then(function (el) {
+    console.log("Post displayed.")
+  });
+```
+
+### Options
+
+| Option        | Values                              | Default                                      | Notes                                                                                   |
+|---------------|-------------------------------------|----------------------------------------------|-----------------------------------------------------------------------------------------|
+| `conversation`| `none`, `all`                       | `all`                                        | Posts in response to another Post will display a compact version of the previous Post by default. Use `none` to hide the parent Post in the conversation. |
+| `cards`       | `hidden`, `visible`                 | `visible`                                    | Hide photos, videos, and link previews powered by [Cards](https://dev.x.com/cards). |
+| `width`       | Positive integer                    | `auto` (derived from container size)         | Set the maximum width of the embedded Post                                            |
+| `align`       | `left`, `right`, `center`           | `Undefined`                                  | Float the embedded Post to the left or right so that text wraps around it, or align center so it floats in the middle of a paragraph |
+| `theme`       | `dark`, `light`                     | `light`                                      | Toggle the default color scheme of the embedded Post                                  |
+
+### Timelines
+
+`createTimeline` takes the data source definition for a timeline. Additional arguments are consistent with embedded Posts.
+
+#### Arguments
+
+- **data source**: _Required_ The data source definition object for the content to be displayed in the widget. May be a widget ID string for a legacy widget.
+- `target`: **Required**. The element in which to render the widget.
+- `options`: _Optional_. A hash of additional options to configure the widget.
+
+#### Examples
+
+Create a timeline widget:
+
+```javascript
+twttr.widgets.createTimeline(
+  {
+    sourceType: 'profile',
+    screenName: 'xdevelopers'
+  },
+  document.getElementById('timeline'),
+  {
+    width: '450',
+    height: '700',
+    related: 'xdevelopers,api'
+  }).then(function (el) {
+    console.log('Embedded a timeline.')
+  });
+```
+
+#### Data Source
+
+The data source definition describes what content will hydrate the embedded timeline. There are several types of data sources: profile; list; URL; widget configuration.
+
+##### Profile
+
+To power an embedded timeline with Posts from an individual user use a `profile` data source. To do so, set `sourceType` to `profile` and set one of `screenName` or `userId`.
+
+| Option      | Values                      |
+|-------------|-----------------------------|
+| `sourceType`| `profile`                   |
+| `screenName`| Valid X username            |
+| `userId`    | Valid X user ID             |
+
+```javascript
+twttr.widgets.createTimeline(
+  {
+    sourceType: 'profile',
+    screenName: 'xdevelopers'
+  },
+  document.getElementById('container')
+);
+```
+
+##### List
+
+To power an embedded timeline with an X list use a `list` data source. Set `sourceType` to `list` and set both `ownerScreenName` and `slug`, or set an `id`.
+
+| Option           | Values                              | Notes                              |
+|------------------|-------------------------------------|------------------------------------|
+| `sourceType`     | `list`                              |                                    |
+| `ownerScreenName`| Valid X username                    | Used with `slug`                   |
+| `slug`           | The string identifier for a list    | Used with `ownerScreenName`        |
+| `id`             | Valid X list ID                     |                                    |
+
+```javascript
+twttr.widgets.createTimeline(
+  {
+    sourceType: 'list',
+    ownerScreenName: 'x',
+    slug: 'official-x-accts'
+  },
+  document.getElementById('container')
+);
+```
+
+##### URL
+
+To power an embedded timeline with X content represented by a URL use a `url` data source. Supported content includes profiles and lists.
+
+| Option      | Values                                      |
+|-------------|---------------------------------------------|
+| `sourceType`| `url`                                       |
+| `url`       | Absolute URL of an X profile or list        |
+
+```javascript
+twttr.widgets.createTimeline(
+  {
+    sourceType: 'url',
+    url: 'https://x.com/xdevelopers'
+  },
+  document.getElementById('container')
+);
+```
+
+### Options
+
+All the parameters described above for all widgets and for embedded Posts also apply to embedded timelines.
+
+| Option       | Values                                                                 | Default              | Notes                                                                                          |
+|--------------|------------------------------------------------------------------------|----------------------|------------------------------------------------------------------------------------------------|
+| `chrome`     | `noheader`, `nofooter`, `noborders`, `transparent`, `noscrollbar`     | `Undefined`          | Toggle the display of design elements in the widget. This parameter is a space-separated list of values. |
+| `height`     | Positive integer                                                       | `600`                | Set a fixed height of the embedded widget                                                      |
+| `tweetLimit` | Range: `1`-`20`                                                        | `Undefined`          | Render a timeline statically, displaying only n number of Posts.                               |
+| `borderColor`| Hexadecimal color                                                      | Varies by theme      | Adjust the color of borders inside the widget.                                                 |
+| `ariaPolite` | `polite`, `assertive`, `rude`                                          | `polite`             | Apply the specified aria-polite behavior to the rendered timeline. New Posts may be added to the top of a timeline, affecting screen readers. |
+
+For more information on the options for customizing embedded Timelines refer to [Embedded Timelines](/x-for-websites/timelines/overview).
+
+These functions make it possible to integrate X user’s content into your site dynamically in a JavaScript application, and integrate user interactions into your own application experience.
+
+Please ask questions and share your code and examples in the [developer forum](https://devcommunity.x.com/). You may also refer to the main [X for Websites documentation](/x-for-websites/javascript-api/guides/set-up-x-for-websites).
