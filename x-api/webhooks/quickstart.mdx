@@ -1,0 +1,412 @@
+---
+title: Quickstart
+sidebarTitle: Quickstart
+description: Set up your webhook consumer app, implement CRC validation, and start receiving events
+keywords: ["webhook quickstart", "webhook setup", "CRC check", "challenge response check", "webhook security", "webhook consumer app"]
+---
+
+This guide walks you through setting up a webhook consumer app, implementing the Challenge-Response Check (CRC), securing incoming events, and registering your webhook with X.
+
+## 1. Develop a webhook consumer app
+
+To register a webhook with your X app, you need to develop, deploy, and host a web app that receives X webhook events and responds to CRC security requests.
+
+### URL requirements
+
+Create a web app with a publicly accessible HTTPS URL that will act as the webhook endpoint to receive events:
+
+- The URI **path** is up to you. These examples are all valid:
+  - `https://mydomain.com/service/listen`
+  - `https://mydomain.com/webhook/twitter`
+- The URL **cannot** include a port specification (e.g., `https://mydomain.com:5000/webhook` will **not** work)
+
+### What your app needs to handle
+
+Your webhook endpoint must handle two types of HTTP requests:
+
+| Request type | Purpose |
+|:-------------|:--------|
+| **GET** | [CRC validation](#2-the-crc-check) — X verifies you control the endpoint |
+| **POST** | Event delivery — X sends JSON event payloads |
+
+---
+
+## 2. The CRC check
+
+The Challenge-Response Check (CRC) is how X validates that the callback URL you provided is valid and that **you control it**. Your web app must correctly respond to CRC requests to register and maintain your webhook.
+
+### When CRC is triggered
+
+| Trigger | Description |
+|:--------|:------------|
+| **Initial registration** | When you call `POST /2/webhooks` |
+| **Hourly validation** | X automatically validates your webhook every hour |
+| **Manual re-validation** | When you call `PUT /2/webhooks/:webhook_id` |
+
+If your webhook fails a CRC check, it will be marked as `invalid` and will **stop receiving events** until it passes again.
+
+### How the CRC works
+
+When X sends a CRC, it makes a **GET request** to your webhook URL with a `crc_token` query parameter:
+
+```
+GET https://your-webhook-url.com/webhook?crc_token=challenge_string
+```
+
+Your application must respond with a JSON body containing a `response_token`:
+
+```json
+{
+  "response_token": "sha256=<base64_encoded_hmac_hash>"
+}
+```
+
+### How to build the CRC response
+
+1. Use the `crc_token` value from the query parameter as the **message**
+2. Use your app's **consumer secret** (API secret key) as the **key**
+3. Create an **HMAC SHA-256** hash
+4. **Base64 encode** the result
+5. Prepend `sha256=` to the encoded string
+
+<Warning>
+**Important:** Your web app must use your app's **consumer secret** (API secret key) for the CRC encryption — not your bearer token or access token.
+</Warning>
+
+### Example: Python
+
+```python
+import hmac
+import hashlib
+import base64
+
+def handle_crc(crc_token, consumer_secret):
+    """
+    Respond to a Twitter CRC check.
+    
+    Args:
+        crc_token: The crc_token query parameter from the GET request
+        consumer_secret: Your app's consumer secret (API secret key)
+    
+    Returns:
+        dict with the response_token
+    """
+    sha256_hash = hmac.new(
+        consumer_secret.encode('utf-8'),
+        crc_token.encode('utf-8'),
+        hashlib.sha256
+    ).digest()
+
+    return {
+        "response_token": "sha256=" + base64.b64encode(sha256_hash).decode('utf-8')
+    }
+```
+
+### Example: Node.js
+
+```javascript
+const crypto = require('crypto');
+
+function handleCrc(crcToken, consumerSecret) {
+  const hmac = crypto
+    .createHmac('sha256', consumerSecret)
+    .update(crcToken)
+    .digest('base64');
+
+  return {
+    response_token: `sha256=${hmac}`
+  };
+}
+```
+
+### Example: Flask (full endpoint)
+
+This example shows a complete webhook endpoint that handles both CRC validation (GET) and event delivery (POST):
+
+```python
+from flask import Flask, request, jsonify
+import hmac
+import hashlib
+import base64
+
+app = Flask(__name__)
+
+CONSUMER_SECRET = "your_consumer_secret_here"
+
+@app.route("/webhook", methods=["GET", "POST"])
+def webhook():
+    if request.method == "GET":
+        # Handle CRC check
+        crc_token = request.args.get("crc_token")
+        if crc_token:
+            sha256_hash = hmac.new(
+                CONSUMER_SECRET.encode("utf-8"),
+                crc_token.encode("utf-8"),
+                hashlib.sha256,
+            ).digest()
+            response_token = "sha256=" + base64.b64encode(sha256_hash).decode("utf-8")
+            return jsonify({"response_token": response_token}), 200
+        return "Missing crc_token", 400
+
+    elif request.method == "POST":
+        # Handle incoming webhook events
+        event = request.get_json()
+        print("Received event:", event)
+        return "", 200
+```
+
+---
+
+## 3. Securing webhooks
+
+X's webhook-based APIs provide two methods for confirming the security of your webhook server:
+
+### Challenge-Response Check (CRC)
+
+The CRC enables X to confirm ownership of the web app receiving webhook events. See [Step 2](#2-the-crc-check) above for full implementation details.
+
+### Signature verification
+
+Each POST request from X includes an `x-twitter-webhooks-signature` header that enables you to confirm that X is the source of the incoming webhook.
+
+To verify the signature:
+
+1. Get the `x-twitter-webhooks-signature` header value from the incoming request
+2. Create an HMAC SHA-256 hash using your **consumer secret** as the key and the **raw request body** as the message
+3. Base64 encode the hash and prepend `sha256=`
+4. Compare your computed value to the header value — they should match
+
+```python
+import hmac
+import hashlib
+import base64
+
+def verify_signature(payload, signature_header, consumer_secret):
+    """
+    Verify that a webhook POST request actually came from X.
+    
+    Args:
+        payload: The raw request body (bytes)
+        signature_header: The x-twitter-webhooks-signature header value
+        consumer_secret: Your app's consumer secret
+    
+    Returns:
+        True if the signature is valid
+    """
+    expected = "sha256=" + base64.b64encode(
+        hmac.new(
+            consumer_secret.encode("utf-8"),
+            payload,
+            hashlib.sha256
+        ).digest()
+    ).decode("utf-8")
+    
+    return hmac.compare_digest(expected, signature_header)
+```
+
+---
+
+## 4. Register your webhook
+
+Once your app can handle CRC checks, register your webhook URL by making a `POST /2/webhooks` request. When you make this request, X will immediately send a CRC request to your web app to verify ownership.
+
+All webhook management endpoints require **OAuth2 App Only Bearer Token** authentication.
+
+### Create a webhook
+
+**`POST /2/webhooks`** — [API Reference](/x-api/webhooks/create-webhook)
+
+```bash
+curl --request POST \
+  --url 'https://api.x.com/2/webhooks' \
+  --header 'Authorization: Bearer $BEARER_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "url": "https://yourdomain.com/webhooks/twitter"
+  }'
+```
+
+**Success response (200 OK):**
+
+A successful response indicates the webhook was created and the initial CRC check passed.
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "url": "https://yourdomain.com/webhooks/twitter",
+    "valid": true,
+    "created_at": "2025-01-15T12:00:00.000Z"
+  }
+}
+```
+
+When a webhook is successfully registered, the response includes a **webhook ID**. This ID is needed when making requests to products that support webhooks (e.g., linking to Filtered Stream, or creating subscriptions for Account Activity).
+
+**Common failure reasons:**
+
+| Reason | Description |
+|:-------|:------------|
+| `CrcValidationFailed` | Your callback URL did not respond correctly to the CRC check (e.g., timed out, wrong response) |
+| `UrlValidationFailed` | The callback URL does not meet requirements (e.g., not `https`, invalid format) |
+| `DuplicateUrlFailed` | A webhook is already registered by your application for this URL |
+| `WebhookLimitExceeded` | Your application has reached the maximum number of allowed webhooks |
+
+### View webhooks
+
+**`GET /2/webhooks`** — [API Reference](/x-api/webhooks/get-webhook)
+
+Retrieve all webhook configurations associated with your application.
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/2/webhooks' \
+  --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+**Response (with one webhook):**
+
+```json
+{
+  "data": [
+    {
+      "created_at": "2025-01-15T12:00:00.000Z",
+      "id": "1234567890",
+      "url": "https://yourdomain.com/webhooks/twitter",
+      "valid": true
+    }
+  ],
+  "meta": {
+    "result_count": 1
+  }
+}
+```
+
+**Response (with no webhooks):**
+
+```json
+{
+  "data": [],
+  "meta": {
+    "result_count": 0
+  }
+}
+```
+
+### Delete a webhook
+
+**`DELETE /2/webhooks/:webhook_id`** — [API Reference](/x-api/webhooks/delete-webhook)
+
+Delete a webhook using its `webhook_id` (obtained from the create or list response).
+
+```bash
+curl --request DELETE \
+  --url 'https://api.x.com/2/webhooks/1234567890' \
+  --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+**Response:**
+
+```json
+{
+  "data": {
+    "deleted": true
+  }
+}
+```
+
+| Failure reason | Description |
+|:---------------|:------------|
+| `WebhookIdInvalid` | The provided `webhook_id` was not found or is not associated with your app |
+
+### Validate and re-enable a webhook
+
+**`PUT /2/webhooks/:webhook_id`** — [API Reference](/x-api/webhooks/validate-webhook)
+
+Triggers a CRC check for the given webhook. If the check succeeds, the webhook is re-enabled with `valid: true`.
+
+```bash
+curl --request PUT \
+  --url 'https://api.x.com/2/webhooks/1234567890' \
+  --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+**Response:**
+
+A 200 OK response indicates the CRC check was initiated. The `valid` field reflects the status after the check attempt. You can verify the current status using `GET /2/webhooks`.
+
+```json
+{
+  "data": {
+    "valid": true
+  }
+}
+```
+
+| Failure reason | Description |
+|:---------------|:------------|
+| `WebhookIdInvalid` | The provided `webhook_id` was not found or is not associated with your app |
+| `CrcValidationFailed` | The callback URL did not respond correctly to the CRC check |
+
+---
+
+## Testing with xurl
+
+For testing purposes, the `xurl` tool supports temporary webhooks. Install the latest version of the [`xurl` project](https://github.com/xdevplatform/xurl) from GitHub, configure your authorization, then run:
+
+```bash
+xurl webhook start
+```
+
+This will generate a temporary public webhook URL, automatically handle all CRC checks, and log any incoming subscription events. It's a great way to verify your setup before deploying. Example output:
+
+```
+Starting webhook server with ngrok...
+Enter your ngrok authtoken (leave empty to try NGROK_AUTHTOKEN env var):
+
+Attempting to use NGROK_AUTHTOKEN environment variable for ngrok authentication.
+Configuring ngrok to forward to local port: 8080
+Ngrok tunnel established!
+  Forwarding URL: https://<your-ngrok-subdomain>.ngrok-free.app -> localhost:8080
+
+Use this URL for your X API webhook registration: https://<your-ngrok-subdomain>.ngrok-free.app/webhook
+
+Starting local HTTP server to handle requests from ngrok tunnel...
+```
+
+---
+
+## Important notes
+
+<Warning>
+- **All incoming Direct Messages** will be delivered via webhooks. DMs sent via [POST /2/dm_conversations/with/:participant_id/messages](/x-api/direct-messages/send-a-new-message-to-a-user) will also be delivered, so your app can track DMs sent from other clients.
+
+- If you have **more than one web app** sharing the same webhook URL and the same user mapped to each app, the same event will be sent to your webhook **multiple times** (once per web app).
+
+- In some cases, your webhook may receive **duplicate events**. Your webhook app should be tolerant of this and **deduplicate by event ID**.
+
+- X sends events as **POST requests** with JSON payloads. See the [Account Activity data object structure](/x-api/account-activity/introduction#account-activity-data-object-structure) for example payloads.
+</Warning>
+
+---
+
+## Sample apps
+
+| App | Description |
+|:----|:------------|
+| [Simple webhook server](https://github.com/m-rosinsky/XWebhookTest/blob/main/app.py) | A single Python script that shows how to respond to the CRC check and accept POST events |
+| [Account Activity API dashboard](https://github.com/xdevplatform/account-activity-dashboard-enterprise/tree/master) | A web app written with [bun.sh](https://bun.sh) that lets you manage webhooks, subscriptions, and receive live events |
+| [xurl testing tool](https://github.com/xdevplatform/xurl) | CLI tool for temporary webhook testing — auto-handles CRC checks and logs events |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Filtered Stream Webhooks" icon="filter" href="/x-api/webhooks/stream/introduction">
+    Receive filtered Posts via webhook
+  </Card>
+  <Card title="Account Activity API" icon="bell" href="/x-api/account-activity/introduction">
+    Receive account events via webhook
+  </Card>
+</CardGroup>
