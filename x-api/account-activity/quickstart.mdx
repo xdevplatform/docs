@@ -1,0 +1,359 @@
+---
+title: Quickstart
+sidebarTitle: Quickstart
+description: Set up Account Activity API subscriptions and start receiving real-time events
+keywords: ["account activity quickstart", "AAA setup", "webhook subscriptions", "account activity setup", "manage subscriptions", "replay"]
+---
+
+This guide walks you through setting up the Account Activity API, managing user subscriptions, validating your webhook, and using the replay feature to recover missed events.
+
+## 1. Create an X App
+
+Create an X app with an approved developer account from the [developer portal](https://developer.x.com/en/portal/products/enterprise). If creating the app on behalf of your company, use a corporate X account.
+
+- Enable **"Read, Write, and Access direct messages"** on the permissions tab of your app page.
+- On the "Keys and Access Tokens" tab, note your app's **Consumer Key (API Key)**, **Consumer Token (API Secret)**, and **Bearer Token**.
+- Generate your app's **Access Token** and **Access Token Secret**. These are needed to subscribe to user accounts.
+- Review [Obtaining Access Tokens](/fundamentals/authentication/overview) if unfamiliar with X Sign-in and user contexts.
+- Note your app's numeric ID from the "Apps" page in the developer portal. This is required when applying for Account Activity API access.
+
+---
+
+## 2. Get Account Activity API access
+
+The Account Activity API is available on the Enterprise and Pay Per Use tiers. Submit an application for access via the [developer portal](https://developer.x.com/en/portal/products/enterprise).
+
+---
+
+## 3. Register a webhook
+
+To receive Account Activity events, you must register a webhook with a publicly accessible HTTPS URL. See the [V2 Webhooks API documentation](/x-api/webhooks/introduction) for details on developing a webhook consumer app, registering a webhook, securing it, and handling Challenge-Response Checks (CRC).
+
+- Ensure your webhook is configured to handle POST requests with JSON-encoded event payloads.
+- Obtain the **`webhook_id`** from the webhook registration response, as it is required for managing subscriptions.
+
+```bash
+curl --request POST \
+  --url 'https://api.x.com/2/webhooks' \
+  --header 'Authorization: Bearer $BEARER_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{"url": "https://yourdomain.com/webhooks/twitter"}'
+```
+
+---
+
+## 4. Validate setup
+
+To validate that your app and webhook are configured correctly:
+
+1. Subscribe a user account to your webhook (see [Adding a Subscription](#adding-a-subscription) below).
+2. Favorite a Post posted by one of the X accounts your app is subscribed to.
+3. You should receive a `favorite_events` payload via a POST request to your webhook URL.
+
+<Note>
+It may take up to 10 seconds for events to start being delivered after adding a subscription.
+</Note>
+
+---
+
+## Managing subscriptions
+
+Once you have a registered webhook with a valid `webhook_id`, you can manage user subscriptions to receive their account activities. Use the following endpoints to add, view, or remove subscriptions.
+
+### Adding a subscription
+
+**Endpoint:** `POST /2/account_activity/webhooks/:webhook_id/subscriptions/all` — [API Reference](/x-api/account-activity/create-subscription)
+
+Subscribes the authenticating user to receive events via the specified webhook.
+
+**Authentication:** OAuth 1.0a (3-legged OAuth flow required, representing the user being subscribed).
+
+| Path Parameter | Description |
+|:---------------|:------------|
+| `webhook_id` | The ID of the webhook to associate the subscription with. |
+
+```bash
+curl --request POST \
+  --url 'https://api.x.com/2/account_activity/webhooks/:WEBHOOK_ID/subscriptions/all' \
+  --header 'authorization: OAuth oauth_consumer_key="<CONSUMER_KEY>", oauth_nonce="GENERATED", oauth_signature="GENERATED", oauth_signature_method="HMAC-SHA1", oauth_timestamp="GENERATED", oauth_token="<ACCESS_TOKEN>", oauth_version="1.0"'
+```
+
+**Success (200 OK):**
+
+```json
+{
+  "data": {
+    "subscribed": true
+  }
+}
+```
+
+**Failure reasons:**
+
+| Reason | Description |
+|:-------|:------------|
+| `WebhookIdInvalid` | The provided `webhook_id` was not found or is not associated with the app. |
+| `DuplicateSubscriptionFailed` | A subscription for this user already exists for the specified `webhook_id`. |
+| `SubscriptionLimitExceeded` | The application has reached its subscription limit across all webhooks. |
+
+---
+
+### Checking a subscription
+
+**Endpoint:** `GET /2/account_activity/webhooks/:webhook_id/subscriptions/all` — [API Reference](/x-api/account-activity/validate-subscription)
+
+Checks if the authenticating user is subscribed to the specified webhook.
+
+**Authentication:** OAuth 1.0a (3-legged OAuth flow required).
+
+| Path Parameter | Description |
+|:---------------|:------------|
+| `webhook_id` | The ID of the webhook to check. |
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/2/account_activity/webhooks/:WEBHOOK_ID/subscriptions/all' \
+  --header 'authorization: OAuth oauth_consumer_key="<CONSUMER_KEY>", oauth_nonce="GENERATED", oauth_signature="GENERATED", oauth_signature_method="HMAC-SHA1", oauth_timestamp="GENERATED", oauth_token="<ACCESS_TOKEN>", oauth_version="1.0"'
+```
+
+**Success (200 OK):**
+
+```json
+{
+  "data": {
+    "subscribed": true
+  }
+}
+```
+
+**Failure reasons:**
+
+| Reason | Description |
+|:-------|:------------|
+| `WebhookIdInvalid` | The provided `webhook_id` was not found or is not associated with the app. |
+
+---
+
+### Removing a subscription
+
+**Endpoint:** `DELETE /2/account_activity/webhooks/:webhook_id/subscriptions/:user_id/all` — [API Reference](/x-api/account-activity/delete-subscription)
+
+Deactivates the subscription for a specific user ID, stopping event delivery to the webhook.
+
+**Authentication:** OAuth2 App Only Bearer Token.
+
+| Path Parameter | Description |
+|:---------------|:------------|
+| `webhook_id` | The ID of the webhook containing the subscription. |
+| `user_id` | The numerical ID of the user to unsubscribe. |
+
+```bash
+curl --request DELETE \
+  --url 'https://api.x.com/2/account_activity/webhooks/:WEBHOOK_ID/subscriptions/:USER_ID/all' \
+  --header 'authorization: Bearer <BEARER_TOKEN>'
+```
+
+**Success (200 OK):**
+
+```json
+{
+  "data": {
+    "subscribed": false
+  }
+}
+```
+
+**Failure reasons:**
+
+| Reason | Description |
+|:-------|:------------|
+| `SubscriptionNotFound` | No subscription exists for the specified `user_id` on the given `webhook_id`. |
+| `WebhookIdInvalid` | The provided `webhook_id` was not found or is not associated with the app. |
+
+---
+
+### Viewing all subscriptions
+
+**Endpoint:** `GET /2/account_activity/webhooks/:webhook_id/subscriptions/all/list` — [API Reference](/x-api/account-activity/get-subscriptions)
+
+Retrieves a list of all user IDs currently subscribed to the specified webhook.
+
+**Authentication:** OAuth2 App Only Bearer Token.
+
+| Path Parameter | Description |
+|:---------------|:------------|
+| `webhook_id` | The ID of the webhook to list subscriptions for. |
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/2/account_activity/webhooks/:WEBHOOK_ID/subscriptions/all/list' \
+  --header 'authorization: Bearer <BEARER_TOKEN>'
+```
+
+**Success (200 OK):**
+
+```json
+{
+  "data": {
+    "application_id": "<your app id>",
+    "webhook_id": "<webhook id>",
+    "webhook_url": "<the webhook's callback url>",
+    "subscriptions": [
+      { "user_id": "<user_id_1>" },
+      { "user_id": "<user_id_2>" }
+    ]
+  }
+}
+```
+
+**Failure reasons:**
+
+| Reason | Description |
+|:-------|:------------|
+| `WebhookIdInvalid` | The provided `webhook_id` was not found or is not associated with the app. |
+
+---
+
+### Subscription count
+
+**Endpoint:** `GET /2/account_activity/subscriptions/count` — [API Reference](/x-api/account-activity/get-subscription-count)
+
+Returns the total count of active subscriptions and the provisioned limit for the authenticating application.
+
+**Authentication:** OAuth2 App Only Bearer Token.
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/2/account_activity/subscriptions/count' \
+  --header 'authorization: Bearer <BEARER_TOKEN>'
+```
+
+**Success (200 OK):**
+
+```json
+{
+  "data": {
+    "account_name": "<your application name>",
+    "provisioned_count": "<subscription limit allocated>",
+    "subscriptions_count_all": "<current active subscription count>",
+    "subscriptions_count_direct_messages": "0"
+  }
+}
+```
+
+<Note>
+DM-only subscriptions are no longer supported. The `subscriptions_count_direct_messages` field will always be `"0"`.
+</Note>
+
+---
+
+## Replay
+
+AAAv2 provides replay functionality that allows you to retrieve past events for a specified time range and re-deliver them to your webhook. This is useful for recovering missed events due to downtime.
+
+**Endpoint:** `POST /2/account_activity/replay/webhooks/:webhook_id/subscriptions/all` — [API Reference](/x-api/account-activity/create-replay-job)
+
+**Authentication:** OAuth2 App Only Bearer Token.
+
+| Path Parameter | Description |
+|:---------------|:------------|
+| `webhook_id` | The ID of the webhook to begin replay. |
+
+| Query Parameter | Description |
+|:----------------|:------------|
+| `from_date` | The oldest (starting) UTC timestamp from which the events will be provided. Must be in `yyyymmddhhmm` format. Timestamp is in minute granularity and is inclusive (i.e. 12:00 includes the 00 minute). Valid times must be within the last 24 hours, UTC time, and no more recent than 31 minutes before the current point in time. It's recommended that `from_date` and `to_date` should be within ~2 hours. |
+| `to_date` | The latest (ending) UTC timestamp to which the event will be provided. Must be in `yyyymmddhhmm` format. Timestamp is in minute granularity and is exclusive (i.e. 12:30 does not include the 30th minute of the hour). Valid times must be within the last 24 hours, UTC time, and no more than 10 minutes before the current point in time. |
+
+**Success (200 OK):**
+
+```json
+{
+  "for_user_id": "<USER_ID>",
+  "replay_event": {
+    "job_id": "<REPLAY_JOB_ID>",
+    "created_at": "yyyy-mm-ddThh:mm:ss.000Z"
+  }
+}
+```
+
+**Failure reasons:**
+
+| Reason | Description |
+|:-------|:------------|
+| `QueryParamInvalid` | `from_date` is older than 24 hours from the current time. |
+| `QueryParamInvalid` | `from_date` is more recent than `to_date`. |
+| `QueryParamInvalid` | `from_date` is in the future. |
+| `QueryParamInvalid` | `to_date` is in the future. |
+| `QueryParamInvalid` | `from_date` or `to_date` is not in the correct format. |
+| `CrcValidationFailed` | Incorrect response received from the webhook URL during CRC validation. |
+| `ReplayConflictError` | A replay job is already in progress for the specified webhook. |
+| `WebhookIdInvalid` | The provided `webhook_id` is invalid or not associated with the app. |
+
+### Job completed messages
+
+Once your replay job successfully completes, X will deliver the following job completion event. Once you receive this event, the job has finished running and another can be submitted.
+
+```json
+{
+  "replay_job_status": {
+    "webhook_id": "<WEBHOOK_ID>",
+    "job_state": "Complete",
+    "job_state_description": "Job completed successfully",
+    "job_id": "<JOB_ID>"
+  }
+}
+```
+
+In the event your job does not complete successfully, X will return the following message encouraging you to retry your Replay Job. Once you receive this event, the job has finished running and another can be submitted.
+
+```json
+{
+  "replay_job_status": {
+    "webhook_id": "<WEBHOOK_ID>",
+    "job_state": "Incomplete",
+    "job_state_description": "Job failed to deliver all events, please retry your replay job",
+    "job_id": "<JOB_ID>"
+  }
+}
+```
+
+---
+
+## Important notes
+
+<Warning>
+- **Authentication**: When subscribing users, use the consumer key, consumer secret, access token, and access token secret for the user's account.
+- **Direct Messages**: All incoming and outgoing Direct Messages (sent via `POST /2/dm_conversations/with/:participant_id/messages`) are delivered via webhooks to keep your app aware of all DM activity.
+- **Event Duplication**:
+  - If two subscribed users are in the same DM conversation, your webhook receives duplicate events (one per user). Use the `for_user_id` field to distinguish them.
+  - If multiple apps share the same webhook URL and user, events are sent multiple times (once per app).
+  - Your app should deduplicate events using the event ID to handle occasional duplicates.
+</Warning>
+
+---
+
+## Sample apps
+
+| App | Description |
+|:----|:------------|
+| [Simple webhook server](https://github.com/m-rosinsky/XWebhookTest/blob/main/app.py) | A single Python script that shows how to respond to the CRC check and accept POST events |
+| [Account Activity API dashboard](https://github.com/xdevplatform/account-activity-dashboard-enterprise/tree/master) | A web app written with [bun.sh](https://bun.sh) that lets you manage webhooks, subscriptions, and receive live events |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Introduction" icon="book" href="/x-api/account-activity/introduction">
+    Activity types, data objects, and payload examples
+  </Card>
+  <Card title="Webhooks API" icon="webhook" href="/x-api/webhooks/introduction">
+    Register and manage your webhooks
+  </Card>
+  <Card title="Migration guide" icon="right-left" href="/x-api/account-activity/migrate/overview">
+    Migrate from legacy Enterprise to v2
+  </Card>
+  <Card title="Webhook quickstart" icon="rocket" href="/x-api/webhooks/quickstart">
+    CRC setup, security, and webhook registration
+  </Card>
+</CardGroup>
