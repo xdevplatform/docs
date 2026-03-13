@@ -1,0 +1,512 @@
+---
+title: Troubleshooting
+sidebarTitle: Troubleshooting
+description: Common errors and solutions when building with XChat
+keywords: ["XChat errors", "XChat troubleshooting", "decryption errors", "key errors", "webhook errors"]
+---
+
+This guide covers common issues you may encounter when building with XChat and how to resolve them.
+
+## Key Management Errors
+
+### `UnlockFailed: InvalidPin`
+
+**Symptom:** `unlock()` fails with an invalid PIN error.
+
+**Causes:**
+- Wrong PIN entered
+- PIN has too many failed attempts (locked out)
+- Keys were set up with a different PIN
+
+**Solutions:**
+```python
+# Check if you're using the correct PIN
+try:
+    chat.unlock(pin)
+except UnlockError as e:
+    if "InvalidPin" in str(e):
+        print("Wrong PIN. Check your PIN and try again.")
+        print(f"Attempts remaining: {e.guesses_remaining}")
+    elif "Locked" in str(e):
+        print("Too many failed attempts. Account is locked.")
+```
+
+<Warning>
+After too many failed PIN attempts, Juicebox will permanently lock your keys. There is no recovery — you'll need to generate new keys and re-register them with X.
+</Warning>
+
+---
+
+### `KeysNotUnlocked`
+
+**Symptom:** Encryption/decryption operations fail because keys aren't loaded.
+
+**Cause:** You're trying to encrypt or decrypt before calling `unlock()`.
+
+**Solution:**
+```python
+# Always unlock before any crypto operations
+if not chat.is_unlocked():
+    chat.unlock(pin)
+
+# Now you can encrypt/decrypt
+encrypted = chat.encrypt_message(...)
+```
+
+---
+
+### `KeyNotFound` / `ConversationKeyMissing`
+
+**Symptom:** Can't decrypt a message because the conversation key is missing.
+
+**Causes:**
+- You don't have the conversation key for this message's `key_version`
+- Key rotation happened and you missed the `KeyChange` event
+
+**Solutions:**
+
+1. **Fetch the conversation to get current keys:**
+```python
+# Get fresh conversation data with keys
+conversation = x_client.chat.get_conversation(conversation_id)
+encrypted_key = conversation.data.participant_keys[0].encrypted_key
+
+# Decrypt and cache it
+conv_key = chat.decrypt_conversation_key(encrypted_key)
+```
+
+2. **Make sure you're handling `KeyChange` events:**
+```python
+def handle_event(event_data):
+    if 'key_change' in event_data.get('payload', {}):
+        # Extract and store the new key FIRST
+        handle_key_change(event_data['payload']['key_change'])
+    
+    # Then decrypt the message
+    decrypt_message(event_data)
+```
+
+---
+
+### `PublicKeyNotFound`
+
+**Symptom:** Can't encrypt a message for a recipient because their public key isn't available.
+
+**Solution:**
+```python
+# Fetch the recipient's public keys from the API
+recipient_keys = x_client.users.get_public_keys(user_id=recipient_id)
+
+# Use the latest key version for encryption
+latest_key = recipient_keys.data[0]  # Sorted by version, newest first
+```
+
+---
+
+## Decryption Errors
+
+### `DecryptionFailed: InvalidCiphertext`
+
+**Symptom:** Message decryption fails with invalid ciphertext error.
+
+**Causes:**
+- Message was corrupted in transit
+- Wrong conversation key version used
+- Message is malformed
+
+**Solutions:**
+
+1. **Verify you're using the correct key version:**
+```python
+# The message specifies which key version was used
+message_key_version = encrypted_event.get('key_version')
+
+# Make sure you have that version
+if message_key_version not in conversation_keys:
+    print(f"Missing key version {message_key_version}")
+    # Fetch historical keys or request resend
+```
+
+2. **Check message integrity:**
+```python
+import base64
+
+# Verify the payload is valid base64
+try:
+    decoded = base64.b64decode(encrypted_payload)
+except Exception:
+    print("Invalid base64 encoding in payload")
+```
+
+---
+
+### `SignatureVerificationFailed`
+
+**Symptom:** Message decrypts but signature verification fails.
+
+**Causes:**
+- Sender's signing key doesn't match
+- Message was tampered with
+- You have outdated signing keys for the sender
+
+**Solutions:**
+```python
+# Fetch fresh signing keys for the sender
+sender_keys = x_client.users.get_public_keys(user_id=sender_id)
+
+# Retry decryption with updated keys
+event = chat.decrypt_event(
+    encrypted_event,
+    conversation_keys,
+    signing_keys=[sender_keys.data[0].signing_key]
+)
+
+# Check verification status
+if not event.verified:
+    print("Warning: Message signature could not be verified")
+    # Decide whether to accept unverified messages
+```
+
+<Note>
+Unverified messages aren't necessarily malicious — the sender may have rotated their signing key. Consider your threat model when deciding how to handle them.
+</Note>
+
+---
+
+## Webhook Errors
+
+### CRC Challenge Failing
+
+**Symptom:** Webhook registration fails or webhook gets disabled.
+
+**Causes:**
+- Incorrect HMAC calculation
+- Wrong consumer secret
+- Response format incorrect
+
+**Solution:**
+```python
+import hmac
+import hashlib
+import base64
+
+def handle_crc(crc_token: str, consumer_secret: str) -> dict:
+    # Must use HMAC-SHA256
+    signature = hmac.new(
+        consumer_secret.encode('utf-8'),
+        crc_token.encode('utf-8'),
+        hashlib.sha256
+    ).digest()
+    
+    # Must be base64 encoded
+    response_token = base64.b64encode(signature).decode('utf-8')
+    
+    # Must return exactly this format
+    return {
+        'response_token': f'sha256={response_token}'
+    }
+```
+
+**Checklist:**
+- [ ] Using the correct `consumer_secret` (API Secret Key, not API Key)
+- [ ] Response is JSON with `response_token` field
+- [ ] Token is prefixed with `sha256=`
+- [ ] Responding within 3 seconds
+
+---
+
+### `403 Forbidden` on Webhook Events
+
+**Symptom:** Your webhook receives events but returns 403.
+
+**Cause:** Signature verification is failing.
+
+**Solution:**
+```python
+def verify_webhook_signature(request) -> bool:
+    signature = request.headers.get('x-twitter-webhooks-signature', '')
+    payload = request.get_data()  # Raw bytes, not parsed JSON
+    
+    expected = 'sha256=' + base64.b64encode(
+        hmac.new(
+            CONSUMER_SECRET.encode('utf-8'),
+            payload,  # Use raw payload, not request.json
+            hashlib.sha256
+        ).digest()
+    ).decode('utf-8')
+    
+    # Use constant-time comparison
+    return hmac.compare_digest(signature, expected)
+```
+
+<Warning>
+**Common mistake:** Using `request.json` instead of `request.get_data()`. The signature is computed over the raw request body, not the parsed JSON.
+</Warning>
+
+---
+
+### Not Receiving Events
+
+**Symptom:** Webhook is registered but you're not getting chat events.
+
+**Checklist:**
+
+1. **Verify subscription exists:**
+```bash
+curl -X GET "https://api.x.com/2/activity/subscriptions" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+2. **Check event types:**
+```bash
+# Make sure you subscribed to both event types
+# chat.received - messages TO you
+# chat.sent - messages FROM you
+```
+
+3. **Verify user authorization:**
+   - Chat events require OAuth 2.0 user authorization
+   - User must have granted `dm.read` scope
+
+4. **Check webhook health:**
+```bash
+# Trigger a manual CRC check
+curl -X PUT "https://api.x.com/2/webhooks/WEBHOOK_ID" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+---
+
+## API Errors
+
+### `401 Unauthorized`
+
+**Causes:**
+- Expired access token
+- Missing or invalid OAuth signature
+- Wrong authentication method
+
+**Solutions:**
+
+```python
+# For OAuth 2.0 - refresh the token
+if response.status_code == 401:
+    new_token = refresh_oauth2_token(refresh_token)
+    # Retry request with new token
+```
+
+**Required scopes for XChat:**
+- `dm.read` — Read conversations and messages
+- `dm.write` — Send messages
+- `users.read` — Read user profiles and public keys
+
+---
+
+### `429 Too Many Requests`
+
+**Cause:** Rate limit exceeded.
+
+**Solution:**
+```python
+import time
+
+def make_request_with_retry(func, *args, max_retries=3):
+    for attempt in range(max_retries):
+        response = func(*args)
+        
+        if response.status_code == 429:
+            # Get reset time from headers
+            reset_time = int(response.headers.get('x-rate-limit-reset', 0))
+            wait_seconds = max(reset_time - time.time(), 1)
+            
+            print(f"Rate limited. Waiting {wait_seconds}s...")
+            time.sleep(wait_seconds)
+            continue
+        
+        return response
+    
+    raise Exception("Max retries exceeded")
+```
+
+---
+
+### `400 Bad Request` on Send Message
+
+**Causes:**
+- Invalid encrypted payload format
+- Missing required fields
+- Conversation key version mismatch
+
+**Solution:**
+```python
+# Make sure all required fields are present
+payload = chat.encrypt_message(
+    text=text,
+    conversation_key=encrypted_key,
+    conversation_id=conversation_id,
+    sender_id=sender_id,
+    should_notify=True
+)
+
+# Verify the payload before sending
+assert payload.encrypted_content is not None
+assert payload.signature is not None
+assert payload.conversation_key_version is not None
+
+response = x_client.chat.send_message(
+    conversation_id=conversation_id,
+    body={
+        "encrypted_content": payload.encrypted_content,
+        "signature": payload.signature,
+        "encoded_event_signature": payload.encoded_event_signature,
+        "conversation_key_version": payload.conversation_key_version,
+        "should_notify": payload.should_notify
+    }
+)
+```
+
+---
+
+## Juicebox Errors
+
+### `NetworkError` / `RealmUnreachable`
+
+**Symptom:** Can't connect to Juicebox realms.
+
+**Causes:**
+- Network connectivity issues
+- Realm is temporarily down
+- Firewall blocking connections
+
+**Solutions:**
+
+1. **Check network connectivity:**
+```python
+import requests
+
+def check_realm_connectivity(realm_url: str) -> bool:
+    try:
+        response = requests.get(f"{realm_url}/health", timeout=5)
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Realm unreachable: {e}")
+        return False
+```
+
+2. **Implement retry logic:**
+```python
+import time
+
+def unlock_with_retry(chat, pin, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            chat.unlock(pin)
+            return True
+        except NetworkError:
+            wait = 2 ** attempt  # Exponential backoff
+            print(f"Network error, retrying in {wait}s...")
+            time.sleep(wait)
+    return False
+```
+
+---
+
+### `TokenExpired`
+
+**Symptom:** Juicebox operations fail with expired token error.
+
+**Cause:** Auth tokens for realms have expired.
+
+**Solution:**
+```typescript
+// TypeScript example with token refresh
+const chat = await createChat({
+  juiceboxConfig,
+  getAuthToken: async (realmId) => {
+    // This callback is called when tokens are needed
+    // Return fresh tokens each time
+    return await fetchFreshToken(realmId);
+  }
+});
+```
+
+---
+
+## Debugging Tips
+
+### Enable Debug Logging
+
+```python
+import logging
+
+# Enable debug logs for XChat XDK
+logging.getLogger('chat_xdk').setLevel(logging.DEBUG)
+
+# Enable debug logs for HTTP requests
+logging.getLogger('urllib3').setLevel(logging.DEBUG)
+```
+
+### Inspect Encrypted Payloads
+
+```python
+import base64
+import json
+
+def inspect_payload(encrypted_event: str):
+    """Decode and inspect an encrypted event (without decrypting)."""
+    try:
+        decoded = base64.b64decode(encrypted_event)
+        print(f"Payload size: {len(decoded)} bytes")
+        
+        # Check if it looks like valid ciphertext
+        if len(decoded) < 32:
+            print("Warning: Payload seems too small")
+        
+        return decoded
+    except Exception as e:
+        print(f"Invalid base64: {e}")
+        return None
+```
+
+### Verify Key Fingerprints
+
+```python
+def verify_setup():
+    """Verify encryption setup is correct."""
+    print(f"Keys unlocked: {chat.is_unlocked()}")
+    
+    if chat.is_unlocked():
+        fingerprint = chat.get_public_key_fingerprint()
+        print(f"Key fingerprint: {fingerprint}")
+        
+        # Compare with what's registered on X
+        registered_keys = x_client.users.get_public_keys(user_id=my_user_id)
+        for key in registered_keys.data:
+            print(f"Registered: {key.fingerprint} (version {key.version})")
+```
+
+---
+
+## Getting Help
+
+If you're still stuck:
+
+1. **Check the logs** — Enable debug logging and look for specific error codes
+2. **Verify your setup** — Run through the [Getting Started](/xchat/getting-started) guide again
+3. **Search the forums** — [X Developer Community](https://devcommunity.x.com/)
+4. **File a bug** — If you've found an SDK bug, report it on GitHub
+
+<CardGroup cols={2}>
+  <Card title="Getting Started" icon="rocket" href="/xchat/getting-started">
+    Step-by-step setup guide
+  </Card>
+  <Card title="XChat XDK Reference" icon="code" href="/xchat/xchat-xdk">
+    Full API documentation
+  </Card>
+  <Card title="Developer Forums" icon="comments" href="https://devcommunity.x.com/">
+    Community support
+  </Card>
+  <Card title="API Status" icon="signal" href="https://api.xstatus.com/">
+    Check for outages
+  </Card>
+</CardGroup>
