@@ -1,0 +1,368 @@
+---
+title: Real-time Chat Events
+sidebarTitle: Real-time Events
+description: Receive encrypted chat messages in real-time via webhooks
+---
+
+import { Button } from '/snippets/button.mdx';
+
+The X Activity API delivers encrypted chat events (`chat.received` and `chat.sent`) to your application in real-time. Combined with webhooks, you can build responsive chat applications that react instantly to new messages.
+
+## Overview
+
+When a user sends or receives an encrypted DM, X can deliver the event to your webhook endpoint within milliseconds. The event payload contains the encrypted message, which you decrypt using the [XChat XDK](/xchat/xchat-xdk).
+
+```mermaid actions={false}
+flowchart LR
+    A["User sends<br/>encrypted DM"] --> B["X Activity API"] --> C["Your webhook"] --> D["XChat XDK<br/>decrypts message"]
+```
+
+## Chat Event Types
+
+| Event Name | Description | When it fires |
+|:-----------|:------------|:--------------|
+| `chat.received` | User receives an encrypted DM | When someone sends your subscribed user a message |
+| `chat.sent` | User sends an encrypted DM | When your subscribed user sends a message |
+
+<Note>
+Chat events are **private events** — they require OAuth 2.0 authentication from the user before you can subscribe to their events.
+</Note>
+
+---
+
+## Quick Setup
+
+### 1. Register a Webhook
+
+First, register a webhook endpoint to receive events:
+
+<CodeGroup>
+```python Python
+from xdk import XClient
+
+client = XClient(bearer_token="YOUR_BEARER_TOKEN")
+
+# Register your webhook URL
+webhook = client.webhooks.create(
+    url="https://your-app.com/webhook"
+)
+print(f"Webhook ID: {webhook.id}")
+```
+
+```typescript TypeScript
+import { XClient } from 'xdk';
+
+const client = new XClient({ bearerToken: 'YOUR_BEARER_TOKEN' });
+
+// Register your webhook URL
+const webhook = await client.webhooks.create({
+  url: 'https://your-app.com/webhook'
+});
+console.log(`Webhook ID: ${webhook.id}`);
+```
+</CodeGroup>
+
+### 2. Implement CRC Validation
+
+X sends periodic Challenge-Response Check (CRC) requests to verify you control the webhook endpoint. Your server must respond with an HMAC-SHA256 hash.
+
+<CodeGroup>
+```python Python (Flask)
+import hmac
+import hashlib
+import base64
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+CONSUMER_SECRET = "your_consumer_secret"
+
+@app.route('/webhook', methods=['GET'])
+def crc_check():
+    crc_token = request.args.get('crc_token')
+    
+    # Create HMAC SHA-256 hash
+    sha256_hash = hmac.new(
+        CONSUMER_SECRET.encode('utf-8'),
+        msg=crc_token.encode('utf-8'),
+        digestmod=hashlib.sha256
+    ).digest()
+    
+    response_token = base64.b64encode(sha256_hash).decode('utf-8')
+    
+    return jsonify({
+        'response_token': f'sha256={response_token}'
+    })
+```
+
+```typescript TypeScript (Express)
+import express from 'express';
+import crypto from 'crypto';
+
+const app = express();
+const CONSUMER_SECRET = 'your_consumer_secret';
+
+app.get('/webhook', (req, res) => {
+  const crcToken = req.query.crc_token as string;
+  
+  // Create HMAC SHA-256 hash
+  const hash = crypto
+    .createHmac('sha256', CONSUMER_SECRET)
+    .update(crcToken)
+    .digest('base64');
+  
+  res.json({
+    response_token: `sha256=${hash}`
+  });
+});
+```
+</CodeGroup>
+
+### 3. Subscribe to Chat Events
+
+Create a subscription for the user's chat events:
+
+<CodeGroup>
+```python Python
+# Subscribe to chat events for a user
+subscription = client.activity.create_subscription(
+    event_types=["chat.received", "chat.sent"],
+    user_id="USER_ID_TO_MONITOR"
+)
+print(f"Subscription ID: {subscription.id}")
+```
+
+```typescript TypeScript
+// Subscribe to chat events for a user
+const subscription = await client.activity.createSubscription({
+  eventTypes: ['chat.received', 'chat.sent'],
+  userId: 'USER_ID_TO_MONITOR'
+});
+console.log(`Subscription ID: ${subscription.id}`);
+```
+</CodeGroup>
+
+### 4. Handle Incoming Events
+
+When a chat event arrives, decrypt it using the XChat XDK:
+
+<CodeGroup>
+```python Python (Flask)
+from xchat_xdk import XChatClient
+
+xchat = XChatClient()
+
+@app.route('/webhook', methods=['POST'])
+def handle_event():
+    event = request.json
+    
+    if event.get('event_type') == 'chat.received':
+        # Extract encrypted payload
+        encrypted_data = event['data']['encrypted_payload']
+        sender_id = event['data']['sender_id']
+        conversation_id = event['data']['conversation_id']
+        
+        # Decrypt the message
+        decrypted = xchat.decrypt_message(
+            encrypted_payload=encrypted_data,
+            conversation_id=conversation_id,
+            sender_public_key=get_sender_public_key(sender_id)
+        )
+        
+        print(f"New message: {decrypted['text']}")
+        
+        # Process the message (e.g., respond, store, analyze)
+        handle_incoming_message(decrypted, sender_id, conversation_id)
+    
+    return '', 200
+```
+
+```typescript TypeScript (Express)
+import { XChatClient } from 'xchat-xdk';
+
+const xchat = new XChatClient();
+
+app.post('/webhook', express.json(), async (req, res) => {
+  const event = req.body;
+  
+  if (event.event_type === 'chat.received') {
+    // Extract encrypted payload
+    const { encrypted_payload, sender_id, conversation_id } = event.data;
+    
+    // Decrypt the message
+    const decrypted = await xchat.decryptMessage({
+      encryptedPayload: encrypted_payload,
+      conversationId: conversation_id,
+      senderPublicKey: await getSenderPublicKey(sender_id)
+    });
+    
+    console.log(`New message: ${decrypted.text}`);
+    
+    // Process the message
+    await handleIncomingMessage(decrypted, sender_id, conversation_id);
+  }
+  
+  res.sendStatus(200);
+});
+```
+</CodeGroup>
+
+---
+
+## Event Payload Structure
+
+Chat events are delivered as JSON with the following structure:
+
+```json
+{
+  "event_type": "chat.received",
+  "timestamp": "2024-01-15T10:30:00.000Z",
+  "data": {
+    "conversation_id": "1234567890-0987654321",
+    "sender_id": "1234567890",
+    "recipient_id": "0987654321",
+    "message_id": "msg_abc123",
+    "encrypted_payload": "base64_encoded_encrypted_data...",
+    "created_at": "2024-01-15T10:30:00.000Z"
+  }
+}
+```
+
+| Field | Description |
+|:------|:------------|
+| `event_type` | `chat.received` or `chat.sent` |
+| `timestamp` | When the event was generated |
+| `conversation_id` | The DM conversation identifier |
+| `sender_id` | User ID of the message sender |
+| `recipient_id` | User ID of the message recipient |
+| `message_id` | Unique identifier for this message |
+| `encrypted_payload` | Base64-encoded encrypted message (decrypt with XChat XDK) |
+
+---
+
+## Webhook Requirements
+
+| Requirement | Description |
+|:------------|:------------|
+| **HTTPS** | Webhook URL must use HTTPS |
+| **Publicly accessible** | URL must be reachable from the internet |
+| **No port in URL** | URLs like `https://example.com:5000/webhook` won't work |
+| **Fast response** | Respond within 10 seconds |
+| **200 OK** | Return 200 status to acknowledge receipt |
+| **CRC support** | Respond to Challenge-Response Check requests |
+
+---
+
+## Signature Verification
+
+Each webhook POST includes an `x-twitter-webhooks-signature` header. Verify this signature to confirm X is the source:
+
+<CodeGroup>
+```python Python
+import hmac
+import hashlib
+
+def verify_signature(payload: bytes, signature: str, consumer_secret: str) -> bool:
+    expected = hmac.new(
+        consumer_secret.encode('utf-8'),
+        msg=payload,
+        digestmod=hashlib.sha256
+    ).hexdigest()
+    
+    # Remove 'sha256=' prefix if present
+    received = signature.replace('sha256=', '')
+    
+    return hmac.compare_digest(expected, received)
+
+# In your webhook handler:
+@app.route('/webhook', methods=['POST'])
+def handle_event():
+    signature = request.headers.get('x-twitter-webhooks-signature', '')
+    
+    if not verify_signature(request.data, signature, CONSUMER_SECRET):
+        return 'Invalid signature', 401
+    
+    # Process event...
+```
+
+```typescript TypeScript
+import crypto from 'crypto';
+
+function verifySignature(
+  payload: Buffer,
+  signature: string,
+  consumerSecret: string
+): boolean {
+  const expected = crypto
+    .createHmac('sha256', consumerSecret)
+    .update(payload)
+    .digest('hex');
+  
+  // Remove 'sha256=' prefix if present
+  const received = signature.replace('sha256=', '');
+  
+  return crypto.timingSafeEqual(
+    Buffer.from(expected),
+    Buffer.from(received)
+  );
+}
+
+// In your webhook handler:
+app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
+  const signature = req.headers['x-twitter-webhooks-signature'] as string;
+  
+  if (!verifySignature(req.body, signature, CONSUMER_SECRET)) {
+    return res.status(401).send('Invalid signature');
+  }
+  
+  // Process event...
+});
+```
+</CodeGroup>
+
+---
+
+## Subscription Limits
+
+| Package Tier | Maximum Subscriptions |
+|:-------------|:---------------------|
+| Self-serve | 1,000 |
+| Enterprise | 50,000 |
+| Partner | 100,000 |
+
+---
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Respond quickly" icon="bolt">
+    Return 200 OK as soon as you receive the event. Process messages asynchronously.
+  </Card>
+  <Card title="Handle duplicates" icon="copy">
+    Use `message_id` to deduplicate events. X may retry delivery.
+  </Card>
+  <Card title="Secure key storage" icon="key">
+    Use [Juicebox](/xchat/cryptography-primer#secure-key-storage-with-juicebox) for secure conversation key storage.
+  </Card>
+  <Card title="Monitor health" icon="heart-pulse">
+    Log and monitor CRC checks. Failed CRCs will disable your webhook.
+  </Card>
+</CardGroup>
+
+---
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="X Activity API" icon="bell" href="/x-api/activity/introduction">
+    Full Activity API documentation with all event types
+  </Card>
+  <Card title="Webhooks API" icon="webhook" href="/x-api/webhooks/introduction">
+    Webhook management endpoints and security details
+  </Card>
+  <Card title="XChat XDK Reference" icon="code" href="/xchat/xchat-xdk">
+    Complete encryption/decryption API reference
+  </Card>
+  <Card title="Getting Started" icon="rocket" href="/xchat/getting-started">
+    End-to-end tutorial for building encrypted chat
+  </Card>
+</CardGroup>
