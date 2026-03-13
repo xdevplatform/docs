@@ -1,0 +1,684 @@
+---
+title: XChat XDK Reference
+sidebarTitle: XChat XDK
+description: API reference for the XChat encryption SDK (Rust, Python, JavaScript)
+keywords: ["XChat XDK", "chat SDK", "encryption SDK", "XChat API", "XChat Python", "XChat TypeScript", "XChat Rust"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+The XChat XDK is a cryptographic library that handles all encryption, decryption, signing, and key management for XChat applications. It's available in Rust, Python, and JavaScript/WASM.
+
+<Note>
+**Platform parity.** All three SDKs expose the same 29 methods with identical semantics. The only differences are language-idiomatic: Rust uses structs/enums, Python uses `bytes`/`dict`, JS uses `Uint8Array`/objects.
+</Note>
+
+---
+
+## Installation
+
+<Tabs>
+  <Tab title="Python">
+    ```bash
+    pip install chat-xdk
+    ```
+  </Tab>
+  <Tab title="TypeScript/JavaScript">
+    ```bash
+    npm install chat-xdk
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```toml
+    # Cargo.toml
+    [dependencies]
+    chat_xdk = { version = "0.1", features = ["juicebox"] }
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Quick start
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from chat_xdk import Chat
+
+    # Initialize with Juicebox config
+    chat = Chat(config_json)
+
+    # First time: generate and store keys
+    payload = chat.generate_keypairs()
+    # POST payload to X API...
+    chat.setup("1234")
+
+    # Subsequent sessions: unlock keys
+    chat.unlock("1234")
+
+    # Decrypt messages
+    conv_keys = chat.extract_conversation_keys([key_event_b64])
+    event = chat.decrypt_event(event_b64, conv_keys)
+    print(event["content"]["text"])
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    import { createChat } from 'chat-xdk';
+
+    // Initialize with Juicebox config
+    const chat = await createChat({
+      juiceboxConfig: configJson,
+      getAuthToken: async (realmId) => getToken(realmId)
+    });
+
+    // First time: generate and store keys
+    const payload = chat.generateKeypairs();
+    // POST payload to X API...
+    await chat.setup("1234");
+
+    // Subsequent sessions: unlock keys
+    await chat.unlock("1234");
+
+    // Decrypt messages
+    const convKeys = chat.extractConversationKeys([keyEventB64]);
+    const event = chat.decryptEvent(eventB64, convKeys);
+    console.log(event.content.text);
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    use chat_xdk::{Chat, Event};
+    use chat_xdk::keys::juicebox::JuiceboxConfig;
+
+    let config = JuiceboxConfig::from_json(config_json);
+    let mut chat = Chat::new(config);
+
+    // First time
+    let payload = chat.generate_keypairs()?;
+    // POST payload to X API...
+    let _keys = chat.setup("1234").await?;
+
+    // Subsequent sessions
+    chat.unlock("1234").await?;
+
+    // Decrypt messages
+    let conv_keys = chat.extract_conversation_keys(&[key_event_b64])?;
+    let event = chat.decrypt_event(event_b64, &conv_keys, None)?;
+    match event {
+        Event::Message(msg) => println!("{}", msg.content.text()),
+        _ => {}
+    }
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## API reference
+
+### Constructor & configuration
+
+| # | Method | Description |
+|---|:-------|:------------|
+| 1 | `new(config)` | Create a new Chat instance with Juicebox configuration |
+| 2 | `update_config(config)` | Update Juicebox configuration (auth tokens, etc.) |
+| 3 | `set_reject_unverified(reject)` | Set whether to reject messages with invalid signatures |
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    chat = Chat(config_json)
+    chat.update_config(new_config_json)
+    chat.set_reject_unverified(True)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const chat = await createChat({ juiceboxConfig });
+    chat.updateConfig(newConfig);
+    chat.setRejectUnverified(true);
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+### Juicebox key storage
+
+| # | Method | Description |
+|---|:-------|:------------|
+| 4 | `setup(pin)` | Store generated keys in Juicebox with PIN protection |
+| 5 | `unlock(pin)` | Recover keys from Juicebox using PIN |
+| 6 | `change_pin(old_pin, new_pin)` | Change the PIN protecting your keys |
+| 7 | `delete()` | Delete keys from Juicebox |
+| 8 | `lock()` | Clear keys from memory (requires unlock to use again) |
+| 9 | `is_unlocked()` | Check if keys are currently loaded in memory |
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    # First time setup
+    public_keys = chat.setup("123456")
+
+    # On subsequent startups
+    chat.unlock("123456")
+    print(f"Unlocked: {chat.is_unlocked()}")
+
+    # Change PIN
+    chat.change_pin("123456", "654321")
+
+    # Lock when done
+    chat.lock()
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    // First time setup
+    const publicKeys = await chat.setup('123456');
+
+    // On subsequent startups
+    await chat.unlock('123456');
+    console.log('Unlocked:', chat.isUnlocked());
+
+    // Change PIN
+    await chat.changePin('123456', '654321');
+
+    // Lock when done
+    chat.lock();
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+### Key management
+
+| # | Method | Description |
+|---|:-------|:------------|
+| 10 | `generate_keypairs()` | Generate new identity + signing keypairs, return registration payload |
+| 11 | `get_public_keys()` | Get current public keys (requires unlock) |
+| 12 | `get_public_key_fingerprint()` | Get SHA-256 fingerprint of identity public key |
+| 13 | `export_keys()` | Export private keys as bytes (for backup) |
+| 14 | `import_keys(bytes)` | Import private keys from bytes |
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    # Generate and register keys
+    registration_payload = chat.generate_keypairs()
+    # POST registration_payload to X API...
+
+    # Get current keys
+    public_keys = chat.get_public_keys()
+    print(f"Identity: {public_keys.identity}")
+    print(f"Signing: {public_keys.signing}")
+    print(f"Fingerprint: {chat.get_public_key_fingerprint()}")
+
+    # Backup/restore
+    backup = chat.export_keys()  # bytes
+    chat.import_keys(backup)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    // Generate and register keys
+    const registrationPayload = chat.generateKeypairs();
+    // POST registrationPayload to X API...
+
+    // Get current keys
+    const publicKeys = chat.getPublicKeys();
+    console.log('Identity:', publicKeys.identity);
+    console.log('Signing:', publicKeys.signing);
+    console.log('Fingerprint:', chat.getPublicKeyFingerprint());
+
+    // Backup/restore
+    const backup: Uint8Array = chat.exportKeys();
+    chat.importKeys(backup);
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+### Conversation keys
+
+| # | Method | Description |
+|---|:-------|:------------|
+| 15 | `generate_conversation_key()` | Generate a new random conversation key |
+| 16 | `decrypt_conversation_key(encrypted_b64)` | Decrypt an encrypted conversation key |
+| 17 | `encrypt_conversation_key_for_recipients(key, recipients)` | Encrypt a conversation key for multiple recipients |
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    # Decrypt a conversation key from the API
+    conv_key = chat.decrypt_conversation_key(encrypted_key_b64)  # returns bytes
+
+    # Generate a new conversation key (for starting conversations)
+    new_key = chat.generate_conversation_key()  # returns bytes
+
+    # Encrypt for multiple recipients
+    recipients = [
+        {"user_id": "123", "public_key": pk1_b64, "version": "1"},
+        {"user_id": "456", "public_key": pk2_b64, "version": "1"}
+    ]
+    encrypted_keys = chat.encrypt_conversation_key_for_recipients(new_key, recipients)
+    # Returns: [{"user_id": "123", "encrypted_key": "...", "version": "1"}, ...]
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    // Decrypt a conversation key from the API
+    const convKey: Uint8Array = chat.decryptConversationKey(encryptedKeyB64);
+
+    // Generate a new conversation key
+    const newKey: Uint8Array = chat.generateConversationKey();
+
+    // Encrypt for multiple recipients
+    const recipients = [
+      { userId: '123', publicKey: pk1B64, version: '1' },
+      { userId: '456', publicKey: pk2B64, version: '1' }
+    ];
+    const encryptedKeys = chat.encryptConversationKeyForRecipients(newKey, recipients);
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+### Event decryption
+
+| # | Method | Description |
+|---|:-------|:------------|
+| 18 | `extract_conversation_keys(events)` | Extract conversation keys from KeyChange events |
+| 19 | `decrypt_event(event_b64, conv_keys, signing_keys?)` | Decrypt and parse a chat event |
+
+The `extract_conversation_keys` method takes base64-encoded event strings (from webhooks or the API) and returns a map of `key_version → conversation_key`. Pass this map to `decrypt_event`.
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    # Extract conversation keys from key change events
+    key_events = [key_change_event_b64, another_key_event_b64]
+    conv_keys = chat.extract_conversation_keys(key_events)
+    # Returns: {"1": <conv_key_bytes>, "2": <conv_key_bytes>}
+
+    # Decrypt any event
+    event = chat.decrypt_event(
+        event_b64,           # Base64-encoded event
+        conv_keys,           # Map of version -> key (or {} for key-change events)
+        []                   # Optional: list of signing keys for verification
+    )
+
+    # Handle different event types
+    if event["type"] == "Message":
+        content = event["content"]
+        if content["content_type"] == "Text":
+            print(f"Text: {content['text']}")
+            print(f"Verified: {event['verified']}")
+    elif event["type"] == "KeyChange":
+        print(f"New key version: {event['key_version']}")
+    elif event["type"] == "Typing":
+        print("User is typing...")
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    // Extract conversation keys from key change events
+    const keyEvents = [keyChangeEventB64, anotherKeyEventB64];
+    const convKeys = chat.extractConversationKeys(keyEvents);
+    // Returns: Map { "1" => Uint8Array, "2" => Uint8Array }
+
+    // Decrypt any event
+    const event = chat.decryptEvent(
+      eventB64,      // Base64-encoded event
+      convKeys,      // Map of version -> key
+      []             // Optional: signing keys for verification
+    );
+
+    // Handle different event types
+    if (event.type === 'Message') {
+      const content = event.content;
+      if (content.contentType === 'Text') {
+        console.log('Text:', content.text);
+        console.log('Verified:', event.verified);
+      }
+    } else if (event.type === 'KeyChange') {
+      console.log('New key version:', event.keyVersion);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+### Message encryption
+
+| # | Method | Description |
+|---|:-------|:------------|
+| 20 | `encrypt_message(params)` | Encrypt a text message with optional entities/attachments |
+| 21 | `encrypt_reply(params)` | Encrypt a reply with reply-to preview |
+| 22 | `encrypt_add_reaction(params)` | Encrypt a reaction-add event |
+| 23 | `encrypt_remove_reaction(params)` | Encrypt a reaction-remove event |
+
+All encrypt methods take the **encrypted** conversation key (base64 from the API) — they decrypt it internally.
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    # Encrypt a text message
+    payload = chat.encrypt_message(
+        text="Hello, world!",
+        conversation_key=encrypted_conv_key_b64,
+        conversation_id="123456789",
+        sender_id="987654321",
+        should_notify=True,
+        ttl_msec=86400000  # Optional: 24-hour TTL
+    )
+
+    # Encrypt a reply
+    payload = chat.encrypt_reply(
+        text="This is my reply",
+        conversation_key=encrypted_conv_key_b64,
+        conversation_id="123456789",
+        sender_id="987654321",
+        reply_to_message_id="original_message_id",
+        reply_to_sender_id="original_sender_id",
+        reply_to_text="Original message text..."
+    )
+
+    # Encrypt a reaction
+    payload = chat.encrypt_add_reaction(
+        emoji="👍",
+        target_message_id="message_id",
+        conversation_key=encrypted_conv_key_b64,
+        conversation_id="123456789",
+        sender_id="987654321"
+    )
+
+    # Send the payload via X API
+    # payload.encrypted_content, payload.signature, etc.
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    // Encrypt a text message
+    const payload = chat.encryptMessage({
+      text: 'Hello, world!',
+      conversationKey: encryptedConvKeyB64,
+      conversationId: '123456789',
+      senderId: '987654321',
+      shouldNotify: true,
+      ttlMsec: 86400000  // Optional: 24-hour TTL
+    });
+
+    // Encrypt a reply
+    const replyPayload = chat.encryptReply({
+      text: 'This is my reply',
+      conversationKey: encryptedConvKeyB64,
+      conversationId: '123456789',
+      senderId: '987654321',
+      replyToMessageId: 'original_message_id',
+      replyToSenderId: 'original_sender_id',
+      replyToText: 'Original message text...'
+    });
+
+    // Encrypt a reaction
+    const reactionPayload = chat.encryptAddReaction({
+      emoji: '👍',
+      targetMessageId: 'message_id',
+      conversationKey: encryptedConvKeyB64,
+      conversationId: '123456789',
+      senderId: '987654321'
+    });
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+### Stream encryption (media)
+
+| # | Method | Description |
+|---|:-------|:------------|
+| 24 | `encrypt_stream(plaintext, conv_key)` | Encrypt media bytes |
+| 25 | `decrypt_stream(ciphertext, conv_key)` | Decrypt media bytes |
+
+Both methods take the **decrypted** conversation key (raw bytes, not base64).
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    # First decrypt the conversation key
+    conv_key = chat.decrypt_conversation_key(encrypted_conv_key_b64)
+
+    # Encrypt media
+    with open("image.png", "rb") as f:
+        plaintext = f.read()
+    
+    encrypted = chat.encrypt_stream(plaintext, conv_key)
+
+    # Decrypt media
+    decrypted = chat.decrypt_stream(encrypted, conv_key)
+    with open("decrypted.png", "wb") as f:
+        f.write(decrypted)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    // First decrypt the conversation key
+    const convKey = chat.decryptConversationKey(encryptedConvKeyB64);
+
+    // Encrypt media
+    const plaintext = await fs.readFile('image.png');
+    const encrypted = chat.encryptStream(plaintext, convKey);
+
+    // Decrypt media
+    const decrypted = chat.decryptStream(encrypted, convKey);
+    await fs.writeFile('decrypted.png', decrypted);
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+### Signing
+
+| # | Method | Description |
+|---|:-------|:------------|
+| 26 | `sign(data)` | Sign arbitrary data with signing key |
+| 27 | `verify(public_key_b64, signature, data)` | Verify a signature |
+| 28 | `sign_add_members(params)` | Sign an add-members group action |
+| 29 | `sign_key_change(params)` | Sign a key-change action |
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    # Sign arbitrary data
+    signature = chat.sign(b"some data to sign")  # returns bytes
+
+    # Verify a signature
+    is_valid = chat.verify(
+        public_key_b64,  # Signer's public key
+        signature,       # bytes
+        b"some data to sign"
+    )
+
+    # Sign group operations
+    action_sig = chat.sign_add_members(
+        conversation_id="123",
+        sender_id="456",
+        member_ids=["789", "012"]
+    )
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    // Sign arbitrary data
+    const signature: Uint8Array = chat.sign(new Uint8Array([...]));
+
+    // Verify a signature
+    const isValid: boolean = chat.verify(
+      publicKeyB64,
+      signature,
+      data
+    );
+
+    // Sign group operations
+    const actionSig = chat.signAddMembers({
+      conversationId: '123',
+      senderId: '456',
+      memberIds: ['789', '012']
+    });
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Types reference
+
+### SendPayload
+
+Returned by all `encrypt_*` methods. Contains everything needed to send via the X API.
+
+```typescript
+interface SendPayload {
+  encrypted_content: string;        // Base64-encoded encrypted message
+  signature: string;                // Base64-encoded ECDSA signature
+  encoded_event_signature: string;  // Base64-encoded signature metadata
+  signature_info: {
+    public_key_version: string;
+    signature_version: string;      // "4"
+  };
+  conversation_key_version: string;
+  should_notify: boolean;
+}
+```
+
+### Event
+
+Returned by `decrypt_event()`. The `type` field indicates the event variant.
+
+```typescript
+type Event = 
+  | { type: 'Message'; /* ... message fields */ }
+  | { type: 'KeyChange'; key_version: string; participant_keys: ParticipantKey[] }
+  | { type: 'GroupChange'; change_type: string; /* ... */ }
+  | { type: 'Typing'; /* ... */ }
+  | { type: 'MessageDeleted'; /* ... */ }
+  | { type: 'ConversationDeleted'; /* ... */ }
+  | { type: 'ReadReceipt'; /* ... */ }
+  | { type: 'MarkedUnread'; /* ... */ }
+  | { type: 'Failure'; failure_type: string }
+  | { type: 'SettingsChange'; setting: string; /* ... */ }
+  | { type: 'MemberDeleted'; /* ... */ }
+  | { type: 'Unknown' };
+```
+
+### Message
+
+The payload of an `Event::Message`.
+
+```typescript
+interface Message {
+  // Event metadata
+  sequence_id?: string;
+  id?: string;
+  sender_id?: string;
+  conversation_id?: string;
+  created_at_msec?: number;
+  
+  // Message-specific
+  content: MessageContent;
+  key_version?: string;     // null for unencrypted
+  verified: boolean;        // false for unencrypted
+  should_notify?: boolean;
+  ttl_msec?: number;
+  attachments?: AttachmentInfo[];
+}
+```
+
+### MessageContent
+
+```typescript
+type MessageContent =
+  | { content_type: 'Text'; text: string; entities?: RichTextEntity[] }
+  | { content_type: 'Reaction'; emoji: string; target_message_id: string }
+  | { content_type: 'ReactionRemoved'; emoji: string; target_message_id: string }
+  | { content_type: 'Edit'; target_message_id: string; new_text: string }
+  | { content_type: 'MarkRead' }
+  | { content_type: 'MarkUnread' }
+  | { content_type: 'Unknown' };
+```
+
+### PublicKeys
+
+```typescript
+interface PublicKeys {
+  identity: string;  // Base64-encoded P-256 public key
+  signing: string;   // Base64-encoded P-256 public key
+}
+```
+
+---
+
+## Error handling
+
+The SDK uses typed errors for different failure scenarios:
+
+| Error Type | Description |
+|:-----------|:------------|
+| `CryptoError` | Key generation, encryption, decryption, or signing failure |
+| `KeyError` | Keys not unlocked, not found, or invalid PIN |
+| `JuiceboxError` | Network error, rate limit, invalid auth token |
+| `SerializationError` | Invalid base64, JSON, or Thrift encoding |
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from chat_xdk import SdkError, KeyError, JuiceboxError
+
+    try:
+        chat.unlock("wrong_pin")
+    except KeyError as e:
+        print(f"Invalid PIN: {e}")
+    except JuiceboxError as e:
+        print(f"Juicebox error: {e}")
+    except SdkError as e:
+        print(f"SDK error: {e}")
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    import { SdkError, KeyError, JuiceboxError } from 'chat-xdk';
+
+    try {
+      await chat.unlock('wrong_pin');
+    } catch (e) {
+      if (e instanceof KeyError) {
+        console.log('Invalid PIN:', e.message);
+      } else if (e instanceof JuiceboxError) {
+        console.log('Juicebox error:', e.message);
+      } else if (e instanceof SdkError) {
+        console.log('SDK error:', e.message);
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Getting Started" icon="rocket" href="/xchat/getting-started">
+    Build your first XChat application
+  </Card>
+  <Card title="Cryptography Primer" icon="key" href="/xchat/cryptography-primer">
+    Understand the encryption concepts
+  </Card>
+</CardGroup>
