@@ -2,7 +2,7 @@
   "openapi" : "3.0.0",
   "info" : {
     "description" : "X API v2 available endpoints",
-    "version" : "2.159",
+    "version" : "2.160",
     "title" : "X API v2",
     "termsOfService" : "https://developer.x.com/en/developer-terms/agreement-and-policy.html",
     "contact" : {
@@ -829,7 +829,121 @@
         }
       }
     },
-    "/2/chat/conversations/{conversation_id}" : {
+    "/2/chat/conversations/group" : {
+      "post" : {
+        "security" : [
+          {
+            "OAuth2UserToken" : [
+              "dm.write",
+              "tweet.read",
+              "users.read"
+            ]
+          },
+          {
+            "UserToken" : [ ]
+          }
+        ],
+        "tags" : [
+          "Chat"
+        ],
+        "summary" : "Create Chat Group Conversation",
+        "description" : "Creates a new encrypted Chat group conversation on behalf of the authenticated user.",
+        "externalDocs" : {
+          "url" : "https://developer.x.com/"
+        },
+        "operationId" : "createChatConversation",
+        "parameters" : [ ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChatCreateConversationRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "The request has succeeded.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ChatCreateConversationResponse"
+                }
+              }
+            }
+          },
+          "default" : {
+            "description" : "The request has failed.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/chat/conversations/group/initialize" : {
+      "post" : {
+        "security" : [
+          {
+            "OAuth2UserToken" : [
+              "dm.write"
+            ]
+          },
+          {
+            "UserToken" : [ ]
+          }
+        ],
+        "tags" : [
+          "Chat"
+        ],
+        "summary" : "Initialize Chat Group",
+        "description" : "Initializes a new XChat group conversation and returns a unique conversation ID.\n\nThis endpoint is the first step in creating a group chat. The returned conversation_id \nshould be used in subsequent calls to POST /chat/conversations/group to fully create and \nconfigure the group with members, admins, encryption keys, and other settings.\n\n**Workflow:**\n1. Call this endpoint to get a `conversation_id`\n2. Use that `conversation_id` when calling `POST /chat/conversations/group` to create the group\n\n**Authentication:**\n- Requires OAuth 1.0a User Context or OAuth 2.0 User Context\n- Required scope: `dm.write`\n",
+        "externalDocs" : {
+          "url" : "https://developer.x.com/"
+        },
+        "operationId" : "initializeChatGroup",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "The request has succeeded.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ChatInitializeGroupResponse"
+                }
+              }
+            }
+          },
+          "default" : {
+            "description" : "The request has failed.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/chat/conversations/{id}" : {
       "get" : {
         "security" : [
           {
@@ -847,19 +961,19 @@
           "Chat"
         ],
         "summary" : "Get Chat Conversation",
-        "description" : "Retrieves messages and key change events for a specific Chat conversation with pagination support.",
+        "description" : "Retrieves messages and key change events for a specific Chat conversation with pagination support. For 1:1 conversations, provide the recipient's user ID; the server constructs the canonical conversation ID from the authenticated user and recipient.",
         "externalDocs" : {
           "url" : "https://developer.x.com/"
         },
         "operationId" : "getChatConversation",
         "parameters" : [
           {
-            "name" : "conversation_id",
+            "name" : "id",
             "in" : "path",
-            "description" : "The Chat conversation ID.",
+            "description" : "The recipient's user ID for a 1:1 conversation, or a group conversation ID (prefixed with 'g').",
             "required" : true,
             "schema" : {
-              "$ref" : "#/components/schemas/ChatConversationId"
+              "$ref" : "#/components/schemas/ChatConversationOrRecipientId"
             },
             "style" : "simple"
           },
@@ -920,7 +1034,155 @@
         }
       }
     },
-    "/2/chat/conversations/{conversation_id}/messages" : {
+    "/2/chat/conversations/{id}/keys" : {
+      "post" : {
+        "security" : [
+          {
+            "OAuth2UserToken" : [
+              "dm.write",
+              "tweet.read",
+              "users.read"
+            ]
+          },
+          {
+            "UserToken" : [ ]
+          }
+        ],
+        "tags" : [
+          "Chat"
+        ],
+        "summary" : "Initialize Conversation Keys",
+        "description" : "Initializes encryption keys for a Chat conversation. This is the first step\nbefore sending messages in a new 1:1 conversation.\n\nFor 1:1 conversations, provide the recipient's user ID as the conversation_id.\nThe server constructs the canonical conversation ID from the authenticated user\nand recipient.\n\nThe request body must contain the conversation key version and participant keys\n(the conversation key encrypted for each participant using their public key).\n\n**Workflow (1:1 conversation):**\n1. Generate a conversation key using the SDK\n2. Encrypt the key for both participants using their public keys\n3. Call this endpoint to register the keys\n4. Send messages using `POST /chat/conversations/{id}/messages`\n\n**Authentication:**\n- Requires OAuth 1.0a User Context or OAuth 2.0 User Context\n- Required scopes: `tweet.read`, `users.read`, `dm.write`\n",
+        "externalDocs" : {
+          "url" : "https://developer.x.com/"
+        },
+        "operationId" : "initializeChatConversationKeys",
+        "parameters" : [
+          {
+            "name" : "id",
+            "in" : "path",
+            "description" : "The recipient's user ID for a 1:1 conversation, or a group conversation ID (prefixed with 'g').",
+            "required" : true,
+            "schema" : {
+              "$ref" : "#/components/schemas/ChatConversationOrRecipientId"
+            },
+            "style" : "simple"
+          }
+        ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChatInitializeConversationKeysRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "The request has succeeded.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ChatInitializeConversationKeysResponse"
+                }
+              }
+            }
+          },
+          "default" : {
+            "description" : "The request has failed.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/chat/conversations/{id}/members" : {
+      "post" : {
+        "security" : [
+          {
+            "OAuth2UserToken" : [
+              "dm.write",
+              "tweet.read",
+              "users.read"
+            ]
+          },
+          {
+            "UserToken" : [ ]
+          }
+        ],
+        "tags" : [
+          "Chat"
+        ],
+        "summary" : "Add members to a Chat group conversation",
+        "description" : "Adds one or more members to an existing encrypted Chat group conversation, rotating the conversation key.",
+        "externalDocs" : {
+          "url" : "https://developer.x.com/"
+        },
+        "operationId" : "addChatGroupMembers",
+        "parameters" : [
+          {
+            "name" : "id",
+            "in" : "path",
+            "description" : "The Chat group conversation ID.",
+            "required" : true,
+            "schema" : {
+              "$ref" : "#/components/schemas/ChatConversationOrRecipientId"
+            },
+            "style" : "simple"
+          }
+        ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ChatAddGroupMembersRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "description" : "The request has succeeded.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ChatAddGroupMembersResponse"
+                }
+              }
+            }
+          },
+          "default" : {
+            "description" : "The request has failed.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/chat/conversations/{id}/messages" : {
       "post" : {
         "security" : [
           {
@@ -938,19 +1200,19 @@
           "Chat"
         ],
         "summary" : "Send Chat Message",
-        "description" : "Sends an encrypted message to a specific Chat conversation.",
+        "description" : "Sends an encrypted message to a specific Chat conversation. For 1:1 conversations, provide the recipient's user ID; the server constructs the canonical conversation ID from the authenticated user and recipient.",
         "externalDocs" : {
           "url" : "https://developer.x.com/"
         },
         "operationId" : "sendChatMessage",
         "parameters" : [
           {
-            "name" : "conversation_id",
+            "name" : "id",
             "in" : "path",
-            "description" : "The Chat conversation ID.",
+            "description" : "The recipient's user ID for a 1:1 conversation, or a group conversation ID (prefixed with 'g').",
             "required" : true,
             "schema" : {
-              "$ref" : "#/components/schemas/ChatConversationId"
+              "$ref" : "#/components/schemas/ChatConversationOrRecipientId"
             },
             "style" : "simple"
           }
@@ -994,7 +1256,7 @@
         }
       }
     },
-    "/2/chat/conversations/{conversation_id}/read" : {
+    "/2/chat/conversations/{id}/read" : {
       "post" : {
         "security" : [
           {
@@ -1012,19 +1274,19 @@
           "Chat"
         ],
         "summary" : "Mark Conversation as Read",
-        "description" : "Marks a specific Chat conversation as read on behalf of the authenticated user.",
+        "description" : "Marks a specific Chat conversation as read on behalf of the authenticated user. For 1:1 conversations, provide the recipient's user ID; the server constructs the canonical conversation ID from the authenticated user and recipient.",
         "externalDocs" : {
           "url" : "https://developer.x.com/"
         },
         "operationId" : "markChatConversationRead",
         "parameters" : [
           {
-            "name" : "conversation_id",
+            "name" : "id",
             "in" : "path",
-            "description" : "The Chat conversation ID.",
+            "description" : "The recipient's user ID for a 1:1 conversation, or a group conversation ID (prefixed with 'g').",
             "required" : true,
             "schema" : {
-              "$ref" : "#/components/schemas/ChatConversationId"
+              "$ref" : "#/components/schemas/ChatConversationOrRecipientId"
             },
             "style" : "simple"
           }
@@ -1068,7 +1330,7 @@
         }
       }
     },
-    "/2/chat/conversations/{conversation_id}/typing" : {
+    "/2/chat/conversations/{id}/typing" : {
       "post" : {
         "security" : [
           {
@@ -1086,19 +1348,19 @@
           "Chat"
         ],
         "summary" : "Send Typing Indicator",
-        "description" : "Sends a typing indicator to a specific Chat conversation on behalf of the authenticated user.",
+        "description" : "Sends a typing indicator to a specific Chat conversation on behalf of the authenticated user. For 1:1 conversations, provide the recipient's user ID; the server constructs the canonical conversation ID from the authenticated user and recipient.",
         "externalDocs" : {
           "url" : "https://developer.x.com/"
         },
         "operationId" : "sendChatTypingIndicator",
         "parameters" : [
           {
-            "name" : "conversation_id",
+            "name" : "id",
             "in" : "path",
-            "description" : "The Chat conversation ID.",
+            "description" : "The recipient's user ID for a 1:1 conversation, or a group conversation ID (prefixed with 'g').",
             "required" : true,
             "schema" : {
-              "$ref" : "#/components/schemas/ChatConversationId"
+              "$ref" : "#/components/schemas/ChatConversationOrRecipientId"
             },
             "style" : "simple"
           }
@@ -1342,7 +1604,7 @@
         }
       }
     },
-    "/2/chat/media/{conversation_id}/{media_hash_key}" : {
+    "/2/chat/media/{id}/{media_hash_key}" : {
       "get" : {
         "security" : [
           {
@@ -1358,19 +1620,19 @@
           "Chat"
         ],
         "summary" : "Download Chat Media",
-        "description" : "Downloads encrypted media bytes from an XChat conversation. The response body contains raw binary bytes.",
+        "description" : "Downloads encrypted media bytes from an XChat conversation. The response body contains raw binary bytes. For 1:1 conversations, provide the recipient's user ID; the server constructs the canonical conversation ID from the authenticated user and recipient.",
         "externalDocs" : {
           "url" : "https://developer.x.com/"
         },
         "operationId" : "chatMediaDownload",
         "parameters" : [
           {
-            "name" : "conversation_id",
+            "name" : "id",
             "in" : "path",
-            "description" : "The Chat conversation ID.",
+            "description" : "The recipient's user ID for a 1:1 conversation, or a group conversation ID (prefixed with 'g').",
             "required" : true,
             "schema" : {
-              "$ref" : "#/components/schemas/ChatConversationId"
+              "$ref" : "#/components/schemas/ChatConversationOrRecipientId"
             },
             "style" : "simple"
           },
@@ -6177,7 +6439,7 @@
           "Tweets"
         ],
         "summary" : "Create or Edit Post",
-        "description" : "Creates a new Post for the authenticated user, or edits an existing Post when edit_options are provided.",
+        "description" : "Creates a new Post for the authenticated user, or edits an existing Post when edit_options are provided. Supports paid partnership disclosure via the paid_partnership field.",
         "externalDocs" : {
           "url" : "https://developer.x.com/en/docs/twitter-api/tweets/manage-tweets/api-reference/post-tweets"
         },
@@ -9619,6 +9881,81 @@
         }
       }
     },
+    "/2/users/public_keys" : {
+      "get" : {
+        "security" : [
+          {
+            "OAuth2UserToken" : [
+              "dm.read",
+              "tweet.read",
+              "users.read"
+            ]
+          },
+          {
+            "UserToken" : [ ]
+          }
+        ],
+        "tags" : [
+          "Users",
+          "Chat"
+        ],
+        "summary" : "Get public keys for multiple users",
+        "description" : "Returns the public keys and Juicebox configuration for the specified users.",
+        "externalDocs" : {
+          "url" : "https://developer.x.com/"
+        },
+        "operationId" : "getUsersPublicKeys",
+        "parameters" : [
+          {
+            "name" : "ids",
+            "in" : "query",
+            "description" : "A list of User IDs, comma-separated. You can specify up to 100 IDs.",
+            "required" : true,
+            "example" : "2244994945,6253282,12",
+            "schema" : {
+              "type" : "array",
+              "minItems" : 1,
+              "maxItems" : 100,
+              "items" : {
+                "$ref" : "#/components/schemas/UserId"
+              }
+            },
+            "explode" : false,
+            "style" : "form"
+          },
+          {
+            "$ref" : "#/components/parameters/PublicKeyFieldsParameter"
+          }
+        ],
+        "responses" : {
+          "200" : {
+            "description" : "The request has succeeded.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Get2UsersPublicKeysResponse"
+                }
+              }
+            }
+          },
+          "default" : {
+            "description" : "The request has failed.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/2/users/reposts_of_me" : {
       "get" : {
         "security" : [
@@ -12150,6 +12487,7 @@
           }
         ],
         "tags" : [
+          "Users",
           "Chat"
         ],
         "summary" : "Get user public keys",
@@ -12157,7 +12495,7 @@
         "externalDocs" : {
           "url" : "https://developer.x.com/"
         },
-        "operationId" : "getUserPublicKeys",
+        "operationId" : "getUsersPublicKey",
         "parameters" : [
           {
             "name" : "id",
@@ -13604,8 +13942,16 @@
       },
       "ActivitySubscriptionFilter" : {
         "type" : "object",
-        "description" : "An XAA subscription.",
+        "description" : "An XAA subscription filter.",
         "properties" : {
+          "direction" : {
+            "type" : "string",
+            "description" : "Optional direction filter for directional events.",
+            "enum" : [
+              "inbound",
+              "outbound"
+            ]
+          },
           "keyword" : {
             "$ref" : "#/components/schemas/Keyword"
           },
@@ -13988,6 +14334,86 @@
           }
         }
       },
+      "ChatActionSignature" : {
+        "type" : "object",
+        "description" : "Cryptographic signature for a chat action.",
+        "properties" : {
+          "encoded_message_event_detail" : {
+            "type" : "string",
+            "description" : "Base64-encoded message event detail."
+          },
+          "message_event_signature" : {
+            "$ref" : "#/components/schemas/ChatMessageEventSignature"
+          },
+          "message_id" : {
+            "type" : "string",
+            "description" : "ID of the message being signed."
+          },
+          "signature_payload" : {
+            "type" : "string",
+            "description" : "Cryptographic signature payload."
+          }
+        }
+      },
+      "ChatAddGroupMembersRequest" : {
+        "type" : "object",
+        "required" : [
+          "user_ids"
+        ],
+        "properties" : {
+          "action_signatures" : {
+            "type" : "array",
+            "description" : "Cryptographic signatures for the add-members action.",
+            "items" : {
+              "$ref" : "#/components/schemas/ChatActionSignature"
+            }
+          },
+          "conversation_key_version" : {
+            "type" : "string",
+            "description" : "Version of the new rotated conversation key."
+          },
+          "conversation_participant_keys" : {
+            "type" : "array",
+            "description" : "Encrypted conversation keys for each new participant after key rotation.",
+            "items" : {
+              "$ref" : "#/components/schemas/ChatConversationParticipantKey"
+            }
+          },
+          "encrypted_avatar_url" : {
+            "type" : "string",
+            "description" : "Re-encrypted group avatar URL with new conversation key."
+          },
+          "encrypted_title" : {
+            "type" : "string",
+            "description" : "Re-encrypted group title with new conversation key."
+          },
+          "user_ids" : {
+            "type" : "array",
+            "description" : "List of user IDs to add to the group conversation.",
+            "items" : {
+              "type" : "string",
+              "description" : "User ID to add."
+            }
+          }
+        }
+      },
+      "ChatAddGroupMembersResponse" : {
+        "type" : "object",
+        "properties" : {
+          "conversation_key_change_sequence_id" : {
+            "type" : "string",
+            "description" : "Sequence ID of the conversation key change event."
+          },
+          "current_member_ids" : {
+            "type" : "array",
+            "description" : "List of all current member IDs in the conversation.",
+            "items" : {
+              "type" : "string",
+              "description" : "User ID."
+            }
+          }
+        }
+      },
       "ChatAddPublicKeyRequest" : {
         "type" : "object",
         "required" : [
@@ -14039,72 +14465,7 @@
         "type" : "object",
         "properties" : {
           "data" : {
-            "type" : "object",
-            "properties" : {
-              "error_code" : {
-                "type" : "string",
-                "description" : "Error code when key registration fails."
-              },
-              "token_map" : {
-                "type" : "object",
-                "description" : "Key store token map for key recovery.",
-                "properties" : {
-                  "key_store_token_map_json" : {
-                    "type" : "string",
-                    "description" : "Raw JSON for key recovery configuration."
-                  },
-                  "max_guess_count" : {
-                    "type" : "integer",
-                    "description" : "Maximum guess count for key recovery."
-                  },
-                  "realm_state_string" : {
-                    "type" : "string",
-                    "description" : "Serialized realm state for key recovery."
-                  },
-                  "recover_threshold" : {
-                    "type" : "integer",
-                    "description" : "Threshold required to recover the key."
-                  },
-                  "register_threshold" : {
-                    "type" : "integer",
-                    "description" : "Threshold required to register the key."
-                  },
-                  "token_map" : {
-                    "type" : "array",
-                    "items" : {
-                      "type" : "object",
-                      "properties" : {
-                        "key" : {
-                          "type" : "string",
-                          "description" : "Token map entry key."
-                        },
-                        "value" : {
-                          "type" : "object",
-                          "properties" : {
-                            "address" : {
-                              "type" : "string",
-                              "description" : "Key store realm address."
-                            },
-                            "public_key" : {
-                              "type" : "string",
-                              "description" : "Realm public key."
-                            },
-                            "token" : {
-                              "type" : "string",
-                              "description" : "JWT auth token for the realm."
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              },
-              "version" : {
-                "type" : "string",
-                "description" : "Public key version."
-              }
-            }
+            "$ref" : "#/components/schemas/ChatPublicKey"
           },
           "errors" : {
             "type" : "array",
@@ -14189,11 +14550,123 @@
           }
         }
       },
-      "ChatConversationId" : {
+      "ChatConversationOrRecipientId" : {
         "type" : "string",
-        "description" : "Unique identifier of an Chat conversation. Format is either two user IDs separated by a hyphen (e.g., '1215441834412953600-1603419180975409153') for direct conversations, or 'g' followed by a numeric ID (e.g., 'g1234567890123456789') for group conversations.",
-        "pattern" : "^([0-9]{1,19}-[0-9]{1,19}|g[0-9]{1,19})$",
-        "example" : "1215441834412953600-1603419180975409153"
+        "description" : "Identifies the conversation target. Accepts three formats: (1) a recipient user ID for 1:1 conversations (e.g., '1215441834412953600'), (2) a legacy 1:1 conversation ID with two user IDs separated by a dash (e.g., '1215441834412953600-1603419180975409153'), or (3) a group conversation ID prefixed with 'g' (e.g., 'g1234567890123456789'). The server constructs the canonical conversation ID from the authenticated user and recipient when a single user ID is provided.",
+        "pattern" : "^([0-9]{1,19}|[0-9]{1,19}-[0-9]{1,19}|g[0-9]{1,19})$",
+        "example" : "1215441834412953600"
+      },
+      "ChatConversationParticipantKey" : {
+        "type" : "object",
+        "description" : "A participant's encrypted conversation key.",
+        "properties" : {
+          "encrypted_conversation_key" : {
+            "type" : "string",
+            "description" : "Conversation key encrypted with this participant's public key."
+          },
+          "public_key_version" : {
+            "type" : "string",
+            "description" : "Version of the participant's public key used for encryption."
+          },
+          "user_id" : {
+            "type" : "string",
+            "description" : "Participant user ID."
+          }
+        }
+      },
+      "ChatCreateConversationRequest" : {
+        "type" : "object",
+        "required" : [
+          "conversation_id",
+          "conversation_key_version",
+          "conversation_participant_keys",
+          "group_members"
+        ],
+        "properties" : {
+          "action_signatures" : {
+            "type" : "array",
+            "description" : "Cryptographic signatures for the create action.",
+            "items" : {
+              "$ref" : "#/components/schemas/ChatActionSignature"
+            }
+          },
+          "base64_encoded_key_rotation" : {
+            "type" : "string",
+            "description" : "Base64-encoded key rotation payload."
+          },
+          "conversation_id" : {
+            "type" : "string",
+            "description" : "Client-generated conversation ID."
+          },
+          "conversation_key_version" : {
+            "type" : "string",
+            "description" : "Version of the conversation encryption key."
+          },
+          "conversation_participant_keys" : {
+            "type" : "array",
+            "description" : "Encrypted conversation keys for each participant.",
+            "items" : {
+              "$ref" : "#/components/schemas/ChatConversationParticipantKey"
+            }
+          },
+          "group_admins" : {
+            "type" : "array",
+            "description" : "User IDs of group admins. Defaults to the creator if omitted.",
+            "items" : {
+              "type" : "string",
+              "description" : "User ID."
+            }
+          },
+          "group_avatar_url" : {
+            "type" : "string",
+            "description" : "URL of the avatar image for the group conversation."
+          },
+          "group_description" : {
+            "type" : "string",
+            "description" : "Description for the group conversation."
+          },
+          "group_members" : {
+            "type" : "array",
+            "description" : "User IDs of group members to include in the conversation.",
+            "items" : {
+              "type" : "string",
+              "description" : "User ID."
+            }
+          },
+          "group_name" : {
+            "type" : "string",
+            "description" : "Display name for the group conversation."
+          },
+          "ttl_msec" : {
+            "type" : "string",
+            "description" : "Message time-to-live in milliseconds. Messages expire after this duration."
+          }
+        }
+      },
+      "ChatCreateConversationResponse" : {
+        "type" : "object",
+        "properties" : {
+          "data" : {
+            "type" : "object",
+            "properties" : {
+              "conversation_id" : {
+                "type" : "string",
+                "description" : "The ID of the created conversation."
+              },
+              "conversation_key_change_sequence_id" : {
+                "type" : "string",
+                "description" : "Sequence ID of the conversation key change event, if applicable."
+              }
+            }
+          },
+          "errors" : {
+            "type" : "array",
+            "minItems" : 1,
+            "items" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        }
       },
       "ChatGetConversationResponse" : {
         "type" : "object",
@@ -14215,16 +14688,16 @@
           "meta" : {
             "type" : "object",
             "properties" : {
-              "has_more" : {
-                "type" : "boolean",
-                "description" : "Whether there are more messages to fetch."
-              },
-              "missing_conversation_key_change_events" : {
+              "conversation_key_events" : {
                 "type" : "array",
-                "description" : "List of conversation key change events needed for decryption.",
+                "description" : "Conversation key change events needed for decryption.",
                 "items" : {
                   "type" : "string"
                 }
+              },
+              "has_more" : {
+                "type" : "boolean",
+                "description" : "Whether there are more messages to fetch."
               },
               "next_token" : {
                 "type" : "string",
@@ -14256,17 +14729,7 @@
             }
           },
           "includes" : {
-            "type" : "object",
-            "description" : "Expanded objects requested via expansions parameter.",
-            "properties" : {
-              "users" : {
-                "type" : "array",
-                "description" : "User objects for expanded user IDs.",
-                "items" : {
-                  "type" : "object"
-                }
-              }
-            }
+            "$ref" : "#/components/schemas/Expansions"
           },
           "meta" : {
             "type" : "object",
@@ -14275,6 +14738,10 @@
                 "type" : "boolean",
                 "description" : "Whether the user has pending message requests."
               },
+              "has_more" : {
+                "type" : "boolean",
+                "description" : "Whether there are more conversations to fetch."
+              },
               "next_token" : {
                 "type" : "string",
                 "description" : "Token to retrieve the next page of results."
@@ -14282,6 +14749,136 @@
               "result_count" : {
                 "type" : "integer",
                 "description" : "The number of conversations returned."
+              }
+            }
+          }
+        }
+      },
+      "ChatInitializeConversationKeysRequest" : {
+        "type" : "object",
+        "required" : [
+          "conversation_key_version",
+          "conversation_participant_keys"
+        ],
+        "properties" : {
+          "action_signatures" : {
+            "type" : "array",
+            "description" : "Cryptographic signatures for the key initialization action.",
+            "items" : {
+              "$ref" : "#/components/schemas/ChatActionSignature"
+            }
+          },
+          "base64_encoded_key_rotation" : {
+            "type" : "string",
+            "description" : "Base64-encoded key rotation payload for ratchet tree key management."
+          },
+          "conversation_key_version" : {
+            "type" : "string",
+            "description" : "Version of the conversation encryption key (typically a timestamp in milliseconds)."
+          },
+          "conversation_participant_keys" : {
+            "type" : "array",
+            "description" : "The conversation key encrypted for each participant using their public key.",
+            "items" : {
+              "$ref" : "#/components/schemas/ChatConversationParticipantKey"
+            }
+          }
+        }
+      },
+      "ChatInitializeConversationKeysResponse" : {
+        "type" : "object",
+        "properties" : {
+          "data" : {
+            "type" : "object",
+            "properties" : {
+              "sequence_id" : {
+                "type" : "string",
+                "description" : "Sequence ID of the conversation key change event. Use this to track key changes in the conversation event stream."
+              }
+            }
+          },
+          "errors" : {
+            "type" : "array",
+            "minItems" : 1,
+            "items" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "ChatInitializeGroupResponse" : {
+        "type" : "object",
+        "properties" : {
+          "data" : {
+            "type" : "object",
+            "properties" : {
+              "conversation_id" : {
+                "type" : "string",
+                "description" : "The unique identifier for the initialized group conversation. This ID is prefixed with 'g' (e.g., 'g1234567890123456789'). Use this ID when calling POST /chat/conversations to create the group."
+              }
+            }
+          },
+          "errors" : {
+            "type" : "array",
+            "minItems" : 1,
+            "items" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "ChatJuiceboxConfig" : {
+        "type" : "object",
+        "description" : "Key recovery configuration for Juicebox-based key storage.",
+        "properties" : {
+          "key_store_token_map_json" : {
+            "type" : "string",
+            "description" : "Raw JSON for key recovery configuration."
+          },
+          "max_guess_count" : {
+            "type" : "integer",
+            "description" : "Maximum guess count for key recovery."
+          },
+          "realm_state_string" : {
+            "type" : "string",
+            "description" : "Serialized realm state for key recovery."
+          },
+          "recover_threshold" : {
+            "type" : "integer",
+            "description" : "Threshold required to recover the key."
+          },
+          "register_threshold" : {
+            "type" : "integer",
+            "description" : "Threshold required to register the key."
+          },
+          "token_map" : {
+            "type" : "array",
+            "description" : "Per-realm auth tokens for key recovery.",
+            "items" : {
+              "type" : "object",
+              "properties" : {
+                "key" : {
+                  "type" : "string",
+                  "description" : "Realm identifier."
+                },
+                "value" : {
+                  "type" : "object",
+                  "description" : "Realm connection details.",
+                  "properties" : {
+                    "address" : {
+                      "type" : "string",
+                      "description" : "Realm URL."
+                    },
+                    "public_key" : {
+                      "type" : "string",
+                      "description" : "Realm public key."
+                    },
+                    "token" : {
+                      "type" : "string",
+                      "description" : "JWT auth token for the realm."
+                    }
+                  }
+                }
               }
             }
           }
@@ -14557,6 +15154,27 @@
           "signing_public_key" : {
             "type" : "string",
             "description" : "The signing public key."
+          }
+        }
+      },
+      "ChatPublicKey" : {
+        "type" : "object",
+        "description" : "A user's public key with associated key recovery configuration.",
+        "properties" : {
+          "juicebox_config" : {
+            "$ref" : "#/components/schemas/ChatJuiceboxConfig"
+          },
+          "public_key" : {
+            "type" : "string",
+            "description" : "Identity public key (base64 encoded)."
+          },
+          "signing_public_key" : {
+            "type" : "string",
+            "description" : "Signing public key (base64 encoded)."
+          },
+          "version" : {
+            "type" : "string",
+            "description" : "Public key version."
           }
         }
       },
@@ -15948,7 +16566,7 @@
           }
         ]
       },
-      "Get2ChatConversationsConversationIdResponse" : {
+      "Get2ChatConversationsIdResponse" : {
         "type" : "object",
         "properties" : {
           "data" : {
@@ -18034,6 +18652,21 @@
             "items" : {
               "$ref" : "#/components/schemas/PersonalizedTrend"
             }
+          },
+          "errors" : {
+            "type" : "array",
+            "minItems" : 1,
+            "items" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "Get2UsersPublicKeysResponse" : {
+        "type" : "object",
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/PublicKey"
           },
           "errors" : {
             "type" : "array",
@@ -21882,6 +22515,10 @@
             },
             "additionalProperties" : false
           },
+          "made_with_ai" : {
+            "type" : "boolean",
+            "description" : "Whether this Post contains AI-generated media. When true, the Post will be labeled accordingly."
+          },
           "media" : {
             "type" : "object",
             "description" : "Media information being attached to created Tweet. This is mutually exclusive from Quote Tweet Id, Poll, and Card URI.",
@@ -21914,6 +22551,10 @@
             "type" : "boolean",
             "description" : "Nullcasted (promoted-only) Posts do not appear in the public timeline and are not served to followers.",
             "default" : false
+          },
+          "paid_partnership" : {
+            "type" : "boolean",
+            "description" : "Whether this Post is a paid partnership. When true, the Post will be labeled as a paid promotion."
           },
           "poll" : {
             "type" : "object",
