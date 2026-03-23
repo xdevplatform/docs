@@ -1,0 +1,251 @@
+---
+title: Migration guide
+sidebarTitle: Migration guide
+description: Migrate DM media retrieval from OAuth 1.0a TON URLs to the OAuth 2.0 endpoint
+keywords: ["dm media migration", "ton url migration", "oauth 1.0a to oauth 2.0", "dm attachment migration", "direct message media migration"]
+---
+
+## Migrating DM media retrieval from OAuth 1.0a to OAuth 2.0
+
+Previously, downloading media attached to Direct Message events required signing a request to a `ton.twitter.com` URL using **OAuth 1.0a**. The new `/2/dm_conversations/media` endpoint replaces this pattern with a standard **OAuth 2.0** authenticated request to `api.x.com` — consistent with the rest of the X API v2.
+
+---
+
+## What's changing
+
+| | Legacy (OAuth 1.0a) | New (OAuth 2.0) |
+|:---|:---|:---|
+| **Host** | `ton.twitter.com` | `api.x.com` |
+| **Path pattern** | `/1.1/ton/data/dm/{dm_id}/{media_id}/{resource_id}` | `/2/dm_conversations/media/{dm_id}/{media_id}/{resource_id}` |
+| **Authentication** | OAuth 1.0a signed request | OAuth 2.0 Bearer token (`Authorization: Bearer`) |
+| **Scopes required** | n/a (OAuth 1.0a user token) | `dm.read`, `tweet.read`, `users.read` |
+| **URL source** | `media_url` or `media_url_https` field on a DM event | Same `media_url` field — parse the path parameters from it |
+
+<Note>
+The path parameters `{dm_id}`, `{media_id}`, and `{resource_id}` are identical in both approaches — only the host and auth method change.
+</Note>
+
+---
+
+## Step-by-step migration
+
+### Step 1 — Obtain an OAuth 2.0 user access token
+
+If you haven't already, implement the [OAuth 2.0 Authorization Code flow with PKCE](/resources/fundamentals/authentication/oauth-2-0/authorization-code) to obtain a user access token. Request the following scopes:
+
+- `dm.read`
+- `tweet.read`
+- `users.read`
+
+Store this token securely. You will use it in place of the OAuth 1.0a signed header.
+
+### Step 2 — Parse the TON URL into path parameters
+
+When you receive a DM event with a media attachment, the `media_url` field returns a TON URL. Extract the last three path segments:
+
+```
+https://ton.twitter.com/1.1/ton/data/dm/1034828552951160836/1034828533812486145/oP5p359h.jpg
+                                        ──────────────────── ──────────────────── ─────────────
+                                              dm_id               media_id          resource_id
+```
+
+<CodeGroup>
+
+```python Python
+from urllib.parse import urlparse
+
+def parse_ton_url(media_url: str) -> tuple[str, str, str]:
+    """Extract (dm_id, media_id, resource_id) from a TON media URL."""
+    path_parts = urlparse(media_url).path.rstrip("/").split("/")
+    # path: /1.1/ton/data/dm/{dm_id}/{media_id}/{resource_id}
+    dm_id, media_id, resource_id = path_parts[-3], path_parts[-2], path_parts[-1]
+    return dm_id, media_id, resource_id
+
+dm_id, media_id, resource_id = parse_ton_url(
+    "https://ton.twitter.com/1.1/ton/data/dm/1034828552951160836/1034828533812486145/oP5p359h.jpg"
+)
+# dm_id      = "1034828552951160836"
+# media_id   = "1034828533812486145"
+# resource_id = "oP5p359h.jpg"
+```
+
+```javascript JavaScript
+function parseTonUrl(mediaUrl) {
+  const url = new URL(mediaUrl);
+  const parts = url.pathname.replace(/\/$/, "").split("/");
+  // pathname: /1.1/ton/data/dm/{dm_id}/{media_id}/{resource_id}
+  const [resourceId, mediaId, dmId] = parts.slice(-3).reverse();
+  return { dmId, mediaId, resourceId };
+}
+
+const { dmId, mediaId, resourceId } = parseTonUrl(
+  "https://ton.twitter.com/1.1/ton/data/dm/1034828552951160836/1034828533812486145/oP5p359h.jpg"
+);
+// dmId       = "1034828552951160836"
+// mediaId    = "1034828533812486145"
+// resourceId = "oP5p359h.jpg"
+```
+
+</CodeGroup>
+
+### Step 3 — Build the new request URL
+
+Replace the TON host and path prefix with the new v2 endpoint:
+
+```
+https://api.x.com/2/dm_conversations/media/{dm_id}/{media_id}/{resource_id}
+```
+
+**Example:**
+
+```
+https://api.x.com/2/dm_conversations/media/1034828552951160836/1034828533812486145/oP5p359h.jpg
+```
+
+### Step 4 — Make the request with OAuth 2.0
+
+Replace the OAuth 1.0a `Authorization` header with an OAuth 2.0 Bearer token:
+
+<CodeGroup>
+
+```bash cURL (Before — OAuth 1.0a)
+curl --request GET \
+  --url "https://ton.twitter.com/1.1/ton/data/dm/1034828552951160836/1034828533812486145/oP5p359h.jpg" \
+  --header 'authorization: OAuth oauth_consumer_key="6NxxxxxxCS", oauth_nonce="Sbxxxxxx2G", oauth_signature="637xxxxxxM%3D", oauth_signature_method="HMAC-SHA1", oauth_timestamp="1535557741", oauth_token="600-SQxxxxxxcqIF", oauth_version="1.0"'
+```
+
+```bash cURL (After — OAuth 2.0)
+curl --request GET \
+  --url "https://api.x.com/2/dm_conversations/media/1034828552951160836/1034828533812486145/oP5p359h.jpg" \
+  --header "Authorization: Bearer $USER_OAUTH2_ACCESS_TOKEN"
+```
+
+```python Python (Before — OAuth 1.0a)
+import requests
+from requests_oauthlib import OAuth1
+
+auth = OAuth1(
+    client_key="YOUR_API_KEY",
+    client_secret="YOUR_API_SECRET",
+    resource_owner_key="USER_ACCESS_TOKEN",
+    resource_owner_secret="USER_ACCESS_TOKEN_SECRET",
+)
+
+response = requests.get(
+    "https://ton.twitter.com/1.1/ton/data/dm/1034828552951160836/1034828533812486145/oP5p359h.jpg",
+    auth=auth,
+)
+media_bytes = response.content
+```
+
+```python Python (After — OAuth 2.0)
+import requests
+
+headers = {"Authorization": f"Bearer {USER_OAUTH2_ACCESS_TOKEN}"}
+
+response = requests.get(
+    "https://api.x.com/2/dm_conversations/media/1034828552951160836/1034828533812486145/oP5p359h.jpg",
+    headers=headers,
+)
+media_bytes = response.content
+```
+
+```javascript JavaScript (Before — OAuth 1.0a)
+import OAuth from "oauth-1.0a";
+import crypto from "crypto";
+
+const oauth = new OAuth({
+  consumer: { key: API_KEY, secret: API_SECRET },
+  signature_method: "HMAC-SHA1",
+  hash_function: (base, key) =>
+    crypto.createHmac("sha1", key).update(base).digest("base64"),
+});
+
+const url =
+  "https://ton.twitter.com/1.1/ton/data/dm/1034828552951160836/1034828533812486145/oP5p359h.jpg";
+const token = { key: USER_ACCESS_TOKEN, secret: USER_ACCESS_TOKEN_SECRET };
+const authHeader = oauth.toHeader(oauth.authorize({ url, method: "GET" }, token));
+
+const response = await fetch(url, { headers: authHeader });
+const mediaBuffer = await response.arrayBuffer();
+```
+
+```javascript JavaScript (After — OAuth 2.0)
+const url =
+  "https://api.x.com/2/dm_conversations/media/1034828552951160836/1034828533812486145/oP5p359h.jpg";
+
+const response = await fetch(url, {
+  headers: { Authorization: `Bearer ${USER_OAUTH2_ACCESS_TOKEN}` },
+});
+const mediaBuffer = await response.arrayBuffer();
+```
+
+</CodeGroup>
+
+---
+
+## Security considerations
+
+When serving DM media through your backend, keep the following in mind regardless of which auth method you use:
+
+<AccordionGroup>
+  <Accordion title="Authenticate your own endpoint">
+    The endpoint that proxies DM media to your users must itself be authenticated. Do not expose it publicly without verifying the requesting user has access.
+  </Accordion>
+
+  <Accordion title="Block cross-origin requests">
+    Deny all cross-origin (CORS) requests to your media proxy endpoint to prevent other origins from accessing your users' DM media.
+  </Accordion>
+
+  <Accordion title="Restrict to DM media only">
+    Your proxy endpoint should only forward requests to the `/2/dm_conversations/media` path. Reject attempts to use it to call other X API endpoints.
+  </Accordion>
+
+  <Accordion title="Do not cache tokens server-side unnecessarily">
+    OAuth 2.0 user access tokens are scoped to the individual user. Ensure you are using the token that belongs to the user requesting the media — not a shared or cached token from a different user.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Displaying media in a web interface
+
+After fetching the raw media bytes through your backend proxy, you can serve them to a frontend application. Example using a proxy endpoint pattern:
+
+```html
+<!-- Proxy the request through your authenticated backend -->
+<img src="/api/dm-media?url=https://ton.twitter.com/1.1/ton/data/dm/1034828552951160836/1034828533812486145/oP5p359h.jpg" alt="DM attachment" />
+```
+
+Your server-side proxy handler parses the TON URL, calls the new v2 endpoint with the user's OAuth 2.0 token, and streams the response back to the client.
+
+---
+
+## Comparison summary
+
+| | OAuth 1.0a (legacy) | OAuth 2.0 (new) |
+|:---|:---|:---|
+| Request complexity | High — requires HMAC-SHA1 signature construction | Low — standard Bearer token header |
+| Library support | Requires `oauth-1.0a` or equivalent | Native `fetch` / `requests` with a header |
+| Token storage needed | API key + secret + user access token + user secret | OAuth 2.0 user access token (+ refresh token) |
+| Host | `ton.twitter.com` | `api.x.com` |
+| API version | v1.1 | v2 |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Introduction" icon="book" href="/x-api/direct-messages/media/introduction">
+    Overview of DM media retrieval
+  </Card>
+  <Card title="API Reference" icon="code" href="/x-api/direct-messages/get-dm-media">
+    Full endpoint documentation
+  </Card>
+  <Card title="OAuth 2.0 Authorization Code" icon="key" href="/resources/fundamentals/authentication/oauth-2-0/authorization-code">
+    Set up OAuth 2.0 PKCE flow
+  </Card>
+  <Card title="DM Lookup" icon="inbox" href="/x-api/direct-messages/lookup/introduction">
+    Retrieve DM events containing media
+  </Card>
+</CardGroup>
