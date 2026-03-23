@@ -268,18 +268,19 @@ Now you can send encrypted messages to a conversation.
     def send_message(conversation_id: str, text: str):
         """Send an encrypted message to a conversation."""
         
-        # First, get the conversation to retrieve the encrypted conversation key
+        # Get the conversation to retrieve key events
         conversation = x_client.chat.get_conversation(conversation_id)
         
-        # Get the encrypted conversation key for the authenticated user
-        # This comes from the API response
-        encrypted_conv_key = conversation.data.participant_keys[0].encrypted_key
+        # Key events are in meta.conversation_key_events (list of base64 strings)
+        # The most recent key event contains the current encryption key
+        key_events = conversation.meta.conversation_key_events
         
         # Encrypt the message using the Chat XDK
-        # The SDK decrypts the conversation key internally and encrypts the message
+        # Pass the latest key event — the XDK extracts the encrypted
+        # conversation key for the authenticated user internally
         send_payload = chat.encrypt_message(
             text=text,
-            conversation_key=encrypted_conv_key,
+            conversation_key=key_events[-1],  # Most recent key event (base64)
             conversation_id=conversation_id,
             sender_id="YOUR_USER_ID",  # The authenticated user's ID
             should_notify=True
@@ -289,15 +290,13 @@ Now you can send encrypted messages to a conversation.
         response = x_client.chat.send_message(
             conversation_id=conversation_id,
             body={
-                "encrypted_content": send_payload.encrypted_content,
-                "signature": send_payload.signature,
-                "encoded_event_signature": send_payload.encoded_event_signature,
-                "conversation_key_version": send_payload.conversation_key_version,
-                "should_notify": send_payload.should_notify
+                "message_id": send_payload.message_id,
+                "encoded_message_create_event": send_payload.encoded_message_create_event,
+                "encoded_message_event_signature": send_payload.encoded_message_event_signature,
             }
         )
         
-        print(f"Message sent! Event ID: {response.data.id}")
+        print(f"Message sent! Encoded event: {response.data.encoded_message_event}")
         return response
 
     # Send a message
@@ -307,16 +306,19 @@ Now you can send encrypted messages to a conversation.
   <Tab title="TypeScript">
     ```typescript
     async function sendMessage(conversationId: string, text: string) {
-      // First, get the conversation to retrieve the encrypted conversation key
+      // Get the conversation to retrieve key events
       const conversation = await xClient.chat.getConversation(conversationId);
       
-      // Get the encrypted conversation key for the authenticated user
-      const encryptedConvKey = conversation.data.participantKeys[0].encryptedKey;
+      // Key events are in meta.conversation_key_events (array of base64 strings)
+      // The most recent key event contains the current encryption key
+      const keyEvents = conversation.meta.conversationKeyEvents;
       
       // Encrypt the message using the Chat XDK
+      // Pass the latest key event — the XDK extracts the encrypted
+      // conversation key for the authenticated user internally
       const sendPayload = chat.encryptMessage({
         text,
-        conversationKey: encryptedConvKey,
+        conversationKey: keyEvents[keyEvents.length - 1], // Most recent key event (base64)
         conversationId,
         senderId: 'YOUR_USER_ID',
         shouldNotify: true
@@ -325,15 +327,13 @@ Now you can send encrypted messages to a conversation.
       // Send the encrypted payload via the X API
       const response = await xClient.chat.sendMessage(conversationId, {
         body: {
-          encryptedContent: sendPayload.encryptedContent,
-          signature: sendPayload.signature,
-          encodedEventSignature: sendPayload.encodedEventSignature,
-          conversationKeyVersion: sendPayload.conversationKeyVersion,
-          shouldNotify: sendPayload.shouldNotify
+          messageId: sendPayload.messageId,
+          encodedMessageCreateEvent: sendPayload.encodedMessageCreateEvent,
+          encodedMessageEventSignature: sendPayload.encodedMessageEventSignature,
         }
       });
       
-      console.log('Message sent! Event ID:', response.data.id);
+      console.log('Message sent! Encoded event:', response.data.encodedMessageEvent);
       return response;
     }
 
@@ -751,14 +751,14 @@ Here's a complete example that brings everything together into a simple customer
 
     def send_reply(conversation_id: str, text: str):
         """Send an encrypted reply."""
-        # Get the latest conversation key
+        # Get the latest conversation key events
         conv = x_client.chat.get_conversation(conversation_id)
-        encrypted_key = conv.data.participant_keys[0].encrypted_key
+        key_events = conv.meta.conversation_key_events
         
         # Encrypt the response
         payload = chat.encrypt_message(
             text=text,
-            conversation_key=encrypted_key,
+            conversation_key=key_events[-1],  # Most recent key event (base64)
             conversation_id=conversation_id,
             sender_id=USER_ID,
             should_notify=True
@@ -768,11 +768,9 @@ Here's a complete example that brings everything together into a simple customer
         x_client.chat.send_message(
             conversation_id=conversation_id,
             body={
-                "encrypted_content": payload.encrypted_content,
-                "signature": payload.signature,
-                "encoded_event_signature": payload.encoded_event_signature,
-                "conversation_key_version": payload.conversation_key_version,
-                "should_notify": True
+                "message_id": payload.message_id,
+                "encoded_message_create_event": payload.encoded_message_create_event,
+                "encoded_message_event_signature": payload.encoded_message_event_signature,
             }
         )
         print(f"Sent: {text}")

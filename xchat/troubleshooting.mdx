@@ -65,14 +65,15 @@ encrypted = chat.encrypt_message(...)
 
 **Solutions:**
 
-1. **Fetch the conversation to get current keys:**
+1. **Fetch the conversation to get current key events:**
 ```python
-# Get fresh conversation data with keys
+# Get fresh conversation data with key events
 conversation = x_client.chat.get_conversation(conversation_id)
-encrypted_key = conversation.data.participant_keys[0].encrypted_key
+key_events = conversation.meta.conversation_key_events
 
-# Decrypt and cache it
-conv_key = chat.decrypt_conversation_key(encrypted_key)
+# Extract and cache the conversation keys
+conv_keys = chat.extract_conversation_keys(key_events)
+conversation_keys[conversation_id] = conv_keys
 ```
 
 2. **Make sure you're handling `KeyChange` events:**
@@ -349,18 +350,15 @@ payload = chat.encrypt_message(
 )
 
 # Verify the payload before sending
-assert payload.encrypted_content is not None
-assert payload.signature is not None
-assert payload.conversation_key_version is not None
+assert payload.message_id is not None
+assert payload.encoded_message_create_event is not None
 
 response = x_client.chat.send_message(
     conversation_id=conversation_id,
     body={
-        "encrypted_content": payload.encrypted_content,
-        "signature": payload.signature,
-        "encoded_event_signature": payload.encoded_event_signature,
-        "conversation_key_version": payload.conversation_key_version,
-        "should_notify": payload.should_notify
+        "message_id": payload.message_id,
+        "encoded_message_create_event": payload.encoded_message_create_event,
+        "encoded_message_event_signature": payload.encoded_message_event_signature,
     }
 )
 ```
@@ -506,7 +504,7 @@ If you're still stuck:
   <Card title="Developer Forums" icon="comments" href="https://devcommunity.x.com/">
     Community support
   </Card>
-  <Card title="API Status" icon="signal" href="https://api.xstatus.com/">
+  <Card title="API Status" icon="signal" href="https://docs.x.com/status">
     Check for outages
   </Card>
 </CardGroup>

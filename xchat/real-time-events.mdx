@@ -23,6 +23,7 @@ flowchart LR
 |:-----------|:------------|:--------------|
 | `chat.received` | User receives an encrypted DM | When someone sends your subscribed user a message |
 | `chat.sent` | User sends an encrypted DM | When your subscribed user sends a message |
+| `chat.conversation_join` | User joins a group conversation | When your subscribed user is added to a group chat |
 
 <Note>
 Chat events are **private events** — they require OAuth 2.0 authentication from the user before you can subscribe to their events.
@@ -38,9 +39,9 @@ First, register a webhook endpoint to receive events:
 
 <CodeGroup>
 ```python Python
-from xdk import XClient
+from xdk import Client
 
-client = XClient(bearer_token="YOUR_BEARER_TOKEN")
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
 
 # Register your webhook URL
 webhook = client.webhooks.create(
@@ -50,9 +51,9 @@ print(f"Webhook ID: {webhook.id}")
 ```
 
 ```typescript TypeScript
-import { XClient } from 'xdk';
+import { Client } from 'xdk';
 
-const client = new XClient({ bearerToken: 'YOUR_BEARER_TOKEN' });
+const client = new Client({ bearerToken: 'YOUR_BEARER_TOKEN' });
 
 // Register your webhook URL
 const webhook = await client.webhooks.create({
@@ -123,21 +124,33 @@ Create a subscription for the user's chat events:
 
 <CodeGroup>
 ```python Python
-# Subscribe to chat events for a user
-subscription = client.activity.create_subscription(
-    event_types=["chat.received", "chat.sent"],
-    user_id="USER_ID_TO_MONITOR"
+# Subscribe to chat events for a user (one subscription per event type)
+received_sub = client.activity.create_subscription(
+    event_type="chat.received",
+    filter={"user_id": "USER_ID_TO_MONITOR"}
 )
-print(f"Subscription ID: {subscription.id}")
+print(f"Subscription ID: {received_sub.id}")
+
+sent_sub = client.activity.create_subscription(
+    event_type="chat.sent",
+    filter={"user_id": "USER_ID_TO_MONITOR"}
+)
+print(f"Subscription ID: {sent_sub.id}")
 ```
 
 ```typescript TypeScript
-// Subscribe to chat events for a user
-const subscription = await client.activity.createSubscription({
-  eventTypes: ['chat.received', 'chat.sent'],
-  userId: 'USER_ID_TO_MONITOR'
+// Subscribe to chat events for a user (one subscription per event type)
+const receivedSub = await client.activity.createSubscription({
+  eventType: 'chat.received',
+  filter: { userId: 'USER_ID_TO_MONITOR' }
 });
-console.log(`Subscription ID: ${subscription.id}`);
+console.log(`Subscription ID: ${receivedSub.id}`);
+
+const sentSub = await client.activity.createSubscription({
+  eventType: 'chat.sent',
+  filter: { userId: 'USER_ID_TO_MONITOR' }
+});
+console.log(`Subscription ID: ${sentSub.id}`);
 ```
 </CodeGroup>
 
@@ -147,58 +160,91 @@ When a chat event arrives, decrypt it using the Chat XDK:
 
 <CodeGroup>
 ```python Python (Flask)
-from xchat_xdk import ChatClient
+from chat_xdk import Chat
 
-xchat = ChatClient()
+# Initialize Chat XDK (unlocked at startup — see Getting Started)
+chat = Chat(JUICEBOX_CONFIG)
+chat.unlock("YOUR_PIN")
+
+# Cache conversation keys in memory (use a database in production)
+conversation_keys = {}
 
 @app.route('/webhook', methods=['POST'])
 def handle_event():
     event = request.json
     
-    if event.get('event_type') == 'chat.received':
-        # Extract encrypted payload
-        encrypted_data = event['data']['encrypted_payload']
-        sender_id = event['data']['sender_id']
-        conversation_id = event['data']['conversation_id']
+    if event.get('event_type') in ['chat.received', 'chat.sent']:
+        payload = event.get('payload', {})
+        encrypted_event = payload.get('encrypted_event')
+        conversation_id = payload.get('conversation_id')
         
-        # Decrypt the message
-        decrypted = xchat.decrypt_message(
-            encrypted_payload=encrypted_data,
-            conversation_id=conversation_id,
-            sender_public_key=get_sender_public_key(sender_id)
-        )
+        # Handle key changes first (new conversation or key rotation)
+        if 'key_change' in payload:
+            key_event = payload['key_change']['encrypted_event']
+            conv_keys = chat.extract_conversation_keys([key_event])
+            conversation_keys[conversation_id] = conv_keys
         
-        print(f"New message: {decrypted['text']}")
+        # Get stored conversation keys for this conversation
+        conv_keys = conversation_keys.get(conversation_id, {})
         
-        # Process the message (e.g., respond, store, analyze)
-        handle_incoming_message(decrypted, sender_id, conversation_id)
+        # Decrypt the event using the Chat XDK
+        event_obj = chat.decrypt_event(encrypted_event, conv_keys)
+        
+        if event_obj.get('type') == 'Message':
+            content = event_obj.get('content', {})
+            if content.get('content_type') == 'Text':
+                print(f"New message: {content.get('text')}")
+                print(f"From: {event_obj.get('sender_id')}")
+                print(f"Verified: {event_obj.get('verified')}")
+                
+                # Process the message (e.g., respond, store, analyze)
+                handle_incoming_message(event_obj, conversation_id)
     
     return '', 200
 ```
 
 ```typescript TypeScript (Express)
-import { ChatClient } from 'xchat-xdk';
+import { createChat } from 'chat-xdk';
 
-const xchat = new ChatClient();
+// Initialize Chat XDK (unlocked at startup — see Getting Started)
+const chat = await createChat({ juiceboxConfig, getAuthToken });
+await chat.unlock('YOUR_PIN');
+
+// Cache conversation keys in memory (use a database in production)
+const conversationKeys = new Map<string, Record<string, Uint8Array>>();
 
 app.post('/webhook', express.json(), async (req, res) => {
   const event = req.body;
   
-  if (event.event_type === 'chat.received') {
-    // Extract encrypted payload
-    const { encrypted_payload, sender_id, conversation_id } = event.data;
+  if (event.event_type === 'chat.received' || event.event_type === 'chat.sent') {
+    const payload = event.payload || {};
+    const encryptedEvent = payload.encrypted_event;
+    const conversationId = payload.conversation_id;
     
-    // Decrypt the message
-    const decrypted = await xchat.decryptMessage({
-      encryptedPayload: encrypted_payload,
-      conversationId: conversation_id,
-      senderPublicKey: await getSenderPublicKey(sender_id)
-    });
+    // Handle key changes first (new conversation or key rotation)
+    if (payload.key_change) {
+      const keyEvent = payload.key_change.encrypted_event;
+      const convKeys = chat.extractConversationKeys([keyEvent]);
+      conversationKeys.set(conversationId, convKeys);
+    }
     
-    console.log(`New message: ${decrypted.text}`);
+    // Get stored conversation keys for this conversation
+    const convKeys = conversationKeys.get(conversationId) || {};
     
-    // Process the message
-    await handleIncomingMessage(decrypted, sender_id, conversation_id);
+    // Decrypt the event using the Chat XDK
+    const eventObj = chat.decryptEvent(encryptedEvent, convKeys);
+    
+    if (eventObj.type === 'Message') {
+      const content = eventObj.content;
+      if (content.contentType === 'Text') {
+        console.log('New message:', content.text);
+        console.log('From:', eventObj.senderId);
+        console.log('Verified:', eventObj.verified);
+        
+        // Process the message
+        await handleIncomingMessage(eventObj, conversationId);
+      }
+    }
   }
   
   res.sendStatus(200);
@@ -210,32 +256,45 @@ app.post('/webhook', express.json(), async (req, res) => {
 
 ## Event Payload Structure
 
-Chat events are delivered as JSON with the following structure:
+Chat events are delivered as JSON. For **webhooks**, the structure is:
 
 ```json
 {
   "event_type": "chat.received",
-  "timestamp": "2024-01-15T10:30:00.000Z",
-  "data": {
+  "payload": {
     "conversation_id": "1234567890-0987654321",
     "sender_id": "1234567890",
-    "recipient_id": "0987654321",
-    "message_id": "msg_abc123",
-    "encrypted_payload": "base64_encoded_encrypted_data...",
-    "created_at": "2024-01-15T10:30:00.000Z"
+    "encrypted_event": "base64_encoded_encrypted_event...",
+    "key_change": {
+      "encrypted_event": "base64_encoded_key_change_event..."
+    }
+  }
+}
+```
+
+For the **activity stream** (`GET /2/activity/stream`), events are wrapped under a `data` envelope:
+
+```json
+{
+  "data": {
+    "event_type": "chat.received",
+    "event_uuid": "abc123def456",
+    "payload": {
+      "conversation_id": "1234567890-0987654321",
+      "sender_id": "1234567890",
+      "encrypted_event": "base64_encoded_encrypted_event..."
+    }
   }
 }
 ```
 
 | Field | Description |
 |:------|:------------|
-| `event_type` | `chat.received` or `chat.sent` |
-| `timestamp` | When the event was generated |
-| `conversation_id` | The DM conversation identifier |
-| `sender_id` | User ID of the message sender |
-| `recipient_id` | User ID of the message recipient |
-| `message_id` | Unique identifier for this message |
-| `encrypted_payload` | Base64-encoded encrypted message (decrypt with Chat XDK) |
+| `event_type` | `chat.received`, `chat.sent`, or `chat.conversation_join` |
+| `payload.conversation_id` | The DM conversation identifier |
+| `payload.sender_id` | User ID of the message sender |
+| `payload.encrypted_event` | Base64-encoded encrypted message event (decrypt with Chat XDK) |
+| `payload.key_change` | Present when the conversation key was rotated; contains the new key event |
 
 ---
 
@@ -260,18 +319,18 @@ Each webhook POST includes an `x-twitter-webhooks-signature` header. Verify this
 ```python Python
 import hmac
 import hashlib
+import base64
 
 def verify_signature(payload: bytes, signature: str, consumer_secret: str) -> bool:
-    expected = hmac.new(
-        consumer_secret.encode('utf-8'),
-        msg=payload,
-        digestmod=hashlib.sha256
-    ).hexdigest()
+    expected = 'sha256=' + base64.b64encode(
+        hmac.new(
+            consumer_secret.encode('utf-8'),
+            msg=payload,
+            digestmod=hashlib.sha256
+        ).digest()
+    ).decode('utf-8')
     
-    # Remove 'sha256=' prefix if present
-    received = signature.replace('sha256=', '')
-    
-    return hmac.compare_digest(expected, received)
+    return hmac.compare_digest(signature, expected)
 
 # In your webhook handler:
 @app.route('/webhook', methods=['POST'])
@@ -292,17 +351,14 @@ function verifySignature(
   signature: string,
   consumerSecret: string
 ): boolean {
-  const expected = crypto
+  const expected = 'sha256=' + crypto
     .createHmac('sha256', consumerSecret)
     .update(payload)
-    .digest('hex');
-  
-  // Remove 'sha256=' prefix if present
-  const received = signature.replace('sha256=', '');
+    .digest('base64');
   
   return crypto.timingSafeEqual(
-    Buffer.from(expected),
-    Buffer.from(received)
+    Buffer.from(signature),
+    Buffer.from(expected)
   );
 }
 
@@ -341,7 +397,7 @@ app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
     Use `message_id` to deduplicate events. X may retry delivery.
   </Card>
   <Card title="Secure key storage" icon="key">
-    Use [Juicebox](/xchat/cryptography-primer#secure-key-storage-with-juicebox) for secure conversation key storage.
+    Use [Juicebox](/xchat/cryptography-primer#juicebox-distributed-key-storage) for secure conversation key storage.
   </Card>
   <Card title="Monitor health" icon="heart-pulse">
     Log and monitor CRC checks. Failed CRCs will disable your webhook.
@@ -360,8 +416,8 @@ Manage which chat events you receive:
 |:-------|:---------|:------------|
 | POST | [`/2/activity/subscriptions`](/x-api/activity/create-x-activity-subscription) | Subscribe to `chat.received` / `chat.sent` events |
 | GET | [`/2/activity/subscriptions`](/x-api/activity/get-x-activity-subscriptions) | List your active subscriptions |
-| PUT | [`/2/activity/subscriptions/:id`](/x-api/activity/update-x-activity-subscription) | Update subscription filters |
-| DELETE | [`/2/activity/subscriptions/:id`](/x-api/activity/deletes-x-activity-subscription) | Remove a subscription |
+| PUT | [`/2/activity/subscriptions/{subscription_id}`](/x-api/activity/update-x-activity-subscription) | Update subscription filters |
+| DELETE | [`/2/activity/subscriptions/{subscription_id}`](/x-api/activity/deletes-x-activity-subscription) | Remove a subscription |
 
 ### Activity Stream
 
