@@ -1,0 +1,284 @@
+---
+title: Quickstart
+sidebarTitle: Quickstart
+description: Create and publish your first X article end-to-end
+keywords: ["articles quickstart", "create article", "publish article", "article draft tutorial", "X articles guide"]
+---
+
+This guide walks you through the complete Articles flow: creating a draft and then publishing it to X.
+
+<Note>
+**Prerequisites**
+
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- A User Access Token with **Read and Write** scopes (OAuth 2.0 User Context)
+- The authenticated user must have an active **X Premium (Blue Verified) subscription**
+</Note>
+
+---
+
+## Step 1: Create an article draft
+
+Call `POST /2/article/draft` with a `title` and a `content_state` body. The `content_state` is a block-based document — each block is a paragraph, heading, or other structural element.
+
+<Steps>
+  <Step title="Prepare the request body" icon="pen">
+    At minimum, provide a `title` and at least one block inside `content_state`:
+
+    ```json
+    {
+      "title": "My First Article",
+      "content_state": {
+        "blocks": [
+          {
+            "text": "Welcome to my first article written via the X API.",
+            "type": "unstyled"
+          },
+          {
+            "text": "The Articles API lets you programmatically publish long-form content on X.",
+            "type": "unstyled"
+          }
+        ],
+        "entities": []
+      }
+    }
+    ```
+
+    <Tip>
+    The `type: "unstyled"` block is a plain paragraph. See the [Writing Guide](/x-api/articles/writing-guide) for all block types, inline formatting, links, and embedded posts.
+    </Tip>
+  </Step>
+
+  <Step title="Send the request" icon="paper-plane">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/article/draft" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "My First Article",
+    "content_state": {
+      "blocks": [
+        {
+          "text": "Welcome to my first article written via the X API.",
+          "type": "unstyled"
+        },
+        {
+          "text": "The Articles API lets you programmatically publish long-form content on X.",
+          "type": "unstyled"
+        }
+      ],
+      "entities": []
+    }
+  }'
+```
+
+```python Python
+import requests
+import json
+
+USER_ACCESS_TOKEN = "YOUR_USER_ACCESS_TOKEN"
+
+payload = {
+    "title": "My First Article",
+    "content_state": {
+        "blocks": [
+            {
+                "text": "Welcome to my first article written via the X API.",
+                "type": "unstyled",
+            },
+            {
+                "text": "The Articles API lets you programmatically publish long-form content on X.",
+                "type": "unstyled",
+            },
+        ],
+        "entities": [],
+    },
+}
+
+response = requests.post(
+    "https://api.x.com/2/article/draft",
+    headers={
+        "Authorization": f"Bearer {USER_ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+    },
+    json=payload,
+)
+
+print(json.dumps(response.json(), indent=2))
+```
+
+```javascript JavaScript
+const USER_ACCESS_TOKEN = "YOUR_USER_ACCESS_TOKEN";
+
+const payload = {
+  title: "My First Article",
+  content_state: {
+    blocks: [
+      {
+        text: "Welcome to my first article written via the X API.",
+        type: "unstyled",
+      },
+      {
+        text: "The Articles API lets you programmatically publish long-form content on X.",
+        type: "unstyled",
+      },
+    ],
+    entities: [],
+  },
+};
+
+const response = await fetch("https://api.x.com/2/article/draft", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${USER_ACCESS_TOKEN}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(payload),
+});
+
+console.log(await response.json());
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Save the article_id" icon="bookmark">
+    A successful `201 Created` response returns your new draft's `id`. **Save it — you'll need it to publish.**
+
+    ```json
+    {
+      "data": {
+        "id": "2030915708830224384",
+        "title": "My First Article"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Step 2: Publish the draft
+
+Call `POST /2/articles/{article_id}/publish` with no request body. X publishes the article and automatically creates a Post linking to it.
+
+<Steps>
+  <Step title="Send the publish request" icon="rocket">
+
+<CodeGroup dropdown>
+
+```bash cURL
+ARTICLE_ID="2030915708830224384"
+
+curl -X POST "https://api.x.com/2/articles/${ARTICLE_ID}/publish" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python
+import requests
+
+USER_ACCESS_TOKEN = "YOUR_USER_ACCESS_TOKEN"
+ARTICLE_ID = "2030915708830224384"
+
+response = requests.post(
+    f"https://api.x.com/2/articles/{ARTICLE_ID}/publish",
+    headers={"Authorization": f"Bearer {USER_ACCESS_TOKEN}"},
+)
+
+print(response.json())
+```
+
+```javascript JavaScript
+const USER_ACCESS_TOKEN = "YOUR_USER_ACCESS_TOKEN";
+const ARTICLE_ID = "2030915708830224384";
+
+const response = await fetch(
+  `https://api.x.com/2/articles/${ARTICLE_ID}/publish`,
+  {
+    method: "POST",
+    headers: { Authorization: `Bearer ${USER_ACCESS_TOKEN}` },
+  }
+);
+
+console.log(await response.json());
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Get the post_id" icon="check">
+    A `200 OK` response returns the `post_id` of the X Post that was automatically created for your article:
+
+    ```json
+    {
+      "data": {
+        "post_id": "2030916179745800224"
+      }
+    }
+    ```
+
+    Your article is now live. The `post_id` can be used with the Posts API to look up, quote, or engage with the article's Post.
+  </Step>
+</Steps>
+
+---
+
+## Common errors
+
+<AccordionGroup>
+  <Accordion title="403 Forbidden — Premium subscription required">
+    ```json
+    {
+      "errors": [{
+        "message": "You are not authorized to create or publish articles. A Premium subscription is required.",
+        "code": 403
+      }]
+    }
+    ```
+    **Resolution:** The authenticated user must have an active X Premium (Blue Verified) subscription to create or publish articles.
+  </Accordion>
+
+  <Accordion title="400 Bad Request — article not found or not owned">
+    ```json
+    {
+      "errors": [{
+        "message": "The specified article could not be found or is not owned by the authenticated user.",
+        "code": 400
+      }]
+    }
+    ```
+    **Resolution:** Verify the `article_id` is correct and was created by the same authenticated user. Each user can only publish their own drafts.
+  </Accordion>
+
+  <Accordion title="401 Unauthorized">
+    ```json
+    { "title": "Unauthorized", "status": 401, "detail": "Unauthorized" }
+    ```
+    **Resolution:** Ensure your `Authorization` header contains a valid User Access Token (not an App-only Bearer Token). Articles require OAuth 2.0 User Context.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Writing Guide" icon="book" href="/x-api/articles/writing-guide">
+    Add headings, bold/italic, links, mentions, embedded posts, and cover media
+  </Card>
+  <Card title="Create Draft Reference" icon="code" href="/x-api/articles/create-draft-article">
+    Full parameter reference for POST /2/article/draft
+  </Card>
+  <Card title="Publish Reference" icon="code" href="/x-api/articles/publish-article">
+    Full parameter reference for POST /2/articles/{article_id}/publish
+  </Card>
+  <Card title="Media Upload" icon="image" href="/x-api/media/quickstart/media-upload-chunked">
+    Upload a cover image for your article
+  </Card>
+</CardGroup>

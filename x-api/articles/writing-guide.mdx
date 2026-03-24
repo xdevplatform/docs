@@ -1,0 +1,965 @@
+---
+title: Writing Articles Programmatically
+sidebarTitle: Writing Guide
+description: Build richly formatted X article content without wrestling with raw offsets
+keywords: ["articles writing guide", "content_state", "article formatting", "blocks entities", "article builder", "X articles programmatic"]
+---
+
+The article body is described as a `content_state` object — a block-based document model that can feel unfamiliar at first. This guide gives you a copy-paste builder utility (Python and JavaScript) that handles all the offset arithmetic, plus common recipes for every formatting feature.
+
+---
+
+## How the content model works
+
+Think of `content_state` like a document made of **stacked rows**:
+
+- **Each block** = one row (a paragraph, heading, list item, blockquote, or embedded element)
+- **`text`** = the plain text of that row, exactly as it would be read aloud
+- **Inline styles** (bold, italic) = character ranges applied on top of the plain text
+- **Entities** (links, embedded posts) = named objects that blocks reference by key
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Block 1: type=header-one  │ text="Why X Articles Matter"   │
+├─────────────────────────────────────────────────────────────┤
+│ Block 2: type=unstyled    │ text="X Articles let you…"     │
+│                           │ inline_style_ranges: bold[0,1] │
+├─────────────────────────────────────────────────────────────┤
+│ Block 3: type=atomic      │ (embedded post — no text)      │
+│                           │ entity_ranges → entity key 0   │
+└─────────────────────────────────────────────────────────────┘
+
+entities: [{ key:"0", value: { type:"post", data:{post_id:"…"} } }]
+```
+
+The trickiest part is **offset arithmetic** for inline styles: every bold/italic/link range is described as `{ offset, length }` — the character position within the block's `text` string where the style starts, and how many characters it covers. The builder below calculates all of that for you.
+
+---
+
+## The ArticleBuilder utility
+
+Copy either version into your project and use it to compose your `content_state`. Both support full method chaining.
+
+<CodeGroup>
+
+```python Python
+import re
+
+class ArticleBuilder:
+    """Builds a content_state payload for the X Articles API."""
+
+    def __init__(self):
+        self._blocks = []
+        self._entities = []
+        self._next_key = 0
+
+    # ── private helpers ──────────────────────────────────────────────
+
+    def _add_block(self, block):
+        self._blocks.append(block)
+        return self  # allows chaining
+
+    def _register_entity(self, value):
+        key = self._next_key
+        self._next_key += 1
+        self._entities.append({"key": str(key), "value": value})
+        return key
+
+    # ── structural blocks ────────────────────────────────────────────
+
+    def paragraph(self, text):
+        """Plain paragraph."""
+        return self._add_block({"text": text, "type": "unstyled"})
+
+    def heading(self, text, level=1):
+        """Heading — level 1 (H1), 2 (H2), or 3 (H3)."""
+        types = {1: "header-one", 2: "header-two", 3: "header-three"}
+        return self._add_block({"text": text, "type": types.get(level, "header-one")})
+
+    def blockquote(self, text):
+        """Blockquote."""
+        return self._add_block({"text": text, "type": "blockquote"})
+
+    def bullet(self, text):
+        """Unordered list item."""
+        return self._add_block({"text": text, "type": "unordered-list-item"})
+
+    def ordered_item(self, text):
+        """Ordered list item."""
+        return self._add_block({"text": text, "type": "ordered-list-item"})
+
+    # ── inline formatting ────────────────────────────────────────────
+
+    def styled(self, segments):
+        """
+        Paragraph with inline bold / italic / strikethrough styling.
+
+        segments: list of (text, style) tuples where style is one of:
+            None                        — no style (plain text)
+            "bold"
+            "italic"
+            "strikethrough"
+            ["bold", "italic"]          — apply multiple styles at once
+
+        Example:
+            builder.styled([
+                ("This article covers ", None),
+                ("three key points", "bold"),
+                (" you should know.", None),
+            ])
+        """
+        full_text = ""
+        ranges = []
+
+        for (text, style) in segments:
+            offset = len(full_text)
+            full_text += text
+            if style:
+                for s in ([style] if isinstance(style, str) else style):
+                    ranges.append({"offset": offset, "length": len(text), "style": s})
+
+        block = {"text": full_text, "type": "unstyled"}
+        if ranges:
+            block["inline_style_ranges"] = ranges
+        return self._add_block(block)
+
+    # ── mentions & hashtags ──────────────────────────────────────────
+
+    def mentions(self, text):
+        """
+        Paragraph that auto-detects @mentions and #hashtags.
+
+        Example:
+            builder.mentions("Thanks @xdevelopers for shipping #XAPI!")
+        """
+        detected_mentions = [
+            {"from_index": m.start(), "to_index": m.end(), "text": m.group(1)}
+            for m in re.finditer(r"@(\w+)", text)
+        ]
+        detected_hashtags = [
+            {"from_index": m.start(), "to_index": m.end(), "text": m.group(1)}
+            for m in re.finditer(r"#(\w+)", text)
+        ]
+
+        block = {"text": text, "type": "unstyled"}
+        if detected_mentions or detected_hashtags:
+            block["data"] = {}
+            if detected_mentions:
+                block["data"]["mentions"] = detected_mentions
+            if detected_hashtags:
+                block["data"]["hashtags"] = detected_hashtags
+        return self._add_block(block)
+
+    # ── hyperlinks ───────────────────────────────────────────────────
+
+    def link(self, link_text, url, *, before="", after=""):
+        """
+        Paragraph containing a clickable hyperlink.
+
+        before / after: optional plain text surrounding the linked text.
+
+        Example:
+            builder.link(
+                "X Developer Platform",
+                url="https://developer.x.com",
+                before="Check out the ",
+                after=" for the full API reference.",
+            )
+        """
+        full_text = before + link_text + after
+        offset = len(before)
+        key = self._register_entity({
+            "type": "link",
+            "mutability": "mutable",
+            "data": {"url": url},
+        })
+        return self._add_block({
+            "text": full_text,
+            "type": "unstyled",
+            "entity_ranges": [{"offset": offset, "length": len(link_text), "key": key}],
+            "data": {
+                "urls": [
+                    {"from_index": offset, "to_index": offset + len(link_text), "text": url}
+                ]
+            },
+        })
+
+    # ── embedded posts ───────────────────────────────────────────────
+
+    def embed_post(self, post_id):
+        """
+        Embed another X Post inline.
+
+        The post is rendered as an atomic block (a full post card).
+        Wrap it with paragraph() calls for intro/outro text.
+
+        Example:
+            builder.paragraph("Here's a post worth reading:")
+            builder.embed_post("1895586542058820000")
+            builder.paragraph("What do you think?")
+        """
+        key = self._register_entity({
+            "type": "post",
+            "mutability": "immutable",
+            "data": {"post_id": post_id},
+        })
+        return self._add_block({
+            "text": " ",
+            "type": "atomic",
+            "entity_ranges": [{"offset": 0, "length": 1, "key": key}],
+        })
+
+    # ── output ───────────────────────────────────────────────────────
+
+    def build(self):
+        """Return the content_state dict, ready to pass to the API."""
+        return {"blocks": self._blocks, "entities": self._entities}
+```
+
+```javascript JavaScript
+class ArticleBuilder {
+  constructor() {
+    this._blocks = [];
+    this._entities = [];
+    this._nextKey = 0;
+  }
+
+  // ── private helpers ──────────────────────────────────────────────
+
+  _addBlock(block) {
+    this._blocks.push(block);
+    return this; // allows chaining
+  }
+
+  _registerEntity(value) {
+    const key = this._nextKey++;
+    this._entities.push({ key: String(key), value });
+    return key;
+  }
+
+  // ── structural blocks ────────────────────────────────────────────
+
+  paragraph(text) {
+    return this._addBlock({ text, type: "unstyled" });
+  }
+
+  heading(text, level = 1) {
+    const types = { 1: "header-one", 2: "header-two", 3: "header-three" };
+    return this._addBlock({ text, type: types[level] ?? "header-one" });
+  }
+
+  blockquote(text) {
+    return this._addBlock({ text, type: "blockquote" });
+  }
+
+  bullet(text) {
+    return this._addBlock({ text, type: "unordered-list-item" });
+  }
+
+  orderedItem(text) {
+    return this._addBlock({ text, type: "ordered-list-item" });
+  }
+
+  // ── inline formatting ────────────────────────────────────────────
+
+  styled(segments) {
+    /**
+     * Paragraph with inline bold / italic / strikethrough styling.
+     *
+     * segments: Array of [text, style] pairs. style can be:
+     *   null                     — plain text
+     *   "bold" | "italic" | "strikethrough"
+     *   ["bold", "italic"]       — multiple styles at once
+     *
+     * Example:
+     *   builder.styled([
+     *     ["This article covers ", null],
+     *     ["three key points", "bold"],
+     *     [" you should know.", null],
+     *   ]);
+     */
+    let fullText = "";
+    const ranges = [];
+
+    for (const [text, style] of segments) {
+      const offset = fullText.length;
+      fullText += text;
+      if (style) {
+        const styles = Array.isArray(style) ? style : [style];
+        for (const s of styles) {
+          ranges.push({ offset, length: text.length, style: s });
+        }
+      }
+    }
+
+    const block = { text: fullText, type: "unstyled" };
+    if (ranges.length) block.inline_style_ranges = ranges;
+    return this._addBlock(block);
+  }
+
+  // ── mentions & hashtags ──────────────────────────────────────────
+
+  mentions(text) {
+    /**
+     * Paragraph that auto-detects @mentions and #hashtags.
+     *
+     * Example:
+     *   builder.mentions("Thanks @xdevelopers for shipping #XAPI!");
+     */
+    const detectedMentions = [...text.matchAll(/@(\w+)/g)].map((m) => ({
+      from_index: m.index,
+      to_index: m.index + m[0].length,
+      text: m[1],
+    }));
+    const detectedHashtags = [...text.matchAll(/#(\w+)/g)].map((m) => ({
+      from_index: m.index,
+      to_index: m.index + m[0].length,
+      text: m[1],
+    }));
+
+    const block = { text, type: "unstyled" };
+    if (detectedMentions.length || detectedHashtags.length) {
+      block.data = {};
+      if (detectedMentions.length) block.data.mentions = detectedMentions;
+      if (detectedHashtags.length) block.data.hashtags = detectedHashtags;
+    }
+    return this._addBlock(block);
+  }
+
+  // ── hyperlinks ───────────────────────────────────────────────────
+
+  link(linkText, url, { before = "", after = "" } = {}) {
+    /**
+     * Paragraph containing a clickable hyperlink.
+     *
+     * before / after: optional plain text surrounding the linked text.
+     *
+     * Example:
+     *   builder.link(
+     *     "X Developer Platform",
+     *     "https://developer.x.com",
+     *     { before: "Check out the ", after: " for the full API reference." }
+     *   );
+     */
+    const fullText = before + linkText + after;
+    const offset = before.length;
+    const key = this._registerEntity({
+      type: "link",
+      mutability: "mutable",
+      data: { url },
+    });
+
+    return this._addBlock({
+      text: fullText,
+      type: "unstyled",
+      entity_ranges: [{ offset, length: linkText.length, key }],
+      data: {
+        urls: [
+          { from_index: offset, to_index: offset + linkText.length, text: url },
+        ],
+      },
+    });
+  }
+
+  // ── embedded posts ───────────────────────────────────────────────
+
+  embedPost(postId) {
+    /**
+     * Embed another X Post inline as a full post card.
+     *
+     * Example:
+     *   builder.paragraph("Here's a post worth reading:");
+     *   builder.embedPost("1895586542058820000");
+     *   builder.paragraph("What do you think?");
+     */
+    const key = this._registerEntity({
+      type: "post",
+      mutability: "immutable",
+      data: { post_id: postId },
+    });
+    return this._addBlock({
+      text: " ",
+      type: "atomic",
+      entity_ranges: [{ offset: 0, length: 1, key }],
+    });
+  }
+
+  // ── output ───────────────────────────────────────────────────────
+
+  build() {
+    /** Return the content_state object, ready to pass to the API. */
+    return { blocks: this._blocks, entities: this._entities };
+  }
+}
+```
+
+</CodeGroup>
+
+---
+
+## Recipes
+
+### Plain text article
+
+The simplest possible article — paragraphs only.
+
+<CodeGroup>
+
+```python Python
+builder = ArticleBuilder()
+builder.paragraph("This is my first paragraph.")
+builder.paragraph("And this is my second paragraph. Keep going as long as you like.")
+
+payload = {
+    "title": "My Plain Article",
+    "content_state": builder.build(),
+}
+```
+
+```javascript JavaScript
+const builder = new ArticleBuilder();
+builder
+  .paragraph("This is my first paragraph.")
+  .paragraph("And this is my second paragraph. Keep going as long as you like.");
+
+const payload = {
+  title: "My Plain Article",
+  content_state: builder.build(),
+};
+```
+
+</CodeGroup>
+
+---
+
+### Headings and structure
+
+Use `heading(text, level)` with levels 1–3 to create H1, H2, and H3 headings.
+
+<CodeGroup>
+
+```python Python
+builder = ArticleBuilder()
+builder.heading("The State of the X API", level=1)
+builder.paragraph("X's developer platform has grown significantly in 2025.")
+
+builder.heading("New Endpoints", level=2)
+builder.paragraph("This year, several major endpoints were added across posts, media, and articles.")
+
+builder.heading("Articles API", level=3)
+builder.paragraph("Articles let developers publish long-form content programmatically.")
+
+payload = {
+    "title": "The State of the X API",
+    "content_state": builder.build(),
+}
+```
+
+```javascript JavaScript
+const builder = new ArticleBuilder();
+builder
+  .heading("The State of the X API", 1)
+  .paragraph("X's developer platform has grown significantly in 2025.")
+  .heading("New Endpoints", 2)
+  .paragraph("This year, several major endpoints were added across posts, media, and articles.")
+  .heading("Articles API", 3)
+  .paragraph("Articles let developers publish long-form content programmatically.");
+
+const payload = {
+  title: "The State of the X API",
+  content_state: builder.build(),
+};
+```
+
+</CodeGroup>
+
+---
+
+### Bold and italic formatting
+
+Use `styled()` to mix plain and formatted text within a single paragraph. Each segment is a `(text, style)` pair — pass `None` / `null` for unstyled runs.
+
+<CodeGroup>
+
+```python Python
+builder = ArticleBuilder()
+builder.styled([
+    ("The most important thing to remember is that ", None),
+    ("content_state is block-based", "bold"),
+    (". Each block maps to one visual row.", None),
+])
+builder.styled([
+    ("You can also use ", None),
+    ("italic", "italic"),
+    (" for emphasis, or even ", None),
+    ("bold italic", ["bold", "italic"]),
+    (" for extra stress.", None),
+])
+builder.styled([
+    ("Outdated info gets ", None),
+    ("struck through", "strikethrough"),
+    (" like this.", None),
+])
+```
+
+```javascript JavaScript
+const builder = new ArticleBuilder();
+builder
+  .styled([
+    ["The most important thing to remember is that ", null],
+    ["content_state is block-based", "bold"],
+    [". Each block maps to one visual row.", null],
+  ])
+  .styled([
+    ["You can also use ", null],
+    ["italic", "italic"],
+    [" for emphasis, or even ", null],
+    ["bold italic", ["bold", "italic"]],
+    [" for extra stress.", null],
+  ])
+  .styled([
+    ["Outdated info gets ", null],
+    ["struck through", "strikethrough"],
+    [" like this.", null],
+  ]);
+```
+
+</CodeGroup>
+
+---
+
+### @mentions and #hashtags
+
+Use `mentions()` for any paragraph that contains @usernames or #hashtags. It auto-detects them from the text — no manual indexing needed.
+
+<CodeGroup>
+
+```python Python
+builder = ArticleBuilder()
+builder.mentions(
+    "Big thanks to @xdevelopers for building #XAPI and @elonmusk for the vision."
+)
+```
+
+```javascript JavaScript
+const builder = new ArticleBuilder();
+builder.mentions(
+  "Big thanks to @xdevelopers for building #XAPI and @elonmusk for the vision."
+);
+```
+
+</CodeGroup>
+
+<Tip>
+Mix `mentions()` with other blocks freely. You can have a heading, then a `mentions()` paragraph, then a `paragraph()`, etc.
+</Tip>
+
+---
+
+### Hyperlinks
+
+Use `link()` for a paragraph that contains a clickable URL. Pass `before` / `after` for surrounding text.
+
+<CodeGroup>
+
+```python Python
+builder = ArticleBuilder()
+
+# Entire paragraph is a link
+builder.link("developer.x.com", url="https://developer.x.com")
+
+# Link surrounded by plain text
+builder.link(
+    "X Developer Platform",
+    url="https://developer.x.com",
+    before="For the full docs, visit the ",
+    after=".",
+)
+```
+
+```javascript JavaScript
+const builder = new ArticleBuilder();
+
+// Entire paragraph is a link
+builder.link("developer.x.com", "https://developer.x.com");
+
+// Link surrounded by plain text
+builder.link(
+  "X Developer Platform",
+  "https://developer.x.com",
+  { before: "For the full docs, visit the ", after: "." }
+);
+```
+
+</CodeGroup>
+
+---
+
+### Lists
+
+<CodeGroup>
+
+```python Python
+builder = ArticleBuilder()
+builder.heading("What you can do with Articles", level=2)
+
+# Unordered list
+builder.bullet("Write long-form content natively on X")
+builder.bullet("Use rich formatting: headings, bold, italic, and more")
+builder.bullet("Embed existing Posts directly in your article")
+
+# Ordered list
+builder.heading("Publishing steps", level=3)
+builder.ordered_item("Create a draft via POST /2/article/draft")
+builder.ordered_item("Receive your article_id")
+builder.ordered_item("Publish via POST /2/articles/{article_id}/publish")
+```
+
+```javascript JavaScript
+const builder = new ArticleBuilder();
+builder
+  .heading("What you can do with Articles", 2)
+  .bullet("Write long-form content natively on X")
+  .bullet("Use rich formatting: headings, bold, italic, and more")
+  .bullet("Embed existing Posts directly in your article")
+  .heading("Publishing steps", 3)
+  .orderedItem("Create a draft via POST /2/article/draft")
+  .orderedItem("Receive your article_id")
+  .orderedItem("Publish via POST /2/articles/{article_id}/publish");
+```
+
+</CodeGroup>
+
+---
+
+### Blockquote
+
+<CodeGroup>
+
+```python Python
+builder = ArticleBuilder()
+builder.paragraph("On the topic of developer experience, the team had this to say:")
+builder.blockquote(
+    "We want building on X to feel as simple as writing a tweet — "
+    "one call to create, one call to publish."
+)
+builder.paragraph("That philosophy drives the design of the Articles API.")
+```
+
+```javascript JavaScript
+const builder = new ArticleBuilder();
+builder
+  .paragraph("On the topic of developer experience, the team had this to say:")
+  .blockquote(
+    "We want building on X to feel as simple as writing a tweet — " +
+    "one call to create, one call to publish."
+  )
+  .paragraph("That philosophy drives the design of the Articles API.");
+```
+
+</CodeGroup>
+
+---
+
+### Embedded Post
+
+Use `embed_post()` to embed an existing X Post as a full card. Surround it with `paragraph()` blocks for context text above and below.
+
+<CodeGroup>
+
+```python Python
+builder = ArticleBuilder()
+builder.paragraph("The announcement that started it all:")
+builder.embed_post("1895586542058820000")
+builder.paragraph(
+    "The response from the community was overwhelming. "
+    "Here's what developers had to say."
+)
+builder.embed_post("1895600000000000000")
+```
+
+```javascript JavaScript
+const builder = new ArticleBuilder();
+builder
+  .paragraph("The announcement that started it all:")
+  .embedPost("1895586542058820000")
+  .paragraph(
+    "The response from the community was overwhelming. " +
+    "Here's what developers had to say."
+  )
+  .embedPost("1895600000000000000");
+```
+
+</CodeGroup>
+
+---
+
+### Cover media
+
+`cover_media` is a top-level field on the draft payload, not part of `content_state`. Upload your image first using the [Media Upload endpoint](/x-api/media/quickstart/media-upload-chunked), then reference the `media_id`.
+
+<CodeGroup>
+
+```python Python
+import requests
+
+USER_ACCESS_TOKEN = "YOUR_USER_ACCESS_TOKEN"
+
+builder = ArticleBuilder()
+builder.heading("A Visual Article", level=1)
+builder.paragraph("This article has a cover image.")
+
+payload = {
+    "title": "A Visual Article",
+    "content_state": builder.build(),
+    "cover_media": {
+        "media_category": "TWEET_IMAGE",
+        "media_id": "1234567890123456789",   # from the Media Upload API
+    },
+}
+
+response = requests.post(
+    "https://api.x.com/2/article/draft",
+    headers={
+        "Authorization": f"Bearer {USER_ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+    },
+    json=payload,
+)
+print(response.json())
+```
+
+```javascript JavaScript
+const USER_ACCESS_TOKEN = "YOUR_USER_ACCESS_TOKEN";
+
+const builder = new ArticleBuilder();
+builder.heading("A Visual Article", 1).paragraph("This article has a cover image.");
+
+const payload = {
+  title: "A Visual Article",
+  content_state: builder.build(),
+  cover_media: {
+    media_category: "TWEET_IMAGE",
+    media_id: "1234567890123456789", // from the Media Upload API
+  },
+};
+
+const response = await fetch("https://api.x.com/2/article/draft", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${USER_ACCESS_TOKEN}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(payload),
+});
+console.log(await response.json());
+```
+
+</CodeGroup>
+
+---
+
+### Full featured example
+
+Putting it all together — a complete article with every element type.
+
+<CodeGroup>
+
+```python Python
+import requests
+
+USER_ACCESS_TOKEN = "YOUR_USER_ACCESS_TOKEN"
+
+builder = ArticleBuilder()
+
+# Intro
+builder.heading("Developer Spotlight: Building with the X API", level=1)
+builder.mentions(
+    "This week we're highlighting the amazing work from @xdevelopers "
+    "and the broader #XDevCommunity."
+)
+
+# Body
+builder.heading("Why Articles?", level=2)
+builder.styled([
+    ("Articles give developers a ", None),
+    ("native long-form surface", "bold"),
+    (" on X — no external blog required. Write once, publish everywhere.", None),
+])
+
+builder.heading("Standout Integrations", level=2)
+builder.bullet("Automated research digests published daily")
+builder.bullet("Developer changelogs pushed straight from CI")
+builder.bullet("Event recaps with embedded post threads")
+
+# Blockquote
+builder.blockquote(
+    "Publishing an article via the API took under 20 lines of Python. "
+    "We're never going back. — Community member"
+)
+
+# Link
+builder.link(
+    "X Developer Platform",
+    url="https://developer.x.com",
+    before="Get started at the ",
+    after=".",
+)
+
+# Embedded post
+builder.paragraph("Here's the announcement post:")
+builder.embed_post("1895586542058820000")
+
+payload = {
+    "title": "Developer Spotlight: Building with the X API",
+    "content_state": builder.build(),
+    "cover_media": {
+        "media_category": "TWEET_IMAGE",
+        "media_id": "1234567890123456789",
+    },
+}
+
+# Create draft
+draft_response = requests.post(
+    "https://api.x.com/2/article/draft",
+    headers={
+        "Authorization": f"Bearer {USER_ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+    },
+    json=payload,
+)
+article_id = draft_response.json()["data"]["id"]
+print(f"Draft created: {article_id}")
+
+# Publish
+publish_response = requests.post(
+    f"https://api.x.com/2/articles/{article_id}/publish",
+    headers={"Authorization": f"Bearer {USER_ACCESS_TOKEN}"},
+)
+post_id = publish_response.json()["data"]["post_id"]
+print(f"Published! Post ID: {post_id}")
+```
+
+```javascript JavaScript
+const USER_ACCESS_TOKEN = "YOUR_USER_ACCESS_TOKEN";
+
+const builder = new ArticleBuilder();
+
+// Intro
+builder
+  .heading("Developer Spotlight: Building with the X API", 1)
+  .mentions(
+    "This week we're highlighting the amazing work from @xdevelopers " +
+    "and the broader #XDevCommunity."
+  )
+
+  // Body
+  .heading("Why Articles?", 2)
+  .styled([
+    ["Articles give developers a ", null],
+    ["native long-form surface", "bold"],
+    [" on X — no external blog required. Write once, publish everywhere.", null],
+  ])
+  .heading("Standout Integrations", 2)
+  .bullet("Automated research digests published daily")
+  .bullet("Developer changelogs pushed straight from CI")
+  .bullet("Event recaps with embedded post threads")
+
+  // Blockquote
+  .blockquote(
+    "Publishing an article via the API took under 20 lines of Python. " +
+    "We're never going back. — Community member"
+  )
+
+  // Link
+  .link("X Developer Platform", "https://developer.x.com", {
+    before: "Get started at the ",
+    after: ".",
+  })
+
+  // Embedded post
+  .paragraph("Here's the announcement post:")
+  .embedPost("1895586542058820000");
+
+const payload = {
+  title: "Developer Spotlight: Building with the X API",
+  content_state: builder.build(),
+  cover_media: {
+    media_category: "TWEET_IMAGE",
+    media_id: "1234567890123456789",
+  },
+};
+
+// Create draft
+const draftRes = await fetch("https://api.x.com/2/article/draft", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${USER_ACCESS_TOKEN}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify(payload),
+});
+const { data: { id: articleId } } = await draftRes.json();
+console.log(`Draft created: ${articleId}`);
+
+// Publish
+const publishRes = await fetch(
+  `https://api.x.com/2/articles/${articleId}/publish`,
+  { method: "POST", headers: { Authorization: `Bearer ${USER_ACCESS_TOKEN}` } }
+);
+const { data: { post_id: postId } } = await publishRes.json();
+console.log(`Published! Post ID: ${postId}`);
+```
+
+</CodeGroup>
+
+---
+
+## Content model reference
+
+### Block types
+
+| `type` value | Description |
+|:-------------|:------------|
+| `unstyled` | Plain paragraph (default block type) |
+| `header-one` | H1 heading |
+| `header-two` | H2 heading |
+| `header-three` | H3 heading |
+| `unordered-list-item` | Bullet list item |
+| `ordered-list-item` | Numbered list item |
+| `blockquote` | Blockquote |
+| `atomic` | Embedded element (post, image) — `text` must be a single space `" "` |
+
+### Inline styles
+
+Applied via `inline_style_ranges: [{ offset, length, style }]` on a block.
+
+| `style` value | Description |
+|:--------------|:------------|
+| `bold` | **Bold** text |
+| `italic` | *Italic* text |
+| `strikethrough` | ~~Struck-through~~ text |
+
+### Entity types
+
+Entities are registered in the top-level `entities` array and referenced from blocks via `entity_ranges`.
+
+| `type` value | `mutability` | Description |
+|:-------------|:-------------|:------------|
+| `link` | `mutable` | Hyperlink — `data.url` holds the destination URL |
+| `post` | `immutable` | Embedded X Post — `data.post_id` holds the Post ID |
+| `image` | `immutable` | Embedded image — see media upload docs for `data` shape |
+
+### Understanding offsets
+
+Offset values are **zero-based character positions** within a block's `text` string:
+
+```
+text:   "Hello, bold world!"
+index:   0123456789...
+
+{ "offset": 7, "length": 4, "style": "bold" }
+  → characters 7–10 = "bold"
+```
+
+For `data.mentions`, `data.hashtags`, and `data.urls`, `from_index` is inclusive and `to_index` is exclusive (Python slice convention). The `ArticleBuilder.styled()`, `link()`, and `mentions()` methods calculate all of these for you automatically.
