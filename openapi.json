@@ -2387,6 +2387,85 @@
         }
       }
     },
+    "/2/dm_conversations/media/{dm_id}/{media_id}/{resource_id}" : {
+      "get" : {
+        "security" : [
+          {
+            "OAuth2UserToken" : [
+              "dm.read"
+            ]
+          }
+        ],
+        "tags" : [
+          "Direct Messages"
+        ],
+        "summary" : "Download DM Media",
+        "description" : "Downloads media attached to a legacy Direct Message. The requesting user must be a participant in the conversation containing the specified DM event. The response body contains raw binary bytes.",
+        "externalDocs" : {
+          "url" : "https://developer.x.com/"
+        },
+        "operationId" : "dmConversationsMediaDownload",
+        "parameters" : [
+          {
+            "name" : "dm_id",
+            "in" : "path",
+            "description" : "The unique identifier of the Direct Message event containing the media.",
+            "required" : true,
+            "schema" : {
+              "$ref" : "#/components/schemas/DmEventId"
+            },
+            "style" : "simple"
+          },
+          {
+            "name" : "media_id",
+            "in" : "path",
+            "description" : "The unique identifier of the media attached to the Direct Message.",
+            "required" : true,
+            "schema" : {
+              "$ref" : "#/components/schemas/MediaId"
+            },
+            "style" : "simple"
+          },
+          {
+            "name" : "resource_id",
+            "in" : "path",
+            "description" : "The resource identifier of the media file, including file extension (e.g. 'hVJQTwig.jpg').",
+            "required" : true,
+            "schema" : {
+              "$ref" : "#/components/schemas/DmResourceId"
+            },
+            "style" : "simple"
+          }
+        ],
+        "responses" : {
+          "200" : {
+            "description" : "The request has succeeded.",
+            "content" : {
+              "application/octet-stream" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BinaryPayload"
+                }
+              }
+            }
+          },
+          "default" : {
+            "description" : "The request has failed.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/2/dm_conversations/with/{participant_id}/dm_events" : {
       "get" : {
         "security" : [
@@ -15976,6 +16055,12 @@
           "$ref" : "#/components/schemas/UserId"
         }
       },
+      "DmResourceId" : {
+        "type" : "string",
+        "description" : "The resource identifier of the media file, including file extension.",
+        "pattern" : "^[a-zA-Z0-9_.-]{1,50}$",
+        "example" : "tJg5kUG5RKPi3jNi.jpg"
+      },
       "DomainRestrictions" : {
         "type" : "object",
         "required" : [
@@ -20257,6 +20342,9 @@
           "post_id" : {
             "$ref" : "#/components/schemas/TweetId"
           },
+          "scoring_status" : {
+            "$ref" : "#/components/schemas/NoteScoringStatus"
+          },
           "status" : {
             "$ref" : "#/components/schemas/NoteRatingStatus"
           },
@@ -20272,6 +20360,52 @@
           "misinformed_or_potentially_misleading",
           "not_misleading"
         ]
+      },
+      "NoteFactorBucketCounts" : {
+        "type" : "object",
+        "description" : "Rating counts for a rater factor bucket.",
+        "properties" : {
+          "helpful_count" : {
+            "type" : "integer",
+            "description" : "The count of helpful ratings."
+          },
+          "helpful_tag_counts" : {
+            "type" : "object",
+            "description" : "Helpful tag counts.",
+            "properties" : {
+              "tag_count" : {
+                "type" : "integer",
+                "description" : "The count of the tag."
+              },
+              "tag_name" : {
+                "type" : "string",
+                "description" : "The name of the tag."
+              }
+            }
+          },
+          "not_helpful_count" : {
+            "type" : "integer",
+            "description" : "The count of not helpful ratings."
+          },
+          "not_helpful_tag_counts" : {
+            "type" : "object",
+            "description" : "Not helpful tag counts.",
+            "properties" : {
+              "tag_count" : {
+                "type" : "integer",
+                "description" : "The count of the tag."
+              },
+              "tag_name" : {
+                "type" : "string",
+                "description" : "The name of the tag."
+              }
+            }
+          },
+          "somewhat_helpful_count" : {
+            "type" : "integer",
+            "description" : "The count of somewhat helpful ratings."
+          }
+        }
       },
       "NoteId" : {
         "type" : "string",
@@ -20310,6 +20444,21 @@
         },
         "additionalProperties" : false
       },
+      "NoteRatingCountsPerModel" : {
+        "type" : "object",
+        "description" : "The rating counts of a Community Note per model.",
+        "properties" : {
+          "negative_factor_bucket_counts" : {
+            "$ref" : "#/components/schemas/NoteFactorBucketCounts"
+          },
+          "neutral_factor_bucket_counts" : {
+            "$ref" : "#/components/schemas/NoteFactorBucketCounts"
+          },
+          "positive_factor_bucket_counts" : {
+            "$ref" : "#/components/schemas/NoteFactorBucketCounts"
+          }
+        }
+      },
       "NoteRatingStatus" : {
         "type" : "string",
         "description" : "Community Note rating status",
@@ -20322,6 +20471,29 @@
           "needs_more_ratings",
           "needs_your_help"
         ]
+      },
+      "NoteScoringStatus" : {
+        "type" : "object",
+        "description" : "The scoring status of a Community Note.",
+        "properties" : {
+          "has_access" : {
+            "type" : "boolean",
+            "description" : "Whether the user has access to the scoring status of the Community Note."
+          },
+          "rating_counts_per_model" : {
+            "type" : "object",
+            "description" : "Rating count stats per model.",
+            "properties" : {
+              "model_name" : {
+                "type" : "string",
+                "description" : "The name of the model."
+              },
+              "value" : {
+                "$ref" : "#/components/schemas/NoteRatingCountsPerModel"
+              }
+            }
+          }
+        }
       },
       "NoteTestResult" : {
         "type" : "object",
@@ -25155,6 +25327,7 @@
             "enum" : [
               "id",
               "info",
+              "scoring_status",
               "status",
               "test_result"
             ]
@@ -25162,6 +25335,7 @@
           "example" : [
             "id",
             "info",
+            "scoring_status",
             "status",
             "test_result"
           ]
