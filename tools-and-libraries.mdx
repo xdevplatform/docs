@@ -1,67 +1,323 @@
 ---
-title: Tools and Libraries
-mode: wide
+title: Tools & Libraries
 icon: toolbox
-keywords: ["tools", "libraries", "SDK", "client libraries", "Postman", "xurl", "embed generator", "developer tools", "API tools", "code libraries", "Python SDK", "TypeScript SDK"]
+description: Official SDKs, community libraries, and developer tools for the X API
+keywords: ["tools", "libraries", "SDK", "XDK", "client libraries", "Postman", "xurl", "developer tools", "API tools", "code libraries", "Python SDK", "TypeScript SDK"]
 ---
 
-<CardGroup cols={3}>
-  <Card title="X API" icon="square-x-twitter" iconType="solid">
-  The X API is a set of programmatic tools that can be used to learn from and engage with the conversation on X.
+import { Button } from '/snippets/button.mdx';
 
-  <br />
-  [Explore tools](/x-api/tools-and-libraries/overview) <Icon icon="angle-right"/>
-  </Card>
-  <Card title="X Ads API" icon="rectangle-ad" iconType="solid">
-  The X Ads API allows you to programmatically integrate with the X Ads platform.
+Speed up your development with official SDKs, community libraries, and developer tools.
 
-<br />
-<br />
-  [Explore tools](/x-ads-api/tools-and-libraries) <Icon icon="angle-right"/>
-  </Card>
-  <Card title="X for Websites" icon="laptop-code" iconType="solid">
-  The X for Websites suite allows you to embed X’s live content into your product and optimize links to your site on X.
+---
 
-<br />
-  [Explore tools](https://developer.x.com/docs/twitter-for-websites/tools-and-libraries) <Icon icon="angle-right"/>
-  </Card>
-</CardGroup>
+## Official SDKs
 
-## General Tools
+X provides official SDKs for TypeScript and Python with full X API v2 support.
+
 <CardGroup cols={2}>
-    <Card title="XDKs" icon="code" iconType="solid">
-  Official SDKs for the X APIs.
-
-<br />
-<br />
-<br />
-<br />
-  [Learn more](/xdks/overview) <Icon icon="angle-right"/>
+  <Card title="Python SDK" icon="python" href="/xdks/python/overview">
+    Async support, type hints, and automatic token refresh. Perfect for data analysis and automation.
   </Card>
-  <Card title="xurl" icon="key" iconType="solid">
-  A command line tool that can be used across the X APIs, and handles authentication for you.
-
-<br />
-<br />
-<br />
-<br />
-  [Learn more](https://github.com/xdevplatform/xurl) <Icon icon="angle-right"/>
-  </Card>
-  <Card title="Postman" icon="envelopes-bulk" iconType="solid">
-  [Postman](https://www.getpostman.com/) is a REST client that allows us to make requests to APIs inside of a user interface. Use this guide to get started with this tool.
-
-<br />
-  [Learn more](/tutorials/postman-getting-started) <Icon icon="angle-right"/>
-  </Card>
-  <Card title="Embed generator" icon="terminal" iconType="solid">
-  Use our embed generator to automatically build an embeddable Tweet, timeline, or button that you can add to your web property.
-
-<br />
-<br />
-  [Visit publish.x.com](https://publish.x.com/#) <Icon icon="angle-right"/>
+  <Card title="TypeScript SDK" icon="js" href="/xdks/typescript/overview">
+    Full type safety and ESM support. Works in Node.js and modern bundlers.
   </Card>
 </CardGroup>
 
------------------------
+### Why use the official SDKs?
 
+| Benefit | Description |
+|:--------|:------------|
+| **Always up-to-date** | Maintained by X, updated with new endpoints |
+| **Type safety** | Full type definitions for all objects and methods |
+| **Built-in auth** | OAuth 2.0 and OAuth 1.0a support |
+| **Automatic pagination** | Iterate through results without manual token handling |
 
+### Quick start
+
+<Tabs>
+  <Tab title="Python">
+#### Installation
+
+```bash
+pip install xdk
+```
+
+#### Basic usage
+
+```python
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Search for posts (returns an iterator)
+for page in client.posts.search_recent(query="api", max_results=10):
+    if page.data and len(page.data) > 0:
+        first_post = page.data[0]
+        print(first_post.text)
+        break
+```
+
+<Button href="/xdks/python/overview">Full Python guide</Button>
+  </Tab>
+  <Tab title="TypeScript">
+#### Installation
+
+```bash
+npm install @xdevplatform/xdk
+```
+
+#### Basic usage
+
+```typescript
+import { Client } from '@xdevplatform/xdk';
+
+const client = new Client({ bearerToken: 'YOUR_BEARER_TOKEN' });
+
+// Look up a user
+const userResponse = await client.users.getByUsername('XDevelopers');
+console.log(userResponse.data?.username);
+```
+
+<Button href="/xdks/typescript/overview">Full TypeScript guide</Button>
+  </Tab>
+</Tabs>
+
+### Authentication
+
+Both SDKs support multiple authentication methods:
+
+<Tabs>
+  <Tab title="Bearer Token (App-only)">
+Simplest option for reading public data.
+
+**Python:**
+```python
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+```
+
+**TypeScript:**
+```typescript
+import { Client } from '@xdevplatform/xdk';
+
+const client = new Client({ bearerToken: 'YOUR_BEARER_TOKEN' });
+```
+  </Tab>
+  <Tab title="OAuth 2.0 (User Context)">
+For actions on behalf of users (posting, following, etc.).
+
+**Python:**
+```python
+from xdk import Client
+from xdk.oauth2_auth import OAuth2PKCEAuth
+
+auth = OAuth2PKCEAuth(
+    client_id="YOUR_CLIENT_ID",
+    redirect_uri="YOUR_CALLBACK_URL",
+    scope="tweet.read users.read offline.access"
+)
+
+# Get authorization URL
+auth_url = auth.get_authorization_url()
+
+# After user authorizes, exchange code for tokens
+tokens = auth.fetch_token(authorization_response=callback_url)
+client = Client(bearer_token=tokens["access_token"])
+```
+
+**TypeScript:**
+```typescript
+import { Client, OAuth2, generateCodeVerifier, generateCodeChallenge } from '@xdevplatform/xdk';
+
+const oauth2 = new OAuth2({
+  clientId: 'YOUR_CLIENT_ID',
+  clientSecret: 'YOUR_CLIENT_SECRET',
+  redirectUri: 'https://your-app.com/callback',
+  scope: ['tweet.read', 'users.read', 'offline.access'],
+});
+
+const codeVerifier = generateCodeVerifier();
+const codeChallenge = await generateCodeChallenge(codeVerifier);
+oauth2.setPkceParameters(codeVerifier, codeChallenge);
+const authUrl = await oauth2.getAuthorizationUrl('state');
+
+// After authorization, exchange code
+const tokens = await oauth2.exchangeCode(authCode, codeVerifier);
+const client = new Client({ accessToken: tokens.access_token });
+```
+  </Tab>
+  <Tab title="OAuth 1.0a (User Context)">
+For legacy applications or specific use cases.
+
+**Python:**
+```python
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+```
+
+**TypeScript:**
+```typescript
+import { Client, OAuth1 } from '@xdevplatform/xdk';
+
+const oauth1 = new OAuth1({
+  apiKey: 'YOUR_API_KEY',
+  apiSecret: 'YOUR_API_SECRET',
+  accessToken: 'YOUR_ACCESS_TOKEN',
+  accessTokenSecret: 'YOUR_ACCESS_TOKEN_SECRET'
+});
+
+const client = new Client({ oauth1: oauth1 });
+```
+  </Tab>
+</Tabs>
+
+### Available methods
+
+The SDKs provide methods for all X API v2 endpoints:
+
+| Category | Python | TypeScript |
+|:---------|:-------|:-----------|
+| **Posts** | `client.posts.search_recent()` | `client.posts.search()` |
+| **Users** | `client.users.get_me()` | `client.users.getMe()` |
+| **Spaces** | `client.spaces.get()` | `client.spaces.findSpaceById()` |
+| **Lists** | `client.lists.get()` | `client.lists.getList()` |
+| **DMs** | `client.direct_messages.get()` | `client.directMessages.lookup()` |
+
+<CardGroup cols={2}>
+  <Card title="Python SDK Docs" icon="book" href="/xdks/python/overview">
+    Complete Python documentation.
+  </Card>
+  <Card title="TypeScript SDK Docs" icon="book" href="/xdks/typescript/overview">
+    Complete TypeScript documentation.
+  </Card>
+  <Card title="Python GitHub" icon="github" href="https://github.com/xdevplatform/xdk-py">
+    Source code and issues.
+  </Card>
+  <Card title="TypeScript GitHub" icon="github" href="https://github.com/xdevplatform/twitter-api-typescript-sdk">
+    Source code and issues.
+  </Card>
+</CardGroup>
+
+---
+
+## Official tools
+
+| Tool | Description |
+|:-----|:------------|
+| [Postman Collection](https://www.postman.com/xapidevelopers/x-api-public-workspace/collection/34902927-2efc5689-99c6-4ab6-8091-996f35c2fd80) | Interactive API testing for all v2 endpoints |
+| [xurl](https://github.com/xdevplatform/xurl) | Command line tool for the X APIs that handles authentication for you |
+| [OpenAPI Spec](https://api.x.com/2/openapi.json) | Machine-readable API specification |
+| [twitter-text](https://github.com/twitter/twitter-text) | Parse and validate post text, count characters |
+| [Embed Generator](https://publish.x.com/#) | Build embeddable posts, timelines, or buttons for your site |
+
+---
+
+## Community libraries
+
+These community-maintained libraries support X API v2. Check each library's documentation for current API coverage.
+
+<Tabs>
+  <Tab title="Python">
+| Library | Description |
+|:--------|:------------|
+| [tweepy](https://github.com/tweepy/tweepy) | Popular Python library with v2 support |
+| [twarc](https://twarc-project.readthedocs.io/) | CLI and library for data collection |
+| [python-twitter](https://github.com/sns-sdks/python-twitter) | Simple Python wrapper |
+| [TwitterAPI](https://github.com/geduldig/TwitterAPI) | Minimal Python wrapper |
+  </Tab>
+  <Tab title="JavaScript/TypeScript">
+| Library | Description |
+|:--------|:------------|
+| [node-twitter-api-v2](https://github.com/PLhery/node-twitter-api-v2) | Strongly-typed, full-featured Node.js client |
+| [twitter.js](https://github.com/twitterjs/twitter.js) | Object-oriented Node.js library |
+| [twitter-v2](https://github.com/HunterLarco/twitter-v2) | Async client library |
+  </Tab>
+  <Tab title="Go">
+| Library | Description |
+|:--------|:------------|
+| [go-twitter](https://github.com/g8rswimmer/go-twitter) | Go library for v2 API |
+| [gotwi](https://github.com/michimani/gotwi) | Go wrapper for v2 |
+| [twitter-stream](https://github.com/Fallenstedt/twitter-stream) | Filtered stream wrapper |
+  </Tab>
+  <Tab title="Java/Kotlin">
+| Library | Description |
+|:--------|:------------|
+| [twittered](https://github.com/redouane59/twittered) | Java client for v2 |
+| [twitter4j-v2](https://github.com/takke/twitter4j-v2) | Twitter4J v2 wrapper |
+| [KTweet](https://github.com/ChromasIV/KTweet) | Kotlin v2 library |
+| [Tweedle](https://github.com/tyczj/Tweedle) | Kotlin Android library |
+  </Tab>
+  <Tab title="PHP">
+| Library | Description |
+|:--------|:------------|
+| [twitter-api-v2-php](https://github.com/noweh/twitter-api-v2-php) | PHP v2 client |
+| [bird-elephant](https://github.com/danieldevine/bird-elephant) | PHP v2 library |
+| [twitteroauth](https://github.com/abraham/twitteroauth) | Popular OAuth library |
+  </Tab>
+  <Tab title="Ruby">
+| Library | Description |
+|:--------|:------------|
+| [tweetkit](https://github.com/julianfssen/tweetkit) | Ruby v2 client |
+| [twitter_oauth2](https://github.com/nov/twitter_oauth2) | OAuth 2.0 library |
+| [omniauth-twitter2](https://github.com/unasuke/omniauth-twitter2) | OmniAuth strategy |
+  </Tab>
+  <Tab title="Other">
+| Language | Library |
+|:---------|:--------|
+| **C#/.NET** | [Tweetinvi](https://github.com/linvi/tweetinvi), [LinqToTwitter](https://github.com/JoeMayo/LinqToTwitter) |
+| **Rust** | [twitter-v2](https://github.com/jpopesculian/twitter-v2-rs) |
+| **Swift** | [Twift](https://github.com/daneden/Twift/), [TwitterAPIKit](https://github.com/mironal/TwitterAPIKit) |
+| **R** | [academictwitteR](https://github.com/cjbarrie/academictwitteR) |
+| **PowerShell** | [BluebirdPS](https://github.com/thedavecarroll/BluebirdPS) |
+  </Tab>
+</Tabs>
+
+<Note>
+Community libraries are not maintained by X. Check their repositories for support and current status.
+</Note>
+
+---
+
+## X Ads API libraries
+
+For tools and libraries specific to the X Ads API, see the [Ads API tools and libraries](/x-ads-api/tools-and-libraries) page.
+
+---
+
+## Code samples
+
+Find examples on GitHub:
+
+- [X API v2 Sample Code](https://github.com/xdevplatform/Twitter-API-v2-sample-code) - Examples in Python, JavaScript, Ruby, and more
+- [X Developer GitHub](https://github.com/xdevplatform) - Official repos and tools
+- [Code Samples Repo](https://github.com/xdevplatform/samples) - Examples using the official XDKs
+- [Glitch Examples](https://glitch.com/@twitter) - Interactive, remixable apps
+- [Replit Examples](https://replit.com/@twitter) - Browser-based coding
+
+---
+
+## Building a library?
+
+If you have built an X API library, share it with the community:
+
+1. Post in the [Libraries and SDKs forum](https://devcommunity.x.com/c/libraries-and-sdks/63)
+2. We may add it to this page!
+
+---
+
+## Getting help
+
+<Card title="Developer Forum" icon="comments" href="https://devcommunity.x.com">
+  Get help from the community.
+</Card>
