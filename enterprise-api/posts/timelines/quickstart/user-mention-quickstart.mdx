@@ -1,0 +1,250 @@
+---
+title: User Mentions Timeline
+sidebarTitle: User Mentions
+description: Get Posts that mention a specific user
+keywords: ["user mentions", "mentions timeline", "mentions quickstart", "mentions tutorial", "mention timeline", "get mentions"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide walks you through retrieving Posts that mention a specific user.
+
+<Note>
+**Prerequisites**
+
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- Your App's Bearer Token (for public data) or User Access Token (for private metrics)
+</Note>
+
+---
+
+## Get user mentions
+
+<Steps>
+  <Step title="Get the user ID">
+    Find the user ID using the [user lookup endpoint](/enterprise-api/users/lookup/introduction). For example, @XDevelopers has user ID `2244994945`.
+  </Step>
+
+  <Step title="Request the mentions timeline">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/mentions?\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id&\
+user.fields=username,verified&\
+max_results=10" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get mentions timeline with pagination
+for page in client.posts.get_user_mentions(
+    "2244994945",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username", "verified"],
+    max_results=10
+):
+    for post in page.data:
+        print(f"@{post.author_id}: {post.text[:50]}...")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get mentions timeline with pagination
+const paginator = client.posts.getUserMentions("2244994945", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username", "verified"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`@${post.author_id}: ${post.text?.slice(0, 50)}...`);
+  });
+}
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Review the response">
+    ```json
+    {
+      "data": [
+        {
+          "id": "1301573587187331074",
+          "text": "Hey @XDevelopers, love the new API!",
+          "author_id": "1234567890",
+          "created_at": "2024-01-15T10:30:00.000Z",
+          "public_metrics": {
+            "retweet_count": 5,
+            "reply_count": 2,
+            "like_count": 42,
+            "quote_count": 1
+          }
+        }
+      ],
+      "includes": {
+        "users": [
+          {
+            "id": "1234567890",
+            "username": "developer",
+            "name": "Dev Person",
+            "verified": false
+          }
+        ]
+      },
+      "meta": {
+        "newest_id": "1301573587187331074",
+        "oldest_id": "1301573587187331074",
+        "result_count": 1,
+        "next_token": "t3buvdr5pujq9g7bggsnf3ep2ha28"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Filter mentions
+
+### Exclude replies
+
+Get only original Posts that mention the user:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/mentions?\
+exclude=replies&\
+max_results=10" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get mentions excluding replies
+for page in client.posts.get_user_mentions(
+    "2244994945",
+    exclude=["replies"],
+    max_results=10
+):
+    for post in page.data:
+        print(post.text)
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get mentions excluding replies
+const paginator = client.posts.getUserMentions("2244994945", {
+  exclude: ["replies"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(post.text);
+  });
+}
+```
+
+</CodeGroup>
+
+### Get mentions in a time range
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/mentions?\
+start_time=2024-01-01T00%3A00%3A00Z&\
+end_time=2024-01-31T23%3A59%3A59Z" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get mentions in a time range
+for page in client.posts.get_user_mentions(
+    "2244994945",
+    start_time="2024-01-01T00:00:00Z",
+    end_time="2024-01-31T23:59:59Z"
+):
+    for post in page.data:
+        print(f"{post.created_at}: {post.text[:50]}...")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get mentions in a time range
+const paginator = client.posts.getUserMentions("2244994945", {
+  startTime: "2024-01-01T00:00:00Z",
+  endTime: "2024-01-31T23:59:59Z",
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.created_at}: ${post.text?.slice(0, 50)}...`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Common parameters
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `max_results` | Results per page (1-100) | 10 |
+| `start_time` | Oldest Post timestamp (ISO 8601) | — |
+| `end_time` | Newest Post timestamp (ISO 8601) | — |
+| `since_id` | Return Posts after this ID | — |
+| `until_id` | Return Posts before this ID | — |
+| `exclude` | Exclude `retweets`, `replies`, or both | — |
+| `pagination_token` | Token for next page | — |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Home timeline" icon="house" href="/enterprise-api/posts/timelines/quickstart/reverse-chron-quickstart">
+    Get user's home timeline
+  </Card>
+  <Card title="Integration guide" icon="book" href="/enterprise-api/posts/timelines/integrate">
+    Key concepts and best practices
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/posts/user-mention-timeline-by-user-id">
+    Full endpoint documentation
+  </Card>
+  <Card title="Pagination guide" icon="arrow-right" href="/enterprise-api/fundamentals/pagination">
+    Navigate large result sets
+  </Card>
+</CardGroup>

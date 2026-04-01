@@ -1,0 +1,281 @@
+---
+title: Integration Guide
+sidebarTitle: Integration Guide
+description: Key concepts and best practices for integrating List lookup
+keywords: ["list lookup integration", "lists integration guide", "list lookup implementation"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide covers the key concepts you need to integrate the List lookup endpoints into your application.
+
+---
+
+## Authentication
+
+List lookup endpoints support multiple authentication methods:
+
+| Method | Best for | Access to private Lists? |
+|:-------|:---------|:-------------------------|
+| [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) | Public List data | No |
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | User-facing apps | Yes (owned/followed) |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | Legacy integrations | Yes (owned/followed) |
+
+### Example request
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/lists/84839422?\
+list.fields=description,member_count,follower_count,private" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get a List by ID
+response = client.lists.get(
+    list_id="84839422",
+    list_fields=["description", "member_count", "follower_count", "private"]
+)
+print(response.data)
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+const response = await client.lists.get("84839422", {
+  listFields: ["description", "member_count", "follower_count", "private"],
+});
+console.log(response.data);
+```
+
+</CodeGroup>
+
+---
+
+## Endpoints overview
+
+| Method | Endpoint | Description |
+|:-------|:---------|:------------|
+| GET | [`/2/lists/:id`](/enterprise-api/lists/get-list) | Get List by ID |
+| GET | [`/2/users/:id/owned_lists`](/enterprise-api/users/get-owned-lists) | Get Lists owned by a user |
+
+---
+
+## Fields and expansions
+
+### Default response
+
+```json
+{
+  "data": {
+    "id": "84839422",
+    "name": "Tech News"
+  }
+}
+```
+
+### Available fields
+
+<Accordion title="list.fields">
+| Field | Description |
+|:------|:------------|
+| `created_at` | List creation timestamp |
+| `description` | List description |
+| `follower_count` | Number of followers |
+| `member_count` | Number of members |
+| `owner_id` | Owner's user ID |
+| `private` | Whether List is private |
+</Accordion>
+
+<Accordion title="user.fields (requires owner_id expansion)">
+| Field | Description |
+|:------|:------------|
+| `username` | Owner's @handle |
+| `name` | Owner's display name |
+| `verified` | Owner's verification status |
+| `profile_image_url` | Owner's avatar URL |
+</Accordion>
+
+### Example with expansions
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/lists/84839422?\
+list.fields=description,member_count,follower_count,owner_id&\
+expansions=owner_id&\
+user.fields=username,verified" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get List with owner expansion
+response = client.lists.get(
+    list_id="84839422",
+    list_fields=["description", "member_count", "follower_count", "owner_id"],
+    expansions=["owner_id"],
+    user_fields=["username", "verified"]
+)
+
+print(response.data)
+print(response.includes)  # Contains owner user object
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+const response = await client.lists.get("84839422", {
+  listFields: ["description", "member_count", "follower_count", "owner_id"],
+  expansions: ["owner_id"],
+  userFields: ["username", "verified"],
+});
+
+console.log(response.data);
+console.log(response.includes); // Contains owner user object
+```
+
+</CodeGroup>
+
+### Response with expansion
+
+```json
+{
+  "data": {
+    "id": "84839422",
+    "name": "Tech News",
+    "description": "Top tech journalists",
+    "member_count": 50,
+    "follower_count": 1250,
+    "owner_id": "2244994945"
+  },
+  "includes": {
+    "users": [
+      {
+        "id": "2244994945",
+        "username": "XDevelopers",
+        "verified": true
+      }
+    ]
+  }
+}
+```
+
+<Card title="Fields and expansions guide" icon="sliders" href="/enterprise-api/fundamentals/fields">
+  Learn more about customizing responses
+</Card>
+
+---
+
+## Pagination
+
+When retrieving owned Lists, results are paginated:
+
+<CodeGroup dropdown>
+
+```bash cURL
+# First request
+curl "https://api.x.com/2/users/123/owned_lists?max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+
+# Subsequent request with pagination token
+curl "https://api.x.com/2/users/123/owned_lists?max_results=100&pagination_token=NEXT_TOKEN" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# The SDK handles pagination automatically
+all_lists = []
+
+for page in client.lists.get_user_owned_lists(user_id="123", max_results=100):
+    if page.data:
+        all_lists.extend(page.data)
+
+print(f"Found {len(all_lists)} lists")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+async function getAllOwnedLists(userId) {
+  const allLists = [];
+
+  // The SDK handles pagination automatically
+  const paginator = client.lists.getUserOwnedLists(userId, { maxResults: 100 });
+
+  for await (const page of paginator) {
+    if (page.data) {
+      allLists.push(...page.data);
+    }
+  }
+
+  return allLists;
+}
+
+// Usage
+const lists = await getAllOwnedLists("123");
+console.log(`Found ${lists.length} lists`);
+```
+
+</CodeGroup>
+
+<Card title="Pagination guide" icon="arrow-right" href="/enterprise-api/fundamentals/pagination">
+  Learn more about pagination
+</Card>
+
+---
+
+## Private Lists
+
+- Private Lists are only visible to the owner
+- You must authenticate as the owner to retrieve private List details
+- The `private` field indicates whether a List is private
+
+---
+
+## Error handling
+
+| Status | Error | Solution |
+|:-------|:------|:---------|
+| 400 | Invalid request | Check List ID format |
+| 401 | Unauthorized | Verify authentication |
+| 403 | Forbidden | List may be private |
+| 404 | Not Found | List doesn't exist |
+| 429 | Too Many Requests | Wait and retry |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/enterprise-api/lists/list-lookup/quickstart">
+    Make your first List lookup request
+  </Card>
+  <Card title="List Posts" icon="list" href="/enterprise-api/lists/list-tweets/introduction">
+    Get Posts from a List
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/lists/get-list">
+    Full endpoint documentation
+  </Card>
+  <Card title="Sample code" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    Working code examples
+  </Card>
+</CardGroup>

@@ -1,0 +1,265 @@
+---
+title: Integration Guide
+sidebarTitle: Overview
+description: Key concepts and best practices for integrating Search Posts
+keywords: ["search integration", "search overview", "search guide", "search implementation", "tweet search integration"]
+---
+
+This guide covers the key concepts you need to integrate the Search Posts endpoints into your application.
+
+---
+
+## Authentication
+
+### Recent search
+
+Recent search supports multiple authentication methods:
+
+| Method | Use case |
+|:-------|:---------|
+| [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) | Public Post data |
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | Private metrics |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | Private metrics |
+
+### Full-archive search
+
+Full-archive search only supports [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) authentication.
+
+<Warning>
+Private metrics (`non_public_metrics`, `organic_metrics`, `promoted_metrics`) are not available with full-archive search because it only supports App-Only authentication.
+</Warning>
+
+---
+
+## Building queries
+
+Queries use operators to match Posts. Combine operators with boolean logic:
+
+```
+(AI OR "machine learning") lang:en -is:retweet has:links
+```
+
+### Query length limits
+
+| Access level | Recent search | Full-archive search |
+|:-------------|:--------------|:--------------------|
+| Self-serve | 512 chars | 1,024 chars |
+| Enterprise | 4,096 chars | 4,096 chars |
+
+### Operator types
+
+| Type | Description | Example |
+|:-----|:------------|:--------|
+| **Standalone** | Can be used alone | `#python`, `from:user` |
+| **Conjunction-required** | Must be used with a standalone operator | `has:media`, `is:retweet` |
+
+<Card title="Build a query" icon="magnifying-glass" href="/enterprise-api/posts/search/integrate/build-a-query">
+  Learn query syntax in detail
+</Card>
+
+<Card title="Operator reference" icon="list-check" href="/enterprise-api/posts/search/integrate/operators">
+  See all available operators
+</Card>
+
+---
+
+## Fields and expansions
+
+By default, the response includes only `id`, `text`, and `edit_history_tweet_ids`. Use parameters to request additional data.
+
+### Example request
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/recent?\
+query=python&\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id,attachments.media_keys&\
+user.fields=username,verified&\
+media.fields=url,type" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Search recent Posts
+for page in client.posts.search_recent(
+    query="python",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id", "attachments.media_keys"],
+    user_fields=["username", "verified"],
+    media_fields=["url", "type"],
+    max_results=100
+):
+    for post in page.data:
+        print(f"{post.text} - Likes: {post.public_metrics.like_count}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Search recent Posts
+const paginator = client.posts.searchRecent("python", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id", "attachments.media_keys"],
+  userFields: ["username", "verified"],
+  mediaFields: ["url", "type"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text} - Likes: ${post.public_metrics?.like_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+### Available expansions
+
+| Expansion | Returns |
+|:----------|:--------|
+| `author_id` | Author's user object |
+| `attachments.media_keys` | Attached media objects |
+| `attachments.poll_ids` | Attached poll objects |
+| `referenced_tweets.id` | Quoted or replied-to Posts |
+| `geo.place_id` | Place objects |
+| `entities.mentions.username` | Mentioned user objects |
+
+<Card title="Fields and expansions guide" icon="sliders" href="/enterprise-api/fundamentals/fields">
+  Learn more about customizing responses
+</Card>
+
+---
+
+## Pagination
+
+Search endpoints return results in pages. Use the `next_token` from the response to fetch additional pages.
+
+### How it works
+
+1. Make your initial request with `max_results`
+2. Check the `meta` object for `next_token`
+3. Include `next_token` in subsequent requests
+4. Repeat until no `next_token` is returned
+
+### Example
+
+<CodeGroup dropdown>
+
+```bash cURL
+# First request
+curl "https://api.x.com/2/tweets/search/recent?query=python&max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+
+# Subsequent request with pagination token
+curl "https://api.x.com/2/tweets/search/recent?query=python&max_results=100&next_token=NEXT_TOKEN" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# The SDK handles pagination automatically
+all_posts = []
+
+for page in client.posts.search_recent(query="python", max_results=100):
+    if page.data:
+        all_posts.extend(page.data)
+
+print(f"Found {len(all_posts)} posts")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+async function getAllResults(query) {
+  const allPosts = [];
+
+  // The SDK handles pagination automatically
+  const paginator = client.posts.searchRecent(query, { maxResults: 100 });
+
+  for await (const page of paginator) {
+    if (page.data) {
+      allPosts.push(...page.data);
+    }
+  }
+
+  return allPosts;
+}
+
+// Usage
+const posts = await getAllResults("python");
+console.log(`Found ${posts.length} posts`);
+```
+
+</CodeGroup>
+
+<Card title="Pagination guide" icon="arrow-right" href="/enterprise-api/posts/search/integrate/paginate">
+  Learn more about pagination
+</Card>
+
+---
+
+## Post edits
+
+Posts can be edited up to 5 times within 30 minutes. The search endpoints always return the most recent version.
+
+### Considerations
+
+- `edit_history_tweet_ids` contains all Post IDs (oldest first)
+- Posts fetched after the 30-minute window represent the final version
+- For near-real-time use cases, recently-published Posts may still be edited
+
+<Card title="Edit Posts fundamentals" icon="clock-rotate-left" href="/enterprise-api/fundamentals/edit-posts">
+  Learn more about Post edits
+</Card>
+
+---
+
+## Best practices
+
+<CardGroup cols={2}>
+  <Card title="Start specific" icon="crosshairs">
+    Use multiple operators to narrow results and reduce noise.
+  </Card>
+  <Card title="Test iteratively" icon="flask">
+    Start broad, then refine based on results.
+  </Card>
+  <Card title="Handle pagination" icon="arrow-right">
+    Implement proper pagination for large result sets.
+  </Card>
+  <Card title="Cache results" icon="database">
+    Store results locally to avoid repeated requests.
+  </Card>
+</CardGroup>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Build a query" icon="magnifying-glass" href="/enterprise-api/posts/search/integrate/build-a-query">
+    Master query syntax
+  </Card>
+  <Card title="Operator reference" icon="list-check" href="/enterprise-api/posts/search/integrate/operators">
+    All available operators
+  </Card>
+  <Card title="Pagination" icon="arrow-right" href="/enterprise-api/posts/search/integrate/paginate">
+    Handle large result sets
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/posts/recent-search">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

@@ -1,0 +1,261 @@
+---
+title: Quickstart
+sidebarTitle: Quickstart
+description: Block and unblock users, and retrieve your block list
+keywords: ["blocks quickstart", "block users quickstart", "blocks tutorial", "block guide"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide walks you through retrieving your block list, as well as blocking and unblocking users.
+
+<Callout icon="key" color="#22C55E" iconType="regular">
+The block and unblock users endpoints are only available under the Enterprise plan. You can fill out the Enterprise interest form [here](/forms/enterprise-api-interest).
+</Callout>
+
+<Note>
+**Prerequisites**
+
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- User Access Token (OAuth 1.0a or OAuth 2.0 PKCE)
+</Note>
+
+---
+
+## Get blocked users
+
+<Steps>
+  <Step title="Get your user ID">
+    You need your authenticated user's ID to retrieve your block list. You can get it from the `/2/users/me` endpoint or use the ID from your tokens.
+  </Step>
+
+  <Step title="Request your block list">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/123456789/blocking?\
+user.fields=username,verified,created_at&\
+max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get blocked users with pagination
+for page in client.users.get_blocking(
+    "123456789",
+    user_fields=["username", "verified", "created_at"],
+    max_results=100
+):
+    for user in page.data:
+        print(f"{user.username} - Created: {user.created_at}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get blocked users with pagination
+const paginator = client.users.getBlocking("123456789", {
+  userFields: ["username", "verified", "created_at"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Created: ${user.created_at}`);
+  });
+}
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Review the response">
+    ```json
+    {
+      "data": [
+        {
+          "id": "17874544",
+          "name": "Example User",
+          "username": "example_user",
+          "verified": false,
+          "created_at": "2008-12-04T18:51:57.000Z"
+        }
+      ],
+      "meta": {
+        "result_count": 1,
+        "next_token": "abc123"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Block a user (Enterprise only)
+
+<Steps>
+  <Step title="Identify the target user">
+    Get the user ID of the account you want to block.
+  </Step>
+
+  <Step title="Send a block request">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/users/123456789/blocking" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"target_user_id": "9876543210"}'
+```
+
+```python Python SDK
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# Block a user
+response = client.users.block(
+    source_user_id="123456789",
+    target_user_id="9876543210"
+)
+print(f"Blocking: {response.data.blocking}")
+```
+
+```javascript JavaScript SDK
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// Block a user
+const response = await client.users.block("123456789", {
+  targetUserId: "9876543210",
+});
+console.log(`Blocking: ${response.data?.blocking}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Confirm the block">
+    ```json
+    {
+      "data": {
+        "blocking": true
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Unblock a user (Enterprise only)
+
+<Steps>
+  <Step title="Send an unblock request">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X DELETE "https://api.x.com/2/users/123456789/blocking/9876543210" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# Unblock a user
+response = client.users.unblock(
+    source_user_id="123456789",
+    target_user_id="9876543210"
+)
+print(f"Blocking: {response.data.blocking}")
+```
+
+```javascript JavaScript SDK
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// Unblock a user
+const response = await client.users.unblock("123456789", "9876543210");
+console.log(`Blocking: ${response.data?.blocking}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Confirm the unblock">
+    ```json
+    {
+      "data": {
+        "blocking": false
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Mutes" icon="volume-xmark" href="/enterprise-api/users/mutes/introduction">
+    Mute users instead of blocking
+  </Card>
+  <Card title="Follows" icon="user-plus" href="/enterprise-api/users/follows/introduction">
+    Manage follows
+  </Card>
+  <Card title="Integration guide" icon="book" href="/enterprise-api/users/blocks/integrate">
+    Key concepts and best practices
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/users/get-blocking">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

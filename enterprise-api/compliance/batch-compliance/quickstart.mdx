@@ -1,0 +1,189 @@
+---
+title: Quickstart
+sidebarTitle: Quickstart
+description: Create and run a batch compliance job
+keywords: ["compliance quickstart", "batch compliance tutorial", "compliance job guide"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide walks you through creating a batch compliance job to check the compliance status of Posts or users.
+
+<Note>
+**Prerequisites**
+
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- Your App's Bearer Token
+</Note>
+
+---
+
+<Steps>
+  <Step title="Create a job" icon="plus">
+    Create a new compliance job specifying the type (tweets or users):
+
+    <Tabs>
+      <Tab title="cURL">
+    ```bash
+    curl -X POST "https://api.x.com/2/compliance/jobs" \
+      -H "Authorization: Bearer $BEARER_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "type": "tweets",
+        "name": "my-compliance-job"
+      }'
+    ```
+      </Tab>
+      <Tab title="Python">
+    ```python
+    import requests
+
+    bearer_token = "YOUR_BEARER_TOKEN"
+
+    url = "https://api.x.com/2/compliance/jobs"
+    headers = {
+        "Authorization": f"Bearer {bearer_token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "type": "tweets",
+        "name": "my-compliance-job"
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+    print(response.json())
+    ```
+      </Tab>
+    </Tabs>
+
+    **Response:**
+
+    ```json
+    {
+      "data": {
+        "id": "1234567890",
+        "type": "tweets",
+        "name": "my-compliance-job",
+        "status": "created",
+        "upload_url": "https://storage.googleapis.com/...",
+        "download_url": "https://storage.googleapis.com/...",
+        "created_at": "2024-01-15T10:00:00.000Z"
+      }
+    }
+    ```
+
+    Save the `upload_url` and `download_url` for the next steps.
+  </Step>
+
+  <Step title="Prepare your data file" icon="file">
+    Create a text file with one ID per line:
+
+    ```
+    1234567890
+    1234567891
+    1234567892
+    1234567893
+    ```
+
+    Save as `ids.txt`.
+  </Step>
+
+  <Step title="Upload your data" icon="upload">
+    Upload the file to the provided `upload_url`:
+
+    ```bash
+    curl -X PUT "UPLOAD_URL_FROM_RESPONSE" \
+      -H "Content-Type: text/plain" \
+      --data-binary @ids.txt
+    ```
+  </Step>
+
+  <Step title="Check job status" icon="clock">
+    Poll the job status until it's complete:
+
+    ```bash
+    curl "https://api.x.com/2/compliance/jobs/1234567890" \
+      -H "Authorization: Bearer $BEARER_TOKEN"
+    ```
+
+    **Job statuses:**
+
+    | Status | Description |
+    |:-------|:------------|
+    | `created` | Job created, awaiting upload |
+    | `in_progress` | Processing data |
+    | `complete` | Results ready for download |
+    | `failed` | Job failed |
+    | `expired` | Job expired before completion |
+  </Step>
+
+  <Step title="Download results" icon="download">
+    Once status is `complete`, download from the `download_url`:
+
+    ```bash
+    curl "DOWNLOAD_URL_FROM_RESPONSE" -o results.json
+    ```
+
+    **Result format** (one JSON object per line):
+
+    ```json
+    {"id": "1234567890", "action": "delete", "created_at": "2024-01-10T12:00:00.000Z", "redacted_at": "2024-01-12T08:30:00.000Z", "reason": "deleted"}
+    {"id": "1234567891", "action": "delete", "created_at": "2024-01-10T12:00:00.000Z", "redacted_at": "2024-01-13T14:20:00.000Z", "reason": "suspended"}
+    ```
+
+    Only IDs with compliance events appear in the results. IDs not in the results are still valid.
+  </Step>
+</Steps>
+
+---
+
+## Compliance actions
+
+<AccordionGroup>
+  <Accordion title="Post compliance events">
+    | Action | Reason | Description |
+    |:-------|:-------|:------------|
+    | `delete` | `deleted` | Post was deleted |
+    | `delete` | `bounced` | Post failed compliance check |
+    | `delete` | `protected` | Account became protected |
+    | `delete` | `suspended` | Account was suspended |
+    | `delete` | `scrub_geo` | Geo data was removed |
+  </Accordion>
+
+  <Accordion title="User compliance events">
+    | Action | Reason | Description |
+    |:-------|:-------|:------------|
+    | `delete` | `deleted` | Account was deleted |
+    | `delete` | `suspended` | Account was suspended |
+    | `delete` | `protected` | Account became protected |
+    | `delete` | `deactivated` | Account was deactivated |
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## List all jobs
+
+Get all compliance jobs for your App:
+
+```bash
+curl "https://api.x.com/2/compliance/jobs?type=tweets" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Integration guide" icon="book" href="/enterprise-api/compliance/batch-compliance/integrate">
+    Key concepts and best practices
+  </Card>
+  <Card title="Compliance streams" icon="stream" href="/enterprise-api/compliance/streams/introduction">
+    Real-time compliance events
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/compliance/create-job">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

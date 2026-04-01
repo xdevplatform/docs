@@ -1,0 +1,285 @@
+---
+title: Build a query
+sidebarTitle: Build a query
+description: Learn how to build search queries using operators
+keywords: ["build query", "search query", "query builder", "search operators", "query syntax", "build search query", "query guide"]
+---
+
+The search endpoints accept a single query with a GET request and return a set of historical Posts that match the query. Queries are made up of operators that match on a variety of Post attributes.
+
+---
+
+## Query limitations
+
+Your queries will be limited depending on which [access level](/enterprise-api/getting-started/about-x-api) you are using:
+
+| Access level | Recent search | Full-archive search |
+| :--- | :--- | :--- |
+| Self-serve | 512 characters | 1,024 characters |
+| Enterprise | 4,096 characters | 4,096 characters |
+
+---
+
+## Operator availability
+
+While most operators are available to any developer, some are reserved for certain access levels:
+
+* **Core operators:** Available when using any [Project](/resources/fundamentals/developer-apps)
+* **Advanced operators:** Available when using a Project with certain access levels
+
+See the complete [list of operators](/enterprise-api/posts/search/integrate/operators) for availability details.
+
+---
+
+## Operator types: standalone and conjunction-required
+
+**Standalone operators** can be used alone or together with any other operators (including those that require conjunction).
+
+For example, this query works because `#hashtag` is a standalone operator:
+
+```
+#xapiv2
+```
+
+**Conjunction-required operators** cannot be used by themselves in a query; they can only be used when at least one standalone operator is included. This is because using these operators alone would match an extremely high volume of Posts.
+
+For example, the following queries are **not supported** since they contain only conjunction-required operators:
+
+```
+has:media
+```
+
+```
+has:links OR is:retweet
+```
+
+If we add a standalone operator, such as the phrase `"X data"`, the query works properly:
+
+```
+"X data" has:mentions (has:media OR has:links)
+```
+
+---
+
+## Boolean operators and grouping
+
+String together multiple operators using these tools:
+
+| Operator | Description | Example |
+| :--- | :--- | :--- |
+| **AND** (space) | Posts must match both conditions | `snow day #NoSchool` matches Posts with "snow" AND "day" AND #NoSchool |
+| **OR** | Posts must match either condition | `grumpy OR cat OR #meme` matches Posts with "grumpy" OR "cat" OR #meme |
+| **NOT** (dash) | Exclude Posts matching this condition | `cat #meme -grumpy` matches Posts with "cat" and #meme but NOT "grumpy" |
+| **Grouping** (parentheses) | Group operators together | `(grumpy cat) OR (#meme has:images)` matches either group |
+
+<Note>
+**A note on negations**
+
+- The operator `-is:nullcast` must always be negated
+- Negated operators cannot be used alone
+- Do not negate grouped operators. Instead of `skiing -(snow OR day OR noschool)`, use `skiing -snow -day -noschool`
+</Note>
+
+---
+
+## Order of operations
+
+When combining AND and OR:
+
+1. Operators connected by AND logic are combined first
+2. Then, operators connected with OR logic are applied
+
+**Examples:**
+
+| Query | Evaluated as |
+| :--- | :--- |
+| `apple OR iphone ipad` | `apple OR (iphone ipad)` |
+| `ipad iphone OR android` | `(iphone ipad) OR android` |
+
+To eliminate uncertainty, use parentheses:
+
+```
+(apple OR iphone) ipad
+```
+
+```
+iphone (ipad OR android)
+```
+
+---
+
+## Punctuation, diacritics, and case sensitivity
+
+**Diacritics:** Search queries with accents or diacritics match Posts both with and without the accents. For example, `Diacrítica` matches both _Diacrítica_ and _Diacritica_.
+
+**Case sensitivity:** All operators are case-insensitive. The query `cat` matches _cat_, _CAT_, and _Cat_.
+
+<Note>
+**Filtered stream behaves differently**
+
+When [building filtered stream rules](/enterprise-api/posts/filtered-stream/integrate/build-a-rule), keywords with accents only match Posts that also include the accent. For example, `Diacrítica` only matches _Diacrítica_, not _Diacritica_.
+</Note>
+
+---
+
+## Quote Tweet matching
+
+When using Search Posts, operators match on the Quote Tweet's content but **not** on the content from the original Post that was quoted.
+
+<Note>
+[Filtered stream](/enterprise-api/posts/filtered-stream/introduction) behaves differently—it matches on both the Quote Tweet and the original Post's content.
+</Note>
+
+---
+
+## Specificity and efficiency
+
+<Warning>
+Using broad operators like a single keyword or hashtag is not recommended—it will match a massive volume of Posts and quickly consume your usage limits.
+</Warning>
+
+**Tips for building effective queries:**
+
+1. **Start specific, then broaden** — Create targeted queries that return relevant results
+2. **Use multiple operators** — Combine operators to narrow results
+3. **Watch your character count** — The entire query string counts toward the limit
+
+**Example progression:**
+
+```
+# Too broad - 200,000+ Posts per day
+happy
+
+# Better - adds language filter and exclusions
+(happy OR happiness) lang:en -birthday -is:retweet
+
+# Even better - 59 characters, more specific
+(happy OR happiness) place_country:GB -birthday -is:retweet
+```
+
+---
+
+## Iteratively building a query
+
+### Step 1: Start with a basic query
+
+```
+happy OR happiness
+```
+
+### Step 2: Test and narrow based on results
+
+We noticed Posts in many languages. Add a language filter:
+
+```
+(happy OR happiness) lang:en
+```
+
+We're getting birthday wishes. Exclude them and Retweets:
+
+```
+(happy OR happiness) lang:en -birthday -is:retweet
+```
+
+### Step 3: Broaden for better coverage
+
+We want to capture more sentiment. Add related keywords:
+
+```
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet
+```
+
+### Step 4: Adjust for trends
+
+Holiday Posts are appearing. Exclude them:
+
+```
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet -holidays
+```
+
+---
+
+## Adding a query to your request
+
+Use the `query` parameter and HTTP encode your query:
+
+```bash
+curl "https://api.x.com/2/tweets/search/recent?\
+query=cat%20has%3Amedia%20-grumpy&\
+tweet.fields=created_at&\
+max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+---
+
+## Query examples
+
+### Tracking a natural disaster
+
+Match Posts from weather agencies about Hurricane Harvey:
+
+**Query:**
+
+```
+has:geo (from:NWSNHC OR from:NHC_Atlantic OR from:NWSHouston OR from:NWSSanAntonio OR from:USGS_TexasRain OR from:USGS_TexasFlood OR from:JeffLindner1) -is:retweet
+```
+
+**Full request URL:**
+
+```
+https://api.x.com/2/tweets/search/recent?query=has%3Ageo%20(from%3ANWSNHC%20OR%20from%3ANHC_Atlantic%20OR%20from%3ANWSHouston%20OR%20from%3ANWSSanAntonio%20OR%20from%3AUSGS_TexasRain%20OR%20from%3AUSGS_TexasFlood%20OR%20from%3AJeffLindner1)%20-is%3Aretweet
+```
+
+### Sentiment analysis for #nowplaying
+
+**Positive sentiment:**
+
+```
+#nowplaying (happy OR exciting OR excited OR favorite OR fav OR amazing OR lovely OR incredible) (place_country:US OR place_country:MX OR place_country:CA) -horrible -worst -sucks -bad -disappointing
+```
+
+**Negative sentiment:**
+
+```
+#nowplaying (horrible OR worst OR sucks OR bad OR disappointing) (place_country:US OR place_country:MX OR place_country:CA) -happy -exciting -excited -favorite -fav -amazing -lovely -incredible
+```
+
+### Using Post annotations
+
+Find Japanese Posts about pets (not cats) with images using the `context:` operator:
+
+First, use [Post lookup](/enterprise-api/posts/lookup/introduction) with `tweet.fields=context_annotations` to identify domain.entity IDs:
+
+- Cats: `domain` 66, `entity` 852262932607926273
+- Pets: `domain` 65, `entity` 852262932607926273
+
+**Query:**
+
+```
+context:65.852262932607926273 -context:66.852262932607926273 -is:retweet has:images lang:ja
+```
+
+---
+
+## Tools
+
+<Card title="Query Builder Tool" icon="wrench" href="https://developer.x.com/apitools/query?query=">
+  Build and test your queries interactively
+</Card>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Operators reference" icon="list" href="/enterprise-api/posts/search/integrate/operators">
+    Complete list of available operators
+  </Card>
+  <Card title="Search quickstart" icon="rocket" href="/enterprise-api/posts/search/quickstart/recent-search">
+    Make your first search request
+  </Card>
+  <Card title="Integration guide" icon="book" href="/enterprise-api/posts/search/integrate/overview">
+    Full integration documentation
+  </Card>
+</CardGroup>

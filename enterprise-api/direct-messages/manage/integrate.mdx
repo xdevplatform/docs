@@ -1,0 +1,290 @@
+---
+title: Integration Guide
+sidebarTitle: Integration Guide
+description: Key concepts and best practices for sending Direct Messages
+keywords: ["manage direct messages integration", "DM management integration", "send DM integration"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide covers the key concepts you need to integrate the manage Direct Messages endpoints into your application.
+
+---
+
+## Authentication
+
+DM endpoints require user authentication:
+
+| Method | Description |
+|:-------|:------------|
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | Recommended |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | Legacy support |
+
+<Warning>
+App-Only authentication is not supported. All Direct Messages are private.
+</Warning>
+
+### Required scopes (OAuth 2.0)
+
+| Scope | Required for |
+|:------|:-------------|
+| `dm.write` | Sending and deleting messages |
+| `dm.read` | Required with dm.write |
+| `tweet.read` | Required with dm scopes |
+| `users.read` | Required with dm scopes |
+
+---
+
+## Endpoints overview
+
+| Method | Endpoint | Description |
+|:-------|:---------|:------------|
+| POST | `/2/dm_conversations/with/:participant_id/messages` | Send one-to-one message |
+| POST | `/2/dm_conversations` | Create group conversation |
+| POST | `/2/dm_conversations/:dm_conversation_id/messages` | Add message to conversation |
+| DELETE | `/2/dm_events/:event_id` | Delete a message |
+
+---
+
+## Sending messages
+
+### One-to-one message
+
+Send a message to a specific user. Creates a new conversation if one doesn't exist:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/dm_conversations/with/9876543210/messages" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Hello!"}'
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Send a one-to-one DM
+response = client.dm_conversations.create_message(
+    participant_id="9876543210",
+    text="Hello!"
+)
+print(response.data)
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Send a one-to-one DM
+const response = await client.dmConversations.createMessage({
+  participantId: "9876543210",
+  text: "Hello!",
+});
+console.log(response.data);
+```
+
+</CodeGroup>
+
+### Group conversation
+
+Create a new group and send the first message:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/dm_conversations" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_type": "Group",
+    "participant_ids": ["944480690", "906948460078698496"],
+    "message": {"text": "Welcome to our group!"}
+  }'
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Create a group conversation
+response = client.dm_conversations.create(
+    conversation_type="Group",
+    participant_ids=["944480690", "906948460078698496"],
+    message={"text": "Welcome to our group!"}
+)
+print(response.data)
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Create a group conversation
+const response = await client.dmConversations.create({
+  conversationType: "Group",
+  participantIds: ["944480690", "906948460078698496"],
+  message: { text: "Welcome to our group!" },
+});
+console.log(response.data);
+```
+
+</CodeGroup>
+
+<Note>
+The `conversation_type` field must be set to `"Group"` (case sensitive).
+</Note>
+
+### Add to existing conversation
+
+Send a message to any conversation you're part of:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/dm_conversations/1582103724607971328/messages" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Another message"}'
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Add message to existing conversation
+response = client.dm_conversations.add_message(
+    dm_conversation_id="1582103724607971328",
+    text="Another message"
+)
+print(response.data)
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Add message to existing conversation
+const response = await client.dmConversations.addMessage({
+  dmConversationId: "1582103724607971328",
+  text: "Another message",
+});
+console.log(response.data);
+```
+
+</CodeGroup>
+
+---
+
+## Media attachments
+
+Attach one piece of media (photo, video, or GIF) per message.
+
+<Steps>
+  <Step title="Upload media">
+    Use the [Media Upload endpoint](/enterprise-api/media/quickstart/media-upload-chunked) to upload your file and get a `media_id`.
+  </Step>
+
+  <Step title="Include in message">
+```json
+{
+  "text": "Check out this image!",
+  "attachments": [{"media_id": "1583157113245011970"}]
+}
+```
+  </Step>
+</Steps>
+
+<Note>
+- The authenticated user must have uploaded the media
+- Media is available for 24 hours after upload
+- Only one attachment per message is supported
+</Note>
+
+---
+
+## Sharing Posts
+
+Include a Post in your message by adding the Post URL to the text:
+
+```json
+{
+  "text": "Have you seen this? https://x.com/XDevelopers/status/1580559079470145536"
+}
+```
+
+The response will include a `referenced_tweets` field with the Post ID.
+
+---
+
+## Message requirements
+
+| Field | Required | Notes |
+|:------|:---------|:------|
+| `text` | Yes* | Required if no attachments |
+| `attachments` | Yes* | Required if no text |
+
+*At least one of `text` or `attachments` must be provided.
+
+---
+
+## ID compatibility with v1.1
+
+Conversation and event IDs are shared between v1.1 and v2 endpoints. This enables hybrid workflows:
+
+- Create messages with v2
+- Delete messages with v1.1 (not yet available in v2)
+- Reference conversation IDs from x.com URLs
+
+---
+
+## Error handling
+
+| Status | Error | Solution |
+|:-------|:------|:---------|
+| 400 | Invalid request | Check request body format |
+| 401 | Unauthorized | Verify access token |
+| 403 | Forbidden | Check scopes and user permissions |
+| 429 | Too Many Requests | Wait and retry |
+
+### Common issues
+
+<AccordionGroup>
+  <Accordion title="Cannot send to user">
+    The recipient may have DM settings that prevent messages from unknown users, or may have blocked you.
+  </Accordion>
+
+  <Accordion title="Media attachment failed">
+    Ensure the media was uploaded by the same authenticated user and is less than 24 hours old.
+  </Accordion>
+
+  <Accordion title="Group creation failed">
+    Verify all participant IDs are valid and the users allow group DM invites.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/enterprise-api/direct-messages/manage/quickstart">
+    Send your first Direct Message
+  </Card>
+  <Card title="DM lookup" icon="inbox" href="/enterprise-api/direct-messages/lookup/introduction">
+    Retrieve DM conversations
+  </Card>
+  <Card title="Media upload" icon="image" href="/enterprise-api/media/quickstart/media-upload-chunked">
+    Upload media for attachments
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/direct-messages/create-dm-message-by-participant-id">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

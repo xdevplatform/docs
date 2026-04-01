@@ -1,0 +1,258 @@
+---
+title: Full-Archive Search Quickstart
+sidebarTitle: Full-Archive Search
+description: Search the complete Post archive back to 2006
+keywords: ["full archive search", "archive search quickstart", "historical search", "full archive tutorial", "archive search guide"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide walks you through making your first full-archive search request to find Posts from the complete X archive, dating back to March 2006.
+
+<Warning>
+Full-archive search requires [Self-serve](/enterprise-api/getting-started/about-x-api) or [Enterprise](/enterprise-api/getting-started/about-x-api) access. [Upgrade your access](https://developer.x.com/en/portal/products) to use this endpoint.
+</Warning>
+
+<Note>
+**Prerequisites**
+
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- Your App's Bearer Token (found in the Developer Console under "Keys and tokens")
+</Note>
+
+---
+
+## Step 1: Build a query
+
+Full-archive search supports all query operators. Build queries the same way as recent search:
+
+```
+from:XDevelopers lang:en
+```
+
+<Tip>
+Full-archive search supports queries up to 1,024 characters (4,096 for Enterprise).
+</Tip>
+
+---
+
+## Step 2: Set a time range
+
+By default, results return Posts from the last 30 days. Use `start_time` and `end_time` to search specific periods:
+
+| Parameter | Format | Example |
+|:----------|:-------|:--------|
+| `start_time` | ISO 8601 | `2020-01-01T00:00:00Z` |
+| `end_time` | ISO 8601 | `2020-12-31T23:59:59Z` |
+
+---
+
+## Step 3: Make a request
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/all?\
+query=from%3AXDevelopers&\
+start_time=2020-01-01T00%3A00%3A00Z&\
+end_time=2020-12-31T23%3A59%3A59Z&\
+max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Full-archive search with pagination
+for page in client.posts.search_all(
+    query="from:XDevelopers",
+    start_time="2020-01-01T00:00:00Z",
+    end_time="2020-12-31T23:59:59Z",
+    max_results=100
+):
+    for post in page.data:
+        print(post.text)
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Full-archive search with pagination
+const paginator = client.posts.searchAll({
+  query: "from:XDevelopers",
+  startTime: "2020-01-01T00:00:00Z",
+  endTime: "2020-12-31T23:59:59Z",
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(post.text);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Step 4: Review the response
+
+```json
+{
+  "data": [
+    {
+      "id": "1271111223220809728",
+      "text": "Tune in tonight and watch as @jessicagarson takes us through...",
+      "edit_history_tweet_ids": ["1271111223220809728"]
+    },
+    {
+      "id": "1270799243071062016",
+      "text": "As we work towards building the new Twitter API...",
+      "edit_history_tweet_ids": ["1270799243071062016"]
+    }
+  ],
+  "meta": {
+    "newest_id": "1271111223220809728",
+    "oldest_id": "1270799243071062016",
+    "result_count": 2
+  }
+}
+```
+
+<Note>
+Posts created before the edit feature was introduced (September 2022) won't include `edit_history_tweet_ids`.
+</Note>
+
+---
+
+## Step 5: Add fields and expansions
+
+Request additional data with query parameters:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/all?\
+query=from%3AXDevelopers&\
+start_time=2020-01-01T00%3A00%3A00Z&\
+end_time=2020-12-31T23%3A59%3A59Z&\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id&\
+user.fields=username,description&\
+max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Search with fields and expansions
+for page in client.posts.search_all(
+    query="from:XDevelopers",
+    start_time="2020-01-01T00:00:00Z",
+    end_time="2020-12-31T23:59:59Z",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username", "description"],
+    max_results=100
+):
+    for post in page.data:
+        print(f"{post.created_at}: {post.text[:50]}...")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Search with fields and expansions
+const paginator = client.posts.searchAll({
+  query: "from:XDevelopers",
+  startTime: "2020-01-01T00:00:00Z",
+  endTime: "2020-12-31T23:59:59Z",
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username", "description"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.created_at}: ${post.text?.slice(0, 50)}...`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Step 6: Paginate through results
+
+The SDKs handle pagination automatically. For cURL, use the `next_token` from the response:
+
+```bash
+curl "https://api.x.com/2/tweets/search/all?\
+query=from%3AXDevelopers&\
+max_results=500&\
+next_token=b26v89c19zqg8o3fo7gesq314yb9l2l4ptqy" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+<Card title="Pagination guide" icon="arrow-right" href="/enterprise-api/posts/search/integrate/paginate">
+  Learn more about navigating large result sets
+</Card>
+
+---
+
+## Key differences from recent search
+
+| Feature | Recent Search | Full-Archive Search |
+|:--------|:--------------|:--------------------|
+| Time range | Last 7 days | March 2006 to now |
+| Access required | All developers | Pay-per-use, Enterprise |
+| Max results per request | 100 | 500 |
+| Query length | 512 chars | 1,024 chars |
+| Rate limit | 450 / 15 min | 300 / 15 min, 1 / sec |
+| Authentication | App-Only, User Context | App-Only only |
+
+---
+
+## Common parameters
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `query` | Search query (required) | — |
+| `max_results` | Posts per page (10-500) | 10 |
+| `start_time` | Oldest Post timestamp | 30 days ago |
+| `end_time` | Newest Post timestamp | Now |
+| `next_token` | Pagination token | — |
+| `tweet.fields` | Additional Post fields | `id`, `text` |
+| `expansions` | Related objects to include | — |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Build a query" icon="magnifying-glass" href="/enterprise-api/posts/search/integrate/build-a-query">
+    Master query syntax and operators
+  </Card>
+  <Card title="Operator reference" icon="list-check" href="/enterprise-api/posts/search/integrate/operators">
+    See all available operators
+  </Card>
+  <Card title="Pagination guide" icon="arrow-right" href="/enterprise-api/posts/search/integrate/paginate">
+    Handle large result sets
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/posts/full-archive-search">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

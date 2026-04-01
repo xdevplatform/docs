@@ -1,0 +1,232 @@
+---
+title: Home Timeline Quickstart
+sidebarTitle: Home Timeline
+description: Get a user's home timeline in reverse chronological order
+keywords: ["home timeline", "reverse chronological", "home timeline quickstart", "timeline quickstart", "home timeline tutorial"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide walks you through making your first request to the reverse chronological home timeline endpoint.
+
+<Note>
+**Prerequisites**
+
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- User Access Tokens (this endpoint requires user authentication)
+</Note>
+
+---
+
+## Step 1: Get the user ID
+
+You need the user ID for the account whose home timeline you want to retrieve. Find it using the username lookup endpoint:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/by/username/XDevelopers" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+response = client.users.get_by_username("XDevelopers")
+print(f"User ID: {response.data.id}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+const response = await client.users.getByUsername("XDevelopers");
+console.log(`User ID: ${response.data?.id}`);
+```
+
+</CodeGroup>
+
+The response includes the user ID:
+
+```json
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "XDevelopers"
+  }
+}
+```
+
+---
+
+## Step 2: Request the home timeline
+
+Make a GET request with the user ID and User Access Token:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/timelines/reverse_chronological" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get home timeline with pagination
+for page in client.posts.get_home_timeline("2244994945"):
+    for post in page.data:
+        print(post.text)
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get home timeline with pagination
+const paginator = client.posts.getHomeTimeline("2244994945");
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(post.text);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Step 3: Review the response
+
+```json
+{
+  "data": [
+    {
+      "id": "1524796546306478083",
+      "text": "Today marks the launch of Devs in the Details...",
+      "edit_history_tweet_ids": ["1524796546306478083"]
+    },
+    {
+      "id": "1524468552404668416",
+      "text": "Join us tomorrow for a discussion about bots...",
+      "edit_history_tweet_ids": ["1524468552404668416"]
+    }
+  ],
+  "meta": {
+    "result_count": 2,
+    "newest_id": "1524796546306478083",
+    "oldest_id": "1524468552404668416",
+    "next_token": "7140dibdnow9c7btw421dyz6jism75z99gyxd8egarsc4"
+  }
+}
+```
+
+---
+
+## Step 4: Add fields and expansions
+
+Request additional data with query parameters:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/timelines/reverse_chronological?\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id&\
+user.fields=username,verified&\
+max_results=10" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get home timeline with fields and expansions
+for page in client.posts.get_home_timeline(
+    "2244994945",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username", "verified"],
+    max_results=10
+):
+    for post in page.data:
+        print(f"{post.text[:50]}... - Likes: {post.public_metrics.like_count}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get home timeline with fields and expansions
+const paginator = client.posts.getHomeTimeline("2244994945", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username", "verified"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text?.slice(0, 50)}... - Likes: ${post.public_metrics?.like_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Step 5: Paginate through results
+
+The SDKs handle pagination automatically. For cURL, use the `next_token` from the response to get more results:
+
+```bash
+curl "https://api.x.com/2/users/2244994945/timelines/reverse_chronological?\
+max_results=10&\
+pagination_token=7140dibdnow9c7btw421dyz6jism75z99gyxd8egarsc4" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+---
+
+## Common parameters
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `max_results` | Results per page (1-100) | 10 |
+| `start_time` | Oldest Post timestamp (ISO 8601) | — |
+| `end_time` | Newest Post timestamp (ISO 8601) | — |
+| `since_id` | Return Posts after this ID | — |
+| `until_id` | Return Posts before this ID | — |
+| `exclude` | Exclude `retweets`, `replies`, or both | — |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="User mentions" icon="at" href="/enterprise-api/posts/timelines/quickstart/user-mention-quickstart">
+    Get Posts mentioning a user
+  </Card>
+  <Card title="Integration guide" icon="book" href="/enterprise-api/posts/timelines/integrate">
+    Key concepts and best practices
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/posts/reverse-chronological-timeline-by-user-id">
+    Full endpoint documentation
+  </Card>
+  <Card title="Pagination guide" icon="arrow-right" href="/enterprise-api/fundamentals/pagination">
+    Navigate large result sets
+  </Card>
+</CardGroup>

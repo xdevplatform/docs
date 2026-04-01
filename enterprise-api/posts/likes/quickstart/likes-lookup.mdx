@@ -1,0 +1,234 @@
+---
+title: Likes Lookup
+sidebarTitle: Likes Lookup
+description: Get users who liked a Post and Posts liked by a user
+keywords: ["likes lookup", "likes quickstart", "get likes", "likes tutorial", "likes guide", "likes example"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide walks you through retrieving likes data using the X API.
+
+<Note>
+**Prerequisites**
+
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- Your App's Bearer Token (for public data) or User Access Token (for private metrics)
+</Note>
+
+---
+
+## Get users who liked a Post
+
+Retrieve the list of users who liked a specific Post:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/1354143047324299264/liking_users?\
+user.fields=created_at,username,verified" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get users who liked a Post with pagination
+for page in client.posts.get_liking_users(
+    "1354143047324299264",
+    user_fields=["created_at", "username", "verified"]
+):
+    for user in page.data:
+        print(f"{user.username} - Joined: {user.created_at}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get users who liked a Post with pagination
+const paginator = client.posts.getLikingUsers("1354143047324299264", {
+  userFields: ["created_at", "username", "verified"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Joined: ${user.created_at}`);
+  });
+}
+```
+
+</CodeGroup>
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "created_at": "2008-12-04T18:51:57.000Z",
+      "id": "17874544",
+      "username": "TwitterSupport",
+      "name": "Twitter Support",
+      "verified": true
+    },
+    {
+      "created_at": "2007-02-20T14:35:54.000Z",
+      "id": "783214",
+      "username": "Twitter",
+      "name": "Twitter",
+      "verified": true
+    }
+  ],
+  "meta": {
+    "result_count": 2,
+    "next_token": "7140dibdnow9c7btw3z2vwioavpvutgzrzm9icis4ndix"
+  }
+}
+```
+
+---
+
+## Get a user's liked Posts
+
+Retrieve Posts that a specific user has liked:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/liked_tweets?\
+tweet.fields=created_at,public_metrics&\
+max_results=10" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get a user's liked Posts with pagination
+for page in client.users.get_liked_tweets(
+    "2244994945",
+    tweet_fields=["created_at", "public_metrics"],
+    max_results=10
+):
+    for post in page.data:
+        print(f"{post.text[:50]}... - Likes: {post.public_metrics.like_count}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get a user's liked Posts with pagination
+const paginator = client.users.getLikedTweets("2244994945", {
+  tweetFields: ["created_at", "public_metrics"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text?.slice(0, 50)}... - Likes: ${post.public_metrics?.like_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "id": "1362449997430542337",
+      "text": "Honored to be the first developer to be featured...",
+      "created_at": "2021-02-18T17:45:00.000Z",
+      "public_metrics": {
+        "retweet_count": 5,
+        "reply_count": 2,
+        "like_count": 42,
+        "quote_count": 1
+      }
+    }
+  ],
+  "meta": {
+    "result_count": 1,
+    "next_token": "7140dibdnow9c7btw4539n0vybdnx19ylpayqf16fjt4l"
+  }
+}
+```
+
+---
+
+## Include additional data
+
+Use expansions to get related data like pinned Posts:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/1354143047324299264/liking_users?\
+user.fields=created_at&\
+expansions=pinned_tweet_id&\
+tweet.fields=created_at" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get liking users with pinned Post expansion
+for page in client.posts.get_liking_users(
+    "1354143047324299264",
+    user_fields=["created_at"],
+    expansions=["pinned_tweet_id"],
+    tweet_fields=["created_at"]
+):
+    for user in page.data:
+        print(f"{user.username}")
+    # Pinned Posts are in page.includes.tweets
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get liking users with pinned Post expansion
+const paginator = client.posts.getLikingUsers("1354143047324299264", {
+  userFields: ["created_at"],
+  expansions: ["pinned_tweet_id"],
+  tweetFields: ["created_at"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(user.username);
+  });
+  // Pinned Posts are in page.includes?.tweets
+}
+```
+
+</CodeGroup>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Manage likes" icon="heart" href="/enterprise-api/posts/likes/quickstart/manage-likes">
+    Like and unlike Posts
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/posts/get-liking-users">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

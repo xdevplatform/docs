@@ -1,0 +1,360 @@
+---
+title: Chunked Media Upload
+sidebarTitle: Quickstart
+description: Upload videos and large media files using chunked upload
+keywords: ["chunked upload", "media upload", "chunked media", "video upload", "large file upload", "chunked upload guide"]
+---
+
+This guide walks you through uploading videos and large media files using the chunked upload workflow.
+
+For video or large media uploads, you must:
+1. **INIT** — Initialize the upload and get a `media_id`
+2. **APPEND** — Upload each chunk of the file
+3. **FINALIZE** — Complete the upload
+4. **STATUS** — (If needed) Wait for processing to complete
+
+<Note>
+See [this sample code](https://github.com/xdevplatform/large-video-upload-python) for a complete Python example.
+</Note>
+
+---
+
+## Step 1: Initialize upload (INIT)
+
+Start the upload session to get a `media_id`:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/media/upload" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: multipart/form-data" \
+  -F "command=INIT" \
+  -F "media_type=video/mp4" \
+  -F "total_bytes=1048576" \
+  -F "media_category=amplify_video"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Initialize chunked upload
+response = client.media.init_upload(
+    media_type="video/mp4",
+    total_bytes=1048576,
+    media_category="amplify_video"
+)
+
+media_id = response.data.id
+print(f"Media ID: {media_id}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Initialize chunked upload
+const response = await client.media.initUpload({
+  mediaType: "video/mp4",
+  totalBytes: 1048576,
+  mediaCategory: "amplify_video",
+});
+
+const mediaId = response.data?.id;
+console.log(`Media ID: ${mediaId}`);
+```
+
+</CodeGroup>
+
+**Response:**
+
+```json
+{
+  "data": {
+    "id": "1880028106020515840",
+    "media_key": "13_1880028106020515840",
+    "expires_after_secs": 1295999
+  }
+}
+```
+
+---
+
+## Step 2: Upload chunks (APPEND)
+
+Upload each chunk of the file. For example, split a 3 MB file into 3 chunks:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/media/upload" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: multipart/form-data" \
+  -F "command=APPEND" \
+  -F "media_id=1880028106020515840" \
+  -F "segment_index=0" \
+  -F "media=@/path/to/chunk1.mp4"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Upload chunks
+chunk_size = 1024 * 1024  # 1 MB chunks
+
+with open("video.mp4", "rb") as f:
+    segment_index = 0
+    while True:
+        chunk = f.read(chunk_size)
+        if not chunk:
+            break
+        
+        client.media.append_upload(
+            media_id=media_id,
+            segment_index=segment_index,
+            media=chunk
+        )
+        segment_index += 1
+        print(f"Uploaded chunk {segment_index}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+import fs from "fs";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Upload chunks
+const chunkSize = 1024 * 1024; // 1 MB chunks
+const fileBuffer = fs.readFileSync("video.mp4");
+
+let segmentIndex = 0;
+for (let offset = 0; offset < fileBuffer.length; offset += chunkSize) {
+  const chunk = fileBuffer.slice(offset, offset + chunkSize);
+  
+  await client.media.appendUpload({
+    mediaId,
+    segmentIndex,
+    media: chunk,
+  });
+  
+  console.log(`Uploaded chunk ${segmentIndex + 1}`);
+  segmentIndex++;
+}
+```
+
+</CodeGroup>
+
+<Info>
+**Chunking advantages:**
+- Improved reliability on slow networks
+- Uploads can be paused and resumed
+- Failed chunks can be retried individually
+</Info>
+
+---
+
+## Step 3: Finalize upload (FINALIZE)
+
+Complete the upload after all chunks are sent:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/media/upload" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: multipart/form-data" \
+  -F "command=FINALIZE" \
+  -F "media_id=1880028106020515840"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Finalize upload
+response = client.media.finalize_upload(media_id=media_id)
+
+print(f"Processing state: {response.data.processing_info.state}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Finalize upload
+const response = await client.media.finalizeUpload({ mediaId });
+
+console.log(`Processing state: ${response.data?.processing_info?.state}`);
+```
+
+</CodeGroup>
+
+**Response:**
+
+```json
+{
+  "data": {
+    "id": "1880028106020515840",
+    "media_key": "13_1880028106020515840",
+    "size": 1048576,
+    "expires_after_secs": 86400,
+    "processing_info": {
+      "state": "pending",
+      "check_after_secs": 1
+    }
+  }
+}
+```
+
+<Note>
+If `processing_info` is returned, proceed to Step 4 to wait for processing. If not, the media is ready to use.
+</Note>
+
+---
+
+## Step 4: Check status (STATUS)
+
+If `processing_info` was returned, poll for processing completion:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/media/upload?command=STATUS&media_id=1880028106020515840" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+import time
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Wait for processing to complete
+while True:
+    response = client.media.get_status(media_id=media_id)
+    state = response.data.processing_info.state
+    
+    if state == "succeeded":
+        print("Media ready!")
+        break
+    elif state == "failed":
+        print("Processing failed")
+        break
+    else:
+        check_after = response.data.processing_info.check_after_secs
+        print(f"Processing... checking again in {check_after}s")
+        time.sleep(check_after)
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Wait for processing to complete
+while (true) {
+  const response = await client.media.getStatus({ mediaId });
+  const state = response.data?.processing_info?.state;
+  
+  if (state === "succeeded") {
+    console.log("Media ready!");
+    break;
+  } else if (state === "failed") {
+    console.log("Processing failed");
+    break;
+  } else {
+    const checkAfter = response.data?.processing_info?.check_after_secs ?? 1;
+    console.log(`Processing... checking again in ${checkAfter}s`);
+    await new Promise((r) => setTimeout(r, checkAfter * 1000));
+  }
+}
+```
+
+</CodeGroup>
+
+**Processing states:** `pending` → `in_progress` → `succeeded` or `failed`
+
+---
+
+## Step 5: Create Post with media
+
+Once processing is complete, create a Post with the media:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/tweets" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Check out this video!",
+    "media": {
+      "media_ids": ["1880028106020515840"]
+    }
+  }'
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Create Post with media
+response = client.posts.create(
+    text="Check out this video!",
+    media={"media_ids": [media_id]}
+)
+
+print(f"Posted: {response.data.id}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Create Post with media
+const response = await client.posts.create({
+  text: "Check out this video!",
+  media: { mediaIds: [mediaId] },
+});
+
+console.log(`Posted: ${response.data?.id}`);
+```
+
+</CodeGroup>
+
+---
+
+## Media categories
+
+| Category | Description |
+|:---------|:------------|
+| `tweet_image` | Image for a Post |
+| `tweet_gif` | Animated GIF for a Post |
+| `tweet_video` | Video for a Post |
+| `amplify_video` | Amplify video |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Best practices" icon="book" href="/enterprise-api/media/quickstart/best-practices">
+    File constraints and requirements
+  </Card>
+  <Card title="Create Posts" icon="message" href="/enterprise-api/posts/manage-tweets/quickstart">
+    Post with media
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/media/media-upload-init">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

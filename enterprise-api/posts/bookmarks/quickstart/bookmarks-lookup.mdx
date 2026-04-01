@@ -1,0 +1,193 @@
+---
+title: Bookmarks Lookup
+sidebarTitle: Bookmarks Lookup
+description: Retrieve your bookmarked Posts
+keywords: ["bookmarks lookup quickstart", "bookmark lookup quickstart", "bookmark lookup tutorial", "bookmark lookup guide"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide walks you through retrieving your bookmarked Posts using the X API.
+
+<Note>
+**Prerequisites**
+
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- User Access Token with `bookmark.read` scope (OAuth 2.0 PKCE)
+</Note>
+
+---
+
+## Get your bookmarks
+
+<Steps>
+  <Step title="Get your user ID">
+    You need your authenticated user's ID. You can find it using the `/2/users/me` endpoint or from the [user lookup endpoint](/enterprise-api/users/lookup/introduction).
+  </Step>
+
+  <Step title="Request your bookmarks">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/bookmarks?\
+tweet.fields=created_at,public_metrics,author_id&\
+max_results=10" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get bookmarked Posts with pagination
+for page in client.bookmarks.get(
+    "2244994945",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    max_results=10
+):
+    for post in page.data:
+        print(f"{post.text[:50]}... - Likes: {post.public_metrics.like_count}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get bookmarked Posts with pagination
+const paginator = client.bookmarks.get("2244994945", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text?.slice(0, 50)}... - Likes: ${post.public_metrics?.like_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Review the response">
+    ```json
+    {
+      "data": [
+        {
+          "id": "1501258597237342208",
+          "text": "Have you built a project using the X API you'd like to share with the community? We'd love to hear from you!",
+          "created_at": "2024-01-15T10:30:00.000Z",
+          "author_id": "2244994945",
+          "public_metrics": {
+            "retweet_count": 15,
+            "reply_count": 8,
+            "like_count": 89,
+            "quote_count": 3
+          }
+        },
+        {
+          "id": "1501258542258348032",
+          "text": "This is just one way developer innovation helps make X a better place...",
+          "created_at": "2024-01-15T09:15:00.000Z",
+          "author_id": "2244994945",
+          "public_metrics": {
+            "retweet_count": 22,
+            "reply_count": 5,
+            "like_count": 156,
+            "quote_count": 7
+          }
+        }
+      ],
+      "meta": {
+        "result_count": 2,
+        "next_token": "7140dibdnow9c7btw4539n0vybdnx19ylpayqf16fjt4l"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Include author information
+
+Use expansions to get data about Post authors:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/bookmarks?\
+tweet.fields=created_at,author_id&\
+expansions=author_id&\
+user.fields=username,verified" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get bookmarks with author info
+for page in client.bookmarks.get(
+    "2244994945",
+    tweet_fields=["created_at", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username", "verified"]
+):
+    for post in page.data:
+        print(f"{post.text[:50]}...")
+    # Author info is in page.includes.users
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get bookmarks with author info
+const paginator = client.bookmarks.get("2244994945", {
+  tweetFields: ["created_at", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username", "verified"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text?.slice(0, 50)}...`);
+  });
+  // Author info is in page.includes?.users
+}
+```
+
+</CodeGroup>
+
+---
+
+## Required scopes
+
+When using OAuth 2.0 PKCE, your access token must have these scopes:
+
+| Scope | Description |
+|:------|:------------|
+| `bookmark.read` | Read bookmarks |
+| `tweet.read` | Read Post data |
+| `users.read` | Read user data (for expansions) |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Manage bookmarks" icon="bookmark" href="/enterprise-api/posts/bookmarks/quickstart/manage-bookmarks">
+    Add and remove bookmarks
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/posts/get-users-bookmarks">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

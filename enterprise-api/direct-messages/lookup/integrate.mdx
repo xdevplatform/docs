@@ -1,0 +1,272 @@
+---
+title: Integration Guide
+sidebarTitle: Integration Guide
+description: Key concepts and best practices for integrating DM lookup endpoints
+keywords: ["direct messages integration", "DM integration", "DM lookup integration"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide covers the key concepts you need to integrate the Direct Messages lookup endpoints into your application.
+
+---
+
+## Authentication
+
+DM endpoints require user authentication to access private conversations:
+
+| Method | Description |
+|:-------|:------------|
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | Recommended |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | Legacy support |
+
+<Warning>
+App-Only authentication is not supported. All Direct Messages are private.
+</Warning>
+
+### Required scopes (OAuth 2.0)
+
+| Scope | Required for |
+|:------|:-------------|
+| `dm.read` | Reading DM events |
+| `tweet.read` | Required with dm.read |
+| `users.read` | Required with dm.read |
+
+---
+
+## Conversation types
+
+<CardGroup cols={2}>
+  <Card title="One-to-one" icon="message">
+    Always has exactly two participants. Conversation ID format: `{smaller_user_id}-{larger_user_id}`
+  </Card>
+  <Card title="Group" icon="comments">
+    Two or more participants. Membership can change over time.
+  </Card>
+</CardGroup>
+
+---
+
+## Event types
+
+| Event | Description | Key fields |
+|:------|:------------|:-----------|
+| `MessageCreate` | A message was sent | `text`, `sender_id` |
+| `ParticipantsJoin` | User joined group | `participant_ids`, `sender_id` |
+| `ParticipantsLeave` | User left group | `participant_ids` |
+
+### Example events
+
+<AccordionGroup>
+  <Accordion title="MessageCreate">
+```json
+{
+  "id": "1582838499983564806",
+  "event_type": "MessageCreate",
+  "text": "Hi everyone.",
+  "sender_id": "944480690",
+  "dm_conversation_id": "1578398451921985538",
+  "created_at": "2022-10-19T20:58:00.000Z"
+}
+```
+  </Accordion>
+
+  <Accordion title="ParticipantsJoin">
+```json
+{
+  "id": "1582835469712138240",
+  "event_type": "ParticipantsJoin",
+  "participant_ids": ["944480690"],
+  "sender_id": "17200003",
+  "dm_conversation_id": "1578398451921985538",
+  "created_at": "2022-10-19T20:45:58.000Z"
+}
+```
+  </Accordion>
+
+  <Accordion title="ParticipantsLeave">
+```json
+{
+  "id": "1582838535115067392",
+  "event_type": "ParticipantsLeave",
+  "participant_ids": ["944480690"],
+  "dm_conversation_id": "1578398451921985538",
+  "created_at": "2022-10-19T20:58:09.000Z"
+}
+```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Fields and expansions
+
+### Default fields
+
+| Event type | Default fields |
+|:-----------|:---------------|
+| MessageCreate | `id`, `event_type`, `text` |
+| ParticipantsJoin/Leave | `id`, `event_type`, `participant_ids` |
+
+### Available fields
+
+| Field | Description | Events |
+|:------|:------------|:-------|
+| `dm_conversation_id` | Conversation ID | All |
+| `created_at` | Event timestamp | All |
+| `sender_id` | Who sent/invited | MessageCreate, Join |
+| `attachments` | Media attachments | MessageCreate |
+| `referenced_tweets` | Shared Posts | MessageCreate |
+
+### Available expansions
+
+| Expansion | Returns |
+|:----------|:--------|
+| `sender_id` | User object for sender |
+| `participant_ids` | User objects for participants |
+| `attachments.media_keys` | Media objects |
+| `referenced_tweets.id` | Post objects |
+
+### Example with expansions
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/dm_events?\
+dm_event.fields=created_at,sender_id,attachments&\
+expansions=sender_id,attachments.media_keys&\
+user.fields=username,profile_image_url&\
+media.fields=url,type" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get DM events with expansions
+for page in client.dm_events.list(
+    dm_event_fields=["created_at", "sender_id", "attachments"],
+    expansions=["sender_id", "attachments.media_keys"],
+    user_fields=["username", "profile_image_url"],
+    media_fields=["url", "type"],
+    max_results=100
+):
+    for event in page.data:
+        print(f"Event: {event.event_type} - {event.text}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+const paginator = client.dmEvents.list({
+  dmEventFields: ["created_at", "sender_id", "attachments"],
+  expansions: ["sender_id", "attachments.media_keys"],
+  userFields: ["username", "profile_image_url"],
+  mediaFields: ["url", "type"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((event) => {
+    console.log(`Event: ${event.event_type} - ${event.text}`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Pagination
+
+DM events are returned in reverse chronological order (newest first):
+
+<CodeGroup dropdown>
+
+```bash cURL
+# First request
+curl "https://api.x.com/2/dm_events?max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+
+# Subsequent request with pagination token
+curl "https://api.x.com/2/dm_events?max_results=100&pagination_token=NEXT_TOKEN" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# The SDK handles pagination automatically
+all_events = []
+
+for page in client.dm_events.list(max_results=100):
+    if page.data:
+        all_events.extend(page.data)
+
+print(f"Found {len(all_events)} DM events")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+async function getAllDMEvents() {
+  const allEvents = [];
+
+  // The SDK handles pagination automatically
+  const paginator = client.dmEvents.list({ maxResults: 100 });
+
+  for await (const page of paginator) {
+    if (page.data) {
+      allEvents.push(...page.data);
+    }
+  }
+
+  return allEvents;
+}
+
+// Usage
+const events = await getAllDMEvents();
+console.log(`Found ${events.length} DM events`);
+```
+
+</CodeGroup>
+
+<Note>
+Events from up to **30 days ago** are available.
+</Note>
+
+---
+
+## ID compatibility with v1.1
+
+Conversation and event IDs are shared between v1.1 and v2 endpoints. This means you can:
+
+- Use v2 to retrieve events, then use v1.1 to delete specific messages
+- Reference conversation IDs from x.com URLs in API requests
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/enterprise-api/direct-messages/lookup/quickstart">
+    Make your first DM lookup request
+  </Card>
+  <Card title="Send DMs" icon="paper-plane" href="/enterprise-api/direct-messages/manage/introduction">
+    Send Direct Messages
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/direct-messages/get-dm-events">
+    Full endpoint documentation
+  </Card>
+  <Card title="Sample code" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    Working code examples
+  </Card>
+</CardGroup>

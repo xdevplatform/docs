@@ -1,0 +1,275 @@
+---
+title: Recent Search Quickstart
+sidebarTitle: Recent Search
+description: Make your first recent search request in minutes
+keywords: ["recent search", "search quickstart", "recent search tutorial", "search tweets", "recent search guide", "search example"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide walks you through making your first recent search request to find Posts from the last 7 days.
+
+<Note>
+**Prerequisites**
+
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- Your App's Bearer Token (found in the Developer Console under "Keys and tokens")
+</Note>
+
+---
+
+<Steps>
+  <Step title="Build a query" icon="magnifying-glass">
+    Search queries use operators to match Posts. Start with a simple keyword:
+
+    ```
+    python
+    ```
+
+    Or combine multiple operators:
+
+    ```
+    python lang:en -is:retweet
+    ```
+
+    This matches Posts containing "python" in English, excluding retweets.
+
+    <Tip>
+    See the [full operator reference](/enterprise-api/posts/search/integrate/operators) for all available options.
+    </Tip>
+  </Step>
+
+  <Step title="Make a request" icon="terminal">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/recent?query=python%20lang%3Aen%20-is%3Aretweet" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Search recent Posts
+for page in client.posts.search_recent(
+    query="python lang:en -is:retweet"
+):
+    for post in page.data:
+        print(post.text)
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Search recent Posts
+const paginator = client.posts.searchRecent({
+  query: "python lang:en -is:retweet",
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(post.text);
+  });
+}
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Review the response" icon="eye">
+    The default response includes `id`, `text`, and `edit_history_tweet_ids`:
+
+    ```json
+    {
+      "data": [
+        {
+          "id": "1234567890123456789",
+          "text": "Just started learning Python and loving it!",
+          "edit_history_tweet_ids": ["1234567890123456789"]
+        },
+        {
+          "id": "1234567890123456788",
+          "text": "Python tip: use list comprehensions for cleaner code",
+          "edit_history_tweet_ids": ["1234567890123456788"]
+        }
+      ],
+      "meta": {
+        "newest_id": "1234567890123456789",
+        "oldest_id": "1234567890123456788",
+        "result_count": 2
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Add fields and expansions" icon="sliders">
+    Request additional data with query parameters:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/recent?\
+query=python%20lang%3Aen%20-is%3Aretweet&\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id&\
+user.fields=username,verified&\
+max_results=10" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Search with fields and expansions
+for page in client.posts.search_recent(
+    query="python lang:en -is:retweet",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username", "verified"],
+    max_results=10
+):
+    for post in page.data:
+        print(f"{post.text[:50]}... - Likes: {post.public_metrics.like_count}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Search with fields and expansions
+const paginator = client.posts.searchRecent({
+  query: "python lang:en -is:retweet",
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username", "verified"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text?.slice(0, 50)}... - Likes: ${post.public_metrics?.like_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "id": "1234567890123456789",
+      "text": "Just started learning Python and loving it!",
+      "created_at": "2024-01-15T10:30:00.000Z",
+      "author_id": "9876543210",
+      "public_metrics": {
+        "retweet_count": 5,
+        "reply_count": 2,
+        "like_count": 42,
+        "quote_count": 1
+      },
+      "edit_history_tweet_ids": ["1234567890123456789"]
+    }
+  ],
+  "includes": {
+    "users": [
+      {
+        "id": "9876543210",
+        "username": "pythondev",
+        "verified": false
+      }
+    ]
+  },
+  "meta": {
+    "newest_id": "1234567890123456789",
+    "oldest_id": "1234567890123456789",
+    "result_count": 1
+  }
+}
+```
+
+  </Step>
+
+  <Step title="Paginate through results" icon="arrow-right">
+    The SDKs handle pagination automatically. For cURL, use the `next_token` from the response:
+
+    ```bash
+    curl "https://api.x.com/2/tweets/search/recent?\
+    query=python&\
+    max_results=100&\
+    next_token=b26v89c19zqg8o3fo7gesq314yb9l2l4ptqy" \
+      -H "Authorization: Bearer $BEARER_TOKEN"
+    ```
+
+    <Card title="Pagination guide" icon="arrow-right" href="/enterprise-api/posts/search/integrate/paginate">
+      Learn more about navigating large result sets
+    </Card>
+  </Step>
+</Steps>
+
+---
+
+## Example queries
+
+<AccordionGroup>
+  <Accordion title="Posts from a specific user">
+    ```
+    from:XDevelopers
+    ```
+  </Accordion>
+
+  <Accordion title="Posts with a hashtag">
+    ```
+    #Python -is:retweet
+    ```
+  </Accordion>
+
+  <Accordion title="Posts with images">
+    ```
+    "machine learning" has:images lang:en
+    ```
+  </Accordion>
+
+  <Accordion title="Posts mentioning a user">
+    ```
+    @elonmusk -is:retweet -is:reply
+    ```
+  </Accordion>
+
+  <Accordion title="Posts with links to a domain">
+    ```
+    url:github.com lang:en
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Build a query" icon="magnifying-glass" href="/enterprise-api/posts/search/integrate/build-a-query">
+    Master query syntax and operators
+  </Card>
+  <Card title="Operator reference" icon="list-check" href="/enterprise-api/posts/search/integrate/operators">
+    See all available operators
+  </Card>
+  <Card title="Full-archive search" icon="vault" href="/enterprise-api/posts/search/quickstart/full-archive-search">
+    Search the complete Post archive
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/posts/search-recent-posts">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

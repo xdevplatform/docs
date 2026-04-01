@@ -1,0 +1,205 @@
+---
+title: Mutes Lookup
+sidebarTitle: Mutes Lookup
+description: Get the list of users you have muted
+keywords: ["mutes lookup quickstart", "mute lookup quickstart", "mutes lookup tutorial", "mute lookup guide", "mutes quickstart"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide walks you through retrieving your muted users list using the X API.
+
+<Note>
+**Prerequisites**
+
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- User Access Token (OAuth 1.0a or OAuth 2.0 PKCE)
+</Note>
+
+---
+
+## Get your muted users
+
+<Steps>
+  <Step title="Get your user ID">
+    You need your authenticated user's ID. You can find it using the [user lookup endpoint](/enterprise-api/users/lookup/introduction) or from your Access Token (the numeric part is your user ID).
+  </Step>
+
+  <Step title="Request your muted users">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/123456789/muting?\
+user.fields=created_at,username,verified&\
+max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get muted users with pagination
+for page in client.users.get_muting(
+    "123456789",
+    user_fields=["created_at", "username", "verified"],
+    max_results=100
+):
+    for user in page.data:
+        print(f"{user.username} - Muted")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get muted users with pagination
+const paginator = client.users.getMuting("123456789", {
+  userFields: ["created_at", "username", "verified"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Muted`);
+  });
+}
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Review the response">
+    ```json
+    {
+      "data": [
+        {
+          "id": "2244994945",
+          "name": "X Developers",
+          "username": "XDevelopers",
+          "created_at": "2013-12-14T04:35:55.000Z",
+          "verified": true
+        }
+      ],
+      "meta": {
+        "result_count": 1,
+        "next_token": "1710819323648428707"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Include additional data
+
+Use expansions to get related data like pinned Posts:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/123456789/muting?\
+user.fields=created_at&\
+expansions=pinned_tweet_id&\
+tweet.fields=created_at" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get muted users with expansions
+for page in client.users.get_muting(
+    "123456789",
+    user_fields=["created_at"],
+    expansions=["pinned_tweet_id"],
+    tweet_fields=["created_at"]
+):
+    for user in page.data:
+        print(f"{user.username}")
+    # Pinned Posts are in page.includes.tweets
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get muted users with expansions
+const paginator = client.users.getMuting("123456789", {
+  userFields: ["created_at"],
+  expansions: ["pinned_tweet_id"],
+  tweetFields: ["created_at"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(user.username);
+  });
+  // Pinned Posts are in page.includes?.tweets
+}
+```
+
+</CodeGroup>
+
+### Response with expansion
+
+```json
+{
+  "data": [
+    {
+      "username": "XDevelopers",
+      "created_at": "2013-12-14T04:35:55.000Z",
+      "id": "2244994945",
+      "name": "X Developers",
+      "pinned_tweet_id": "1430984356139470849"
+    }
+  ],
+  "includes": {
+    "tweets": [
+      {
+        "created_at": "2021-08-26T20:03:51.000Z",
+        "id": "1430984356139470849",
+        "text": "Help us build a better X Developer Platform!..."
+      }
+    ]
+  },
+  "meta": {
+    "result_count": 1
+  }
+}
+```
+
+---
+
+## Paginate through results
+
+The SDKs handle pagination automatically. For cURL, use the `next_token` from the response:
+
+```bash
+curl "https://api.x.com/2/users/123456789/muting?\
+max_results=100&\
+pagination_token=1710819323648428707" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Manage mutes" icon="volume-xmark" href="/enterprise-api/users/mutes/quickstart/manage-mutes-quickstart">
+    Mute and unmute users
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/users/get-muted-users">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

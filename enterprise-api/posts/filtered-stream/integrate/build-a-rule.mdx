@@ -1,0 +1,294 @@
+---
+title: Build a rule
+sidebarTitle: Build a rule
+description: Learn how to build filtered stream rules using operators
+keywords: ["build rule", "filter rules", "stream rules", "rule builder", "filtered stream rules", "create rule", "rule guide"]
+---
+
+The filtered stream endpoints deliver Posts that match a set of rules applied to the stream. Rules are made up of operators that match on a variety of Post attributes.
+
+Multiple rules can be applied using the [POST /tweets/search/stream/rules](/enterprise-api/stream/update-stream-rules) endpoint. Once you've added rules and connected using [GET /tweets/search/stream](/enterprise-api/stream/get-stream-rules), only Posts matching your rules will be delivered. You do not need to disconnect to add or remove rules.
+
+---
+
+## Rule limitations
+
+Limits on the number of rules depend on your [access level](/enterprise-api/getting-started/about-x-api). See the [filtered stream introduction](/enterprise-api/posts/filtered-stream/introduction) for specific limits.
+
+---
+
+## Operator types: standalone and conjunction-required
+
+**Standalone operators** can be used alone or together with any other operators (including those that require conjunction).
+
+For example, this rule works because `#hashtag` is a standalone operator:
+
+```
+#xapiv2
+```
+
+**Conjunction-required operators** cannot be used by themselves in a rule; they can only be used when at least one standalone operator is included. This is because using these operators alone would match an extremely high volume of Posts.
+
+For example, the following rules are **not supported** since they contain only conjunction-required operators:
+
+```
+has:media
+```
+
+```
+has:links OR is:retweet
+```
+
+If we add a standalone operator, such as the phrase `"X data"`, the rule works properly:
+
+```
+"X data" has:mentions (has:media OR has:links)
+```
+
+---
+
+## Boolean operators and grouping
+
+String together multiple operators using these tools:
+
+| Operator | Description | Example |
+| :--- | :--- | :--- |
+| **AND** (space) | Posts must match both conditions | `snow day #NoSchool` matches Posts with "snow" AND "day" AND #NoSchool |
+| **OR** | Posts must match either condition | `grumpy OR cat OR #meme` matches Posts with "grumpy" OR "cat" OR #meme |
+| **NOT** (dash) | Exclude Posts matching this condition | `cat #meme -grumpy` matches Posts with "cat" and #meme but NOT "grumpy" |
+| **Grouping** (parentheses) | Group operators together | `(grumpy cat) OR (#meme has:images)` matches either group |
+
+<Note>
+**A note on negations**
+
+- All operators can be negated except for `sample:`
+- The operator `-is:nullcast` must always be negated
+- Negated operators cannot be used alone
+- Do not negate grouped operators. Instead of `skiing -(snow OR day OR noschool)`, use `skiing -snow -day -noschool`
+</Note>
+
+---
+
+## Order of operations
+
+When combining AND and OR:
+
+1. Operators connected by AND logic are combined first
+2. Then, operators connected with OR logic are applied
+
+**Examples:**
+
+| Query | Evaluated as |
+| :--- | :--- |
+| `apple OR iphone ipad` | `apple OR (iphone ipad)` |
+| `ipad iphone OR android` | `(iphone ipad) OR android` |
+
+To eliminate uncertainty, use parentheses:
+
+```
+(apple OR iphone) ipad
+```
+
+```
+iphone (ipad OR android)
+```
+
+---
+
+## Punctuation, diacritics, and case sensitivity
+
+**Diacritics:** Filtered stream rules with accents only match Posts that also include the accent. For example, `diacrítica` matches _diacrítica_ but **not** _diacritica_.
+
+**Case sensitivity:** All operators are case-insensitive. The rule `cat` matches _cat_, _CAT_, and _Cat_.
+
+<Note>
+**Search Posts behaves differently**
+
+When [building search queries](/enterprise-api/posts/search/integrate/build-a-query), keywords with accents match Posts both with and without the accents. For example, `Diacrítica` matches both _Diacrítica_ and _Diacritica_.
+</Note>
+
+---
+
+## Quote Tweet matching
+
+When using filtered stream, operators match on both the Quote Tweet's content **and** the content from the original Post that was quoted.
+
+<Note>
+[Search Posts](/enterprise-api/posts/search/introduction) behaves differently—it only matches on the Quote Tweet's content, not the original Post.
+</Note>
+
+---
+
+## Specificity and efficiency
+
+<Warning>
+Using broad operators like a single keyword or hashtag is not recommended—it will match a massive volume of Posts and quickly consume your connection.
+</Warning>
+
+**Tips for building effective rules:**
+
+1. **Start specific, then broaden** — Create targeted rules that return relevant results
+2. **Use multiple operators** — Combine operators to narrow results
+3. **Watch your character count** — The entire rule string counts toward the limit
+
+**Example progression:**
+
+```
+# Too broad - 200,000+ Posts per day
+happy
+
+# Better - adds language filter and exclusions
+(happy OR happiness) lang:en -birthday -is:retweet
+
+# Even better - 59 characters, more specific
+(happy OR happiness) place_country:GB -birthday -is:retweet
+```
+
+---
+
+## Iteratively building a rule
+
+### Step 1: Start with a basic rule
+
+```
+happy OR happiness
+```
+
+### Step 2: Test and narrow based on results
+
+We noticed Posts in many languages. Add a language filter:
+
+```
+(happy OR happiness) lang:en
+```
+
+We're getting birthday wishes. Exclude them and Retweets:
+
+```
+(happy OR happiness) lang:en -birthday -is:retweet
+```
+
+### Step 3: Broaden for better coverage
+
+We want to capture more sentiment. Add related keywords:
+
+```
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet
+```
+
+### Step 4: Adjust for trends
+
+Holiday Posts are appearing. Exclude them:
+
+```
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet -holidays
+```
+
+---
+
+## Adding and removing rules
+
+Use [POST /2/tweets/search/stream/rules](/enterprise-api/stream/update-stream-rules) to add or remove rules.
+
+### Adding rules
+
+Submit an `add` JSON body with the `value` (the rule) and optional `tag` (to identify matching Posts):
+
+```bash
+curl -X POST "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -d '{
+    "add": [
+      {"value": "cat has:media", "tag": "cats with media"},
+      {"value": "cat has:media -grumpy", "tag": "happy cats with media"},
+      {"value": "meme", "tag": "funny things"},
+      {"value": "meme has:images"}
+    ]
+  }'
+```
+
+### Removing rules
+
+Submit a `delete` JSON body with the rule IDs to remove:
+
+```bash
+curl -X POST "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -d '{
+    "delete": {
+      "ids": [
+        "1165037377523306498",
+        "1165037377523306499"
+      ]
+    }
+  }'
+```
+
+---
+
+## Rule examples
+
+### Tracking a natural disaster
+
+Match Posts from weather agencies about Hurricane Harvey:
+
+```json
+{
+  "value": "-is:retweet has:geo (from:NWSNHC OR from:NHC_Atlantic OR from:NWSHouston OR from:NWSSanAntonio OR from:USGS_TexasRain OR from:USGS_TexasFlood OR from:JeffLindner1)",
+  "tag": "Hurricane Harvey - weather agencies with geo"
+}
+```
+
+### Sentiment analysis for #nowplaying
+
+**Positive sentiment:**
+
+```json
+{
+  "value": "#nowplaying (happy OR exciting OR excited OR favorite OR fav OR amazing OR lovely OR incredible) (place_country:US OR place_country:MX OR place_country:CA) -horrible -worst -sucks -bad -disappointing",
+  "tag": "#nowplaying positive"
+}
+```
+
+**Negative sentiment:**
+
+```json
+{
+  "value": "#nowplaying (horrible OR worst OR sucks OR bad OR disappointing) (place_country:US OR place_country:MX OR place_country:CA) -happy -exciting -excited -favorite -fav -amazing -lovely -incredible",
+  "tag": "#nowplaying negative"
+}
+```
+
+### Using Post annotations
+
+Find Japanese Posts about pets (not cats) with images using the `context:` operator:
+
+First, use [Post lookup](/enterprise-api/posts/lookup/introduction) with `tweet.fields=context_annotations` to identify domain.entity IDs:
+
+- Cats: `domain` 66, `entity` 852262932607926273
+- Pets: `domain` 65, `entity` 852262932607926273
+
+```json
+{
+  "value": "context:65.852262932607926273 -context:66.852262932607926273 -is:retweet has:images lang:ja",
+  "tag": "Japanese pets with images - no cats"
+}
+```
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Operators reference" icon="list" href="/enterprise-api/posts/filtered-stream/integrate/operators">
+    Complete list of available operators
+  </Card>
+  <Card title="Filtered stream quickstart" icon="rocket" href="/enterprise-api/posts/filtered-stream/quickstart">
+    Connect to your stream
+  </Card>
+  <Card title="Sample code" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code/tree/master/Filtered-Stream">
+    Code examples in multiple languages
+  </Card>
+</CardGroup>

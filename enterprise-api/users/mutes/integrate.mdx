@@ -1,0 +1,237 @@
+---
+title: Integration Guide
+sidebarTitle: Integration Guide
+description: Key concepts and best practices for integrating mutes endpoints
+keywords: ["mutes integration", "mute users integration", "mutes guide"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide covers the key concepts you need to integrate the mutes endpoints into your application.
+
+---
+
+## Authentication
+
+Mutes endpoints require user authentication to access private mute lists:
+
+| Method | Description |
+|:-------|:------------|
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | Recommended for new applications |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | Legacy support |
+
+<Warning>
+App-Only authentication is not supported. You must authenticate on behalf of a user.
+</Warning>
+
+### Required scopes (OAuth 2.0)
+
+| Scope | Required for |
+|:------|:-------------|
+| `mute.read` | Retrieving muted accounts |
+| `mute.write` | Muting and unmuting accounts |
+| `users.read` | Required with mute scopes |
+
+---
+
+## Endpoints overview
+
+| Method | Endpoint | Description |
+|:-------|:---------|:------------|
+| GET | `/2/users/:id/muting` | Get list of muted accounts |
+| POST | `/2/users/:id/muting` | Mute an account |
+| DELETE | `/2/users/:source_user_id/muting/:target_user_id` | Unmute an account |
+
+---
+
+## Fields and expansions
+
+### Default response
+
+```json
+{
+  "data": [
+    {
+      "id": "1234567890",
+      "name": "Example User",
+      "username": "example"
+    }
+  ]
+}
+```
+
+### Available fields
+
+<Accordion title="user.fields">
+| Field | Description |
+|:------|:------------|
+| `created_at` | Account creation date |
+| `description` | User bio |
+| `profile_image_url` | Avatar URL |
+| `public_metrics` | Follower/following counts |
+| `verified` | Verification status |
+</Accordion>
+
+<Accordion title="expansions">
+| Expansion | Description |
+|:----------|:------------|
+| `pinned_tweet_id` | User's pinned Post |
+</Accordion>
+
+### Example with fields
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/123456789/muting?\
+user.fields=username,verified,created_at&\
+max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get muted users with additional fields
+for page in client.users.get_muting(
+    user_id="123456789",
+    user_fields=["username", "verified", "created_at"],
+    max_results=100
+):
+    for user in page.data:
+        print(f"{user.username} - Verified: {user.verified}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+const paginator = client.users.getMuting("123456789", {
+  userFields: ["username", "verified", "created_at"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Verified: ${user.verified}`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Pagination
+
+For users with large mute lists, results are paginated:
+
+<CodeGroup dropdown>
+
+```bash cURL
+# First request
+curl "https://api.x.com/2/users/123/muting?max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+
+# Subsequent request with pagination token
+curl "https://api.x.com/2/users/123/muting?max_results=100&pagination_token=NEXT_TOKEN" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# The SDK handles pagination automatically
+all_muted = []
+
+for page in client.users.get_muting(user_id="123", max_results=100):
+    if page.data:
+        all_muted.extend(page.data)
+
+print(f"Muted {len(all_muted)} users")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+async function getAllMutedUsers(userId) {
+  const allMuted = [];
+
+  // The SDK handles pagination automatically
+  const paginator = client.users.getMuting(userId, { maxResults: 100 });
+
+  for await (const page of paginator) {
+    if (page.data) {
+      allMuted.push(...page.data);
+    }
+  }
+
+  return allMuted;
+}
+
+// Usage
+const muted = await getAllMutedUsers("123");
+console.log(`Muted ${muted.length} users`);
+```
+
+</CodeGroup>
+
+<Card title="Pagination guide" icon="arrow-right" href="/enterprise-api/fundamentals/pagination">
+  Learn more about pagination
+</Card>
+
+---
+
+## Behavior differences
+
+### Muting vs Blocking
+
+| Feature | Mute | Block |
+|:--------|:-----|:------|
+| See their Posts | No (hidden) | No |
+| They see your Posts | Yes | No |
+| They follow you | Yes (can follow) | No (removed) |
+| They can DM you | Yes | No |
+| Notification sent | No | No |
+
+<Tip>
+Muting is private — the muted user is not notified and cannot tell they've been muted.
+</Tip>
+
+---
+
+## Error handling
+
+| Status | Error | Solution |
+|:-------|:------|:---------|
+| 400 | Invalid request | Check user ID format |
+| 401 | Unauthorized | Verify access token |
+| 403 | Forbidden | Check scopes and permissions |
+| 404 | Not Found | User doesn't exist |
+| 429 | Too Many Requests | Wait and retry |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/enterprise-api/users/mutes/quickstart/manage-mutes-quickstart">
+    Make your first mutes request
+  </Card>
+  <Card title="Blocks" icon="ban" href="/enterprise-api/users/blocks/introduction">
+    Block users instead of muting
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/users/get-muting">
+    Full endpoint documentation
+  </Card>
+  <Card title="Sample code" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    Working code examples
+  </Card>
+</CardGroup>

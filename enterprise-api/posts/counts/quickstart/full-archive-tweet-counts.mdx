@@ -1,0 +1,243 @@
+---
+title: Full-Archive Post Counts
+sidebarTitle: Full-Archive Post Counts
+description: Get historical Post volume back to 2006
+keywords: ["full archive tweet counts quickstart", "archive counts quickstart", "historical counts quickstart", "full archive counts"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide walks you through getting historical Post counts back to March 2006.
+
+<Warning>
+Full-archive Post counts requires [Self-serve](/enterprise-api/getting-started/about-x-api) or [Enterprise](/enterprise-api/getting-started/about-x-api) access.
+</Warning>
+
+<Note>
+**Prerequisites**
+
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with Self-serve or Enterprise access
+- Your App's Bearer Token
+</Note>
+
+---
+
+## Get full-archive Post counts
+
+<Steps>
+  <Step title="Build a query">
+    Use the same query syntax as full-archive search. For example, to count Posts from @XDevelopers:
+
+    ```
+    from:XDevelopers
+    ```
+  </Step>
+
+  <Step title="Set a time range">
+    Specify `start_time` and `end_time` to search specific historical periods:
+
+    | Parameter | Format | Example |
+    |:----------|:-------|:--------|
+    | `start_time` | ISO 8601 | `2020-01-01T00:00:00Z` |
+    | `end_time` | ISO 8601 | `2020-12-31T23:59:59Z` |
+  </Step>
+
+  <Step title="Make the request">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/counts/all?\
+query=from%3AXDevelopers&\
+start_time=2020-01-01T00%3A00%3A00Z&\
+end_time=2020-12-31T23%3A59%3A59Z&\
+granularity=day" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get full-archive Post counts
+response = client.posts.count_all(
+    query="from:XDevelopers",
+    start_time="2020-01-01T00:00:00Z",
+    end_time="2020-12-31T23:59:59Z",
+    granularity="day"
+)
+
+for bucket in response.data:
+    print(f"{bucket.start}: {bucket.tweet_count} Posts")
+
+print(f"Total: {response.meta.total_tweet_count}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get full-archive Post counts
+const response = await client.posts.countAll({
+  query: "from:XDevelopers",
+  startTime: "2020-01-01T00:00:00Z",
+  endTime: "2020-12-31T23:59:59Z",
+  granularity: "day",
+});
+
+response.data?.forEach((bucket) => {
+  console.log(`${bucket.start}: ${bucket.tweet_count} Posts`);
+});
+
+console.log(`Total: ${response.meta?.total_tweet_count}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Review the response">
+    ```json
+    {
+      "data": [
+        {
+          "end": "2020-01-02T00:00:00.000Z",
+          "start": "2020-01-01T00:00:00.000Z",
+          "tweet_count": 3
+        },
+        {
+          "end": "2020-01-03T00:00:00.000Z",
+          "start": "2020-01-02T00:00:00.000Z",
+          "tweet_count": 5
+        }
+      ],
+      "meta": {
+        "total_tweet_count": 8
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Granularity options
+
+Control how counts are grouped:
+
+| Granularity | Description |
+|:------------|:------------|
+| `minute` | Counts per minute |
+| `hour` | Counts per hour (default) |
+| `day` | Counts per day |
+
+---
+
+## Paginate through results
+
+For large time ranges, use the `next_token` from the response:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/counts/all?\
+query=from%3AXDevelopers&\
+start_time=2015-01-01T00%3A00%3A00Z&\
+end_time=2020-12-31T23%3A59%3A59Z&\
+granularity=day&\
+next_token=abc123" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get counts with pagination
+next_token = None
+
+while True:
+    response = client.posts.count_all(
+        query="from:XDevelopers",
+        start_time="2015-01-01T00:00:00Z",
+        end_time="2020-12-31T23:59:59Z",
+        granularity="day",
+        next_token=next_token
+    )
+    
+    for bucket in response.data:
+        print(f"{bucket.start}: {bucket.tweet_count}")
+    
+    next_token = response.meta.next_token
+    if not next_token:
+        break
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get counts with pagination
+let nextToken = undefined;
+
+do {
+  const response = await client.posts.countAll({
+    query: "from:XDevelopers",
+    startTime: "2015-01-01T00:00:00Z",
+    endTime: "2020-12-31T23:59:59Z",
+    granularity: "day",
+    nextToken,
+  });
+
+  response.data?.forEach((bucket) => {
+    console.log(`${bucket.start}: ${bucket.tweet_count}`);
+  });
+
+  nextToken = response.meta?.next_token;
+} while (nextToken);
+```
+
+</CodeGroup>
+
+---
+
+## Key differences from recent counts
+
+| Feature | Recent Counts | Full-Archive Counts |
+|:--------|:--------------|:--------------------|
+| Time range | Last 7 days | March 2006 to now |
+| Access required | All developers | Pay-per-use, Enterprise |
+| Default time range | Last 7 days | Last 30 days |
+
+---
+
+## Common parameters
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `query` | Search query (required) | — |
+| `granularity` | Time bucket size | `hour` |
+| `start_time` | Oldest timestamp (ISO 8601) | 30 days ago |
+| `end_time` | Newest timestamp (ISO 8601) | Now |
+| `next_token` | Pagination token | — |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Recent counts" icon="clock" href="/enterprise-api/posts/counts/quickstart/recent-tweet-counts">
+    Get recent Post counts
+  </Card>
+  <Card title="Build a query" icon="magnifying-glass" href="/enterprise-api/posts/counts/integrate/build-a-query">
+    Master query syntax
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/posts/full-archive-post-count">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

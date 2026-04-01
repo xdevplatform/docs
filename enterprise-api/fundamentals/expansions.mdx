@@ -1,0 +1,226 @@
+---
+title: Expansions
+sidebarTitle: Expansions
+description: Include related objects in API responses
+keywords: ["expansions", "expand objects", "object expansion", "nested objects", "related objects"]
+---
+
+Expansions let you include related objects in a single API response. Instead of making multiple requests, get a post and its author, media, or referenced posts in one call.
+
+---
+
+## How expansions work
+
+When you request an expansion, the API includes the full object in the `includes` section of the response:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?expansions=author_id" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "author_id": "2244994945"
+  },
+  "includes": {
+    "users": [{
+      "id": "2244994945",
+      "name": "X Developers",
+      "username": "xdevelopers"
+    }]
+  }
+}
+```
+
+The `author_id` in `data` links to the user object in `includes`.
+
+---
+
+## Post expansions
+
+| Expansion | Returns | Use case |
+|:----------|:--------|:---------|
+| `author_id` | User object | Get post author details |
+| `referenced_tweets.id` | Post object(s) | Get quoted/replied-to posts |
+| `referenced_tweets.id.author_id` | User object(s) | Get authors of referenced posts |
+| `in_reply_to_user_id` | User object | Get user being replied to |
+| `attachments.media_keys` | Media object(s) | Get images, videos, GIFs |
+| `attachments.poll_ids` | Poll object | Get poll options and votes |
+| `geo.place_id` | Place object | Get location details |
+| `entities.mentions.username` | User object(s) | Get mentioned users |
+| `edit_history_tweet_ids` | Post object(s) | Get previous versions of edited posts |
+
+---
+
+## User expansions
+
+| Expansion | Returns | Use case |
+|:----------|:--------|:---------|
+| `pinned_tweet_id` | Post object | Get user's pinned post |
+
+---
+
+## Space expansions
+
+| Expansion | Returns | Use case |
+|:----------|:--------|:---------|
+| `creator_id` | User object | Get Space creator |
+| `host_ids` | User object(s) | Get Space hosts |
+| `speaker_ids` | User object(s) | Get Space speakers |
+| `invited_user_ids` | User object(s) | Get invited users |
+
+---
+
+## DM expansions
+
+| Expansion | Returns | Use case |
+|:----------|:--------|:---------|
+| `sender_id` | User object | Get message sender |
+| `participant_ids` | User object(s) | Get conversation participants |
+| `attachments.media_keys` | Media object | Get attached media |
+| `referenced_tweets.id` | Post object | Get referenced post |
+
+---
+
+## List expansions
+
+| Expansion | Returns | Use case |
+|:----------|:--------|:---------|
+| `owner_id` | User object | Get list owner |
+
+---
+
+## Combining with fields
+
+Expansions return default fields for each object. To get additional fields, combine expansions with field parameters:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?\
+expansions=author_id,attachments.media_keys&\
+user.fields=description,public_metrics&\
+media.fields=url,alt_text" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Check out this image!",
+    "author_id": "2244994945",
+    "attachments": {
+      "media_keys": ["3_1234567890"]
+    }
+  },
+  "includes": {
+    "users": [{
+      "id": "2244994945",
+      "name": "X Developers",
+      "username": "xdevelopers",
+      "description": "The voice of the X Developer Platform",
+      "public_metrics": {
+        "followers_count": 570842
+      }
+    }],
+    "media": [{
+      "media_key": "3_1234567890",
+      "type": "photo",
+      "url": "https://pbs.twimg.com/media/example.jpg",
+      "alt_text": "Example image"
+    }]
+  }
+}
+```
+
+---
+
+## Multiple expansions
+
+Request multiple expansions as a comma-separated list:
+
+```bash
+expansions=author_id,referenced_tweets.id,attachments.media_keys
+```
+
+---
+
+## Common patterns
+
+<Tabs>
+  <Tab title="Full post context">
+Get a post with author, media, and referenced posts:
+
+```bash
+expansions=author_id,attachments.media_keys,referenced_tweets.id
+tweet.fields=created_at,public_metrics,conversation_id
+user.fields=username,name,profile_image_url
+media.fields=url,preview_image_url,type
+```
+  </Tab>
+  <Tab title="Conversation thread">
+Get replies with their authors:
+
+```bash
+expansions=author_id,in_reply_to_user_id,referenced_tweets.id
+tweet.fields=conversation_id,in_reply_to_user_id,created_at
+user.fields=username,name
+```
+  </Tab>
+  <Tab title="User with pinned post">
+Get a user profile with their pinned post:
+
+```bash
+expansions=pinned_tweet_id
+user.fields=description,public_metrics,verified
+tweet.fields=created_at,public_metrics
+```
+  </Tab>
+</Tabs>
+
+---
+
+## Linking data and includes
+
+The objects in `includes` don't contain position information. Link them using IDs:
+
+```python
+# Python example
+response = api_call()
+post = response["data"]
+users = {u["id"]: u for u in response["includes"]["users"]}
+
+# Get the author
+author = users.get(post["author_id"])
+print(f"{author['name']} said: {post['text']}")
+```
+
+```javascript
+// JavaScript example
+const { data: post, includes } = response;
+const users = Object.fromEntries(
+  includes.users.map(u => [u.id, u])
+);
+
+const author = users[post.author_id];
+console.log(`${author.name} said: ${post.text}`);
+```
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Fields" icon="list" href="/enterprise-api/fundamentals/fields">
+    Request specific fields for each object.
+  </Card>
+  <Card title="Data Dictionary" icon="book" href="/enterprise-api/fundamentals/data-dictionary">
+    Complete object schemas.
+  </Card>
+</CardGroup>

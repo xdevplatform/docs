@@ -1,0 +1,308 @@
+---
+title: Quickstart
+sidebarTitle: Quickstart
+description: Get followers and following lists, and manage follows
+keywords: ["follows quickstart", "followers quickstart", "following tutorial", "follows guide"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide walks you through retrieving followers and following lists, and managing follows.
+
+<Note>
+**Prerequisites**
+
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info) with an approved App
+- Your App's Bearer Token (for lookups)
+- User Access Token (for managing follows)
+</Note>
+
+---
+
+## Get a user's followers
+
+Retrieve the list of users following a specific user:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/followers?\
+user.fields=username,verified,public_metrics&\
+max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get a user's followers with pagination
+for page in client.users.get_followers(
+    "2244994945",
+    user_fields=["username", "verified", "public_metrics"],
+    max_results=100
+):
+    for user in page.data:
+        print(f"{user.username} - Followers: {user.public_metrics.followers_count}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get a user's followers with pagination
+const paginator = client.users.getFollowers("2244994945", {
+  userFields: ["username", "verified", "public_metrics"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Followers: ${user.public_metrics?.followers_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "id": "1234567890",
+      "name": "Developer",
+      "username": "dev_user",
+      "verified": false,
+      "public_metrics": {
+        "followers_count": 500,
+        "following_count": 200,
+        "tweet_count": 1500
+      }
+    }
+  ],
+  "meta": {
+    "result_count": 1,
+    "next_token": "abc123"
+  }
+}
+```
+
+---
+
+## Get who a user follows
+
+Retrieve the list of users that a specific user follows:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/following?\
+user.fields=username,verified&\
+max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get users that a user follows
+for page in client.users.get_following(
+    "2244994945",
+    user_fields=["username", "verified"],
+    max_results=100
+):
+    for user in page.data:
+        print(f"{user.username} - Verified: {user.verified}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get users that a user follows
+const paginator = client.users.getFollowing("2244994945", {
+  userFields: ["username", "verified"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Verified: ${user.verified}`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Follow a user
+
+Follow a user on behalf of the authenticated user:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/users/123456789/following" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"target_user_id": "2244994945"}'
+```
+
+```python Python SDK
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# Follow a user
+response = client.users.follow(
+    source_user_id="123456789",
+    target_user_id="2244994945"
+)
+print(f"Following: {response.data.following}")
+```
+
+```javascript JavaScript SDK
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// Follow a user
+const response = await client.users.follow("123456789", {
+  targetUserId: "2244994945",
+});
+console.log(`Following: ${response.data?.following}`);
+```
+
+</CodeGroup>
+
+### Response
+
+```json
+{
+  "data": {
+    "following": true,
+    "pending_follow": false
+  }
+}
+```
+
+<Note>
+If the target account is protected, `pending_follow` will be `true` until the follow request is approved.
+</Note>
+
+---
+
+## Unfollow a user
+
+Unfollow a user on behalf of the authenticated user:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X DELETE "https://api.x.com/2/users/123456789/following/2244994945" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# Unfollow a user
+response = client.users.unfollow(
+    source_user_id="123456789",
+    target_user_id="2244994945"
+)
+print(f"Following: {response.data.following}")
+```
+
+```javascript JavaScript SDK
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// Unfollow a user
+const response = await client.users.unfollow("123456789", "2244994945");
+console.log(`Following: ${response.data?.following}`);
+```
+
+</CodeGroup>
+
+### Response
+
+```json
+{
+  "data": {
+    "following": false
+  }
+}
+```
+
+---
+
+## Common parameters
+
+| Parameter | Description |
+|:----------|:------------|
+| `max_results` | Results per page (1-1000, default 100) |
+| `pagination_token` | Token for next page |
+| `user.fields` | Additional user fields |
+| `expansions` | Related objects to include |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="User lookup" icon="user" href="/enterprise-api/users/lookup/introduction">
+    Look up user profiles
+  </Card>
+  <Card title="Blocks" icon="ban" href="/enterprise-api/users/blocks/introduction">
+    Block and unblock users
+  </Card>
+  <Card title="Mutes" icon="volume-xmark" href="/enterprise-api/users/mutes/introduction">
+    Mute and unmute users
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/users/get-followers">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

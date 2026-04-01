@@ -1,0 +1,147 @@
+---
+title: V2 Webhooks API
+sidebarTitle: Introduction
+description: Receive real-time event notifications from X via webhook-based JSON messages
+keywords: ["webhooks", "webhook API", "real-time webhooks", "webhook delivery", "event webhooks", "CRC", "challenge response check"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+The V2 Webhooks API enables developers to receive real-time event notifications from X accounts via webhook-based JSON messages. These APIs allow you to register and manage webhooks, develop consumer applications to process events, and ensure secure communication through challenge-response checks (CRC) and signature headers.
+
+## Overview
+
+<CardGroup cols={2}>
+  <Card title="Real-time delivery" icon="bolt">
+    Receive events instantly as they occur
+  </Card>
+  <Card title="Push-based" icon="arrow-right">
+    Data sent directly to your server — no polling
+  </Card>
+  <Card title="Secure" icon="shield">
+    CRC validation and signature verification
+  </Card>
+  <Card title="Reliable" icon="gauge">
+    Retry and recovery support
+  </Card>
+</CardGroup>
+
+---
+
+## Products that support webhooks
+
+These are the products that currently support delivering events via webhook:
+
+| Product | Description |
+|:--------|:------------|
+| [X Activity API (XAA)](/enterprise-api/activity/introduction) | Receive real-time events for activity happening on X |
+| [Account Activity API (AAA)](/enterprise-api/account-activity/introduction) | Receive real-time events tied to specific user accounts |
+| [Filtered Stream Webhooks](/enterprise-api/webhooks/stream/introduction) | Receive filtered stream Posts via webhook delivery |
+
+---
+
+## How webhooks work
+
+```mermaid actions={false}
+flowchart LR
+    A["X Event<br/>Occurs"] --> B["X Server"] --> C["Your<br/>Webhook URL"]
+```
+
+1. **Event occurs** — A user posts, sends a DM, gets followed, etc.
+2. **X sends a POST request** — JSON event payload sent to your registered webhook URL
+3. **You process the event** — Your server handles the event data
+4. **Respond with 200 OK** — Return a 200 status to acknowledge receipt
+
+---
+
+## Webhook requirements
+
+| Requirement | Description |
+|:------------|:------------|
+| **HTTPS** | Webhook URL must use HTTPS |
+| **Publicly accessible** | URL must be reachable from the internet |
+| **No port specification** | The URL cannot include a port (e.g., `https://mydomain.com:5000/webhook` will not work) |
+| **Fast response** | Respond within 10 seconds |
+| **200 OK** | Return 200 status to acknowledge receipt |
+| **CRC support** | Must respond to Challenge-Response Check GET requests ([learn more](/enterprise-api/webhooks/quickstart#2-the-crc-check)) |
+
+---
+
+## Endpoints
+
+| Method | Endpoint | Description |
+|:-------|:---------|:------------|
+| POST | [`/2/webhooks`](/enterprise-api/webhooks/create-webhook) | Register a new webhook |
+| GET | [`/2/webhooks`](/enterprise-api/webhooks/get-webhook) | List registered webhooks |
+| DELETE | [`/2/webhooks/:webhook_id`](/enterprise-api/webhooks/delete-webhook) | Delete a webhook |
+| POST | [`/2/webhooks/replay`](/enterprise-api/webhooks/create-replay-job-for-webhook) | Create a replay job for webhook |
+| PUT | [`/2/webhooks/:webhook_id`](/enterprise-api/webhooks/validate-webhook) | Trigger CRC check and re-enable a webhook |
+
+All endpoints require **OAuth2 App Only Bearer Token** authentication.
+
+---
+
+## Security
+
+X's webhook-based APIs provide two methods for confirming the security of your webhook server:
+
+1. **Challenge-Response Check (CRC)** — X sends periodic GET requests to your webhook URL. You respond with an HMAC-SHA256 hash to prove you control the endpoint. CRC checks happen on initial registration, hourly, and on manual re-validation.
+
+2. **Signature verification** — Each POST request from X includes an `x-twitter-webhooks-signature` header. You can verify this signature to confirm X is the source of incoming events.
+
+<Card title="See full implementation details" icon="code" href="/enterprise-api/webhooks/quickstart">
+  Step-by-step CRC setup, code examples, and signature verification
+</Card>
+
+---
+
+## Webhook validation
+
+A CRC check is sent to your webhook in the following cases:
+
+- Immediately upon creation
+- On an explicit PUT request (`PUT /2/webhooks/{id}`)
+- Periodically every 30 minutes, but only if the webhook has not been successfully validated in the past 24 hours
+
+A webhook is marked as **invalid** when:
+
+- It returns an invalid response to a CRC check
+  - Returns a 2XX status code but the `response_token` is incorrect
+  - Returns a 3XX status code
+  - Results in an SSL exception
+- It experiences persistent transient errors such that it has not successfully validated for more than 28 hours (includes a 4-hour grace period for transient issues)
+  - The following responses are treated as transient errors:
+    - 4XX status code
+    - 5XX status code
+    - Request timeout
+    - Channel closed
+
+You can check the valid/invalid status of a webhook using the `GET /2/webhooks` endpoint or via the toolbox in the Developer Console.
+
+---
+
+## Getting started
+
+<Note>
+**Prerequisites**
+
+- An approved [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- A [Project and App](/resources/fundamentals/developer-apps) in the Developer Console
+- A publicly accessible HTTPS endpoint
+- Your app's **consumer secret** (API secret key) for CRC validation
+</Note>
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/enterprise-api/webhooks/quickstart">
+    Set up your webhook end-to-end
+  </Card>
+  <Card title="Filtered Stream Webhooks" icon="filter" href="/enterprise-api/webhooks/stream/introduction">
+    Receive filtered Posts via webhook
+  </Card>
+  <Card title="Account Activity API" icon="bell" href="/enterprise-api/account-activity/introduction">
+    Receive account events via webhook
+  </Card>
+  <Card title="Sample apps" icon="github" href="/enterprise-api/webhooks/quickstart#sample-apps">
+    Working code examples
+  </Card>
+</CardGroup>

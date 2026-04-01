@@ -1,0 +1,311 @@
+---
+title: Quickstart
+sidebarTitle: Quickstart
+description: Connect to the filtered stream and receive near real-time Posts
+keywords: ["filtered stream quickstart", "streaming quickstart", "filtered stream tutorial", "stream guide", "streaming example"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+This guide walks you through connecting to the filtered stream to receive near real-time Posts matching your filter rules.
+
+<Note>
+**Prerequisites**
+
+Before you begin, you'll need:
+- A [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- Your App's Bearer Token (found in the Developer Console under "Keys and tokens")
+</Note>
+
+---
+
+<Steps>
+  <Step title="Create a filter rule" icon="filter">
+    Rules define which Posts to receive. Use operators to match on keywords, hashtags, users, and more.
+
+    **Example rule:** Match Posts containing "cat" with images:
+
+    ```
+    cat has:images
+    ```
+
+    <Card title="Build a rule" icon="filter" href="/enterprise-api/posts/filtered-stream/integrate/build-a-rule">
+      Learn rule syntax and operators
+    </Card>
+  </Step>
+
+  <Step title="Add the rule to your stream" icon="plus">
+    Add your rule using the rules endpoint. Include a `tag` to identify which rule matched each Post:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Authorization: Bearer $BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "add": [
+      {"value": "cat has:images", "tag": "cats with images"}
+    ]
+  }'
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Add a rule to the filtered stream
+response = client.filtered_stream.add_rules(
+    add=[{"value": "cat has:images", "tag": "cats with images"}]
+)
+
+for rule in response.data:
+    print(f"Rule added: {rule.id} - {rule.value}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Add a rule to the filtered stream
+const response = await client.filteredStream.addRules({
+  add: [{ value: "cat has:images", tag: "cats with images" }],
+});
+
+response.data?.forEach((rule) => {
+  console.log(`Rule added: ${rule.id} - ${rule.value}`);
+});
+```
+
+</CodeGroup>
+
+    **Response:**
+
+    ```json
+    {
+      "data": [
+        {
+          "id": "1273026480692322304",
+          "value": "cat has:images",
+          "tag": "cats with images"
+        }
+      ],
+      "meta": {
+        "sent": "2024-01-15T10:30:00.000Z",
+        "summary": {
+          "created": 1,
+          "not_created": 0,
+          "valid": 1,
+          "invalid": 0
+        }
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Verify your rules" icon="check">
+    List all active rules to confirm your rule was added:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get all active rules
+response = client.filtered_stream.get_rules()
+
+for rule in response.data:
+    print(f"Active rule: {rule.id} - {rule.value}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get all active rules
+const response = await client.filteredStream.getRules();
+
+response.data?.forEach((rule) => {
+  console.log(`Active rule: ${rule.id} - ${rule.value}`);
+});
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Connect to the stream" icon="plug">
+    Open a persistent connection to receive matching Posts:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/stream?\
+tweet.fields=created_at,author_id&\
+expansions=author_id&\
+user.fields=username" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Connect to the filtered stream
+for post in client.filtered_stream.stream(
+    tweet_fields=["created_at", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username"]
+):
+    print(f"New post: {post.data.text}")
+    print(f"Matching rules: {post.matching_rules}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Connect to the filtered stream
+const stream = client.filteredStream.stream({
+  tweetFields: ["created_at", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username"],
+});
+
+for await (const post of stream) {
+  console.log(`New post: ${post.data?.text}`);
+  console.log(`Matching rules: ${post.matching_rules}`);
+}
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Process incoming Posts" icon="message">
+    Matching Posts stream as JSON objects:
+
+    ```json
+    {
+      "data": {
+        "id": "1234567890",
+        "text": "Look at this cute cat! 🐱",
+        "author_id": "9876543210",
+        "created_at": "2024-01-15T10:35:00.000Z",
+        "edit_history_tweet_ids": ["1234567890"]
+      },
+      "includes": {
+        "users": [
+          {
+            "id": "9876543210",
+            "username": "catperson"
+          }
+        ]
+      },
+      "matching_rules": [
+        {
+          "id": "1273026480692322304",
+          "tag": "cats with images"
+        }
+      ]
+    }
+    ```
+
+    <Tip>
+    The `matching_rules` array shows which rules matched the Post, using the tags you defined.
+    </Tip>
+  </Step>
+
+  <Step title="Delete rules (optional)" icon="trash">
+    Remove rules by their ID:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Authorization: Bearer $BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "delete": {
+      "ids": ["1273026480692322304"]
+    }
+  }'
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Delete rules by ID
+response = client.filtered_stream.delete_rules(
+    delete={"ids": ["1273026480692322304"]}
+)
+print(f"Deleted: {response.meta.summary.deleted}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Delete rules by ID
+const response = await client.filteredStream.deleteRules({
+  delete: { ids: ["1273026480692322304"] },
+});
+console.log(`Deleted: ${response.meta?.summary?.deleted}`);
+```
+
+</CodeGroup>
+
+  </Step>
+</Steps>
+
+---
+
+## Managing your connection
+
+<AccordionGroup>
+  <Accordion title="Keep-alive signals">
+    The stream sends blank lines (`\r\n`) every 20 seconds. If you don't receive data or a keep-alive for 20 seconds, reconnect.
+  </Accordion>
+
+  <Accordion title="Disconnecting">
+    Press `Ctrl+C` to close the connection, or close your terminal window.
+  </Accordion>
+
+  <Accordion title="Connection limits">
+    Only one connection per App is allowed. Opening a new connection will close any existing one.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Build a rule" icon="filter" href="/enterprise-api/posts/filtered-stream/integrate/build-a-rule">
+    Learn rule syntax
+  </Card>
+  <Card title="Operator reference" icon="list-check" href="/enterprise-api/posts/filtered-stream/integrate/operators">
+    All available operators
+  </Card>
+  <Card title="Handling disconnections" icon="plug" href="/enterprise-api/posts/filtered-stream/integrate/handling-disconnections">
+    Reconnect gracefully
+  </Card>
+  <Card title="API Reference" icon="code" href="/enterprise-api/posts/filtered-stream">
+    Full endpoint documentation
+  </Card>
+</CardGroup>

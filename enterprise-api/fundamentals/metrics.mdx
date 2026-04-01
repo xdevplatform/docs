@@ -1,0 +1,230 @@
+---
+title: Metrics
+sidebarTitle: Metrics
+description: Access engagement metrics for posts and media
+keywords: ["metrics", "engagement metrics", "tweet metrics", "impressions", "likes", "retweets", "video views", "analytics"]
+---
+
+The X API provides engagement metrics for posts and media. Access public metrics with any authentication, or private metrics for your own content with user authentication.
+
+---
+
+## Metric types
+
+| Type | Authentication | Description |
+|:-----|:---------------|:------------|
+| **Public** | Bearer Token | Visible to anyone (impressions, likes, reposts, replies) |
+| **Non-public** | User context | Private metrics (clicks) |
+| **Organic** | User context | Metrics from non-promoted views |
+| **Promoted** | User context | Metrics from ad views |
+
+<Note>
+**30-day limit**: Non-public, organic, and promoted metrics are only available for posts created within the last 30 days.
+</Note>
+
+---
+
+## Available metrics
+
+### Post metrics
+
+| Metric | Type | Field path |
+|:-------|:-----|:-----------|
+| Reposts | Public | `public_metrics.retweet_count` |
+| Quotes | Public | `public_metrics.quote_count` |
+| Likes | Public | `public_metrics.like_count` |
+| Replies | Public | `public_metrics.reply_count` |
+| Impressions | Public | `public_metrics.impression_count` |
+| Bookmarks | Public | `public_metrics.bookmark_count` |
+| URL clicks | Non-public | `non_public_metrics.url_link_clicks` |
+| Profile clicks | Non-public | `non_public_metrics.user_profile_clicks` |
+| Engagements | Non-public | `non_public_metrics.engagements` |
+
+### Media metrics (videos)
+
+| Metric | Type | Field path |
+|:-------|:-----|:-----------|
+| Views | Public | `public_metrics.view_count` |
+| Playback 0% | Non-public | `non_public_metrics.playback_0_count` |
+| Playback 25% | Non-public | `non_public_metrics.playback_25_count` |
+| Playback 50% | Non-public | `non_public_metrics.playback_50_count` |
+| Playback 75% | Non-public | `non_public_metrics.playback_75_count` |
+| Playback 100% | Non-public | `non_public_metrics.playback_100_count` |
+
+---
+
+## Requesting metrics
+
+### Public metrics (any auth)
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?tweet.fields=public_metrics" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "public_metrics": {
+      "retweet_count": 50,
+      "reply_count": 12,
+      "like_count": 234,
+      "quote_count": 5,
+      "bookmark_count": 8,
+      "impression_count": 5432
+    }
+  }
+}
+```
+
+### Private metrics (user context)
+
+Requires OAuth 1.0a or OAuth 2.0 with user context for posts you own:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?tweet.fields=non_public_metrics,organic_metrics" \
+  -H "Authorization: OAuth oauth_consumer_key=...,oauth_token=..."
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "non_public_metrics": {
+      "impression_count": 5432,
+      "url_link_clicks": 89,
+      "user_profile_clicks": 156,
+      "engagements": 345
+    },
+    "organic_metrics": {
+      "impression_count": 5432,
+      "like_count": 234,
+      "reply_count": 12,
+      "retweet_count": 50,
+      "url_link_clicks": 89,
+      "user_profile_clicks": 156
+    }
+  }
+}
+```
+
+---
+
+## Video metrics
+
+For video playback metrics, use the media expansion:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?\
+tweet.fields=attachments&\
+expansions=attachments.media_keys&\
+media.fields=public_metrics,non_public_metrics" \
+  -H "Authorization: OAuth ..."
+```
+
+Response:
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Check out this video!",
+    "attachments": {
+      "media_keys": ["13_9876543210"]
+    }
+  },
+  "includes": {
+    "media": [{
+      "media_key": "13_9876543210",
+      "type": "video",
+      "public_metrics": {
+        "view_count": 12543
+      },
+      "non_public_metrics": {
+        "playback_0_count": 12543,
+        "playback_25_count": 9876,
+        "playback_50_count": 7654,
+        "playback_75_count": 5432,
+        "playback_100_count": 3210
+      }
+    }]
+  }
+}
+```
+
+---
+
+## Organic vs. promoted metrics
+
+If a post was promoted as an ad, metrics split between organic and promoted views:
+
+| Context | Description |
+|:--------|:------------|
+| **Organic** | Metrics from normal timeline views |
+| **Promoted** | Metrics from paid ad impressions |
+| **Public** | Combined total (organic + promoted) |
+
+Request both to see the breakdown:
+
+```bash
+tweet.fields=public_metrics,organic_metrics,promoted_metrics
+```
+
+---
+
+## Metric definitions
+
+<Accordion title="Impressions">
+Count of times the post appeared on a user's screen. Not unique—the same user viewing twice counts as two impressions.
+</Accordion>
+
+<Accordion title="Repost count">
+Number of reposts (retweets). Does not include quote posts.
+</Accordion>
+
+<Accordion title="Quote count">
+Number of quote posts (reposts with comment). These are always organic.
+</Accordion>
+
+<Accordion title="Bookmark count">
+Number of times the post has been bookmarked by users.
+</Accordion>
+
+<Accordion title="Video views">
+Aggregated across all posts containing the video. A video reposted in multiple posts has one total view count.
+</Accordion>
+
+<Accordion title="Playback quartiles">
+Number of unique users who played through each percentage of the video. Useful for understanding drop-off rates.
+</Accordion>
+
+---
+
+## Requirements summary
+
+| Metric field | Authentication required |
+|:-------------|:-----------------------|
+| `public_metrics` | Bearer Token (any) |
+| `non_public_metrics` | User context (owned posts only) |
+| `organic_metrics` | User context (owned posts only) |
+| `promoted_metrics` | User context (promoted posts only) |
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Data Dictionary" icon="book" href="/enterprise-api/fundamentals/data-dictionary">
+    Complete field reference.
+  </Card>
+  <Card title="Authentication" icon="key" href="/resources/fundamentals/authentication/overview">
+    Set up user context auth.
+  </Card>
+</CardGroup>
