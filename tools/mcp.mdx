@@ -1,0 +1,167 @@
+---
+title: MCP Servers
+sidebarTitle: MCP
+description: MCP servers for calling X API endpoints and searching X API documentation from AI tools
+keywords: ["XMCP", "MCP", "Model Context Protocol", "docs MCP", "AI agent", "AI tools", "Grok", "Cursor", "Windsurf", "OpenAPI", "MCP server"]
+---
+
+Two [MCP](https://modelcontextprotocol.io) (Model Context Protocol) servers are available for working with X from AI tools:
+
+| Server | What it does | URL |
+|:-------|:-------------|:----|
+| **XMCP** | Call X API endpoints (create posts, search, look up users, etc.) | `http://127.0.0.1:8000/mcp` (local) |
+| **Docs MCP** | Search and read X API documentation | `https://docs.x.com/mcp` (hosted) |
+
+---
+
+## XMCP — X API endpoints
+
+[XMCP](https://github.com/xdevplatform/xmcp) is an official MCP server that exposes X API endpoints as callable tools. Run it locally and connect any MCP-compatible client — like Cursor, Windsurf, or your own agent — to read and write to X programmatically.
+
+<CardGroup cols={2}>
+  <Card title="GitHub repository" icon="github" href="https://github.com/xdevplatform/xmcp">
+    Source code, setup instructions, and configuration.
+  </Card>
+  <Card title="What is MCP?" icon="circle-info" href="https://modelcontextprotocol.io">
+    Learn about the Model Context Protocol standard.
+  </Card>
+</CardGroup>
+
+XMCP loads the X API [OpenAPI specification](https://api.x.com/2/openapi.json) at startup and converts every operation into an MCP tool. Your AI assistant can then call these tools to interact with the X API — creating posts, searching, looking up users, and more.
+
+**Key features:**
+
+- **200+ tools** automatically generated from the OpenAPI spec — search posts, create posts, look up users, manage likes, and more
+- **OAuth 1.0a authentication** with browser-based consent flow
+- **Tool allow-listing** via `X_API_TOOL_ALLOWLIST` to restrict which API operations are available
+- **Works with any MCP client** — Cursor, Windsurf, or custom implementations
+- **Optional Grok test client** using the xAI API
+
+### Quick setup
+
+<Steps>
+  <Step title="Clone and install">
+    Requires Python 3.9+.
+
+    ```bash
+    git clone https://github.com/xdevplatform/xmcp && cd xmcp
+    python -m venv .venv && source .venv/bin/activate
+    pip install -r requirements.txt
+    ```
+  </Step>
+  <Step title="Configure credentials">
+    Copy the example environment file and add your X API credentials:
+
+    ```bash
+    cp env.example .env
+    ```
+
+    Edit `.env` with your app's OAuth consumer key, consumer secret, and bearer token from the [Developer Console](https://console.x.com). Set your callback URL (e.g., `http://127.0.0.1:8976/oauth/callback`) — make sure to register it in the Developer Console too.
+  </Step>
+  <Step title="Start the server">
+    ```bash
+    python server.py
+    ```
+    
+    The MCP server starts at `http://127.0.0.1:8000/mcp` by default. Host and port are configurable via environment variables.
+  </Step>
+  <Step title="Connect your AI tool">
+    Point your MCP-compatible client to `http://127.0.0.1:8000/mcp`. See the [XMCP README](https://github.com/xdevplatform/xmcp) for client-specific configuration.
+  </Step>
+</Steps>
+
+### Configuration
+
+Add XMCP to your MCP client settings:
+
+```json
+{
+  "mcpServers": {
+    "xmcp": {
+      "url": "http://127.0.0.1:8000/mcp"
+    }
+  }
+}
+```
+
+Once connected, you can ask your AI assistant to interact with X directly — "search for recent posts about AI", "look up @XDevelopers", or "create a post".
+
+### Tool allow-listing
+
+By default, XMCP exposes all X API operations as tools. Use the `X_API_TOOL_ALLOWLIST` environment variable to restrict which tools are available:
+
+```bash
+X_API_TOOL_ALLOWLIST="createPosts,getUsersByUsername,searchPostsRecent,likePost"
+```
+
+This is useful for limiting what an AI agent can do — for example, allowing read-only operations while blocking post creation or deletion.
+
+### Limitations
+
+- **No streaming or webhook endpoints** — these require persistent connections that don't fit the MCP request/response model
+- **Spec fetched at startup** — restart the server to pick up any API spec updates
+- **Tokens stored in memory** — OAuth tokens are not persisted across restarts
+
+---
+
+## Docs MCP — documentation search
+
+An MCP server for the X API documentation is hosted at `https://docs.x.com/mcp`. Connect it to your AI tool to search and read documentation pages without leaving your workflow.
+
+### Available tools
+
+| Tool | Description |
+|:-----|:------------|
+| `search_x` | Search across the X documentation for relevant information, code examples, API references, and guides |
+| `get_page_x` | Retrieve the full content of a specific documentation page by its path |
+
+### Configuration
+
+Add the docs MCP server to your MCP client configuration:
+
+```json
+{
+  "mcpServers": {
+    "x-docs": {
+      "url": "https://docs.x.com/mcp"
+    }
+  }
+}
+```
+
+This is useful when you're building with the X API and want your AI assistant to look up endpoint details, authentication guides, or code examples on the fly.
+
+---
+
+## Using both servers together
+
+You can connect both MCP servers simultaneously. This gives your AI assistant the ability to both look up documentation *and* call the API:
+
+```json
+{
+  "mcpServers": {
+    "xmcp": {
+      "url": "http://127.0.0.1:8000/mcp"
+    },
+    "x-docs": {
+      "url": "https://docs.x.com/mcp"
+    }
+  }
+}
+```
+
+---
+
+## OpenAPI specification
+
+The machine-readable API specification for all X API v2 endpoints. This is the same spec that XMCP uses to generate its tools.
+
+| Resource | URL |
+|:---------|:----|
+| **OpenAPI Spec (JSON)** | [`https://api.x.com/2/openapi.json`](https://api.x.com/2/openapi.json) |
+
+```bash
+curl https://api.x.com/2/openapi.json -o openapi.json
+```
+
+You can use it to auto-generate API clients, import into [Postman](https://www.postman.com/xapidevelopers/x-api-public-workspace/collection/34902927-2efc5689-99c6-4ab6-8091-996f35c2fd80), feed into custom AI agents, or validate request/response schemas.
