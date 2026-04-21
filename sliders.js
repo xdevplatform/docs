@@ -36,6 +36,20 @@ async function fetchPricingData() {
   return pricingDataPromise;
 }
 
+// Endpoints that qualify for Owned Read pricing ($0.001/resource)
+// when {id} matches the authenticated user who owns the developer app
+const OWNED_READ_SLUGS = new Set([
+  'get-bookmarks', 'get-blocking', 'get-muting', 'get-pinned-lists',
+  'get-posts', 'get-mentions', 'get-liked-posts',
+  'get-followers', 'get-following',
+  'get-owned-lists', 'get-followed-lists', 'get-list-memberships'
+]);
+
+// Endpoints that require an Enterprise plan (not available on self-serve)
+const ENTERPRISE_ONLY_SLUGS = new Set([
+  'follow-user', 'unfollow-user', 'like-post', 'unlike-post'
+]);
+
 // Build mapping from pricing types to display strings
 function getPricingTypeDisplayName(pricingType) {
   const displayMapping = {
@@ -406,7 +420,7 @@ async function getPricingForType(pricingType) {
   return null;
 }
 
-function createSliderContent(endpointName, unitCost, pricingType) {
+function createSliderContent(endpointName, unitCost, pricingType, options = {}) {
   const maxUsage = 50000; // 50k
   
   // Determine if this is event type (per resource) or request type (per request)
@@ -525,6 +539,33 @@ function createSliderContent(endpointName, unitCost, pricingType) {
   unitCostDiv.className = 'text-xs text-gray-500 dark:text-gray-400 mb-2';
   unitCostDiv.textContent = `Unit Cost: $${unitCost.toFixed(3)} ${unitLabel}`;
   container.appendChild(unitCostDiv);
+  
+  // Owned Read note
+  if (options.ownedReadCost) {
+    const ownedReadNote = document.createElement('div');
+    ownedReadNote.className = 'text-xs mb-2';
+    ownedReadNote.style.color = '#00BA7C';
+    ownedReadNote.textContent = `Owned Read price: $${options.ownedReadCost.toFixed(3)} ${unitLabel} when accessing your own data as the app owner`;
+    container.appendChild(ownedReadNote);
+  }
+  
+  // Enterprise-only warning
+  if (options.enterpriseOnly) {
+    const enterpriseNote = document.createElement('div');
+    enterpriseNote.className = 'text-xs mb-2';
+    enterpriseNote.style.cssText = 'color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); border-radius: 6px; padding: 6px 8px;';
+    enterpriseNote.textContent = 'This endpoint requires an Enterprise plan. Not available on self-serve (pay-per-use) tiers.';
+    container.appendChild(enterpriseNote);
+  }
+  
+  // URL post pricing note
+  if (options.urlNote) {
+    const urlNote = document.createElement('div');
+    urlNote.className = 'text-xs mb-2';
+    urlNote.style.color = '#9ca3af';
+    urlNote.textContent = 'Posts containing a URL: $0.200 per request (summoned replies remain at standard price).';
+    container.appendChild(urlNote);
+  }
   
   // Usage label
   const usageLabel = document.createElement('div');
@@ -665,7 +706,23 @@ async function createOrUpdateDropdown() {
   dropdown.style.marginTop = '0.5rem';
   
   const endpointDisplayName = getPricingTypeDisplayName(pricingType);
-  const sliderContent = createSliderContent(endpointDisplayName, pricing.cost, pricingType);
+  
+  // Determine additional pricing context from the current page slug
+  const slugMatch = window.location.pathname.match(/\/([^\/]+)$/);
+  const currentSlug = slugMatch ? slugMatch[1] : '';
+  const sliderOptions = {};
+  
+  if (OWNED_READ_SLUGS.has(currentSlug)) {
+    sliderOptions.ownedReadCost = 0.001;
+  }
+  if (ENTERPRISE_ONLY_SLUGS.has(currentSlug)) {
+    sliderOptions.enterpriseOnly = true;
+  }
+  if (currentSlug === 'create-post') {
+    sliderOptions.urlNote = true;
+  }
+  
+  const sliderContent = createSliderContent(endpointDisplayName, pricing.cost, pricingType, sliderOptions);
   dropdown.appendChild(sliderContent);
   
   // Position the page context menu as relative for absolute dropdown positioning
