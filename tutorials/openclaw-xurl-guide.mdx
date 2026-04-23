@@ -1,0 +1,317 @@
+---
+title: Talk to the X API from OpenClaw with the xurl skill
+description: "Use OpenClaw with Grok and the xurl CLI to post, search, manage lists, and run agentic X API workflows from your machine."
+sidebarTitle: OpenClaw + xurl
+mode: wide
+keywords: ["OpenClaw", "xurl", "Grok", "X API", "AI agent", "self-hosted agent", "OAuth", "automation", "lists", "tutorial"]
+---
+
+OpenClaw is an open-source, self-hosted personal AI assistant with a built-in skills system — which is where xurl plugs in. With **xurl** installed, OpenClaw can post to X, search, pull bookmarks, manage lists, and call any other X API endpoint — through plain English. This guide gets you from zero to a working setup with **Grok** as the model and **xurl** as the bridge to X.
+
+<Note>
+OpenClaw is in beta and personal-by-default. If you plan to expose it beyond a single trusted operator, read the [security docs](https://docs.openclaw.ai/gateway/security) first.
+</Note>
+
+---
+
+## What you need
+
+- A [Grok API key](https://console.x.ai)
+- An [X developer account](https://developer.x.com) (you'll create an app and load X API credits in step 4)
+- macOS, Linux, or WSL2 (native Windows works but WSL2 is recommended)
+- Node.js 24 (or 22.14+) — the installer will set this up if missing
+
+---
+
+## 1. Install OpenClaw
+
+<Tabs>
+  <Tab title="macOS / Linux / WSL2">
+    ```bash
+    curl -fsSL https://openclaw.ai/install.sh | bash
+    ```
+  </Tab>
+  <Tab title="Windows (PowerShell)">
+    ```powershell
+    iwr -useb https://openclaw.ai/install.ps1 | iex
+    ```
+  </Tab>
+</Tabs>
+
+Other install options (npm, Docker, macOS app) are in the [OpenClaw install docs](https://docs.openclaw.ai/install).
+
+Verify the install:
+
+```bash
+openclaw --version
+```
+
+<Note>
+If a new shell can't find the command, add the npm global bin directory to your PATH. The installer prints the exact line to copy.
+</Note>
+
+---
+
+## 2. Configure Grok as your model provider
+
+Run the recommended onboarding command — it walks the wizard and installs the background gateway service in one step:
+
+```bash
+openclaw onboard --install-daemon
+```
+
+In the wizard:
+
+<Steps>
+  <Step title="Accept the security disclaimer">
+    Confirms you understand OpenClaw runs with your local credentials.
+  </Step>
+  <Step title="Pick QuickStart">
+    Local gateway, token auth, no exposure.
+  </Step>
+  <Step title="Choose xAI (Grok) (API key) as the model provider">
+    The wizard will prompt for your API key next.
+  </Step>
+  <Step title="Paste your Grok API key">
+    Stored locally by OpenClaw.
+  </Step>
+  <Step title="Pick a default model">
+    `xai/grok-4` is a good default.
+  </Step>
+  <Step title="Skip channels and skills for now">
+    You'll layer those in once xurl is working.
+  </Step>
+</Steps>
+
+When it finishes, confirm the gateway is healthy:
+
+```bash
+openclaw gateway status
+openclaw dashboard         # opens the Control UI in your browser
+```
+
+For everything else (channels, hooks, advanced wizard options, doctor) see the [OpenClaw onboarding docs](https://docs.openclaw.ai/start/onboarding).
+
+<Tip>
+Copy your Grok key directly from [console.x.ai](https://console.x.ai). PDFs and rich-text editors can substitute lookalike Unicode for ASCII letters and silently break auth.
+</Tip>
+
+---
+
+## 3. Install xurl
+
+xurl is a standalone CLI for the X API. OpenClaw shells out to it when you ask the agent to do something X-related. Pick whichever install method fits your machine:
+
+<CodeGroup>
+
+```bash Shell script
+# No sudo, installs to ~/.local/bin
+curl -fsSL https://raw.githubusercontent.com/xdevplatform/xurl/main/install.sh | bash
+```
+
+```bash Homebrew
+brew install --cask xdevplatform/tap/xurl
+```
+
+```bash npm
+npm install -g @xdevplatform/xurl
+```
+
+```bash Go
+go install github.com/xdevplatform/xurl@latest
+```
+
+</CodeGroup>
+
+If you used the shell script, make sure `~/.local/bin` is on your PATH:
+
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Confirm:
+
+```bash
+xurl --help
+```
+
+---
+
+## 4. Authenticate xurl with the X API
+
+<Warning>
+Do this in your terminal directly — never paste secrets into a chat.
+</Warning>
+
+### Create the developer app
+
+<Steps>
+  <Step title="Open the Developer Console">
+    Go to [developer.x.com/en/portal/dashboard](https://developer.x.com/en/portal/dashboard).
+  </Step>
+  <Step title="Create or reuse an app">
+    Create a new app, or reuse an existing one.
+  </Step>
+  <Step title="Set the redirect URI">
+    Under **User authentication settings**, set the redirect URI to `http://localhost:8080/callback`.
+  </Step>
+  <Step title="Copy the Client ID and Client Secret">
+    You'll wire these into xurl in a moment.
+  </Step>
+</Steps>
+
+### Load API credits
+
+The X API is pay-per-use, so you need to load credits before xurl can make any calls — including `xurl whoami` below.
+
+<Steps>
+  <Step title="Open the X API console">
+    Go to [console.x.com](https://console.x.com).
+  </Step>
+  <Step title="Purchase credits">
+    Navigate to **Billing → Credits → Purchase Credits** and buy a starting balance.
+  </Step>
+  <Step title="Set guardrails">
+    While you're there, enable **auto-recharge** and set a **max spend cap** — useful insurance when an agent is the one making the calls.
+  </Step>
+</Steps>
+
+See the [X API pricing docs](/x-api/getting-started/pricing) and the [X API introduction](/x-api/introduction) for current rates and endpoint costs.
+
+### Wire them into xurl and authorize
+
+```bash
+xurl auth apps add my-app \
+  --client-id YOUR_CLIENT_ID \
+  --client-secret YOUR_CLIENT_SECRET
+
+xurl auth oauth2 --app my-app          # opens browser for OAuth
+xurl auth default my-app
+xurl whoami                            # should print your X handle
+```
+
+That's the whole auth dance. xurl now has a token to act on your behalf.
+
+---
+
+## 5. Use xurl from OpenClaw
+
+Open the Control UI (`openclaw dashboard`) or send a message via whichever channel you've connected. Then describe what you want — and mention xurl explicitly the first few times so OpenClaw reaches for the right tool.
+
+**Post:**
+
+```
+Use xurl to post "Hello from OpenClaw" to my X account.
+```
+
+OpenClaw runs `xurl post "Hello from OpenClaw"` and reports the post ID and link.
+
+**Read your bookmarks:**
+
+```
+Fetch my latest 50 bookmarks with xurl and group them by topic.
+```
+
+### More things to try
+
+<AccordionGroup>
+  <Accordion title="Search X and summarize" icon="magnifying-glass">
+    ```
+    Search X for recent posts about OpenClaw using xurl and summarize them.
+    ```
+  </Accordion>
+  <Accordion title="Reply to a post" icon="reply">
+    ```
+    Reply to post 2047107136023650625 saying 'Thanks for sharing'.
+    ```
+  </Accordion>
+  <Accordion title="Quote a post" icon="quote-left">
+    ```
+    Quote post 2047107136023650625 and add my own commentary.
+    ```
+  </Accordion>
+  <Accordion title="Look up a user" icon="user">
+    ```
+    Look up @username with xurl and show their bio and follower count.
+    ```
+  </Accordion>
+  <Accordion title="Triage your timeline" icon="list">
+    ```
+    Pull my home timeline and pick the three threads most worth my time.
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+If you want to keep the agent's tool surface small, OpenClaw's sandbox can restrict which terminal commands it's allowed to run. See the [security docs](https://docs.openclaw.ai/gateway/security) for the schema.
+</Tip>
+
+---
+
+## 6. Going further: build curated X Lists with a research agent
+
+Posting and reading is just the surface. The agent gets interesting when it composes xurl with the rest of OpenClaw's toolbox — Grok for reasoning, the web search provider you configured during onboarding, and scheduled tasks. Here's a workflow that turns "build a List of the smart people in [topic]" from a tedious afternoon into a single prompt.
+
+In the Control UI:
+
+```
+Build me a private X List called "[topic] thinkers" of the people
+consistently posting substantive content about [topic]. Use xurl to
+search posts from the past 30 days, weight by engagement and reach,
+and find authors who show up repeatedly with original takes — skip
+news aggregators, link-droppers, and engagement farmers. Web-search
+each candidate to verify their actual expertise (papers, projects,
+real-world work). Show me the top 25 with a one-line rationale for
+each, then add them to the List once I approve.
+```
+
+OpenClaw will:
+
+<Steps>
+  <Step title="Search posts on the topic">
+    Calls `xurl search` to surface posts and the authors behind them.
+  </Step>
+  <Step title="Rank candidates">
+    Uses Grok to dedupe candidates and rank them for signal vs. noise.
+  </Step>
+  <Step title="Verify expertise">
+    Hits your web search provider to verify each candidate's expertise.
+  </Step>
+  <Step title="Show proposed members">
+    Returns the candidate List with a rationale for each name.
+  </Step>
+  <Step title="Create and populate the List">
+    After approval, creates the List via xurl and adds the members.
+  </Step>
+</Steps>
+
+Lists are one of X's most useful features and one of the most tedious to build by hand. With xurl plus an agent, you can spin up a focused List for any new project, conference, or research interest in minutes. Schedule the same prompt monthly and your Lists stay fresh as new voices emerge.
+
+A few variations to try once the basic flow works:
+
+- "Audit my existing Lists — who's gone inactive, who should I add?"
+- "Build a List from the authors of every post I've bookmarked this year"
+- "Build a List of speakers from this conference's hashtag"
+
+Once you trust a workflow, [package it as a custom skill](https://docs.openclaw.ai) so the agent can reach for it by name. That's the real story: xurl gives you the X API, but the agent gives you a reason to use it.
+
+---
+
+## Where to go next
+
+<CardGroup cols={3}>
+  <Card title="xurl on GitHub" icon="github" href="https://github.com/xdevplatform/xurl">
+    Source code, releases, and the SKILL.md spec.
+  </Card>
+  <Card title="X API reference" icon="book" href="/x-api/introduction">
+    Endpoints, fields, and expansions for the X API.
+  </Card>
+  <Card title="OpenClaw docs" icon="robot" href="https://docs.openclaw.ai">
+    Channels, skills, sandboxing, and scheduled tasks.
+  </Card>
+</CardGroup>
+
+<Tip>
+When something doesn't behave, run `openclaw doctor` and `xurl auth status` — between them they catch most setup issues.
+</Tip>
