@@ -1,7 +1,8 @@
 ---
 title: Compliance Firehose API
 keywords: ["compliance firehose", "firehose API", "compliance API", "enterprise firehose", "compliance stream", "firehose"]
----
+
+description: >**Please note** > >We have released a new compliance tool to X API v2 called [batch compliance](/x-api/compliance/batch-compliance). This new tool allo...---
 
 >**Please note**
 >
@@ -274,109 +275,4 @@ See the payload examples below for each compliance event described in the table 
 ```
 ### integrating Compliance Firehose
 
-The Compliance Firehose is a realtime streaming API that delivers compliance events that occur on the X platform. For an understanding of compliance events and how they are generated on X, please reference our article, [Honoring User Intent on X](/x-api/enterprise-gnip-2.0/fundamentals/firehouse#honoring-user-intent-on-twitter).
-
-It is important to note that Post and User events are delivered independently and that each should be processed independently (i.e. a Post delete doesn’t imply a User event, and vice versa.) Several User events are not necessarily permanent and can toggle between states infinitely. These include: user\_delete,user\_undelete, user\_protect, user\_unprotect and user\_suspend, user\_unsuspend.
-
-User\_deletes are followed by status\_deletes 30 days later only if the user has not selected to user\_undelete their account. It is possible that a user\_delete is reversed by the user and deletes for all of their Posts 30 days later do not occur.
-
-User\_suspend is an action that remains true unless the user is subject to an user\_unsuspend event. These are not subject to any changes on a 30 day time period.
-
-It is never suitable to display compliance events directly to users of your software or to otherwise incorporate them into your products or customer experiences. They are intended solely for maintaining compliance and honoring the actions of X users.
-
-#### **Integrating with the Compliance Firehose**
-
-To integrate the Compliance Firehose into your system, you will need to build an integration that can do the following:
-
-1.  Establish a streaming connection to each streaming API partition of the Compliance Firehose
-2.  Handle high data volumes – de-couple stream ingestion from additional processing using asynchronous processes
-3.  Reconnect to the stream partitions automatically when disconnected for any reason
-4.  Process compliance events that are relevant to Post and User data you have stored in accordance with the guidance presented above
-
-
-### Honoring user intent on Twitter
-
-We believe that respecting the privacy and intent of X users is critically important to the long term health of one of the largest public, real-time information platforms in the world. X puts privacy controls in the hands of its users, giving individuals the ability to control their own X experience. As business consumers of X data, we have a collective responsibility to honor the privacy and actions of end users in order to maintain this environment of trust and respect.
-
-There are a variety of things that can happen to Posts and User accounts that impact how they are displayed on the platform. The actions that affect privacy and intent are defined at both the Status (Post) and User levels. These actions include:
-
-#### User
-
-| Action | Description |
-| :--- | :--- |
-| Protect Account | A X user can protect or unprotect their account at any time. Protected accounts require manual user approval of every person who is allowed to view their account's Posts.   <br/>For more information, see [About Public and Protected Posts](https://support.x.com/articles/14016-about-public-and-protected-tweets). |
-| Delete Account | A X user can decide to delete their account and all associated status messages at any time. X retains the account information for 30 days after deletion in case the user decides to undelete and effectively reactivate their account. |
-| Scrub Geo | A X user can remove all location data from past Posts at any time. This known as “scrub geo”. |
-| Suspend Account | X retains the right to suspend accounts that are in violation of the X Rules or if an account is suspected to have been hacked or compromised. Account suspensions can only be reversed (unsuspend) by X. |
-| Withhold Account | X retains the right to reactively withhold access to certain content in a specific country from time to time. A withheld account can only be made unwithheld by X.   <br/>For more information, see [Country Withheld Content](https://support.x.com/articles/20169222-country-withheld-content). |
-
-#### Status
-
-| Action | Description |
-| :--- | :--- |
-| Delete Status | A X user can delete a status at any point in time. Deleted statuses cannot be reversed and are permanently deleted. |
-| Withhold Status | X retains the right to reactively withhold access to certain content in a specific country from time to time. A withheld status can only be made unwithheld by X.   <br/>For more information, see [Country Withheld Content](https://support.x.com/articles/20169222-country-withheld-content). |
-
-#### Keeping Track of User and Status Changes
-
-The state of a User or Status can change at any time due to one of the actions above, and this impacts how consumers of X data are expected to treat the availability and privacy of all associated content. When these actions happen, a corresponding compliance message is sent that indicates that the state of a Status or User has changed.
-
-## API Reference
-
-### **GET compliance/firehose**
-
-#### Methods
-
-| Method | Description |
-| :--- | :--- |
-| [GET /compliance/:stream](#Connect) | Connect to the Data Stream |
-
-#### Authentication
-
-All requests to the Compliance Firehose API must use HTTP Basic Authentication, constructed from a valid email address and password combination used to log into your account at console.gnip.com. Credentials must be passed as the Authorization header for each request.
-
-#### GET /compliance/:stream
-
-Establishes a persistent connection to the Compliance firehose data stream, through which the compliance events will be delivered.
-
-|     |     |
-| :--- | :--- |
-| **Request Method** | HTTP GET |
-| **Connection Type** | Keep-Alive |
-| **URL** | Found on the stream's API Help page of your dashboard, and resembles the following structure:  <br/>  <br/><br/>[https://gnip-stream.x.com/stream/compliance/accounts/:account\_name/publishers/twitter/:stream\_label.json?partition=1](https://gnip-stream.x.com/stream/compliance/accounts/:account_name/publishers/twitter/:stream_label.json?partition=1)<br/><br/>**Note:** The "partition" parameter is required. You will need to connect to all 8 partitions, each containing 12.5% of the total volume, to consume the full stream. |
-| **Compression** | Gzip. To connect to the stream using Gzip compression, simply send an Accept-Encoding header in the connection request. The header should look like the following:  <br/>  <br/>Accept-Encoding: gzip |
-| **Character Encoding** | UTF-8 |
-| **Response Format** | JSON. The header of your request should specify JSON format for the response. |
-| **Rate Limit** | 10 requests per 60 seconds. |
-| **Read Timeout** | Set a read timeout on your client, and ensure that it is set to a value beyond 30 seconds. |
-| **Support for Tweet edits** | All Tweet edits trigger a "tweet_edit" Compliance event. See the [Compliance Data Objects](/x-api/enterprise-gnip-2.0/fundamentals/firehouse#compliance-data-objects) documentation for more details. |
-
-**Example Curl Request**
-
-The following example request is accomplished using cURL on the command line:
-
-```bash
-curl --compressed -v -uexample@customer.com "https://gnip-stream.x.com/stream/compliance/accounts/:account_name/publishers/twitter/:stream_label.json?partition=1"
-```
-
-_Note:_ the above request is only connecting to `partition=1` of the Compliance firehose - you'll need to connect to all 8 partitions to consume the entirety of this stream.
-
-#### Response Codes
-
-The following responses may be returned by the API for these requests. Most error codes are returned with a string with additional details in the body. For non-200 responses, clients should attempt to reconnect.
-
-| Status | Text | Definition |
-| :--- | :--- | :--- |
-| 200 | Success | The connection was successfully opened, and new activities will be sent through as they arrive. |
-| 401 | Unauthorized | HTTP authentication failed due to invalid credentials. Log in to console.gnip.com with your credentials to ensure you are using them correctly with your request. |
-| 406 | Not Acceptable | Generally, this occurs where your client fails to properly include the headers to accept gzip encoding from the stream, but can occur in other circumstances as well. Will contain a JSON message similar to "This connection requires compression. To enable compression, send an 'Accept-Encoding: gzip' header in your request and be ready to uncompress the stream as it is read on the client end." |
-| 429 | Rate Limited | Your app has exceeded the limit on connection requests. |
-| 503 | Service Unavailable | Twitter server issue. Reconnect using an exponential backoff pattern. If no notice about this issue has been posted on the [X API Status Page](https://api.twitterstat.us/), contact support. |
-
-#### Other Recommendations & Best practices
-
-* **Build Data Storage Schemas That Store Numeric Tweet ID and User ID**: User messages require action to be taken on all Tweets from that User. Therefore, since all compliance messages are delivered only by numeric ID, it is important to design storage schemas that maintain the relationship between Tweet and User based on numeric IDs. Data consumers will need to monitor compliance events by both Tweet ID and User ID and be able to update the local data store appropriately.
-
-* **Build Schemas That Address All Compliance Statuses**: Depending on how compliance activities will be addressed in various applications, it may be required to add other metadata to the data store. For instance, data consumers may decide to add metadata to an existing database to facilitate restricting the display of content in countries affected by a status_withheld message.
-
-* **Handling Retweet Deletes**: Retweets are a special kind of Tweet where the original message is nested in an object within the Retweet. In this case, there are two Tweet IDs referenced in a Retweet -- the ID for the Retweet, and the ID for the original message (included in the nested object). When an original message is deleted, a Tweet delete message is issued for the original ID. Subsequent delete messages are NOT issued for all of the Retweets. The deletion of the original ID should be sufficient to delete all subsequent Retweets.
+The Compliance Firehose is a realtime streaming API that delivers compliance events that occur on the X platform. For an understanding of compliance events and how they are generated on X, please reference our article, [Honoring User Intent on X](/x-api/enterprise-gnip-2.0/fundamentals/f
