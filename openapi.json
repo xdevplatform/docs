@@ -931,6 +931,170 @@
         }
       }
     },
+    "/2/chat/conversations/{id}" : {
+      "get" : {
+        "security" : [
+          {
+            "OAuth2UserToken" : [
+              "dm.read",
+              "tweet.read",
+              "users.read"
+            ]
+          },
+          {
+            "UserToken" : [ ]
+          }
+        ],
+        "tags" : [
+          "Chat"
+        ],
+        "summary" : "Get Chat Conversation",
+        "description" : "Returns metadata for a Chat conversation including type, muted status, and group details. Use chat_conversation.fields to select which fields are returned. Use expansions to hydrate member, admin, or participant user objects. Use user.fields to control which profile fields are returned for expanded users.",
+        "externalDocs" : {
+          "url" : "https://developer.x.com/"
+        },
+        "operationId" : "getChatConversation",
+        "parameters" : [
+          {
+            "name" : "id",
+            "in" : "path",
+            "description" : "The conversation ID. For 1:1 conversations, use the recipient user ID or dash-separated canonical ID. For group conversations, use the group ID (prefixed with 'g').",
+            "required" : true,
+            "schema" : {
+              "type" : "string"
+            },
+            "style" : "simple"
+          },
+          {
+            "$ref" : "#/components/parameters/ChatConversationFieldsParameter"
+          },
+          {
+            "$ref" : "#/components/parameters/ChatConversationExpansionsParameter"
+          },
+          {
+            "$ref" : "#/components/parameters/UserFieldsParameter"
+          }
+        ],
+        "responses" : {
+          "200" : {
+            "description" : "The request has succeeded.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ChatGetConversationsResponse"
+                }
+              }
+            }
+          },
+          "default" : {
+            "description" : "The request has failed.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/chat/conversations/{id}/events" : {
+      "get" : {
+        "security" : [
+          {
+            "OAuth2UserToken" : [
+              "dm.read",
+              "tweet.read",
+              "users.read"
+            ]
+          },
+          {
+            "UserToken" : [ ]
+          }
+        ],
+        "tags" : [
+          "Chat"
+        ],
+        "summary" : "Get Chat Conversation Events",
+        "description" : "Retrieves messages and key change events for a specific Chat conversation with pagination support. For 1:1 conversations, provide the recipient's user ID; the server constructs the canonical conversation ID from the authenticated user and recipient.",
+        "externalDocs" : {
+          "url" : "https://developer.x.com/"
+        },
+        "operationId" : "getChatConversationEvents",
+        "parameters" : [
+          {
+            "name" : "id",
+            "in" : "path",
+            "description" : "The recipient's user ID for a 1:1 conversation, or a group conversation ID (prefixed with 'g').",
+            "required" : true,
+            "schema" : {
+              "$ref" : "#/components/schemas/ChatConversationOrRecipientId"
+            },
+            "style" : "simple"
+          },
+          {
+            "name" : "max_results",
+            "in" : "query",
+            "description" : "Maximum number of message events to return.",
+            "required" : false,
+            "schema" : {
+              "type" : "integer",
+              "minimum" : 1,
+              "maximum" : 100,
+              "format" : "int32",
+              "default" : 10
+            },
+            "style" : "form"
+          },
+          {
+            "name" : "pagination_token",
+            "in" : "query",
+            "description" : "Token for pagination to retrieve the next page of results.",
+            "required" : false,
+            "schema" : {
+              "type" : "string"
+            },
+            "style" : "form"
+          },
+          {
+            "$ref" : "#/components/parameters/ChatMessageEventFieldsParameter"
+          }
+        ],
+        "responses" : {
+          "200" : {
+            "description" : "The request has succeeded.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ChatGetConversationResponse"
+                }
+              }
+            }
+          },
+          "default" : {
+            "description" : "The request has failed.",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/2/chat/conversations/{id}/keys" : {
       "post" : {
         "security" : [
@@ -14640,6 +14804,49 @@
           }
         }
       },
+      "ChatGetConversationResponse" : {
+        "type" : "object",
+        "properties" : {
+          "data" : {
+            "type" : "array",
+            "description" : "List of message events in the conversation.",
+            "items" : {
+              "$ref" : "#/components/schemas/ChatMessageEvent"
+            }
+          },
+          "errors" : {
+            "type" : "array",
+            "minItems" : 1,
+            "items" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          },
+          "meta" : {
+            "type" : "object",
+            "properties" : {
+              "conversation_key_events" : {
+                "type" : "array",
+                "description" : "Conversation key change events needed for decryption.",
+                "items" : {
+                  "type" : "string"
+                }
+              },
+              "has_more" : {
+                "type" : "boolean",
+                "description" : "Whether there are more messages to fetch."
+              },
+              "next_token" : {
+                "type" : "string",
+                "description" : "Token to retrieve the next page of results."
+              },
+              "result_count" : {
+                "type" : "integer",
+                "description" : "The number of message events returned."
+              }
+            }
+          }
+        }
+      },
       "ChatGetConversationsResponse" : {
         "type" : "object",
         "properties" : {
@@ -14988,6 +15195,54 @@
                 "example" : "735401"
               }
             }
+          }
+        }
+      },
+      "ChatMessageEvent" : {
+        "type" : "object",
+        "description" : "An Chat message event with extracted envelope fields and the original encoded event.",
+        "required" : [
+          "encoded_event"
+        ],
+        "properties" : {
+          "conversation_id" : {
+            "type" : "string",
+            "description" : "The conversation ID this message belongs to."
+          },
+          "conversation_token" : {
+            "type" : "string",
+            "description" : "The conversation token for this message."
+          },
+          "created_at_msec" : {
+            "type" : "string",
+            "description" : "The creation timestamp in milliseconds."
+          },
+          "encoded_event" : {
+            "type" : "string",
+            "description" : "Base64-encoded MessageEvent for client decoding."
+          },
+          "id" : {
+            "type" : "string",
+            "description" : "The unique identifier for this message event (message_id)."
+          },
+          "is_trusted" : {
+            "type" : "boolean",
+            "description" : "Whether the message is from a trusted source."
+          },
+          "message_event_signature" : {
+            "$ref" : "#/components/schemas/ChatMessageEventSignature"
+          },
+          "previous_sequence_id" : {
+            "type" : "string",
+            "description" : "The sequence ID of the previous message."
+          },
+          "sender_id" : {
+            "type" : "string",
+            "description" : "The user ID of the message sender."
+          },
+          "sequence_id" : {
+            "type" : "string",
+            "description" : "The sequence identifier for ordering messages."
           }
         }
       },
@@ -16452,6 +16707,54 @@
             }
           }
         ]
+      },
+      "Get2ChatConversationsIdEventsResponse" : {
+        "type" : "object",
+        "properties" : {
+          "data" : {
+            "type" : "array",
+            "minItems" : 1,
+            "items" : {
+              "$ref" : "#/components/schemas/ChatMessageEvent"
+            }
+          },
+          "errors" : {
+            "type" : "array",
+            "minItems" : 1,
+            "items" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          },
+          "meta" : {
+            "type" : "object",
+            "properties" : {
+              "next_token" : {
+                "$ref" : "#/components/schemas/NextToken"
+              },
+              "result_count" : {
+                "$ref" : "#/components/schemas/ResultCount"
+              }
+            }
+          }
+        }
+      },
+      "Get2ChatConversationsIdResponse" : {
+        "type" : "object",
+        "properties" : {
+          "data" : {
+            "$ref" : "#/components/schemas/ChatConversation"
+          },
+          "errors" : {
+            "type" : "array",
+            "minItems" : 1,
+            "items" : {
+              "$ref" : "#/components/schemas/Problem"
+            }
+          },
+          "includes" : {
+            "$ref" : "#/components/schemas/Expansions"
+          }
+        }
       },
       "Get2ChatConversationsResponse" : {
         "type" : "object",
