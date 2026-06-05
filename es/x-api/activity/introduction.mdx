@@ -1,0 +1,168 @@
+---
+title: Introducción
+sidebarTitle: Introducción
+keywords: ["API de actividad", "X Activity API", "eventos de actividad", "actualizaciones de perfil", "post.create", "post.delete", "actividad del usuario", "eventos en tiempo real", "flujo de actividad"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+El grupo de endpoints de la X Activity API (XAA) permite a los desarrolladores acceder a los eventos de actividad que ocurren en la plataforma X.
+
+Un desarrollador puede suscribirse a los eventos que le interesen, como `profile.update.bio`, `post.create`, `post.delete`, etc., y filtrar por el User ID cuyos eventos quiera recibir. Los eventos coincidentes para ese User ID se entregarán a tu app con una latencia inferior a un segundo.
+
+## Mecanismos de entrega
+
+La X Activity API admite actualmente los siguientes mecanismos de entrega para enviar eventos a tu app:
+
+- Stream HTTP persistente
+- [Webhook](/x-api/webhooks/introduction)
+
+## Tipos de eventos admitidos
+
+Actualmente, la X Activity API admite los siguientes tipos de eventos, organizados por categoría:
+
+### Eventos de Post
+
+Los eventos de Post se activan cuando un usuario crea o elimina un Post.
+
+| Event Name | Descripción | Filtros |
+| --- | --- | --- |
+| `post.create` | Se activa cuando un usuario crea un Post | `user_id` |
+| `post.delete` | Se activa cuando un usuario elimina un Post | `user_id` |
+
+<Note>
+**Eventos de Post mediante XAA vs Filtered Stream:** La X Activity API admite los eventos `post.create` y `post.delete`. Suscríbete por `user_id` para recibir notificaciones en tiempo real cuando los usuarios creen o eliminen Posts.
+
+Si necesitas filtrado dirigido por palabras clave, lógica booleana, segmentación geográfica, filtros de idioma o cualquiera de los demás operadores que admite el Filtered Stream, utiliza en su lugar el endpoint [Filtered Stream](/x-api/posts/filtered-stream/introduction).
+</Note>
+
+### Eventos de seguimiento
+
+Los eventos de seguimiento se activan cuando el usuario filtrado sigue a otro usuario, o cuando es seguido por otro usuario.
+
+| Event Name | Descripción | Filtros |
+| --- | --- | --- |
+| `follow.follow` | Se activa cuando un usuario sigue a otro usuario | `user_id` |
+| `follow.unfollow` | Se activa cuando un usuario deja de seguir a otro usuario | `user_id` |
+
+### Eventos de perfil
+
+Los eventos de perfil se activan cuando un usuario realiza cambios en la información de su perfil.
+
+| Event Name | Descripción | Filtros |
+| --- | --- | --- |
+| `profile.update.bio` | Se activa cuando un usuario actualiza la biografía de su perfil | `user_id` |
+| `profile.update.profile_picture` | Se activa cuando un usuario actualiza su foto de perfil | `user_id` |
+| `profile.update.banner_picture` | Se activa cuando un usuario actualiza el banner de su perfil | `user_id` |
+| `profile.update.screenname` | Se activa cuando un usuario actualiza su nombre para mostrar | `user_id` |
+| `profile.update.handle` | Se activa cuando un usuario actualiza su handle | `user_id` |
+| `profile.update.geo` | Se activa cuando un usuario actualiza la ubicación de su perfil | `user_id` |
+| `profile.update.url` | Se activa cuando un usuario actualiza la URL del sitio web de su perfil | `user_id` |
+| `profile.update.verified_badge` | Se activa cuando un usuario actualiza su insignia de verificación | `user_id` |
+| `profile.update.affiliate_badge` | Se activa cuando un usuario actualiza su insignia de afiliado | `user_id` |
+
+### Eventos de chat
+
+Los eventos de chat corresponden a la nueva pila de mensajería cifrada, o XChat.
+
+| Event Name | Descripción | Filtros |
+| --- | --- | --- |
+| `chat.received` | Se activa cuando un usuario recibe un mensaje directo cifrado | `user_id` |
+| `chat.sent` | Se activa cuando un usuario envía un mensaje directo cifrado | `user_id` |
+| `chat.conversation_join` | Se activa cuando un usuario se une a una conversación de chat cifrado | `user_id` |
+
+### Eventos heredados de DM
+
+Los eventos heredados de DM corresponden al sistema heredado de DM sin cifrar.
+
+| Event Name | Descripción | Filtros |
+| --- | --- | --- |
+| `dm.received` | Se activa cuando un usuario recibe un mensaje directo sin cifrar | `user_id` |
+| `dm.sent` | Se activa cuando un usuario envía un mensaje directo sin cifrar | `user_id` |
+| `dm.read` | Se activa cuando un usuario lee el mensaje de DM sin cifrar del usuario filtrado, o "confirmación de lectura" | `user_id` |
+| `dm.indicate_typing` | Se activa cuando un usuario está escribiendo un mensaje al usuario filtrado | `user_id` |
+
+### Eventos de noticias
+
+Los eventos de noticias proporcionan actualizaciones sobre tendencias y titulares seleccionados por Grok.
+
+| Event Name | Descripción | Filtros |
+| --- | --- | --- |
+| `news.new` | Nuevas tendencias y titulares seleccionados por Grok | `keyword` |
+
+<Note>
+**Solo Enterprise:** El evento `news.new` solo está disponible actualmente para cuentas de los niveles Enterprise y Partner.
+</Note>
+
+### Eventos de Spaces
+
+Los eventos de Spaces se activan cuando un usuario inicia o finaliza un Space.
+
+| Event Name | Descripción | Filtros |
+| --- | --- | --- |
+| `spaces.start` | Se activa cuando un usuario inicia un Space | `user_id` |
+| `spaces.end` | Se activa cuando un usuario finaliza un Space | `user_id` |
+
+En futuras versiones, XAA se ampliará para admitir más tipos de eventos, incluyendo interacciones sociales, interacción con contenido, funciones de monetización y mucho más. Seguiremos actualizando nuestra documentación cuando estén disponibles nuevos tipos de eventos.
+
+## Privacidad de los eventos y autenticación
+
+La X Activity API distingue entre **eventos públicos** y **eventos privados** con paridad respecto a la app de X, como se explica a continuación.
+
+### Eventos públicos
+
+Los eventos públicos son actividades que una cuenta de usuario pública realiza de forma pública y que son visibles para todos los usuarios de X. Estos eventos son visibles para todos los usuarios en la plataforma X y no requieren autenticación OAuth por parte del usuario para poder visualizarse.
+
+**Eventos públicos actuales:**
+- Actualizaciones de perfil (biografía, foto, banner, ubicación, URL, cambios de nombre de usuario)
+- Creación de Posts (`post.create`) y eliminación (`post.delete`)
+
+Para estos eventos públicos, puedes crear suscripciones especificando el ID de usuario en tu filtro y recibirlos mediante XAA.
+
+### Eventos privados
+
+Los eventos privados son actividades que requieren el consentimiento explícito del usuario mediante autenticación OAuth. El usuario debe autenticarse a través de X y dar permiso explícito a una app de desarrollador para acceder a estos eventos.
+
+**Requisitos de autenticación para eventos privados:**
+- El usuario debe autenticar tu aplicación mediante OAuth 2.0
+- Tu aplicación debe obtener los scopes de OAuth correspondientes
+- El usuario debe otorgar permiso explícito para que tu app acceda a estos eventos
+- Las suscripciones a eventos privados solo se pueden crear para usuarios que hayan autorizado tu aplicación
+
+## Límites de suscripción
+
+La X Activity API tiene distintos límites de suscripción según el nivel de tu cuenta:
+
+| Nivel del paquete | Suscripciones máximas |
+| --- | --- |
+| Autoservicio | 1000 |
+| Enterprise | 50,000 |
+| Partner | 100,000 |
+
+## Endpoints
+
+| Método | Endpoint | Descripción |
+|:-------|:---------|:------------|
+| GET | [`/2/activity/stream`](/x-api/activity/activity-stream) | Conectarse al flujo de actividad |
+| POST | [`/2/activity/subscriptions`](/x-api/activity/create-x-activity-subscription) | Crear una suscripción |
+| GET | [`/2/activity/subscriptions`](/x-api/activity/get-x-activity-subscriptions) | Listar suscripciones |
+| PUT | [`/2/activity/subscriptions/:id`](/x-api/activity/update-x-activity-subscription) | Actualizar una suscripción |
+| DELETE | [`/2/activity/subscriptions/:id`](/x-api/activity/deletes-x-activity-subscription) | Eliminar una suscripción |
+
+<Note>
+**Configuración de la cuenta**
+
+Para acceder a estos endpoints, necesitarás:
+
+* Una [cuenta de desarrollador](https://developer.x.com/en/portal/petition/essential/basic-info) aprobada.
+* Autenticarte usando las claves y tokens de una [App de desarrollador](/fundamentals/developer-apps) que esté ubicada dentro de un Project.
+
+Obtén más información sobre cómo obtener acceso a los endpoints de la X API v2 en nuestra [guía de inicio](/x-api/getting-started/getting-access).
+</Note>
+
+<div className="flex">
+<Button href="/x-api/activity/quickstart">
+  Inicio rápido
+</Button>
+</div>
+

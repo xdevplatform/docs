@@ -1,0 +1,168 @@
+---
+title: 소개
+sidebarTitle: 소개
+keywords: ["activity API", "X Activity API", "activity events", "profile updates", "post.create", "post.delete", "user activity", "real-time events", "activity stream"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+X Activity API(XAA) 엔드포인트 그룹을 사용하면 개발자가 X 플랫폼에서 발생하는 활동 이벤트에 접근할 수 있습니다.
+
+개발자는 `profile.update.bio`, `post.create`, `post.delete` 등 관심 있는 이벤트를 구독하고, 이벤트를 받고자 하는 사용자의 User ID로 필터링할 수 있습니다. 해당 User ID에 매칭되는 이벤트는 1초 미만의 지연 시간으로 앱에 전달됩니다.
+
+## 전달 메커니즘
+
+X Activity API는 현재 이벤트를 앱으로 전송하기 위해 다음과 같은 전달 메커니즘을 지원합니다:
+
+- 영구 HTTP 스트림
+- [Webhook](/x-api/webhooks/introduction)
+
+## 지원되는 이벤트 유형
+
+현재 X Activity API는 카테고리별로 분류된 다음 이벤트 유형을 지원합니다:
+
+### Post 이벤트
+
+Post 이벤트는 사용자가 Post를 생성하거나 삭제할 때 트리거됩니다.
+
+| 이벤트 이름 | 설명 | 필터 |
+| --- | --- | --- |
+| `post.create` | 사용자가 Post를 생성할 때 발생 | `user_id` |
+| `post.delete` | 사용자가 Post를 삭제할 때 발생 | `user_id` |
+
+<Note>
+**XAA를 통한 Post 이벤트 vs Filtered Stream:** X Activity API는 `post.create` 및 `post.delete` 이벤트를 지원합니다. `user_id`로 구독하여 사용자가 Post를 생성하거나 삭제할 때 실시간 알림을 받을 수 있습니다.
+
+타겟 키워드 필터링, 불리언 로직, 지역 타겟팅, 언어 필터 또는 Filtered Stream이 지원하는 기타 연산자가 필요한 경우 [Filtered Stream](/x-api/posts/filtered-stream/introduction) 엔드포인트를 대신 사용하세요.
+</Note>
+
+### Follow 이벤트
+
+Follow 이벤트는 필터링된 사용자가 다른 사용자를 팔로우하거나 다른 사용자에게 팔로우될 때 트리거됩니다.
+
+| 이벤트 이름 | 설명 | 필터 |
+| --- | --- | --- |
+| `follow.follow` | 사용자가 다른 사용자를 팔로우할 때 발생 | `user_id` |
+| `follow.unfollow` | 사용자가 다른 사용자를 언팔로우할 때 발생 | `user_id` |
+
+### 프로필 이벤트
+
+프로필 이벤트는 사용자가 자신의 프로필 정보를 변경할 때 트리거됩니다.
+
+| 이벤트 이름 | 설명 | 필터 |
+| --- | --- | --- |
+| `profile.update.bio` | 사용자가 프로필 자기소개를 업데이트할 때 발생 | `user_id` |
+| `profile.update.profile_picture` | 사용자가 프로필 사진을 업데이트할 때 발생 | `user_id` |
+| `profile.update.banner_picture` | 사용자가 프로필 배너를 업데이트할 때 발생 | `user_id` |
+| `profile.update.screenname` | 사용자가 표시 이름을 업데이트할 때 발생 | `user_id` |
+| `profile.update.handle` | 사용자가 핸들을 업데이트할 때 발생 | `user_id` |
+| `profile.update.geo` | 사용자가 프로필 위치를 업데이트할 때 발생 | `user_id` |
+| `profile.update.url` | 사용자가 프로필 웹사이트 URL을 업데이트할 때 발생 | `user_id` |
+| `profile.update.verified_badge` | 사용자가 인증 배지를 업데이트할 때 발생 | `user_id` |
+| `profile.update.affiliate_badge` | 사용자가 제휴 배지를 업데이트할 때 발생 | `user_id` |
+
+### 채팅 이벤트
+
+채팅 이벤트는 새로운 암호화 메시징 스택, 즉 XChat과 관련됩니다.
+
+| 이벤트 이름 | 설명 | 필터 |
+| --- | --- | --- |
+| `chat.received` | 사용자가 암호화된 다이렉트 메시지를 받을 때 발생 | `user_id` |
+| `chat.sent` | 사용자가 암호화된 다이렉트 메시지를 보낼 때 발생 | `user_id` |
+| `chat.conversation_join` | 사용자가 암호화된 채팅 대화에 참여할 때 발생 | `user_id` |
+
+### 레거시 DM 이벤트
+
+레거시 DM 이벤트는 암호화되지 않은 기존 DM 시스템과 관련됩니다.
+
+| 이벤트 이름 | 설명 | 필터 |
+| --- | --- | --- |
+| `dm.received` | 사용자가 암호화되지 않은 다이렉트 메시지를 받을 때 발생 | `user_id` |
+| `dm.sent` | 사용자가 암호화되지 않은 다이렉트 메시지를 보낼 때 발생 | `user_id` |
+| `dm.read` | 사용자가 필터링된 사용자의 암호화되지 않은 DM 메시지를 읽을 때, 즉 "읽음 확인"이 발생할 때 발생 | `user_id` |
+| `dm.indicate_typing` | 사용자가 필터링된 사용자에게 메시지를 입력 중일 때 발생 | `user_id` |
+
+### 뉴스 이벤트
+
+뉴스 이벤트는 Grok이 큐레이션한 트렌딩 주제 및 헤드라인에 대한 업데이트를 제공합니다.
+
+| 이벤트 이름 | 설명 | 필터 |
+| --- | --- | --- |
+| `news.new` | Grok이 큐레이션한 새로운 트렌드와 헤드라인 | `keyword` |
+
+<Note>
+**엔터프라이즈 전용:** `news.new` 이벤트는 현재 Enterprise 및 Partner 등급 계정에서만 사용할 수 있습니다.
+</Note>
+
+### Spaces 이벤트
+
+Spaces 이벤트는 사용자가 Space를 시작하거나 종료할 때 트리거됩니다.
+
+| 이벤트 이름 | 설명 | 필터 |
+| --- | --- | --- |
+| `spaces.start` | 사용자가 Space를 시작할 때 발생 | `user_id` |
+| `spaces.end` | 사용자가 Space를 종료할 때 발생 | `user_id` |
+
+향후 릴리스에서 XAA는 소셜 상호작용, 콘텐츠 참여, 수익화 기능 등 추가 이벤트 유형을 지원하도록 확장될 예정입니다. 새로운 이벤트 유형이 제공되면 문서를 계속 업데이트하겠습니다.
+
+## 이벤트 프라이버시 및 인증
+
+X Activity API는 아래에 설명된 대로 X 앱과 동등하게 **공개 이벤트**와 **비공개 이벤트**를 구분합니다.
+
+### 공개 이벤트
+
+공개 이벤트는 공개 사용자 계정이 공개적으로 수행하는 활동으로, 모든 X 사용자에게 표시됩니다. 이러한 이벤트는 X 플랫폼의 모든 사용자에게 표시되며, 보기 위해 사용자로부터 OAuth 인증을 받을 필요가 없습니다.
+
+**현재 공개 이벤트:**
+- 프로필 업데이트(자기소개, 사진, 배너, 위치, URL, 사용자 이름 변경)
+- Post 생성(`post.create`) 및 삭제(`post.delete`)
+
+이러한 공개 이벤트의 경우, 필터에 사용자 ID를 지정하여 구독을 생성하고 XAA를 통해 받을 수 있습니다.
+
+### 비공개 이벤트
+
+비공개 이벤트는 OAuth 인증을 통해 사용자의 명시적 동의가 필요한 활동입니다. 사용자는 X를 통해 인증하고 이러한 이벤트에 접근할 수 있도록 개발자 앱에 명시적인 권한을 부여해야 합니다.
+
+**비공개 이벤트에 대한 인증 요구사항:**
+- 사용자가 OAuth 2.0을 통해 애플리케이션을 인증해야 합니다
+- 애플리케이션이 적절한 OAuth 스코프를 획득해야 합니다
+- 사용자가 이러한 이벤트에 접근할 수 있도록 앱에 명시적으로 권한을 부여해야 합니다
+- 비공개 이벤트에 대한 구독은 애플리케이션을 승인한 사용자에 대해서만 생성할 수 있습니다
+
+## 구독 한도
+
+X Activity API는 계정 등급에 따라 서로 다른 구독 한도를 가집니다:
+
+| 패키지 등급 | 최대 구독 수 |
+| --- | --- |
+| 셀프서브 | 1000 |
+| Enterprise | 50,000 |
+| Partner | 100,000 |
+
+## 엔드포인트
+
+| 메서드 | 엔드포인트 | 설명 |
+|:-------|:---------|:------------|
+| GET | [`/2/activity/stream`](/x-api/activity/activity-stream) | 활동 스트림에 연결 |
+| POST | [`/2/activity/subscriptions`](/x-api/activity/create-x-activity-subscription) | 구독 생성 |
+| GET | [`/2/activity/subscriptions`](/x-api/activity/get-x-activity-subscriptions) | 구독 목록 조회 |
+| PUT | [`/2/activity/subscriptions/:id`](/x-api/activity/update-x-activity-subscription) | 구독 업데이트 |
+| DELETE | [`/2/activity/subscriptions/:id`](/x-api/activity/deletes-x-activity-subscription) | 구독 삭제 |
+
+<Note>
+**계정 설정**
+
+이러한 엔드포인트에 접근하려면 다음이 필요합니다:
+
+* 승인된 [개발자 계정](https://developer.x.com/en/portal/petition/essential/basic-info).
+* 프로젝트 내에 위치한 [개발자 앱](/fundamentals/developer-apps)의 키와 토큰을 사용한 인증.
+
+X API v2 엔드포인트에 대한 액세스를 얻는 방법에 대해 [시작 가이드](/x-api/getting-started/getting-access)에서 자세히 알아보세요.
+</Note>
+
+<div className="flex">
+<Button href="/x-api/activity/quickstart">
+  빠른 시작
+</Button>
+</div>
+
