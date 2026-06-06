@@ -20,16 +20,21 @@ This guide covers common issues you may encounter when building with Chat and ho
 
 **Solutions:**
 ```python
-# Check if you're using the correct PIN
+# The SDK raises a built-in ValueError; the message carries the reason.
 try:
     chat.unlock(pin)
-except UnlockError as e:
-    if "InvalidPin" in str(e):
+except ValueError as e:
+    msg = str(e)
+    if "InvalidPin" in msg:
         print("Wrong PIN. Check your PIN and try again.")
-        print(f"Attempts remaining: {e.guesses_remaining}")
-    elif "Locked" in str(e):
-        print("Too many failed attempts. Account is locked.")
+        # The message includes guesses_remaining when the realm reports it.
+    elif "RateLimitExceeded" in msg or "Locked" in msg:
+        print("Too many failed attempts. The keys are locked.")
 ```
+
+<Note>
+The Python binding raises the built-in `ValueError` (not a custom exception class) with a descriptive message. The JavaScript/TypeScript binding throws an `Error` whose message includes the Juicebox `reason` (e.g. `InvalidPin`, `RateLimitExceeded`, `NotRegistered`).
+</Note>
 
 <Warning>
 After too many failed PIN attempts, Juicebox will permanently lock your keys. There is no recovery — you'll need to generate new keys and re-register them with X.
@@ -65,25 +70,29 @@ encrypted = chat.encrypt_message(...)
 
 **Solutions:**
 
-1. **Fetch the conversation to get current key events:**
+1. **Fetch conversation events to get the current key events:**
 ```python
-# Get fresh conversation data with key events
-conversation = x_client.chat.get_conversation(conversation_id)
-key_events = conversation.meta.conversation_key_events
+# get_conversation_events returns the key change events in meta.conversation_key_events.
+key_events = []
+for page in client.chat.get_conversation_events(conversation_id):
+    key_events += (page.meta.conversation_key_events or []) if page.meta else []
 
-# Extract and cache the conversation keys
-conv_keys = chat.extract_conversation_keys(key_events)
-conversation_keys[conversation_id] = conv_keys
+# Extract and cache the raw conversation keys.
+extracted = chat.extract_conversation_keys(key_events)
+conversation_keys[conversation_id] = extracted["keys"]   # { version: key_bytes }
 ```
 
-2. **Make sure you're handling `KeyChange` events:**
+2. **Make sure you're handling key changes:**
 ```python
 def handle_event(event_data):
-    if 'key_change' in event_data.get('payload', {}):
+    payload = event_data.get('data', {}).get('payload', {})
+    key_change = payload.get('conversation_key_change_event')
+    if key_change:
         # Extract and store the new key FIRST
-        handle_key_change(event_data['payload']['key_change'])
-    
-    # Then decrypt the message
+        extracted = chat.extract_conversation_keys([key_change])
+        conversation_keys[payload['conversation_id']] = extracted['keys']
+
+    # Then decrypt the message (payload['encoded_event'])
     decrypt_message(event_data)
 ```
 
@@ -95,11 +104,19 @@ def handle_event(event_data):
 
 **Solution:**
 ```python
-# Fetch the recipient's public keys from the API
-recipient_keys = x_client.users.get_public_keys(user_id=recipient_id)
+# Fetch the recipient's public keys from the API.
+resp = client.chat.get_user_public_keys(
+    recipient_id,
+    public_key_fields=["version", "public_key", "signing_public_key", "identity_public_key_signature"],
+)
+record = resp.data[0]
 
-# Use the latest key version for encryption
-latest_key = recipient_keys.data[0]  # Sorted by version, newest first
+# Build the input for prepare_conversation_keys (identity key + version).
+public_key_input = {
+    "user_id": recipient_id,
+    "public_key": record["public_key"],   # identity public key
+    "key_version": record["version"],
+}
 ```
 
 ---
@@ -117,26 +134,27 @@ latest_key = recipient_keys.data[0]  # Sorted by version, newest first
 
 **Solutions:**
 
-1. **Verify you're using the correct key version:**
+1. **Verify you have the key version the event needs:**
 ```python
-# The message specifies which key version was used
-message_key_version = encrypted_event.get('key_version')
+# The event payload carries the key version it was encrypted with.
+message_key_version = payload.get('conversation_key_version')
 
-# Make sure you have that version
-if message_key_version not in conversation_keys:
+# Make sure that version is in your cached keys for this conversation.
+keys = conversation_keys.get(payload['conversation_id'], {})
+if message_key_version not in keys:
     print(f"Missing key version {message_key_version}")
-    # Fetch historical keys or request resend
+    # Re-extract from payload['conversation_key_change_event'] or fetch /events
 ```
 
 2. **Check message integrity:**
 ```python
 import base64
 
-# Verify the payload is valid base64
+# Verify the encoded_event is valid base64
 try:
-    decoded = base64.b64decode(encrypted_payload)
+    decoded = base64.b64decode(payload['encoded_event'])
 except Exception:
-    print("Invalid base64 encoding in payload")
+    print("Invalid base64 encoding in encoded_event")
 ```
 
 ---
@@ -152,18 +170,27 @@ except Exception:
 
 **Solutions:**
 ```python
-# Fetch fresh signing keys for the sender
-sender_keys = x_client.users.get_public_keys(user_id=sender_id)
-
-# Retry decryption with updated keys
-event = chat.decrypt_event(
-    encrypted_event,
-    conversation_keys,
-    signing_keys=[sender_keys.data[0].signing_key]
+# Fetch fresh public keys for the sender and build the signing-key entries.
+resp = client.chat.get_user_public_keys(
+    sender_id,
+    public_key_fields=["version", "public_key", "signing_public_key", "identity_public_key_signature"],
 )
+signing_keys = [
+    {
+        "user_id": sender_id,
+        "public_key_version": r["version"],
+        "public_key": r["signing_public_key"],
+        "identity_public_key": r["public_key"],
+        "identity_public_key_signature": r["identity_public_key_signature"],
+    }
+    for r in resp.data
+]
 
-# Check verification status
-if not event.verified:
+# Retry decryption with the full signing-key entries.
+event = chat.decrypt_event(encoded_event, conversation_keys, signing_keys)
+
+# Check verification status (dict field).
+if not event["verified"]:
     print("Warning: Message signature could not be verified")
     # Decide whether to accept unverified messages
 ```
@@ -297,10 +324,11 @@ if response.status_code == 401:
 ```
 
 **Required scopes for Chat:**
-- `dm.read` — Read conversations and messages
-- `dm.write` — Send messages, create conversations, register public keys
-- `media.write` — Upload media attachments
+- `dm.read` — Read conversations, events, and public keys
+- `dm.write` — Send messages, initialize keys, create conversations, register public keys
+- `tweet.read` — Required alongside `dm.*` on most chat endpoints
 - `users.read` — Read user profiles and public keys
+- `media.write` — Upload and download media attachments
 
 ---
 
@@ -341,28 +369,36 @@ def make_request_with_retry(func, *args, max_retries=3):
 
 **Solution:**
 ```python
-# Make sure all required fields are present
+import uuid
+
+# Generate the message_id yourself and pass the RAW conversation key.
+message_id = str(uuid.uuid4())
 payload = chat.encrypt_message(
-    text=text,
-    conversation_key=encrypted_key,
-    conversation_id=conversation_id,
-    sender_id=sender_id,
-    should_notify=True
+    message_id,                 # message_id
+    sender_id,                  # sender_id
+    conversation_id,            # conversation_id
+    raw_conversation_key,       # RAW bytes — not the encrypted base64 key
+    text,                       # text
+    conversation_key_version,   # conversation_key_version
+    signing_key_version,        # signing_key_version
 )
 
-# Verify the payload before sending
-assert payload.message_id is not None
-assert payload.encoded_message_create_event is not None
+# Map SendPayload fields to the request body.
+from xdk.chat.models import SendMessageRequest
 
-response = x_client.chat.send_message(
-    conversation_id=conversation_id,
-    body={
-        "message_id": payload.message_id,
-        "encoded_message_create_event": payload.encoded_message_create_event,
-        "encoded_message_event_signature": payload.encoded_message_event_signature,
-    }
+client.chat.send_message(
+    conversation_id,
+    SendMessageRequest(
+        message_id=message_id,
+        encoded_message_create_event=payload.encrypted_content,
+        encoded_message_event_signature=payload.encoded_event_signature,
+    ),
 )
 ```
+
+<Warning>
+Two common causes of `400` here: passing the **encrypted** conversation key instead of the raw bytes, and using the old `SendPayload` field names. The request body fields are `encoded_message_create_event` (= `payload.encrypted_content`) and `encoded_message_event_signature` (= `payload.encoded_event_signature`).
+</Warning>
 
 ---
 
@@ -451,10 +487,10 @@ logging.getLogger('urllib3').setLevel(logging.DEBUG)
 import base64
 import json
 
-def inspect_payload(encrypted_event: str):
-    """Decode and inspect an encrypted event (without decrypting)."""
+def inspect_payload(encoded_event: str):
+    """Decode and inspect an encoded event (without decrypting)."""
     try:
-        decoded = base64.b64decode(encrypted_event)
+        decoded = base64.b64decode(encoded_event)
         print(f"Payload size: {len(decoded)} bytes")
         
         # Check if it looks like valid ciphertext
@@ -467,21 +503,24 @@ def inspect_payload(encrypted_event: str):
         return None
 ```
 
-### Verify Key Fingerprints
+### Verify Key Versions
 
 ```python
 def verify_setup():
     """Verify encryption setup is correct."""
     print(f"Keys unlocked: {chat.is_unlocked()}")
-    
+
     if chat.is_unlocked():
-        fingerprint = chat.get_public_key_fingerprint()
-        print(f"Key fingerprint: {fingerprint}")
-        
-        # Compare with what's registered on X
-        registered_keys = x_client.users.get_public_keys(user_id=my_user_id)
-        for key in registered_keys.data:
-            print(f"Registered: {key.fingerprint} (version {key.version})")
+        # Local fingerprint of the loaded identity key (for out-of-band comparison).
+        print(f"Local fingerprint: {chat.get_public_key_fingerprint()}")
+
+        # Compare with what's registered on X.
+        resp = client.chat.get_user_public_keys(
+            my_user_id,
+            public_key_fields=["version", "public_key", "signing_public_key"],
+        )
+        for key in resp.data:
+            print(f"Registered version {key['version']}: identity={key['public_key'][:16]}...")
 ```
 
 ---

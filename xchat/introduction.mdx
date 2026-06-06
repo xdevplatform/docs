@@ -20,7 +20,7 @@ The Chat API enables developers to build applications that send and receive **en
     Receive chat events via webhooks or persistent streams
   </Card>
   <Card title="Multi-platform SDKs" icon="cube">
-    Python, TypeScript, and Rust SDKs for encryption operations
+    Rust, Python, JavaScript/WASM, Go, .NET, and JVM bindings for encryption operations
   </Card>
 </CardGroup>
 
@@ -42,29 +42,30 @@ Chat enables a wide range of secure messaging applications:
 
 ## Architecture overview
 
-Building with Chat involves three main components working together:
+Building with Chat involves two pieces of your own code working against the X API:
 
 ```mermaid
 flowchart LR
     subgraph Your App
-        A[Chat XDK<br/>Encryption/Decryption]
-        B[Juicebox SDK<br/>Key Storage]
-        C[XDK<br/>API Calls]
+        A[Chat XDK<br/>Encryption/Decryption<br/>+ integrated Juicebox key storage]
+        C[XDK / HTTP<br/>API Calls]
     end
-    
-    A <--> B
-    C --> D[X API<br/>/2/chat/*]
+
+    C --> D[X API<br/>/2/chat/*, /2/users/*/public_keys]
     D --> E[X Infrastructure]
-    
-    E --> F[Webhook/Stream]
+
+    E --> F[Webhook / Activity Stream]
     F --> A
 ```
 
-| Component | Purpose | SDK |
-|:----------|:--------|:----|
-| **Chat XDK** | Handles all cryptographic operations — encryption, decryption, signing, verification | Rust, Python, JavaScript/WASM |
-| **Juicebox SDK** | Secure PIN-protected storage for encryption keys across distributed servers | Rust, Swift, Android, JavaScript |
-| **XDK (Python/TypeScript)** | Makes API calls to X's `/2/chat/*` endpoints | Python, TypeScript |
+| Component | Purpose | Languages |
+|:----------|:--------|:----------|
+| **Chat XDK** | Handles all cryptographic operations — key generation, encryption, decryption, signing, verification — and key storage via integrated [Juicebox](/xchat/cryptography-primer#juicebox-distributed-key-storage) | Rust, Python, JavaScript/WASM, Go, .NET, JVM |
+| **XDK / HTTP client** | Makes calls to X's `/2/chat/*` and public-key endpoints | Python, TypeScript, or any HTTP client |
+
+<Note>
+**Juicebox is built in.** The Chat XDK embeds the Juicebox client — you don't install or call a separate Juicebox SDK. The Juicebox configuration your app needs is returned by the X API itself (see [Authentication and key storage](#authentication-and-key-storage) below), not provisioned out of band.
+</Note>
 
 ---
 
@@ -84,7 +85,7 @@ flowchart LR
     Your app sends the encrypted payload to X using the `/2/chat/conversations/{id}/messages` endpoint.
   </Step>
   <Step title="Receive encrypted events">
-    Incoming messages arrive via the X Activity API (webhooks or streams) or by polling the conversations endpoint.
+    Incoming messages arrive in real time via the X Activity API (webhooks or streams), or by paging `/2/chat/conversations/{id}/events` for history.
   </Step>
   <Step title="Decrypt and verify">
     The Chat XDK decrypts the message using the conversation key and verifies the sender's signature.
@@ -123,46 +124,54 @@ The X Activity API supports real-time delivery of chat events:
 |:-----------|:------------|
 | `chat.received` | Fired when a user receives a direct message |
 | `chat.sent` | Fired when a user sends a direct message |
+| `chat.conversation_join` | Fired when a user is added to a group conversation |
 
-These events deliver encrypted message payloads that you decrypt using the Chat XDK.
+These events deliver encrypted message payloads (the `encoded_event` field) that you decrypt using the Chat XDK. See [Real-time events](/xchat/real-time-events) for the full payload structure.
 
 ---
 
 ## API endpoints
 
-Chat uses the `/2/chat/*` family of endpoints, plus public key endpoints under `/2/users/`:
+Chat uses the `/2/chat/*` family of endpoints, plus public-key endpoints under `/2/users/`:
 
 | Method | Endpoint | Description |
 |:-------|:---------|:------------|
-| GET | [`/2/chat/conversations`](/x-api/chat/get-chat-conversations) | List conversations |
-| POST | [`/2/chat/conversations/group`](/x-api/chat/create-chat-group-conversation) | Create group conversation |
-| POST | [`/2/chat/conversations/group/initialize`](/x-api/chat/initialize-chat-group) | Initialize chat group |
-| GET | [`/2/chat/conversations/{id}`](/x-api/chat/get-chat-conversation) | Get conversation |
-| POST | [`/2/chat/conversations/{id}/keys`](/x-api/chat/initialize-conversation-keys) | Initialize conversation keys |
-| POST | [`/2/chat/conversations/{id}/members`](/x-api/chat/add-members-to-a-chat-group-conversation) | Add members to group conversation |
+| GET | [`/2/chat/conversations`](/x-api/chat/get-chat-conversations) | List conversations in the inbox |
+| GET | [`/2/chat/conversations/{id}`](/x-api/chat/get-chat-conversation) | Get conversation metadata |
+| GET | [`/2/chat/conversations/{id}/events`](/x-api/chat/get-chat-conversation-events) | Get message + key-change events (with pagination) |
+| POST | [`/2/chat/conversations/{id}/keys`](/x-api/chat/initialize-conversation-keys) | Initialize conversation keys (1:1) |
 | POST | [`/2/chat/conversations/{id}/messages`](/x-api/chat/send-chat-message) | Send encrypted message |
 | POST | [`/2/chat/conversations/{id}/read`](/x-api/chat/mark-conversation-as-read) | Mark as read |
 | POST | [`/2/chat/conversations/{id}/typing`](/x-api/chat/send-typing-indicator) | Send typing indicator |
-| GET | [`/2/users/public_keys`](/x-api/users/get-public-keys-for-multiple-users) | Get public keys for multiple users |
-| GET | [`/2/users/{id}/public_keys`](/x-api/chat/get-user-public-keys) | Get user's public keys |
-| POST | [`/2/users/{id}/public_keys`](/x-api/chat/add-public-key) | Register public keys |
+| POST | [`/2/chat/conversations/group/initialize`](/x-api/chat/initialize-chat-group) | Initialize a group conversation |
+| POST | [`/2/chat/conversations/group`](/x-api/chat/create-chat-group-conversation) | Create a group conversation |
+| POST | [`/2/chat/conversations/{id}/members`](/x-api/chat/add-members-to-a-chat-group-conversation) | Add members to a group (rotates the key) |
+| GET | [`/2/users/public_keys`](/x-api/users/get-public-keys-for-multiple-users) | Get public keys + Juicebox config for multiple users |
+| GET | [`/2/users/{id}/public_keys`](/x-api/chat/get-user-public-keys) | Get a user's public keys + Juicebox config |
+| POST | [`/2/users/{id}/public_keys`](/x-api/chat/add-public-key) | Register your public keys |
 | POST | [`/2/chat/media/upload/initialize`](/x-api/chat/initialize-chat-media-upload) | Initialize media upload |
 | POST | [`/2/chat/media/upload/{id}/append`](/x-api/chat/append-chat-media-upload) | Append media data |
 | POST | [`/2/chat/media/upload/{id}/finalize`](/x-api/chat/finalize-chat-media-upload) | Finalize media upload |
-| GET | [`/2/chat/media/{id}/{media_hash_key}`](/x-api/chat/download-chat-media) | Download media |
+| GET | [`/2/chat/media/{id}/{media_hash_key}`](/x-api/chat/download-chat-media) | Download encrypted media |
+
+<Tip>
+For 1:1 conversations, the `{id}` path parameter on the message, events, keys, read, and typing endpoints accepts the **recipient's user ID** directly — the server derives the canonical conversation ID from the authenticated user and the recipient. Group conversation IDs are prefixed with `g`.
+</Tip>
 
 ---
 
-## Authentication
+## Authentication and key storage
 
 Chat endpoints require **user context authentication**:
 
 | Auth Method | Description |
 |:------------|:------------|
-| **OAuth 2.0 User Token** | Preferred method with specific scopes (`dm.read`, `dm.write`, `media.write`) |
+| **OAuth 2.0 User Token** | Preferred method. Scopes used across Chat endpoints: `dm.read`, `dm.write`, `tweet.read`, `users.read`, and `media.write` (for media) |
 | **OAuth 1.0a User Token** | Alternative authentication method |
 
 The authenticated user is the "sender" for outgoing messages and the "recipient" for incoming events.
+
+**Where the Juicebox config comes from.** The public-key endpoints (`GET /2/users/{id}/public_keys` and `GET /2/users/public_keys`) return each user's `juicebox_config` alongside their `public_key` and `signing_public_key` when you request the `juicebox_config` field. Fetch your own record and pass that config to the Chat XDK to unlock your keys — there's no separate provisioning step.
 
 ---
 
@@ -199,5 +208,8 @@ The authenticated user is the "sender" for outgoing messages and the "recipient"
 Before building with Chat, you'll need:
 - An approved [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
 - A [Project and App](/resources/fundamentals/developer-apps) in the Developer Console
-- Juicebox configuration (contact your X account representative for access)
+- OAuth 2.0 credentials with the `dm.read`, `dm.write`, `tweet.read`, `users.read`, and `media.write` scopes
+- The Chat XDK for your language (handles encryption and Juicebox key storage)
+
+The Juicebox configuration needed for key storage is returned by the X API's public-key endpoints — no separate provisioning is required.
 </Note>

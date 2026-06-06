@@ -7,11 +7,11 @@ keywords: ["Chat tutorial", "encrypted DM tutorial", "Chat quickstart", "Chat se
 
 import { Button } from '/snippets/button.mdx';
 
-This guide walks you through building an Chat application that can send and receive end-to-end encrypted direct messages. By the end, you'll have a working application that can:
+This guide walks you through building a Chat application that can send and receive end-to-end encrypted direct messages. By the end, you'll have a working application that can:
 
-- Generate and securely store encryption keys
-- Send encrypted messages
-- Receive and decrypt incoming messages via webhooks
+- Generate, register, and securely store encryption keys
+- Initialize a conversation and send an encrypted message
+- Receive and decrypt incoming messages in real time
 
 <Note>
 **Prerequisites**
@@ -19,36 +19,58 @@ This guide walks you through building an Chat application that can send and rece
 Before you begin, you'll need:
 - An approved [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
 - A [Project and App](/resources/fundamentals/developer-apps) in the Developer Console
-- Juicebox configuration (provided by your X account representative)
-- OAuth 2.0 credentials with `dm.read`, `dm.write`, and `media.write` scopes
-- Python 3.9+ or Node.js 18+
+- OAuth 2.0 credentials with the `dm.read`, `dm.write`, `tweet.read`, `users.read`, and `media.write` scopes
+- Python 3.10+ or Node.js 18+
 </Note>
 
 ---
 
-## Architecture overview
+## How the pieces fit together
 
-Your Chat application needs three components:
+Your Chat application combines two SDKs: the **Chat XDK** for cryptography and key storage, and the **XDK** for calling the X API.
 
 ```mermaid
 flowchart TB
     subgraph "Your Application"
-        A[Chat XDK<br/>Encryption]
-        B[XDK<br/>API Calls]
-        C[Webhook Server<br/>Event Handling]
+        A[Chat XDK<br/>encryption + Juicebox key storage]
+        B[XDK<br/>API client]
+        C[Webhook or stream handler]
     end
-    
-    A <--> B
+
     B <--> D[X API]
     D --> C
     C --> A
+    A --> B
 ```
 
 | Component | Purpose |
 |:----------|:--------|
-| **Chat XDK** | Handles all encryption, decryption, and key management |
-| **XDK** | Makes API calls to `/2/chat/*` endpoints |
-| **Webhook Server** | Receives real-time chat events from X Activity API |
+| **Chat XDK** (`chat-xdk`) | Generates keys, encrypts/decrypts/signs messages, and stores private keys via integrated Juicebox |
+| **XDK** (`xdk` / `@xdevplatform/xdk`) | Calls `/2/chat/*` and `/2/users/*/public_keys` via `client.chat.*` |
+| **Webhook / stream handler** | Receives real-time chat events from the X Activity API |
+
+Create the XDK client once with your OAuth 2.0 user token:
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from xdk import Client
+
+    client = Client(access_token="YOUR_OAUTH2_USER_TOKEN")
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    import { Client } from '@xdevplatform/xdk';
+
+    const client = new Client({ accessToken: 'YOUR_OAUTH2_USER_TOKEN' });
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+**XDK version.** The chat client methods used below — `client.chat.send_message`, `client.chat.add_user_public_key`, and `client.chat.get_user_public_keys` — are available today. The newest endpoints, initializing conversation keys (`POST /2/chat/conversations/{id}/keys`) and listing conversation events (`GET /2/chat/conversations/{id}/events`), map to `client.chat.initialize_conversation_keys(...)` and `client.chat.get_conversation_events(...)` (camelCase in TypeScript). If your installed XDK predates those endpoints, upgrade it or call the documented paths directly.
+</Note>
 
 ---
 
@@ -57,200 +79,171 @@ flowchart TB
 <Tabs>
   <Tab title="Python">
     ```bash
-    # Install the XDK and Chat XDK
-    pip install xdk chat-xdk
+    # Chat XDK (encryption) + the XDK (API client)
+    pip install chat-xdk xdk
     ```
   </Tab>
   <Tab title="TypeScript">
     ```bash
-    # Install the XDK and Chat XDK
-    npm install @xdevplatform/xdk chat-xdk
+    # Chat XDK (encryption) + the XDK (API client)
+    npm install chat-xdk @xdevplatform/xdk
     ```
   </Tab>
 </Tabs>
 
 ---
 
-## Step 2: Initialize the SDKs
+## Step 2: Fetch your Juicebox config and initialize the Chat XDK
 
-Create a main application file and initialize both SDKs.
+The Chat XDK stores your private keys with [Juicebox](/xchat/cryptography-primer#juicebox-distributed-key-storage). Request your own public-key record with the `juicebox_config` field, then hand that config to the Chat XDK.
 
 <Tabs>
   <Tab title="Python">
     ```python
-    from xdk import Client
+    import json
     from chat_xdk import Chat
 
-    # Initialize the XDK with OAuth 2.0 credentials
-    x_client = Client(
-        access_token="YOUR_OAUTH2_ACCESS_TOKEN",
-        # Or use OAuth 1.0a:
-        # api_key="YOUR_API_KEY",
-        # api_secret="YOUR_API_SECRET",
-        # access_token="YOUR_ACCESS_TOKEN",
-        # access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+    resp = client.chat.get_user_public_keys(
+        "YOUR_USER_ID",
+        public_key_fields=[
+            "version", "public_key", "signing_public_key",
+            "identity_public_key_signature", "juicebox_config",
+        ],
     )
+    record = resp.data[0]
+    signing_key_version = record["version"]
 
-    # Initialize the Chat XDK with Juicebox configuration
-    # You'll receive this JSON config from your X account representative
-    juicebox_config = """
-    {
-      "realms": [
-        {
-          "address": "https://realm1.juicebox.xyz",
-          "id": "realm1_id",
-          "public_key": "realm1_public_key"
-        },
-        {
-          "address": "https://realm2.juicebox.xyz",
-          "id": "realm2_id"
-        }
-      ],
-      "register_threshold": 2,
-      "recover_threshold": 2,
-      "pin_hashing_mode": "Standard2019"
-    }
-    """
-
-    chat = Chat(juicebox_config)
+    # The Chat XDK accepts the API's juicebox_config object directly.
+    chat = Chat(json.dumps(record["juicebox_config"]))
     ```
   </Tab>
   <Tab title="TypeScript">
     ```typescript
-    import { Client } from '@xdevplatform/xdk';
     import { createChat } from 'chat-xdk';
 
-    // Initialize the XDK with OAuth 2.0 credentials
-    const xClient = new Client({
-      accessToken: 'YOUR_OAUTH2_ACCESS_TOKEN',
-      // Or use OAuth 1.0a:
-      // apiKey: 'YOUR_API_KEY',
-      // apiSecret: 'YOUR_API_SECRET',
-      // accessToken: 'YOUR_ACCESS_TOKEN',
-      // accessTokenSecret: 'YOUR_ACCESS_TOKEN_SECRET'
-    });
-
-    // Initialize the Chat XDK with Juicebox configuration
-    const juiceboxConfig = `{
-      "realms": [
-        {
-          "address": "https://realm1.juicebox.xyz",
-          "id": "realm1_id",
-          "public_key": "realm1_public_key"
-        },
-        {
-          "address": "https://realm2.juicebox.xyz",
-          "id": "realm2_id"
-        }
+    const resp = await client.chat.getUserPublicKeys('YOUR_USER_ID', {
+      publicKeyFields: [
+        'version', 'public_key', 'signing_public_key',
+        'identity_public_key_signature', 'juicebox_config',
       ],
-      "register_threshold": 2,
-      "recover_threshold": 2,
-      "pin_hashing_mode": "Standard2019"
-    }`;
+    });
+    const record = resp.data[0];
+    const signingKeyVersion = record.version;
 
     const chat = await createChat({
-      juiceboxConfig,
-      getAuthToken: async (realmId) => {
-        // Return auth tokens for each realm
-        // This should call your backend to get fresh tokens
-        return await getTokenForRealm(realmId);
-      }
+      juiceboxConfig: JSON.stringify(record.juicebox_config),
+      getAuthToken: async (realmId) => getTokenForRealm(realmId),
     });
     ```
   </Tab>
 </Tabs>
+
+<Note>
+If you'd rather manage keys yourself instead of using Juicebox, create the SDK with no config (`Chat()` in Python, `createChatWithoutJuicebox()` in TypeScript) and use `export_keys()` / `import_keys()` to persist the raw key bytes. The rest of this guide uses Juicebox.
+</Note>
 
 ---
 
 ## Step 3: Generate and register encryption keys
 
-Before you can send or receive encrypted messages, you need to generate encryption keys and register them with X.
+The first time a user onboards, generate their identity and signing keypairs, register the **public** keys with X, then store the private keys in Juicebox under a PIN.
 
 <Tabs>
   <Tab title="Python">
     ```python
-    # First-time setup: Generate new keypairs
-    def setup_encryption_keys(pin: str):
-        # Generate identity and signing keypairs
-        registration_payload = chat.generate_keypairs()
-        
-        # Register public keys with X API
-        # The payload contains everything X needs to know about your public keys
-        response = x_client.chat.add_public_key(
-            body=registration_payload
+    from xdk.chat.models import AddUserPublicKeyRequest
+
+    def setup_encryption_keys(user_id: str, pin: str):
+        # Generate identity + signing keypairs (held in memory).
+        registration = chat.generate_keypairs()
+        pk = registration.public_key
+
+        # Register the PUBLIC keys with X.
+        client.chat.add_user_public_key(
+            user_id,
+            AddUserPublicKeyRequest(
+                public_key={
+                    "identity_public_key_signature": pk.identity_public_key_signature,
+                    "public_key": pk.public_key,
+                    "public_key_fingerprint": pk.public_key_fingerprint,
+                    "registration_method": pk.registration_method,
+                    "signing_public_key": pk.signing_public_key,
+                    "signing_public_key_signature": pk.signing_public_key_signature,
+                },
+                version=registration.version,
+                generate_version=registration.generate_version,
+            ),
         )
-        print(f"Public keys registered: {response}")
-        
-        # Store keys securely in Juicebox with your PIN
-        # This is the only time you need to call setup()
+
+        # Store the PRIVATE keys in Juicebox, protected by the PIN.
         public_keys = chat.setup(pin)
-        print(f"Keys stored with fingerprint: {chat.get_public_key_fingerprint()}")
-        
+        print(f"Keys stored. Fingerprint: {chat.get_public_key_fingerprint()}")
         return public_keys
 
-    # Run first-time setup
-    setup_encryption_keys("1234")  # Use a strong PIN in production!
+    setup_encryption_keys("YOUR_USER_ID", "1234")  # Use a strong PIN in production!
     ```
   </Tab>
   <Tab title="TypeScript">
     ```typescript
-    // First-time setup: Generate new keypairs
-    async function setupEncryptionKeys(pin: string) {
-      // Generate identity and signing keypairs
-      const registrationPayload = chat.generateKeypairs();
-      
-      // Register public keys with X API
-      const response = await xClient.chat.addPublicKey({
-        body: registrationPayload
+    async function setupEncryptionKeys(userId: string, pin: string) {
+      // Generate identity + signing keypairs (held in memory).
+      const registration = chat.generateKeypairs();
+      const pk = registration.publicKey;
+
+      // Register the PUBLIC keys with X (map the SDK's camelCase to the API body).
+      await client.chat.addUserPublicKey(userId, {
+        public_key: {
+          identity_public_key_signature: pk.identityPublicKeySignature,
+          public_key: pk.publicKey,
+          public_key_fingerprint: pk.publicKeyFingerprint,
+          registration_method: pk.registrationMethod,
+          signing_public_key: pk.signingPublicKey,
+          signing_public_key_signature: pk.signingPublicKeySignature,
+        },
+        version: registration.version,
+        generate_version: registration.generateVersion,
       });
-      console.log('Public keys registered:', response);
-      
-      // Store keys securely in Juicebox with your PIN
+
+      // Store the PRIVATE keys in Juicebox, protected by the PIN.
       const publicKeys = await chat.setup(pin);
-      console.log('Keys stored with fingerprint:', chat.getPublicKeyFingerprint());
-      
+      console.log('Keys stored. Fingerprint:', chat.getPublicKeyFingerprint());
       return publicKeys;
     }
 
-    // Run first-time setup
-    await setupEncryptionKeys('1234'); // Use a strong PIN in production!
+    await setupEncryptionKeys('YOUR_USER_ID', '1234'); // Use a strong PIN in production!
     ```
   </Tab>
 </Tabs>
 
 <Warning>
-**Key storage is critical.** After calling `setup()`, your private keys are securely stored in Juicebox. You'll need your PIN to access them later. If you lose your PIN and can't recover your keys, you won't be able to decrypt past or future messages.
+**Key storage is critical.** After `setup()`, your private keys live in Juicebox and are recovered with your PIN. If you lose the PIN and can't recover your keys, you won't be able to decrypt past or future messages. Juicebox rate-limits wrong PINs and permanently locks the keys after too many failures.
 </Warning>
 
 ---
 
 ## Step 4: Unlock keys on startup
 
-After initial setup, you need to unlock your keys each time your application starts.
+After the one-time setup, unlock the keys from Juicebox each time your app starts.
 
 <Tabs>
   <Tab title="Python">
     ```python
     def unlock_keys(pin: str):
-        """Unlock keys from Juicebox storage on app startup."""
         chat.unlock(pin)
-        print(f"Keys unlocked. Fingerprint: {chat.get_public_key_fingerprint()}")
-        print(f"Is unlocked: {chat.is_unlocked()}")
+        print(f"Unlocked: {chat.is_unlocked()}")
+        print(f"Fingerprint: {chat.get_public_key_fingerprint()}")
 
-    # On application startup
     unlock_keys("1234")
     ```
   </Tab>
   <Tab title="TypeScript">
     ```typescript
     async function unlockKeys(pin: string) {
-      // Unlock keys from Juicebox storage on app startup
       await chat.unlock(pin);
-      console.log('Keys unlocked. Fingerprint:', chat.getPublicKeyFingerprint());
-      console.log('Is unlocked:', chat.isUnlocked());
+      console.log('Unlocked:', chat.isUnlocked());
+      console.log('Fingerprint:', chat.getPublicKeyFingerprint());
     }
 
-    // On application startup
     await unlockKeys('1234');
     ```
   </Tab>
@@ -258,527 +251,468 @@ After initial setup, you need to unlock your keys each time your application sta
 
 ---
 
-## Step 5: Send an encrypted message
+## Step 5: Initialize conversation keys
 
-Now you can send encrypted messages to a conversation.
+Before the first message in a **new 1:1 conversation**, generate a conversation key, encrypt it for every participant, and register it with X. The Chat XDK's `prepare_conversation_keys` does the crypto in one call — feed it the participants' identity public keys (yours and the recipient's).
 
 <Tabs>
   <Tab title="Python">
     ```python
-    def send_message(conversation_id: str, text: str):
-        """Send an encrypted message to a conversation."""
-        
-        # Get the conversation to retrieve key events
-        conversation = x_client.chat.get_conversation(conversation_id)
-        
-        # Key events are in meta.conversation_key_events (list of base64 strings)
-        # The most recent key event contains the current encryption key
-        key_events = conversation.meta.conversation_key_events
-        
-        # Encrypt the message using the Chat XDK
-        # Pass the latest key event — the XDK extracts the encrypted
-        # conversation key for the authenticated user internally
-        send_payload = chat.encrypt_message(
-            text=text,
-            conversation_key=key_events[-1],  # Most recent key event (base64)
-            conversation_id=conversation_id,
-            sender_id="YOUR_USER_ID",  # The authenticated user's ID
-            should_notify=True
+    def get_public_key_input(user_id: str) -> dict:
+        resp = client.chat.get_user_public_keys(
+            user_id, public_key_fields=["version", "public_key"]
         )
-        
-        # Send the encrypted payload via the X API
-        response = x_client.chat.send_message(
-            conversation_id=conversation_id,
-            body={
-                "message_id": send_payload.message_id,
-                "encoded_message_create_event": send_payload.encoded_message_create_event,
-                "encoded_message_event_signature": send_payload.encoded_message_event_signature,
+        r = resp.data[0]
+        # prepare_conversation_keys wants user_id, identity public_key, key_version.
+        return {"user_id": user_id, "public_key": r["public_key"], "key_version": r["version"]}
+
+    def initialize_conversation(my_user_id: str, recipient_id: str):
+        public_keys = [get_public_key_input(my_user_id), get_public_key_input(recipient_id)]
+        prepared = chat.prepare_conversation_keys(public_keys)
+
+        # Map the SDK's participant keys to the API's field names.
+        # SDK "encrypted_key" -> API "encrypted_conversation_key".
+        participant_keys = [
+            {
+                "user_id": pk["user_id"],
+                "encrypted_conversation_key": pk["encrypted_key"],
+                "public_key_version": pk["public_key_version"],
             }
+            for pk in prepared["participant_keys"]
+        ]
+
+        # Register the keys. For 1:1, the {id} can be the recipient's user ID.
+        client.chat.initialize_conversation_keys(
+            recipient_id,
+            {
+                "conversation_key_version": prepared["conversation_key_version"],
+                "conversation_participant_keys": participant_keys,
+            },
         )
-        
-        print(f"Message sent! Encoded event: {response.data.encoded_message_event}")
-        return response
 
-    # Send a message
-    send_message("CONVERSATION_ID", "Hello! This is an encrypted message.")
+        # Keep the raw conversation key + version locally — you'll use them to encrypt.
+        return prepared["conversation_key"], prepared["conversation_key_version"]
+
+    conv_key, conv_key_version = initialize_conversation("YOUR_USER_ID", "RECIPIENT_USER_ID")
     ```
   </Tab>
   <Tab title="TypeScript">
     ```typescript
-    async function sendMessage(conversationId: string, text: string) {
-      // Get the conversation to retrieve key events
-      const conversation = await xClient.chat.getConversation(conversationId);
-      
-      // Key events are in meta.conversation_key_events (array of base64 strings)
-      // The most recent key event contains the current encryption key
-      const keyEvents = conversation.meta.conversationKeyEvents;
-      
-      // Encrypt the message using the Chat XDK
-      // Pass the latest key event — the XDK extracts the encrypted
-      // conversation key for the authenticated user internally
-      const sendPayload = chat.encryptMessage({
-        text,
-        conversationKey: keyEvents[keyEvents.length - 1], // Most recent key event (base64)
-        conversationId,
-        senderId: 'YOUR_USER_ID',
-        shouldNotify: true
+    async function getPublicKeyInput(userId: string) {
+      const resp = await client.chat.getUserPublicKeys(userId, {
+        publicKeyFields: ['version', 'public_key'],
       });
-      
-      // Send the encrypted payload via the X API
-      const response = await xClient.chat.sendMessage(conversationId, {
-        body: {
-          messageId: sendPayload.messageId,
-          encodedMessageCreateEvent: sendPayload.encodedMessageCreateEvent,
-          encodedMessageEventSignature: sendPayload.encodedMessageEventSignature,
-        }
-      });
-      
-      console.log('Message sent! Encoded event:', response.data.encodedMessageEvent);
-      return response;
+      const r = resp.data[0];
+      return { userId, publicKey: r.public_key, keyVersion: r.version };
     }
 
-    // Send a message
-    await sendMessage('CONVERSATION_ID', 'Hello! This is an encrypted message.');
+    async function initializeConversation(myUserId: string, recipientId: string) {
+      const publicKeys = [await getPublicKeyInput(myUserId), await getPublicKeyInput(recipientId)];
+      const prepared = chat.prepareConversationKeys(publicKeys);
+
+      // Map the SDK's participant keys to the API's field names.
+      const participantKeys = prepared.participantKeys.map((pk) => ({
+        user_id: pk.userId,
+        encrypted_conversation_key: pk.encryptedKey,
+        public_key_version: pk.publicKeyVersion,
+      }));
+
+      await client.chat.initializeConversationKeys(recipientId, {
+        conversation_key_version: prepared.conversationKeyVersion,
+        conversation_participant_keys: participantKeys,
+      });
+
+      return { conversationKey: prepared.conversationKey, version: prepared.conversationKeyVersion };
+    }
     ```
   </Tab>
 </Tabs>
 
----
-
-## Step 6: Set up webhook for real-time events
-
-To receive messages in real-time, set up a webhook endpoint and subscribe to chat events using the X Activity API.
-
-### 6.1 Create a webhook endpoint
-
-<Tabs>
-  <Tab title="Python (Flask)">
-    ```python
-    from flask import Flask, request, jsonify
-    import hmac
-    import hashlib
-    import base64
-
-    app = Flask(__name__)
-
-    # Your app's consumer secret for CRC validation
-    CONSUMER_SECRET = "YOUR_CONSUMER_SECRET"
-
-    # Store conversation keys in memory (use a database in production)
-    conversation_keys = {}
-
-    @app.route('/webhook', methods=['GET', 'POST'])
-    def webhook():
-        if request.method == 'GET':
-            # Handle CRC challenge
-            crc_token = request.args.get('crc_token')
-            if crc_token:
-                signature = hmac.new(
-                    CONSUMER_SECRET.encode(),
-                    crc_token.encode(),
-                    hashlib.sha256
-                ).digest()
-                response_token = base64.b64encode(signature).decode()
-                return jsonify({'response_token': f'sha256={response_token}'})
-            return 'OK', 200
-        
-        if request.method == 'POST':
-            # Verify signature header
-            signature = request.headers.get('x-twitter-webhooks-signature', '')
-            payload = request.get_data()
-            
-            expected = 'sha256=' + base64.b64encode(
-                hmac.new(CONSUMER_SECRET.encode(), payload, hashlib.sha256).digest()
-            ).decode()
-            
-            if not hmac.compare_digest(signature, expected):
-                return 'Invalid signature', 403
-            
-            # Process the event
-            event_data = request.json
-            handle_chat_event(event_data)
-            return 'OK', 200
-
-    def handle_chat_event(event_data):
-        """Process incoming chat events."""
-        event_type = event_data.get('event_type')
-        payload = event_data.get('payload', {})
-        
-        if event_type in ['chat.received', 'chat.sent']:
-            # Extract encrypted event data
-            encrypted_event = payload.get('encrypted_event')
-            conversation_id = payload.get('conversation_id')
-            
-            # Get or extract conversation keys
-            if 'key_change' in payload:
-                # New conversation key - extract and store it
-                key_events = [payload['key_change']['encrypted_event']]
-                conv_keys = chat.extract_conversation_keys(key_events)
-                conversation_keys[conversation_id] = conv_keys
-            
-            # Get stored conversation keys for this conversation
-            conv_keys = conversation_keys.get(conversation_id, {})
-            
-            # Decrypt the event
-            event = chat.decrypt_event(
-                encrypted_event,
-                conv_keys,
-                []  # Signing keys for verification (optional)
-            )
-            
-            if event.get('type') == 'Message':
-                content = event.get('content', {})
-                if content.get('content_type') == 'Text':
-                    print(f"Received message: {content.get('text')}")
-                    print(f"From: {event.get('sender_id')}")
-                    print(f"Verified: {event.get('verified')}")
-
-    if __name__ == '__main__':
-        app.run(port=5000, ssl_context='adhoc')  # Use proper SSL in production
-    ```
-  </Tab>
-  <Tab title="TypeScript (Express)">
-    ```typescript
-    import express from 'express';
-    import crypto from 'crypto';
-
-    const app = express();
-    app.use(express.json({ verify: (req, res, buf) => { (req as any).rawBody = buf; }}));
-
-    const CONSUMER_SECRET = 'YOUR_CONSUMER_SECRET';
-
-    // Store conversation keys in memory (use a database in production)
-    const conversationKeys = new Map<string, Record<string, Uint8Array>>();
-
-    app.get('/webhook', (req, res) => {
-      // Handle CRC challenge
-      const crcToken = req.query.crc_token as string;
-      if (crcToken) {
-        const hmac = crypto.createHmac('sha256', CONSUMER_SECRET);
-        hmac.update(crcToken);
-        const responseToken = 'sha256=' + hmac.digest('base64');
-        return res.json({ response_token: responseToken });
-      }
-      res.send('OK');
-    });
-
-    app.post('/webhook', (req, res) => {
-      // Verify signature
-      const signature = req.headers['x-twitter-webhooks-signature'] as string;
-      const payload = (req as any).rawBody;
-      
-      const expected = 'sha256=' + crypto
-        .createHmac('sha256', CONSUMER_SECRET)
-        .update(payload)
-        .digest('base64');
-      
-      if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
-        return res.status(403).send('Invalid signature');
-      }
-      
-      // Process the event
-      handleChatEvent(req.body);
-      res.send('OK');
-    });
-
-    async function handleChatEvent(eventData: any) {
-      const eventType = eventData.event_type;
-      const payload = eventData.payload || {};
-      
-      if (eventType === 'chat.received' || eventType === 'chat.sent') {
-        const encryptedEvent = payload.encrypted_event;
-        const conversationId = payload.conversation_id;
-        
-        // Get or extract conversation keys
-        if (payload.key_change) {
-          const keyEvents = [payload.key_change.encrypted_event];
-          const convKeys = chat.extractConversationKeys(keyEvents);
-          conversationKeys.set(conversationId, convKeys);
-        }
-        
-        const convKeys = conversationKeys.get(conversationId) || {};
-        
-        // Decrypt the event
-        const event = chat.decryptEvent(encryptedEvent, convKeys);
-        
-        if (event.type === 'Message') {
-          const content = event.content;
-          if (content.contentType === 'Text') {
-            console.log('Received message:', content.text);
-            console.log('From:', event.senderId);
-            console.log('Verified:', event.verified);
-          }
-        }
-      }
-    }
-
-    app.listen(5000, () => console.log('Webhook server running on port 5000'));
-    ```
-  </Tab>
-</Tabs>
-
-### 6.2 Register the webhook
-
-```bash
-# Register your webhook URL
-curl -X POST "https://api.x.com/2/webhooks" \
-  -H "Authorization: Bearer YOUR_BEARER_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://your-domain.com/webhook"
-  }'
-```
-
-### 6.3 Subscribe to chat events
-
-```bash
-# Create subscription for chat.received events
-curl -X POST "https://api.x.com/2/activity/subscriptions" \
-  -H "Authorization: Bearer YOUR_BEARER_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "event_type": "chat.received",
-    "filter": {
-      "user_id": "YOUR_USER_ID"
-    },
-    "webhook_id": "YOUR_WEBHOOK_ID"
-  }'
-
-# Create subscription for chat.sent events (to track your own messages)
-curl -X POST "https://api.x.com/2/activity/subscriptions" \
-  -H "Authorization: Bearer YOUR_BEARER_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "event_type": "chat.sent",
-    "filter": {
-      "user_id": "YOUR_USER_ID"
-    },
-    "webhook_id": "YOUR_WEBHOOK_ID"
-  }'
-```
+<Note>
+If the conversation already exists, skip this step. Fetch the current conversation key from `client.chat.get_conversation_events(...)` (`meta.conversation_key_events`) and decrypt it with the Chat XDK instead — see [Step 7](#step-7-receive-messages-in-real-time).
+</Note>
 
 ---
 
-## Step 7: Handle key changes
+## Step 6: Send an encrypted message
 
-When a conversation key is rotated (new participant, someone leaves, etc.), you'll receive a `KeyChange` event. Your app must handle these to continue decrypting messages.
+`encrypt_message` takes the **raw** conversation key bytes (from Step 5 or from a decrypted key event), the current `conversation_key_version`, and your `signing_key_version` (the `version` of your registered public key). It returns a `SendPayload` whose fields map to the send-message request body.
 
 <Tabs>
   <Tab title="Python">
     ```python
-    def handle_key_change_event(event_data):
-        """Handle key change events and update stored keys."""
-        payload = event_data.get('payload', {})
-        encrypted_event = payload.get('encrypted_event')
-        conversation_id = payload.get('conversation_id')
-        
-        # Decrypt the key change event
-        event = chat.decrypt_event(encrypted_event, None, [])
-        
-        if event.get('type') == 'KeyChange':
-            key_version = event.get('key_version')
-            participant_keys = event.get('participant_keys', [])
-            
-            # Find your encrypted key
-            for pk in participant_keys:
-                if pk['user_id'] == 'YOUR_USER_ID':
-                    # Decrypt and store the new conversation key
-                    conv_key = chat.decrypt_conversation_key(pk['encrypted_key'])
-                    
-                    # Store with version for future message decryption
-                    if conversation_id not in conversation_keys:
-                        conversation_keys[conversation_id] = {}
-                    conversation_keys[conversation_id][key_version] = conv_key
-                    
-                    print(f"Updated conversation key for {conversation_id}, version {key_version}")
-                    break
-    ```
-  </Tab>
-  <Tab title="TypeScript">
-    ```typescript
-    function handleKeyChangeEvent(eventData: any) {
-      const payload = eventData.payload || {};
-      const encryptedEvent = payload.encrypted_event;
-      const conversationId = payload.conversation_id;
-      
-      // Decrypt the key change event (no conversation key needed)
-      const event = chat.decryptEvent(encryptedEvent, {});
-      
-      if (event.type === 'KeyChange') {
-        const keyVersion = event.keyVersion;
-        const participantKeys = event.participantKeys || [];
-        
-        // Find your encrypted key
-        for (const pk of participantKeys) {
-          if (pk.userId === 'YOUR_USER_ID') {
-            // Decrypt and store the new conversation key
-            const convKey = chat.decryptConversationKey(pk.encryptedKey);
-            
-            // Store with version for future message decryption
-            const existing = conversationKeys.get(conversationId) || {};
-            existing[keyVersion] = convKey;
-            conversationKeys.set(conversationId, existing);
-            
-            console.log(`Updated conversation key for ${conversationId}, version ${keyVersion}`);
-            break;
-          }
-        }
-      }
-    }
-    ```
-  </Tab>
-</Tabs>
+    import uuid
+    from xdk.chat.models import SendMessageRequest
 
----
+    def send_message(recipient_id, conversation_id, conv_key, conv_key_version, signing_key_version, text):
+        message_id = str(uuid.uuid4())
 
-## Complete example: Customer service bot
-
-Here's a complete example that brings everything together into a simple customer service bot:
-
-<Tabs>
-  <Tab title="Python">
-    ```python
-    from flask import Flask, request, jsonify
-    from xdk import Client
-    from chat_xdk import Chat
-    import hmac
-    import hashlib
-    import base64
-
-    # Configuration
-    CONSUMER_SECRET = "YOUR_CONSUMER_SECRET"
-    USER_ID = "YOUR_USER_ID"
-
-    # Initialize SDKs
-    x_client = Client(access_token="YOUR_ACCESS_TOKEN")
-    chat = Chat(JUICEBOX_CONFIG)
-
-    # Storage
-    conversation_keys = {}
-
-    app = Flask(__name__)
-
-    # Unlock encryption keys on startup
-    with app.app_context():
-        chat.unlock("1234")  # Use secure PIN management in production
-        print("Encryption keys unlocked")
-
-    @app.route('/webhook', methods=['GET', 'POST'])
-    def webhook():
-        if request.method == 'GET':
-            # CRC challenge
-            crc_token = request.args.get('crc_token')
-            if crc_token:
-                sig = hmac.new(CONSUMER_SECRET.encode(), crc_token.encode(), hashlib.sha256).digest()
-                return jsonify({'response_token': f'sha256={base64.b64encode(sig).decode()}'})
-            return 'OK'
-        
-        # Verify and process POST
-        if not verify_signature(request):
-            return 'Invalid signature', 403
-        
-        process_event(request.json)
-        return 'OK'
-
-    def verify_signature(req):
-        signature = req.headers.get('x-twitter-webhooks-signature', '')
-        payload = req.get_data()
-        expected = 'sha256=' + base64.b64encode(
-            hmac.new(CONSUMER_SECRET.encode(), payload, hashlib.sha256).digest()
-        ).decode()
-        return hmac.compare_digest(signature, expected)
-
-    def process_event(event_data):
-        """Process incoming chat events."""
-        if event_data.get('event_type') != 'chat.received':
-            return
-        
-        payload = event_data.get('payload', {})
-        encrypted_event = payload.get('encrypted_event')
-        conversation_id = payload.get('conversation_id')
-        sender_id = payload.get('sender_id')
-        
-        # Skip our own messages
-        if sender_id == USER_ID:
-            return
-        
-        # Handle key changes
-        if 'key_change' in payload:
-            handle_key_change(payload['key_change'], conversation_id)
-        
-        # Get conversation keys
-        conv_keys = conversation_keys.get(conversation_id, {})
-        
-        # Decrypt message
-        event = chat.decrypt_event(encrypted_event, conv_keys, [])
-        
-        if event.get('type') == 'Message':
-            content = event.get('content', {})
-            if content.get('content_type') == 'Text':
-                incoming_text = content.get('text', '')
-                print(f"Received: {incoming_text}")
-                
-                # Generate response
-                response = generate_response(incoming_text)
-                
-                # Send encrypted reply
-                send_reply(conversation_id, response)
-
-    def handle_key_change(key_change_data, conversation_id):
-        """Extract and store new conversation keys."""
-        event = chat.decrypt_event(key_change_data['encrypted_event'], {}, [])
-        if event.get('type') == 'KeyChange':
-            for pk in event.get('participant_keys', []):
-                if pk['user_id'] == USER_ID:
-                    conv_key = chat.decrypt_conversation_key(pk['encrypted_key'])
-                    if conversation_id not in conversation_keys:
-                        conversation_keys[conversation_id] = {}
-                    conversation_keys[conversation_id][event['key_version']] = conv_key
-                    break
-
-    def generate_response(text: str) -> str:
-        """Generate a bot response."""
-        text_lower = text.lower()
-        if 'hello' in text_lower or 'hi' in text_lower:
-            return "Hello! How can I help you today?"
-        elif 'help' in text_lower:
-            return "I'm here to help! Please describe your issue."
-        elif 'thanks' in text_lower or 'thank you' in text_lower:
-            return "You're welcome! Is there anything else I can help with?"
-        else:
-            return "Thanks for your message. A team member will respond shortly."
-
-    def send_reply(conversation_id: str, text: str):
-        """Send an encrypted reply."""
-        # Get the latest conversation key events
-        conv = x_client.chat.get_conversation(conversation_id)
-        key_events = conv.meta.conversation_key_events
-        
-        # Encrypt the response
         payload = chat.encrypt_message(
-            text=text,
-            conversation_key=key_events[-1],  # Most recent key event (base64)
-            conversation_id=conversation_id,
-            sender_id=USER_ID,
-            should_notify=True
+            message_id,            # unique id you generate
+            "YOUR_USER_ID",        # sender_id
+            conversation_id,       # conversation_id
+            conv_key,              # RAW conversation key bytes
+            text,
+            conv_key_version,      # conversation_key_version
+            signing_key_version,   # your registered signing key version
         )
-        
-        # Send via API
-        x_client.chat.send_message(
-            conversation_id=conversation_id,
-            body={
-                "message_id": payload.message_id,
-                "encoded_message_create_event": payload.encoded_message_create_event,
-                "encoded_message_event_signature": payload.encoded_message_event_signature,
-            }
-        )
-        print(f"Sent: {text}")
 
-    if __name__ == '__main__':
-        app.run(port=5000, ssl_context='adhoc')
+        # Map SendPayload fields to the request body. For 1:1, {id} can be the recipient user ID.
+        client.chat.send_message(
+            recipient_id,
+            SendMessageRequest(
+                message_id=message_id,
+                encoded_message_create_event=payload.encrypted_content,
+                encoded_message_event_signature=payload.encoded_event_signature,
+            ),
+        )
+        print(f"Sent message {message_id}")
+
+    send_message(
+        "RECIPIENT_USER_ID", "CONVERSATION_ID",
+        conv_key, conv_key_version, "YOUR_SIGNING_KEY_VERSION",
+        "Hello! This is an encrypted message.",
+    )
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    import { randomUUID } from 'crypto';
+
+    async function sendMessage(recipientId, conversationId, convKey, convKeyVersion, signingKeyVersion, text) {
+      const messageId = randomUUID();
+
+      const payload = chat.encryptMessage(
+        messageId,            // unique id you generate
+        'YOUR_USER_ID',       // senderId
+        conversationId,       // conversationId
+        convKey,              // RAW conversation key (Uint8Array)
+        text,
+        convKeyVersion,       // conversationKeyVersion
+        signingKeyVersion,    // your registered signing key version
+      );
+
+      // Map SendPayload fields to the request body.
+      await client.chat.sendMessage(recipientId, {
+        message_id: messageId,
+        encoded_message_create_event: payload.encryptedContent,
+        encoded_message_event_signature: payload.encodedEventSignature,
+      });
+      console.log(`Sent message ${messageId}`);
+    }
     ```
   </Tab>
 </Tabs>
+
+<Warning>
+The `SendPayload` field names don't match the request body. Map them explicitly:
+
+| `SendPayload` field | Request body field |
+|:--------------------|:-------------------|
+| `encrypted_content` | `encoded_message_create_event` |
+| `encoded_event_signature` | `encoded_message_event_signature` |
+| (the `message_id` you generated) | `message_id` |
+</Warning>
+
+---
+
+## Step 7: Receive messages in real time
+
+To receive messages, set up a webhook (or open the activity stream) and subscribe to chat events. Each delivered event carries the encrypted message in `payload.encoded_event` plus, when needed, the conversation key change event in `payload.conversation_key_change_event`.
+
+### 7.1 Subscribe to chat events
+
+```bash
+# Subscribe to messages received by your user
+curl -X POST "https://api.x.com/2/activity/subscriptions" \
+  -H "Authorization: Bearer YOUR_BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"event_type": "chat.received", "filter": {"user_id": "YOUR_USER_ID"}}'
+```
+
+The same call in the XDK is `client.activity.create_subscription(...)`. See [Real-time events](/xchat/real-time-events) for webhook registration, CRC validation, and signature verification.
+
+### 7.2 Decrypt an incoming event
+
+A delivered chat event looks like this (the `data` envelope is the same for webhooks and the stream):
+
+```json
+{
+  "data": {
+    "event_type": "chat.received",
+    "event_uuid": "abc123",
+    "payload": {
+      "conversation_id": "1215441834412953600-1603419180975409153",
+      "sender_id": "1603419180975409153",
+      "id": "2046813948905676800",
+      "encoded_event": "CwABAAAA...",
+      "conversation_key_version": "1765441245499",
+      "conversation_key_change_event": "CwABAAAA..."
+    }
+  }
+}
+```
+
+Extract the conversation key from `conversation_key_change_event` (when present), then decrypt `encoded_event`. Pass the sender's signing keys so the SDK can verify the signature.
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    # Cache raw conversation keys per conversation: { conversation_id: { version: key_bytes } }
+    conversation_keys = {}
+
+    def get_signing_keys(user_id: str) -> list[dict]:
+        resp = client.chat.get_user_public_keys(
+            user_id,
+            public_key_fields=["version", "public_key", "signing_public_key", "identity_public_key_signature"],
+        )
+        # Each record maps directly to a SigningKeyEntry.
+        return [
+            {
+                "user_id": user_id,
+                "public_key_version": r["version"],
+                "public_key": r["signing_public_key"],
+                "identity_public_key": r["public_key"],
+                "identity_public_key_signature": r["identity_public_key_signature"],
+            }
+            for r in resp.data
+        ]
+
+    def handle_chat_event(event):
+        payload = event.get("data", {}).get("payload", {})
+        conversation_id = payload.get("conversation_id")
+        encoded_event = payload.get("encoded_event")
+        sender_id = payload.get("sender_id")
+
+        # 1. Update cached keys from the key change event, if one is attached.
+        key_change = payload.get("conversation_key_change_event")
+        if key_change:
+            extracted = chat.extract_conversation_keys([key_change])
+            conversation_keys[conversation_id] = extracted["keys"]
+
+        # 2. Decrypt the event with the cached keys, verifying the sender's signature.
+        keys = conversation_keys.get(conversation_id, {})
+        decrypted = chat.decrypt_event(encoded_event, keys, get_signing_keys(sender_id))
+
+        if decrypted["type"] == "Message":
+            content = decrypted["content"]
+            if content.get("content_type") == "Text":
+                print(f"Message from {decrypted['sender_id']}: {content['text']}")
+                print(f"Signature verified: {decrypted['verified']}")
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    // Cache raw conversation keys per conversation.
+    const conversationKeys = new Map<string, ConversationKeyMap>();
+
+    async function getSigningKeys(userId: string) {
+      const resp = await client.chat.getUserPublicKeys(userId, {
+        publicKeyFields: ['version', 'public_key', 'signing_public_key', 'identity_public_key_signature'],
+      });
+      return resp.data.map((r: any) => ({
+        userId,
+        publicKeyVersion: r.version,
+        publicKey: r.signing_public_key,
+        identityPublicKey: r.public_key,
+        identityPublicKeySignature: r.identity_public_key_signature,
+      }));
+    }
+
+    async function handleChatEvent(event: any) {
+      const payload = event?.data?.payload ?? {};
+      const { conversation_id: conversationId, encoded_event: encodedEvent, sender_id: senderId } = payload;
+
+      // 1. Update cached keys from the key change event, if attached.
+      if (payload.conversation_key_change_event) {
+        const extracted = chat.extractConversationKeys([payload.conversation_key_change_event]);
+        conversationKeys.set(conversationId, extracted.keys);
+      }
+
+      // 2. Decrypt with the cached keys, verifying the sender's signature.
+      const keys = conversationKeys.get(conversationId) ?? {};
+      const decrypted = chat.decryptEvent(encodedEvent, keys, await getSigningKeys(senderId));
+
+      if (decrypted.type === 'message' && decrypted.content?.contentType === 'text') {
+        console.log(`Message from ${decrypted.senderId}: ${decrypted.content.text}`);
+        console.log('Signature verified:', decrypted.verified);
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### 7.3 Loading history
+
+To backfill a conversation, page `client.chat.get_conversation_events(...)` (`GET /2/chat/conversations/{id}/events`). The response gives you the raw events in `data[].encoded_event` and every key change event in `meta.conversation_key_events`. The batch `decrypt_events` extracts keys and decrypts everything in one call:
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    signing_keys = []  # collect signing keys for all participants
+    for participant_id in participant_ids:
+        signing_keys += get_signing_keys(participant_id)
+
+    raw_events, key_events = [], []
+    for page in client.chat.get_conversation_events(conversation_id):
+        raw_events += [e["encoded_event"] for e in (page.data or [])]
+        key_events += (page.meta.conversation_key_events or []) if page.meta else []
+
+    result = chat.decrypt_events(raw_events + key_events, signing_keys)
+    for dm in result["messages"]:
+        evt = dm["event"]
+        if evt["type"] == "Message" and evt["content"].get("content_type") == "Text":
+            print(evt["sender_id"], evt["content"]["text"])
+
+    # Cache the extracted keys for sending replies / decrypting new events.
+    conversation_keys[conversation_id] = result["conversation_keys"]["keys"]
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const signingKeys = (await Promise.all(participantIds.map(getSigningKeys))).flat();
+
+    const rawEvents: string[] = [];
+    const keyEvents: string[] = [];
+    for await (const page of client.chat.getConversationEvents(conversationId)) {
+      rawEvents.push(...(page.data ?? []).map((e: any) => e.encoded_event));
+      keyEvents.push(...(page.meta?.conversation_key_events ?? []));
+    }
+
+    const result = chat.decryptEvents([...rawEvents, ...keyEvents], signingKeys);
+    for (const dm of result.messages) {
+      if (dm.event.type === 'message' && dm.event.content?.contentType === 'text') {
+        console.log(dm.event.senderId, dm.event.content.text);
+      }
+    }
+
+    conversationKeys.set(conversationId, result.conversationKeys.keys);
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Step 8: Handle key changes
+
+Conversation keys rotate when membership changes (someone joins or leaves a group). When that happens you receive a `conversation_key_change_event` (on chat events) or a decrypted event of type `KeyChange`. Re-extract the keys and update your cache — the latest version is what you use to send new messages.
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    def update_keys_from_key_change(conversation_id: str, key_change_event_b64: str):
+        extracted = chat.extract_conversation_keys([key_change_event_b64])
+        # extracted = { "keys": { version: key_bytes }, "latest_version": "..." }
+        conversation_keys.setdefault(conversation_id, {}).update(extracted["keys"])
+        return extracted["latest_version"]  # use this version to encrypt new messages
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    function updateKeysFromKeyChange(conversationId: string, keyChangeEventB64: string) {
+      const extracted = chat.extractConversationKeys([keyChangeEventB64]);
+      const existing = conversationKeys.get(conversationId) ?? {};
+      conversationKeys.set(conversationId, { ...existing, ...extracted.keys });
+      return extracted.latestVersion; // use this version to encrypt new messages
+    }
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Complete example: an echo bot
+
+This Python bot opens the activity stream, decrypts each incoming message, and replies with `received <text>`. It mirrors the `xchat-bot-python` sample.
+
+```python
+import uuid
+from xdk import Client
+from xdk.chat.models import SendMessageRequest
+from chat_xdk import Chat
+
+USER_ID = "YOUR_USER_ID"
+SIGNING_KEY_VERSION = "YOUR_SIGNING_KEY_VERSION"
+
+# OAuth2 user token for sending; app bearer token for the stream.
+client = Client(access_token="YOUR_OAUTH2_USER_TOKEN")
+stream_client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Unlock the Chat XDK at startup (juicebox_config fetched in Step 2).
+chat = Chat(JUICEBOX_CONFIG_JSON)
+chat.unlock("1234")
+
+# Cache raw conversation keys: { conversation_id: { version: key_bytes } }
+conversation_keys = {}
+
+def get_signing_keys(user_id):
+    resp = client.chat.get_user_public_keys(
+        user_id,
+        public_key_fields=["version", "public_key", "signing_public_key", "identity_public_key_signature"],
+    )
+    return [
+        {
+            "user_id": user_id,
+            "public_key_version": r["version"],
+            "public_key": r["signing_public_key"],
+            "identity_public_key": r["public_key"],
+            "identity_public_key_signature": r["identity_public_key_signature"],
+        }
+        for r in resp.data
+    ]
+
+def handle_event(response):
+    data = response.data
+    if not data or data.event_type != "chat.received":
+        return
+    payload = data.payload or {}
+
+    conversation_id = payload.get("conversation_id")
+    sender_id = payload.get("sender_id")
+    encoded_event = payload.get("encoded_event")
+    if sender_id == USER_ID:
+        return  # skip our own messages
+
+    # Refresh keys from the attached key change event, if any.
+    key_change = payload.get("conversation_key_change_event")
+    if key_change:
+        conversation_keys[conversation_id] = chat.extract_conversation_keys([key_change])["keys"]
+
+    keys = conversation_keys.get(conversation_id, {})
+    decrypted = chat.decrypt_event(encoded_event, keys, get_signing_keys(sender_id))
+    if decrypted.get("type") != "Message":
+        return
+    content = decrypted.get("content", {})
+    if content.get("content_type") != "Text":
+        return
+
+    reply(conversation_id, payload.get("conversation_key_version"), f"received {content['text']}")
+
+def reply(conversation_id, conv_key_version, text):
+    # Use the latest raw conversation key for this conversation.
+    keys = conversation_keys.get(conversation_id, {})
+    raw_key = keys.get(conv_key_version) or next(iter(keys.values()), None)
+    if raw_key is None:
+        return
+
+    message_id = str(uuid.uuid4())
+    payload = chat.encrypt_message(
+        message_id, USER_ID, conversation_id, raw_key, text,
+        conv_key_version, SIGNING_KEY_VERSION,
+    )
+    client.chat.send_message(
+        conversation_id,
+        SendMessageRequest(
+            message_id=message_id,
+            encoded_message_create_event=payload.encrypted_content,
+            encoded_message_event_signature=payload.encoded_event_signature,
+        ),
+    )
+
+# Stream activity events and dispatch them.
+for response in stream_client.activity.stream():
+    handle_event(response)
+```
 
 ---
 
@@ -786,22 +720,22 @@ Here's a complete example that brings everything together into a simple customer
 
 ### Security
 
-- **Use a strong PIN** for Juicebox key storage (6+ digits)
-- **Never log** encryption keys or decrypted message content in production
-- **Verify signatures** on all incoming messages
-- **Implement proper OAuth** token refresh logic
+- **Use a strong PIN** for Juicebox key storage.
+- **Never log** raw keys or decrypted message content in production.
+- **Verify signatures** by always passing the sender's signing keys to `decrypt_event` / `decrypt_events`, and consider `set_reject_unverified(True)`.
+- **Refresh OAuth tokens** before they expire (the XDK refreshes automatically when constructed with `client_id` and a `token` dict).
 
 ### Performance
 
-- **Cache conversation keys** - Decrypting keys (ECIES) is expensive; cache them
-- **Use webhooks** instead of polling for real-time applications
-- **Batch operations** when possible
+- **Cache conversation keys** in memory (and persist them). Decrypting a conversation key with ECIES is expensive; the raw key is reusable across messages of the same version.
+- **Cache public/signing keys** per user and refresh on `SignatureVerificationFailed`.
+- **Use webhooks or the stream** instead of polling for real-time apps.
 
-### Error handling
+### Reliability
 
-- **Handle unlock failures** gracefully (wrong PIN, network issues)
-- **Retry transient errors** with exponential backoff
-- **Log errors** without exposing sensitive data
+- **Deduplicate** events using `event_uuid` (X may retry delivery).
+- **Handle key rotation** by re-extracting keys whenever a `conversation_key_change_event` arrives.
+- **Retry transient errors** with exponential backoff.
 
 ---
 
