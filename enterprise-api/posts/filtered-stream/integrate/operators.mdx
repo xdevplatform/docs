@@ -14,6 +14,8 @@ Operators are used to match on specific Post attributes. There are two types:
 - **Standalone operators** — Can be used alone or with any other operators
 - **Conjunction-required operators** — Must be used with at least one standalone operator
 
+Some advanced operators (such as semantic embedding) require Embedding tier access in addition to Enterprise.
+
 ---
 
 ## Keyword and phrase operators
@@ -154,6 +156,37 @@ Operators are used to match on specific Post attributes. There are two types:
 | Space (AND) | Logical AND between expressions | `cat dog` (both required) |
 | `()` | Grouping for complex expressions | `(cat OR dog) -is:retweet` |
 | `-` | Negation/exclusion | `cat -grumpy` |
+
+---
+
+## Semantic operators
+
+<Note>
+**Requires Embedding tier**
+
+The `embedding:` and `embedding_threshold:` operators require Embedding tier access on your Enterprise Filtered Stream instance. If not provisioned, rule creation will fail with an "'embedding' is not an available operator" error.
+</Note>
+
+These operators use a neural embedding model to match Posts by *semantic similarity* to a query, rather than requiring exact keyword matches.
+
+| Operator | Type | Summary | Example |
+|:---------|:-----|:--------|:--------|
+| `embedding:"query"` | Standalone | Matches Posts semantically similar to the query. Multi-word queries must be quoted. | `embedding:"climate change policy"` |
+| `embedding_threshold:X.XX` | Conjunction required | Minimum cosine similarity for a match (0.0–1.0). Defaults to `0.3`. Use values between 0.3–0.6. | `embedding:"cryptocurrency regulation" embedding_threshold:0.45` |
+
+### Key requirements and notes
+
+- `embedding_threshold:` **cannot** be the only operator in a rule. Pair it with `embedding:` (or another standalone operator).
+- **Do not negate** `embedding:` (e.g. `-embedding:"..."` is unsupported).
+- Longer, descriptive natural language queries produce better results than short keywords.
+- Embedding query processing is asynchronous — newly created rules may take a few seconds before they begin matching.
+- When a Post matches via an embedding rule, the delivered payload's `matching_rules` entries will contain `embedding_similarity` and `embedding_threshold` (see [Matching Posts to Rules](/x-api/posts/filtered-stream/integrate/matching-returned-tweets)).
+
+**Example rules:**
+
+- `embedding:"electric vehicle announcements" lang:en -is:retweet has:links`
+- `embedding:"natural disaster relief" embedding_threshold:0.45 has:media`
+- `embedding:"renewable energy" embedding_threshold:0.4 OR embedding:"solar power investment"`
 
 ---
 
