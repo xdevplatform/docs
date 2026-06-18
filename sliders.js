@@ -259,12 +259,7 @@ function buildSlugToPricingTypeMapping() {
   mapping['get-compliance-jobs'] = 'CountsRecent'; // Placeholder - may need to verify
   mapping['get-compliance-job-by-id'] = 'CountsRecent'; // Placeholder - may need to verify
   
-  // Community Notes endpoints (may not have pricing)
-  mapping['create-a-community-note'] = 'ContentCreate'; // Placeholder - may need to verify
-  mapping['delete-a-community-note'] = 'ContentManage'; // Placeholder - may need to verify
-  mapping['evaluate-a-community-note'] = 'ContentCreate'; // Placeholder - may need to verify
-  mapping['search-for-community-notes-written'] = 'CountsRecent'; // Placeholder - may need to verify
-  mapping['search-for-posts-eligible-for-community-notes'] = 'Post'; // Returns posts
+  // Community Notes endpoints are free (do not show View Pricing / cost estimator)
   
   // Account Activity endpoints (may not have pricing)
   mapping['create-subscription'] = 'ContentCreate'; // Placeholder - may need to verify
@@ -337,6 +332,13 @@ function extractPricingTypeFromPage() {
   
   // Extract slug from URL (e.g., /x-api/users/get-users-by-ids -> get-users-by-ids)
   const urlPath = window.location.pathname;
+
+  // Community Notes endpoints (and possibly others) are free and should not show View Pricing
+  if (urlPath.includes('/community-notes/')) {
+    console.log('[Cost Estimator] Community Notes endpoint is free, skipping pricing injection.');
+    return null;
+  }
+
   const slugMatch = urlPath.match(/\/([^\/]+)$/);
   
   if (!slugMatch) {
