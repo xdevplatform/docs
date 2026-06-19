@@ -1,0 +1,1263 @@
+---
+title: "アナリティクス"
+keywords: ["広告アナリティクス", "Ads アナリティクス", "キャンペーンアナリティクス", "広告メトリクス", "広告指標", "キャンペーンパフォーマンス"]
+description: "X Ads API の同期および非同期アナリティクスエンドポイントを使用して、セグメンテーションや粒度オプションを指定しながらキャンペーンのパフォーマンス指標を取得します。"
+---
+
+アナリティクス指標は、パートナーや広告主が X 上でプロモートしているコンテンツのパフォーマンスを把握するのに役立ちます。これにはインプレッション、クリック、動画視聴数、支出などの情報が含まれます。さらに、パートナーや広告主は、リーチしたオーディエンスのさまざまなセグメントに関する詳細な指標を取得することもできます。
+
+Ads API は、キャンペーンの詳細なパフォーマンス指標を取得する 2 つの方法、同期と非同期をサポートしています。同期アナリティクスコールでは、リクエストされた指標がレスポンスとして返されます。非同期アナリティクスエンドポイントでは、関連する「ジョブ」の処理が完了した後、リクエストされた指標をダウンロード可能な結果ファイルから取得できます。同期エンドポイントは短い期間のリクエストをサポートし、リアルタイムのキャンペーン最適化に最適です。非同期エンドポイントははるかに長い期間をサポートしており、より多くのデータを取得できるため、レポート作成や履歴データのバックフィルに最適です。
+
+## 詳細
+
+### 同期 vs. 非同期
+
+同期および非同期アナリティクスエンドポイントの違いを以下の表にまとめています。この情報は、どちらのエンドポイントを使用するかを開発者が選択する際に役立てることを意図しています。
+
+| 機能 | 同期 | 非同期 |
+| :-- | :-- | :-- |
+| レート制限 | ユーザーレベル: 250 リクエスト / 15 分 | アカウントレベル: 100 件の同時\\*ジョブ |
+| 期間 | 7 日間 | 90 日間 (セグメント化なし)<br />45 日間 (セグメント化あり) |
+| セグメンテーション | 不可 | 可 |
+| レスポンスで返るもの | 指標データ | ジョブの処理状態\\*\\* |
+| 推奨ユースケース | リアルタイム最適化<br />ユーザーインターフェースリクエスト | 定期スケジュール同期<br />履歴データのバックフィル |
+
+<Note>
+  \* これは、任意の時点で処理中の状態にあるジョブの最大数を指します。
+
+  \*\* ジョブの処理が正常に完了すると、URL が返されます。ここから圧縮 (gzip) された結果ファイルをダウンロードできます。
+
+  この点を除き、両エンドポイントは同じ機能を提供します。
+</Note>
+
+### ユースケース
+
+主要なアナリティクスのユースケースは 3 つあります。
+
+1. リアルタイム最適化: パフォーマンス指標を使用してアクティブなキャンペーンを更新する
+2. 同期: 定期スケジュールでのバックグラウンド同期
+3. 新規アカウントのオンボーディング: 履歴データのバックフィル
+
+同期アナリティクスエンドポイントは、直近 5〜15 分以内の指標の変化に基づきキャンペーンを更新するリアルタイム最適化に使用できます。アナリティクス同期にはどちらのエンドポイントも使用できます。希望する期間とセグメンテーションが必要かどうかによって、どちらのエンドポイントを使用するかが決まります。新規アカウントのオンボーディングには、非同期アナリティクスエンドポイントのみを使用してください。(同期アナリティクスエンドポイントは、大量のデータを取得するために使用してはいけません。)
+
+非同期アナリティクスエンドポイントは、バックエンドプロセスで指標を同期していれば、ダッシュボードやその他の UI 要素を動かすことができます。ユーザーインターフェースのリクエストを満たす目的で非同期アナリティクスエンドポイントを呼び出すことは避けてください。
+
+### リクエストオプション
+
+アナリティクスリクエストは広告アカウントを対象とするため、リソースパスにアカウント ID が必要です。以下に挙げるリクエストオプションは、クエリパラメータとして指定します。次の種類の値が必要です。
+
+- エンティティ: エンティティタイプと、アナリティクスを取得したい最大 20 件のエンティティ ID
+- 期間: ISO 8601 形式で表現された開始時刻と終了時刻
+  - **注:** 時間単位 (whole hours) で指定する必要があります
+- メトリクスグループ: 1 つ以上の関連メトリクスのセット (各メトリクスグループ内のメトリクスの一覧については「Metrics and Segmentation」を参照)
+- 粒度 (Granularity): 指標が返される集計レベルを指定します
+- プレースメント: X 上または X 以外で配信された広告の指標を取得するかを決定します
+  - **注:** 1 リクエストあたり 1 つのプレースメント値のみ指定できます
+
+`start_time` および `end_time` リクエストパラメータを使用して期間を指定します。これらの値は、指定された粒度に合わせて以下のように整列している必要があります。
+
+1. `TOTAL`: (エンドポイントの制限内で) 任意の期間を指定可能
+2. `DAY`: 開始時刻と終了時刻の両方がアカウントのタイムゾーンにおける深夜 0 時に一致している必要があります
+3. `HOUR`: (エンドポイントの制限内で) 任意の期間を指定可能
+
+終了時刻 (end time) は除外的 (exclusive) です。例えば、`start_time=2026-01-01T00:00:00Z` および `end_time=2026-01-02T00:00:00Z` のリクエストでは、この期間は 24 時間しかカバーしないため、(2 日ではなく) 1 日分のアナリティクス指標が返されます。
+
+**セグメンテーション**
+
+セグメンテーションは非同期アナリティクスエンドポイントでのみ利用可能であり、特定のターゲティング値ごとに分解された指標をパートナーや広告主が取得できるようにします。セグメント化された指標をリクエストするには、`segmentation_type` リクエストパラメータを使用します。セグメンテーションオプションの詳細については、[Metrics and Segmentation](/x-ads-api/analytics#metrics-and-segmentation) を参照してください。
+
+## FAQ
+
+Ads API の数値が X Ads UI に表示されている数値と一致しないのはなぜですか?
+
+- すべてのプレースメント (`ALL_ON_TWITTER`、`SPOTLIGHT`、`TREND`) のデータをリクエストしているか確認してください。
+- Ads API では終了時刻 (end time) は除外的ですが、Ads UI では包含的 (inclusive) であることに注意してください。
+
+データをリクエストするタイミングによって数値が変動するのはなぜですか?
+
+- レポーティング指標は利用可能になり次第すぐに取得できます。これらはほぼリアルタイムで利用可能です。ただし、これらの初期結果は推定値であり、変化することが想定されます。指標は 24 時間後に確定しますが、支出データは例外です。
+- 支出指標は通常、イベントから 3 日以内に確定します。ただし、課金データは (スパムフィルタリングなどのために) イベント発生日から最大 14 日間処理されます。
+
+特定の期間にどのエンティティ ID をリクエストすべきかを判断するにはどうすればよいですか?
+
+- [Active Entities エンドポイント](/x-ads-api/analytics#active-entities-2) を使用してください
+
+アナリティクスレスポンスのすべての値が `null` なのはなぜですか?
+
+- リクエストされた期間中、キャンペーンが配信されていなかった可能性が高いです
+- [Active Entities エンドポイント](/x-ads-api/analytics#active-entities-2) を使用して、どのエンティティについてどの期間のアナリティクスを取得すべきかを判断してください
+
+API は `null` 値を返すのに、UI では 0 が表示されるのはなぜですか?
+
+- UI ではこれらの値を 0 として表示することを選んでいますが、値としては同等です
+
+X タイムラインなど、より細かいプレースメントに関連する指標をリクエストするにはどうすればよいですか?
+
+- アナリティクスでは次のプレースメント値をサポートしています: `ALL_ON_TWITTER`、`SPOTLIGHT`、`TREND`
+
+削除済みまたは一時停止中のエンティティについて指標を取得することは可能ですか?
+
+- はい。エンティティのステータスはアナリティクス指標の利用可能性には影響しません。
+
+セグメント化された値が、セグメント化されていない値と一致しないのはなぜですか?
+
+- セグメント化されたデータは、その情報の導出方法の都合上、セグメント化されていないデータに対して 100% ロールアップされることは想定されていません。
+
+API からのセグメント化された値が、Ads Manager UI が表示する値と一致しないのはなぜですか?
+
+- API は、クエリしている特定のエンティティタイプ (CAMPAIGN、PROMOTED\_TWEET) にスコープされたセグメント化された指標を返します。Ads Manager UI はエンティティタイプを横断してデータを集計します。これらは同じ基礎データの異なるビューであり、想定されている挙動です。
+
+複数のディメンションでセグメント化されたデータをリクエストすることは可能ですか?
+
+- マルチセグメンテーションはサポートしていません。
+
+## ベストプラクティス
+
+Ads API から [アナリティクス](/x-ads-api/analytics) データを収集する際のいくつかのベストプラクティスです。
+
+### レート制限とリトライ
+
+- レート制限がかかったクエリ (`HTTP 429` ステータスコードを返すもの) では、`x-rate-limit-reset` ヘッダーを確認し、示された時刻以降にのみリトライしてください。
+- HTTP 503 Service Unavailable ステータスコードを返すクエリでは、`retry-after` ヘッダーを確認し、示された時刻以降にのみリトライしてください。
+- リトライ時刻を尊重しないアプリケーションは、予告なく Ads API へのアクセスが取り消されたり、スロットリングされたりする可能性があります。
+
+### アナリティクス指標のポイント
+
+- すべてのアナリティクス指標は、`billed_charge_local_micro` を除き、24 時間後にロックされ変更されません。
+- `billed_charge_local_micro` 指標は、データが返された後最大 3 日間は推定値です。
+- 24 時間経過後、この指標は、超過配信 (指定された `end_time` 以降に配信された広告) に対するクレジットや、無効と判断された課金イベントによって減少する可能性があります。この指標は 24 時間後にはほとんど変化しません。
+- 詳細については [アナリティクス](/x-ads-api/analytics) を参照してください。
+
+### リアルタイムでセグメント化されていないデータの取得
+
+- 必ず `start_time` と `end_time` の両方を指定してください。
+- 7 日より古いエンティティについてはデータを取得しないでください。
+- 理想的には `HOUR` 粒度でデータをリクエストしてください。常に集計してロールアップし、`DAY` および `TOTAL` 粒度を得ることができます。
+- 理想的には `line_items` および `promoted_tweets` レベルでデータをリクエストしてください。これらの指標を集計してロールアップすることで、広告エンティティ階層全体 (キャンペーン、ファンディングインストゥルメント、アカウントレベル) の合計を得ることができます。
+- アナリティクス指標の値は自分側 (ローカル) に保存・保管してください。
+- 30 日より古いデータを繰り返しクエリしないでください。このデータは変化しないため、ローカルに保管すべきです。
+- セグメント化されていないデータはすべてリアルタイムであり、イベント発生から数秒以内に利用可能になります。
+- コンバージョン指標と非コンバージョン指標は別のリクエストにグループ化してください。
+
+### セグメント化されたデータの取得
+
+- 上記「リアルタイムでセグメント化されていないデータの取得」のガイドラインを参照してください。以下に追加のアドバイスを示します。
+- ほとんどのセグメント化データタイプでは、データが完了するまでに最大 1 時間かかる場合があります。`INTERESTS` でセグメント化されたデータは最大 12 時間遅延する可能性があります。
+- セグメント化されたデータは、その情報の導出方法の都合上、セグメント化されていないデータに対して 100% ロールアップされることは想定されていません。
+
+### 履歴データの取得
+
+- データをバックフィルする際 (新しい広告主アカウントの追加など) は、より小さい `start_time` と `end_time` のチャンクで複数のリクエストを行う必要がある場合があります。
+- 取得は 30 日間の日付ウィンドウに制限してください。
+- これらのリクエストをスロットリングし、時間をかけて分散させ、レート制限を使い切らないようにしてください。
+
+### サンプル
+
+これらのベストプラクティスの一部を示すサンプルスクリプト (`fetch_stats`) を、[ads-platform-tools GitHub](https://github.com/xdevplatform/ads-platform-tools) リポジトリで提供しています。
+
+## 目的別の指標
+
+エンティティに適用可能な指標は、[キャンペーンの目的](/x-ads-api/campaign-management) によって異なります。このガイドを参考に、各目的タイプに対して取得すべき関連メトリクスグループや、追加の派生指標をどのように計算できるかを判断してください。
+
+### `ENGAGEMENTS`
+
+**関連メトリクスグループ:** `ENGAGEMENT` および `BILLING`。
+
+|  |  |
+| :-- | :-- |
+| 派生指標 | 公開指標による計算式 |
+| Engagement Rate | `engagements/impressions` |
+| CPE | `billed_charge_local_micro/engagements` |
+
+### `WEBSITE_CLICKS` および `WEBSITE_CONVERSIONS`
+
+**関連メトリクスグループ:** `ENGAGEMENT`、`BILLING`、および `WEB_CONVERSION`。
+
+|  |  |
+| :-- | :-- |
+| 派生指標 | 公開指標による計算式 |
+| CPM | `billed_charge_local_micro/impressions/1000` |
+| Click Rate | `clicks/impressions` |
+| CPLC | `billed_charge_local_micro/clicks` |
+| Total Conversions | `conversion_custom` \+ `conversion_site_visits` \+ `conversion_sign_ups` \+ `conversion_downloads` \+ `conversion_purchases` |
+| Conversion Rate | Total Conversions / `impressions` |
+| CPA | `billed_charge_local_micro` / Total Conversions |
+
+### `APP_INSTALLS`
+
+**関連メトリクスグループ:** `ENGAGEMENT`、`BILLING`、`MOBILE_CONVERSION`、および `LIFE_TIME_VALUE_MOBILE_CONVERSION`。クリエイティブで video app card を使用する場合は `VIDEO` も該当します。
+
+|  |  |
+| :-- | :-- |
+| 派生指標 | 公開指標による計算式 |
+| CPM | `billed_charge_local_micro/impressions/1000` |
+| App Click Rate | `app_clicks/impressions` |
+| CPAC | `billed_charge_local_micro/app_clicks` |
+| CPI | `billed_charge_local_micro/mobile_conversion_installs` |
+
+### `FOLLOWERS`
+
+**関連メトリクスグループ:** `ENGAGEMENT` および `BILLING`。
+
+|  |  |
+| :-- | :-- |
+| 派生指標 | 公開指標による計算式 |
+| CPM | `billed_charge_local_micro/impressions/1000` |
+| Follow Rate | `follows/impressions` |
+| CPF | `billed_charge_local_micro/follows` |
+
+### `VIDEO_VIEWS`
+
+**関連メトリクスグループ:** `ENGAGEMENT`、`BILLING`、および `VIDEO`。
+
+|  |  |
+| :-- | :-- |
+| 派生指標 | 公開指標による計算式 |
+| CPM | `billed_charge_local_micro/impressions/1000` |
+| Video Rate | `video_total_views/impressions` |
+| Cost Per View | `billed_charge_local_micro/video_total_views` |
+
+### `VIDEO_VIEWS_PREROLL`
+
+**関連メトリクスグループ:** `ENGAGEMENT`、`BILLING`、および `VIDEO`。
+
+|  |  |
+| :-- | :-- |
+| 派生指標 | 公開指標による計算式 |
+| CPM | `billed_charge_local_micro/impressions/1000` |
+| Video Rate | `video_total_views/impressions` |
+| Cost Per View | `billed_charge_local_micro/video_total_views` |
+
+## メトリクスとセグメンテーション
+
+このドキュメントは、エンティティタイプごとに [アナリティクス](/x-ads-api/analytics) で利用可能な指標と、各指標で利用可能なセグメンテーションの概要をまとめたものです。
+
+|  |  |  |  |  |  |  |
+| :-- | :-- | :-- | :-- | :-- | :-- | :-- |
+|  | メトリクスグループ |  |  |  |  |  |
+| エンティティ | [`ENGAGEMENT`](#engagement) | [`BILLING`](#BILLING) | [`VIDEO`](#VIDEO) | [`WEB_CONVERSION`](#WEB_CONVERSION) | [`MOBILE_CONVERSION`](#MOBILE_CONVERSION) | [`LIFE_TIME_VALUE_MOBILE_CONVERSION`](#LIFE_TIME_VALUE_MOBILE_CONVERSION) |
+| `ACCOUNT` | ✔\\* |  |  |  |  |  |
+| `FUNDING_INSTRUMENT` | ✔\\* | ✔ |  |  |  |  |
+| `CAMPAIGN` | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
+| `LINE_ITEM` | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
+| `PROMOTED_TWEET` | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
+
+\\*`ENGAGEMENT` メトリクスファミリーの一部の指標は、アカウントおよびファンディングインストゥルメントレベルでは利用できません。詳細は `ENGAGEMENT` セクションを参照してください。
+
+### メトリクスグループ別の利用可能な指標
+
+#### `ENGAGEMENT`
+
+|  |  |  |  |  |
+| :-- | :-- | :-- | :-- | :-- |
+| 指標 | 説明 | セグメンテーション可否 | データ型 | アカウント / ファンディングインストゥルメントで利用可 |
+| `engagements` | エンゲージメントの総数 | ✔ | Array of ints | ✔ |
+| `impressions` | インプレッションの総数 | ✔ | Array of ints | ✔ |
+| `retweets` | リポストの総数 | ✔ | Array of ints | ✔ |
+| `replies` | 返信の総数 | ✔ | Array of ints | ✔ |
+| `likes` | いいねの総数 | ✔ | Array of ints | ✔ |
+| `follows` | フォローの総数 | ✔ | Array of ints | ✔ |
+| `card_engagements` | カードエンゲージメントの総数 | ✔ | Array of ints |  |
+| `clicks` | お気に入りやその他のエンゲージメントを含むクリックの総数 | ✔ | Array of ints |  |
+| `app_clicks` | アプリのインストールまたは起動の試行回数 | ✔ | Array of ints |  |
+| url\_clicks | 広告内のリンクまたは Website Card のクリック総数 (アーンドを含む) | ✔ | Array of ints |  |
+| `qualified_impressions` | 適格インプレッションの総数 | ✔ | Array of ints |  |
+| `carousel_swipes` | Carousel 画像または動画のスワイプ総数 | ✔ | Array of ints |  |
+
+#### `BILLING`
+
+|  |  |  |  |
+| :-- | :-- | :-- | :-- |
+| 指標 | 説明 | セグメンテーション可否 | データ型 |
+| `billed_engagements` | 課金エンゲージメントの総数 | ✔ | Array of ints |
+| `billed_charge_local_micro` | 総支出 (マイクロ単位) | ✔ | Array of ints |
+
+#### `VIDEO`
+
+動画指標の定義変更に関する通知:
+
+`VIDEO` メトリクスグループ内の `video_total_views` 指標は、MRC 基準に従い、少なくとも 50% が画面に表示されている状態で 2 秒間視聴されたビューを集計します。
+
+少なくとも 3 秒間 100% が画面内に表示されたという従来の動画視聴定義は、`VIDEO` メトリクスグループ内の新しい指標 `video_3s100pct_views` として引き続き利用できます。元の視聴定義に基づいて入札・課金を継続するには、新たに利用可能になった `VIEW_3S_100PCT` bid\_unit を使用してください。
+
+|  |  |  |  |
+| :-- | :-- | :-- | :-- |
+| 指標 | 説明 | セグメンテーション可否 | データ型 |
+| `video_total_views` | 動画視聴の総数 | ✔ | Array of ints |
+| `video_views_25` | 動画の少なくとも 25% が視聴されたビューの総数。 | ✔ | Array of ints |
+| `video_views_50` | 動画の少なくとも 50% が視聴されたビューの総数。 | ✔ | Array of ints |
+| `video_views_75` | 動画の少なくとも 75% が視聴されたビューの総数。 | ✔ | Array of ints |
+| `video_views_100` | 動画の 100% が視聴されたビューの総数。 | ✔ | Array of ints |
+| `video_cta_clicks` | コールトゥアクションのクリック総数 | ✔ | Array of ints |
+| `video_content_starts` | 動画再生開始の総数 | ✔ | Array of ints |
+| `video_3s100pct_views` | 少なくとも 3 秒間 100% が画面内に表示されて再生されたビューの総数 (旧 `video_total_views`) | ✔ | Array of ints |
+| `video_6s_views` | 動画の少なくとも 6 秒間が視聴されたビューの総数 | ✔ | Array of ints |
+| `video_15s_views` | 動画の少なくとも 15 秒間、または総再生時間の 95% が視聴されたビューの総数 | ✔ | Array of ints |
+
+#### `WEB_CONVERSION`
+
+|  |  |  |  |
+| :-- | :-- | :-- | :-- |
+| 指標 | 説明 | セグメンテーション可否 | データ型 |
+| `conversion_purchases` | PURCHASE タイプのコンバージョン数と、それに対応する販売額と注文数量 | `PLATFORMS` のみ | JSON object |
+| `conversion_sign_ups` | SIGN\_UP タイプのコンバージョン数と、それに対応する販売額と注文数量 | `PLATFORMS` のみ | JSON object |
+| `conversion_site_visits` | SITE\_VISIT タイプのコンバージョン数と、それに対応する販売額と注文数量 | `PLATFORMS` のみ | JSON object |
+| `conversion_downloads` | DOWNLOAD タイプのコンバージョン数と、それに対応する販売額と注文数量 | `PLATFORMS` のみ | JSON object |
+| `conversion_custom` | CUSTOM タイプのコンバージョン数と、それに対応する販売額と注文数量 | `PLATFORMS` のみ | JSON object |
+
+#### `MOBILE_CONVERSION`
+
+モバイルコンバージョンの統計は、MACT が有効化された広告主アカウントでのみ利用できます。
+
+|  |  |  |  |
+| :-- | :-- | :-- | :-- |
+| 指標 | 説明 | セグメンテーション可否 | データ型 |
+| `mobile_conversion_spent_credits` | SPENT\_CREDIT タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_installs` | INSTALL タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_content_views` | CONTENT\_VIEW タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_add_to_wishlists` | ADD\_TO\_WISHLIST タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_checkouts_initiated` | CHECKOUT\_INITIATED タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_reservations` | RESERVATION タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_tutorials_completed` | TUTORIAL\_COMPLETED タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_achievements_unlocked` | ACHIEVEMENT\_UNLOCKED タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_searches` | SEARCH タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_add_to_carts` | ADD\_TO\_CART タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_payment_info_additions` | PAYMENT\_INFO\_ADDITION タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_re_engages` | RE\_ENGAGE タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_shares` | SHARE タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_rates` | RATE タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_logins` | LOGIN タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_updates` | UPDATE タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_levels_achieved` | LEVEL\_ACHIEVED タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_invites` | INVITE タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| `mobile_conversion_key_page_views` | KEY\_PAGE\_VIEW タイプのモバイルコンバージョンを post\_view と post\_engagement に内訳 | ✔ | JSON object |
+| mobile\_conversion\_downloads | DOWNLOAD タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| mobile\_conversion\_purchases | PURCHASE タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| mobile\_conversion\_sign\_ups | SIGN\_UP タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+| mobile\_conversion\_site\_visits | SITE\_VISIT タイプのモバイルコンバージョンを post\_view、post\_engagement、assisted、order\_quantity、sale\_amount に内訳 | ✔ | JSON object |
+
+#### `LIFE_TIME_VALUE_MOBILE_CONVERSION`
+
+ライフタイムモバイルコンバージョンの統計は、MACT が有効化された広告主アカウントでのみ利用できます。
+
+|  |  |  |  |
+| :-- | :-- | :-- | :-- |
+| 指標 | 説明 | セグメンテーション可否 | データ型 |
+| `mobile_conversion_lifetime_value_purchases` | PURCHASE タイプのモバイルコンバージョンの内訳 |  | JSON object |
+| `mobile_conversion_lifetime_value_sign_ups` | SIGN\_UP タイプのモバイルコンバージョンの内訳 |  | JSON object |
+| `mobile_conversion_lifetime_value_updates` | UPDATE タイプのモバイルコンバージョンの内訳 |  | JSON object |
+| `mobile_conversion_lifetime_value_tutorials_completed` | TUTORIAL\_COMPLETED タイプのモバイルコンバージョンの内訳 |  | JSON object |
+| `mobile_conversion_lifetime_value_reservations` | RESERVATION タイプのモバイルコンバージョンの内訳 |  | JSON object |
+| `mobile_conversion_lifetime_value_add_to_carts` | ADD\_TO\_CART タイプのモバイルコンバージョンの内訳 |  | JSON object |
+| `mobile_conversion_lifetime_value_add_to_wishlists` | ADD\_TO\_WISHLIST タイプのモバイルコンバージョンの内訳 |  | JSON object |
+| `mobile_conversion_lifetime_value_checkouts_initiated` | CHECKOUT\_INITIATED タイプのモバイルコンバージョンの内訳 |  | JSON object |
+| `mobile_conversion_lifetime_value_levels_achieved` | LEVEL\_ACHIEVED タイプのモバイルコンバージョンの内訳 |  | JSON object |
+| `mobile_conversion_lifetime_value_achievements_unlocked` | ACHIEVEMENT\_UNLOCKED タイプのモバイルコンバージョンの内訳 |  | JSON object |
+| `mobile_conversion_lifetime_value_shares` | SHARE タイプのモバイルコンバージョンの内訳 |  | JSON object |
+| `mobile_conversion_lifetime_value_invites` | INVITE タイプのモバイルコンバージョンの内訳 |  | JSON object |
+| `mobile_conversion_lifetime_value_payment_info_additions` | PAYMENT\_INFO\_ADDITION タイプのモバイルコンバージョンの内訳 |  | JSON object |
+| `mobile_conversion_lifetime_value_spent_credits` | SPENT\_CREDIT タイプのモバイルコンバージョンの内訳 |  | JSON object |
+| `mobile_conversion_lifetime_value_rates` | RATE タイプのモバイルコンバージョンの内訳 |  | JSON object |
+
+### セグメンテーション
+
+セグメンテーションレポートは、指定されたターゲティングタイプの値ごとに分解された指標を取得することを可能にします。セグメンテーションは、その複雑さが大きいため、[非同期アナリティクスクエリ](/x-ads-api/analytics#asynchronous-analytics) でのみ利用可能です。
+
+2026 年 5 月時点で、以下のセグメンテーションタイプのみが有効化されています。METROS は Nielsen DMA コードを数値文字列として返します (819 = Seattle-Tacoma)。METROS のような地理的セグメンテーションタイプには country パラメータが必要です (米国の場合は 96683cc9126741d1)。
+
+|  |  |
+| :-- | :-- |
+| セグメンテーションタイプ | `country` パラメータ必須 |
+| `AGE` |  |
+| `GENDER` |  |
+| `METROS` | ✔ |
+| `PLATFORMS` |  |
+
+## 派生指標
+
+キャンペーンの指標は [キャンペーンの目的](/x-ads-api/campaign-management) に依存します。設定された目的に基づいて、使用する派生指標を計算する方法をこのガイドで確認してください。
+
+中括弧で囲まれていない `metric` は、Ads API の [アナリティクス](/x-ads-api/analytics#synchronous-analytics) エンドポイントから返される指標です。`{中括弧}` で囲まれた名前は、そのカテゴリの派生指標を示します。
+
+### ENGAGEMENTS
+
+|  |  |
+| :-- | :-- |
+| 派生指標 | 公開指標による計算式 |
+| `promoted_tweet_search_impressions + promoted_tweet_timeline_impressions + promoted_tweet_profile_impressions` |  |
+| `billed_charge_local_micro / {Impressions} / 1000` |  |
+| `{Total Engagements}` | `promoted_account_follows + promoted_tweet_search_engagements + promoted_tweet_timeline_engagements + promoted_tweet_profile_engagements` または `promoted_account_follows + promoted_tweet_search_clicks + promoted_tweet_search_replies + promoted_tweet_search_retweets + promoted_tweet_search_follows + promoted_tweet_timeline_clicks + promoted_tweet_timeline_replies + promoted_tweet_timeline_retweets + promoted_tweet_timeline_follows + promoted_tweet_profile_clicks + promoted_tweet_profile_replies + promoted_tweet_profile_retweets + promoted_tweet_profile_follows` |
+| `{Engagement Rate}` | `{Total Engagements} / {Impressions}` |
+| `billed_charge_local_micro / {Total Engagements}` |  |
+
+### WEBSITE\_CLICKS
+
+|  |  |
+| :-- | :-- |
+| 派生指標 | 公開指標による計算式 |
+| `promoted_tweet_search_impressions + promoted_tweet_timeline_impressions + promoted_tweet_profile_impressions` |  |
+| `billed_charge_local_micro / {Impressions} / 1000` |  |
+| `{Link Clicks}` | `promoted_tweet_search_url_clicks + promoted_tweet_timeline_url_clicks + promoted_tweet_profile_url_clicks` |
+| `{Click Rate}` | `{Link Clicks} / {Impressions}` |
+| `billed_charge_local_micro / {Link Clicks}` |  |
+| `conversion_site_visits` |  |
+| `{Conversion Rate}` | `conversion_site_visits / {Impressions}` |
+| `billed_charge_local_micro / conversion_site_visits` |  |
+
+### APP\_INSTALLS
+
+|  |  |
+| :-- | :-- |
+| 派生指標 | 公開指標による計算式 |
+| `promoted_tweet_search_impressions + promoted_tweet_timeline_impressions` |  |
+| `billed_charge_local_micro / {Impressions} / 1000` |  |
+| `{App Clicks}` | `promoted_tweet_app_install_attempts + promoted_tweet_app_open_attempts + promoted_tweet_timeline_url_clicks + promoted_tweet_search_url_clicks` |
+| `{App Click Rate}` | `{App Clicks} / {Impressions}` |
+| `billed_charge_local_micro / {App Clicks}` |  |
+| `billed_charge_local_micro / mobile_conversion_installs` |  |
+
+### FOLLOWERS
+
+|  |  |
+| :-- | :-- |
+| 派生指標 | 公開指標による計算式 |
+| `promoted_account_impressions` |  |
+| `billed_charge_local_micro / {Impressions} / 1000` |  |
+| `promoted_account_follows` |  |
+| `{Follow Rate}` | `promoted_account_follow_rate` |
+| `billed_charge_local_micro / promoted_account_follows` |  |
+
+### VIDEO\_VIEWS
+
+|  |  |
+| :-- | :-- |
+| 派生指標 | 公開指標による計算式 |
+| `promoted_tweet_search_impressions + promoted_tweet_timeline_impressions + promoted_tweet_profile_impressions` |  |
+|  | `billed_charge_local_micro / {Impressions} / 1000` |
+| `{Video Views}` | `promoted_video_total_views` |
+| `{Video Rate}` | `promoted_video_total_views / {Impressions}` |
+| `{Cost Per View}` | `billed_charge_local_micro / promoted_video_total_views` |
+
+### QUALIFIED\_IMPRESSIONS
+
+|  |  |
+| :-- | :-- |
+| 派生指標 | 公開指標による計算式 |
+| `promoted_tweet_search_impressions + promoted_tweet_timeline_impressions + promoted_tweet_profile_impressions` |  |
+|  | `billed_charge_local_micro / {Impressions} / 1000` |
+| `{Qualified Impressions}` | `promoted_tweet_timeline_qualified_impressions + promoted_tweet_search_qualified_impressions + promoted_tweet_profile_qualified_impressions` |
+| `{Qualified Impression Rate}` | `{Qualified Impressions} / {Impressions}` |
+| `{Cost Per 1000 Qualified Impressions }` | `billed_charge_local_micro / {Qualified Impressions} / 1000` |
+
+### CUSTOM
+
+`placement_type` が `PROMOTED_ACCOUNT` の場合は、上記の `FOLLOWERS` 目的を参照してください。この目的の他のすべてのプレースメントについては、対応する派生指標について `ENGAGEMENTS` を参照してください。
+
+## ガイド
+
+### Active Entities
+
+#### はじめに
+
+[Active Entities エンドポイント](/x-ads-api/analytics#get-stats-accounts-account-id-active-entities) は、[同期](/x-ads-api/analytics#get-stats-accounts-account-id) および [非同期](/x-ads-api/analytics#asynchronous-analytics) アナリティクスエンドポイントと組み合わせて使用するように設計されており、どのキャンペーンに対してアナリティクスをリクエストすべきかという情報を提供します。具体的には、広告エンティティおよびその指標が変化した時点に関する詳細を返します。このエンドポイントを使用することで、コードとアナリティクス取得ロジックが大幅に簡素化されます。
+
+このガイドには、エンドポイントとそのデータソースに関する情報とコンテキストが含まれています。また、[使用ガイドライン](#usage) と一連の [リクエスト例](#example) も提供しており、Active Entities をアナリティクスエンドポイントと組み合わせて使用する方法を示します。[Summary セクション](#summary) では、推奨されるアプローチを高レベルで説明しています。
+
+#### データ
+
+広告エンティティの指標が変化するたびに、その変更に関する情報を記録します。これらの変更イベントは時間単位のバケットに保存され、エンティティの詳細と変更が適用される時刻が含まれます。後者が必要なのは、変更イベントが記録された時刻と必ずしも一致しないからです。課金調整がよくある理由ですが、他にも理由があります。
+
+#### エンドポイント
+
+### リクエスト
+
+Active Entities リクエストは広告アカウントを対象にスコープされ、3 つの必須クエリパラメータ (`entity`、`start_time`、`end_time`) を持ちます。
+
+`twurl -H ads-api.x.com "/12/stats/accounts/18ce54d4x5t/active_entities?entity=PROMOTED_TWEET&start_time=2026-03-05T00:00:00Z&end_time=2026-03-06T00:00:00Z"`
+
+`entity` に指定できる値は以下のとおりです: `CAMPAIGN`、`FUNDING_INSTRUMENT`、`LINE_ITEM`、`PROMOTED_ACCOUNT`、`PROMOTED_TWEET`。これは、アナリティクスエンドポイントがサポートするエンティティタイプを反映しています。
+
+`start_time` と `end_time` の値は [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) で表現する必要があり、どの時間バケットをクエリするかを指定します。これらは時間単位 (whole hours) で表現する必要があります。
+
+このエンドポイントは結果をフィルタリングするための 3 つのオプションパラメータ (`funding_instrument_ids`、`campaign_ids`、`line_item_ids`) もサポートしています。これらは広告階層のすべてのレベルで、また任意の指定された `entity` タイプと共に機能します。
+
+### レスポンス
+
+上記リクエストに対する Active Entities のレスポンスを以下に示します。
+
+```json
+    {
+      "request": {
+        "params": {
+          "account_id": "18ce54d4x5t",
+          "entity": "PROMOTED_TWEET",
+          "start_time": "2026-03-05T00:00:00Z",
+          "end_time": "2026-03-06T00:00:00Z"
+        }
+      },
+      "data": [
+        {
+          "entity_id": "2r0wxw",
+          "activity_start_time": "2026-03-04T20:55:20Z",
+          "activity_end_time": "2026-03-05T03:43:56Z",
+          "placements": [
+            "ALL_ON_TWITTER"
+          ]
+        },
+        {
+          "entity_id": "2r30fn",
+          "activity_start_time": "2026-03-05T08:11:08Z",
+          "activity_end_time": "2026-03-05T14:40:59Z",
+          "placements": [
+            "ALL_ON_TWITTER",
+            "PUBLISHER_NETWORK"
+          ]
+        }
+      ]
+    }
+```
+
+`data` 配列には、後続のアナリティクスリクエストに含めるべきすべてのエンティティに対応するオブジェクトが含まれています。このセット以外の ID についてアナリティクスをリクエストすべきではありません。
+
+各オブジェクトには 4 つのフィールドが含まれます: `entity_id`、`activity_start_time`、`activity_end_time`、`placements`。activity の開始時刻と終了時刻は、関連するエンティティの変更イベントが適用される期間を表しており、後続のアナリティクスリクエストで指定すべき日付を決定します。`placements` 配列には次の値を含めることができます: `ALL_ON_TWITTER`、`SPOTLIGHT`、`TREND`。これは、指定されたエンティティ ID に対してリクエストすべきプレースメントを示します。
+
+#### 使用方法
+
+Active Entities エンドポイントは、アナリティクスリクエストの作成方法を決定するために使用すべきです。次の使用ガイドラインは、アナリティクス同期をサポートし、パートナーが自社データストアを X と同期させるために書かれています。言い換えると、定期スケジュールのバックグラウンド同期を実行する方法を説明しています。
+
+開発者が下すべき判断は 2 つあります。
+
+1. Active Entities 情報をリクエストする頻度、つまりアナリティクスを取得する頻度。
+2. activity の開始時刻と終了時刻を使用して、アナリティクスリクエストの `start_time` と `end_time` の値をどう決定するか。
+
+これらについては、要約の後、それぞれのサブセクションで詳しく説明します。
+
+### 要約
+
+Active Entities エンドポイントを次のように使用して、アナリティクスリクエストの作成方法を決定します。Active Entities 情報をリクエストする頻度、つまりアナリティクスを取得する頻度を決めた後、以下の手順に従ってください。
+
+1. Active Entities リクエストを行います。
+2. レスポンスをプレースメント別に分割します。`ALL_ON_TWITTER` で 1 グループ、`SPOTLIGHT` で 1 グループ、`TREND` で 1 グループ。
+3. 各プレースメントグループについて、以下を実行します。
+   1. エンティティ ID を抽出します。
+   2. アナリティクスの `start_time` と `end_time` の値を決定します。
+      - 最小の `activity_start_time` を見つけます。この値を切り下げます。
+      - 最大の `activity_end_time` を見つけます。この値を切り上げます。
+   3. アナリティクスリクエストを実行します。
+      - エンティティ ID を 20 件ずつのバッチにグループ化します。
+      - #3b で取得した `start_time` と `end_time` を使用します。
+      - 適切な `placement` 値を指定します。
+   4. データストアに書き込みます。
+
+Python SDK を使用した例として、[active\_entities.py](https://github.com/xdevplatform/twitter-python-ads-sdk/blob/master/examples/active_entities.py) を参照してください。
+
+### 頻度
+
+最初の質問への答えにより、Active Entities リクエストで使用すべき期間が決まります。例えば、Active Entities 情報を 1 時間ごとにリクエストする場合、期間は 1 時間にすべきです。1 日 1 回 Active Entities 情報をリクエストする場合、期間は 1 日にすべきです。言い換えると、期間は、現在のリクエストの `start_time` が前のリクエストの `end_time` と等しくなるように選択する必要があります。
+
+<Note>
+  **注**: 同じ時間ウィンドウは一度だけリクエストすべきです。同じ時間ウィンドウを複数回リクエストすると、不必要なアナリティクスリクエストにつながります。(例外は以下を参照。)
+</Note>
+
+_現在の_ 時間に対して 1 時間に複数回アナリティクスをリクエストしたいパートナーには、同じパターンが適用されます——頻度が期間を決定します。以下の表に、このシナリオに対する Active Entities の開始タイムスタンプと終了タイムスタンプの例を示します。
+
+|  |  |  |
+| :-- | :-- | :-- |
+| **リクエスト時刻** | **`start_time` タイムスタンプ** | **`end_time` タイムスタンプ** |
+| 00:15:00 | 00:00:00 | 00:15:00 |
+| 00:30:00 | 00:15:00 | 00:30:00 |
+| 00:45:00 | 00:30:00 | 00:45:00 |
+| 01:00:00 | 00:45:00 | 01:00:00 |
+
+変更イベントが保存される方法を考慮すると、上記の 4 つの Active Entities リクエストはいずれも同じ時間バケットをクエリすることになり、これはこのユースケースには必要です。しかし、現在の時間が過ぎた後は、この時間バケットを再度クエリすべきではありません。
+
+### アクティビティ時刻
+
+アクティビティの開始時刻と終了時刻の扱いには、以下のアプローチを推奨します。Active Entities レスポンス内のすべてのオブジェクトを横断して、最小の `activity_start_time` と最大の `activity_end_time` を見つけます。これらの値を、最小のアクティビティ開始時刻は切り下げ、最大のアクティビティ終了時刻は切り上げて修正します。具体的には、両方のタイムスタンプを 0 に設定し、終了時刻には 1 日を加算します (以下の表を参照)。これらが、後続のアナリティクスリクエストで指定すべき開始時刻と終了時刻になります。
+
+|  |  |
+| :-- | :-- |
+| **最小、最大のアクティビティ時刻** | **導出された時刻** |
+| 2026-03-04T20:55:20Z  <br /><br />2026-03-05T14:40:59Z | 2026-03-04T00:00:00Z  <br /><br />2026-03-06T00:00:00Z |
+
+**注**: 時、分、秒を 0 に設定したタイムスタンプを含めることが重要です。日付のみが渡された場合、広告アカウントのタイムゾーンの深夜 0 時を開始および終了としてアナリティクスをリクエストしているとみなされ、それは望ましくない場合があります。例えば、最小のアクティビティ開始時刻が 2026-02-28T01:30:07Z で、オフセットが -08:00:00 の広告アカウントに対してタイムスタンプを省略した場合、アナリティクスリクエストは 01:30 と 08:00 の間に発生した変更を取得できません。
+
+または、完全な日に拡張せずに、返されたアクティビティ時間ウィンドウのみについてアナリティクスをリクエストしたい場合も可能です。このアプローチを使用すると、導出される開始時刻と終了時刻はそれぞれ 2026-03-04T20:00:00Z と 2026-03-05T15:00:00Z になります。(アナリティクスリクエストで `DAY` 粒度を指定した場合、このような範囲は受け付けられないことに注意してください。)
+
+#### 例
+
+このセクションでは、Active Entities を同期アナリティクスエンドポイントと組み合わせて使用する方法を示します。(レスポンスは読みやすさのために若干変更しています。) この例では、毎時の正時に Active Entities エンドポイントを呼び出し、それぞれのリクエストは前の 1 時間を見るようにしています。レスポンスにより、同期アナリティクスエンドポイントの使用方法が決まります。
+
+最初の Active Entities リクエストは 03:00:00 に行われます。レスポンスは、ラインアイテム dvcz7 の指標が変化し、その変更イベントが 02:02:55 から 02:28:12 のウィンドウに適用されることを示しています。
+
+```text
+`twurl -H ads-api.x.com "/12/stats/accounts/18ce54d4x5t/active_entities?entity=LINE_ITEM&start_time=2026-02-11T02:00:00Z&end_time=2026-02-11T03:00:00Z"`
+```
+
+```json
+    {
+      "request": {},
+      "data": [
+        {
+          "entity_id": "dvcz7",
+          "activity_start_time": "2026-02-11T02:02:55Z",
+          "activity_end_time": "2026-02-11T02:58:12Z",
+          "placements": [
+            "ALL_ON_TWITTER"
+          ]
+        }
+      ]
+    }
+```
+
+これらのアクティビティ開始時刻と終了時刻、および上記のアプローチに基づいて、アナリティクスの `start_time` と `end_time` の値はそれぞれ 2026-02-11T00:00:00Z および 2026-02-12T00:00:00Z に設定されます。以下の各指標配列の 3 番目の要素が非ゼロであることが分かります。これは、Active Entities 情報に基づき期待されていたとおりです。
+
+```text
+`twurl -H ads-api.x.com "/12/stats/accounts/18ce54d4x5t?entity=LINE_ITEM&entity_ids=dvcz7&start_time=2026-02-11T00:00:00Z&end_time=2026-02-12T00:00:00Z&granularity=HOUR&metric_groups=ENGAGEMENT,VIDEO&placement=ALL_ON_TWITTER"`
+```
+
+```json
+    {
+      "data_type": "stats",
+      "time_series_length": 24,
+      "data": [
+        {
+          "id": "dvcz7",
+          "id_data": [
+            {
+              "segment": null,
+              "metrics": {
+                "impressions": [
+                  0,0,2792,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+                ],
+                "engagements": [
+                  0,0,60,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+                ],
+                "video_total_views": [
+                  0,0,1326,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "request": {}
+    }
+```
+
+次の Active Entities リクエストは 04:00:00 に行われ、前の 1 時間のみを見ます。上述のとおり、同じ時間ウィンドウは一度だけリクエストすべきです。レスポンスから、このラインアイテムの変更イベントは _02:00:00 と 03:00:00 の両方_ に適用されることが分かります。後続のアナリティクスリクエストでは、両方の時間に対する変更が反映されることが期待されます。
+
+```text
+`twurl -H ads-api.x.com "/12/stats/accounts/18ce54d4x5t/active_entities?entity=LINE_ITEM&start_time=2026-02-11T03:00:00Z&end_time=2026-02-11T04:00:00Z"`
+```
+
+```json
+    {
+      "request": {},
+      "data": [
+        {
+          "entity_id": "dvcz7",
+          "activity_start_time": "2026-02-11T02:07:17Z",
+          "activity_end_time": "2026-02-11T03:49:22Z",
+          "placements": [
+            "ALL_ON_TWITTER"
+          ]
+        }
+      ]
+    }
+```
+
+03:00:00 の非ゼロの指標を確認できることに加え、インプレッション、支出、および MRC 動画ビューが以前の値から更新されていることが分かります。例えば、02:00:00 のインプレッションは、2,792 から 2,995 に増加しています。これは、03:00:00 の時間中に記録された変更イベントが 02:00:00 の時間に適用されることを示しています。
+
+```text
+`twurl -H ads-api.x.com "/12/stats/accounts/18ce54d4x5t?entity=LINE_ITEM&entity_ids=dvcz7&start_time=2026-02-11T00:00:00Z&end_time=2026-02-12T00:00:00Z&granularity=HOUR&metric_groups=ENGAGEMENT,VIDEO&placement=ALL_ON_TWITTER"`
+```
+
+```json
+    {
+      "data_type": "stats",
+      "time_series_length": 24,
+      "data": [
+        {
+          "id": "dvcz7",
+          "id_data": [
+            {
+              "segment": null,
+              "metrics": {
+                "impressions": [
+                  0,0,2995,734,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+                ],
+                "engagements": [
+                  0,0,65,7,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+                ],
+                "video_total_views": [
+                  0,0,1449,342,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "request": {}
+    }
+```
+
+05:00:00 の Active Entities リクエストでも前の 1 時間のみを見ますが、変更イベントは 03:00:00 の時間のみに適用されることが示されています。後続のリクエストにおけるアナリティクス指標の変更にもこれが反映されています。
+
+```text
+`twurl -H ads-api.x.com "/12/stats/accounts/18ce54d4x5t/active_entities?entity=LINE_ITEM&start_time=2026-02-11T04:00:00Z&end_time=2026-02-11T05:00:00Z"`
+```
+
+```json
+    {
+      "request": {},
+      "data": [
+        {
+          "entity_id": "dvcz7",
+          "activity_start_time": "2026-02-11T03:42:39Z",
+          "activity_end_time": "2026-02-11T03:48:48Z",
+          "placements": [
+            "ALL_ON_TWITTER"
+          ]
+        }
+      ]
+    }
+```
+
+アナリティクスレスポンスでは、03:00:00 の時間の指標のみが変化しており、02:00:00 の時間の値は前回のアナリティクスリクエスト時と同じであることが分かります。
+
+```text
+`twurl -H ads-api.x.com "/12/stats/accounts/18ce54d4x5t?entity=LINE_ITEM&entity_ids=dvcz7&start_time=2026-02-11T00:00:00Z&end_time=2026-02-12T00:00:00Z&granularity=HOUR&metric_groups=ENGAGEMENT,VIDEO&placement=ALL_ON_TWITTER"`
+```
+
+```json
+    {
+      "data_type": "stats",
+      "time_series_length": 24,
+      "data": [
+        {
+          "id": "dvcz7",
+          "id_data": [
+            {
+              "segment": null,
+              "metrics": {
+                "impressions": [
+                  0,0,2995,753,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+                ],
+                "engagements": [
+                  0,0,65,8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+                ],
+                "video_total_views": [
+                  0,0,1449,351,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "request": {}
+    }
+```
+
+最後に、06:00:00 では追加の変更イベントがないことが分かります。**注**: ただし、これはこのラインアイテムの指標が今後変化しないことを _意味しません_。
+
+```text
+`twurl -H ads-api.x.com "/12/stats/accounts/18ce54d4x5t/active_entities?entity=LINE_ITEM&start_time=2026-02-11T05:00:00Z&end_time=2026-02-11T06:00:00Z"`
+```
+
+```json
+    {
+      "request": {},
+      "data": []
+    }
+```
+
+### 非同期ガイド
+
+## API リファレンス
+
+### 非同期アナリティクス
+
+#### はじめに
+
+非同期アナリティクスエンドポイントを使用すると、パートナーや広告主はサーバーが非同期で処理する作成リクエストを送信して指標をリクエストできます。(これらを非同期アナリティクスの「ジョブ」と呼びます。) このアプローチでは、リクエストが完了するまでクライアントの接続を開いたままにしておく必要がありません。
+
+これらのエンドポイントは、同期版と同様に、パートナーや広告主がキャンペーンのパフォーマンスに関する詳細な統計情報をリクエストできるようにします。アカウント、ファンディングインストゥルメント、キャンペーン、ラインアイテム、プロモート投稿、メディアクリエイティブのデータをリクエストできます。同期エンドポイントとの違いは、非同期アナリティクスエンドポイントは最大 90 日間というより長い期間と、セグメンテーションをサポートしている点です。両者の違いの詳細については [アナリティクス概要](/x-ads-api/analytics) ページを参照してください。
+
+同期エンドポイントとは異なり、レート制限は所定アカウントの同時ジョブ数に基づきます。言い換えると、ある時点で処理中の状態にあるジョブの数に基づきます。これは広告アカウントレベルでカウントされます。
+
+#### 使用方法
+
+非同期アナリティクスエンドポイントを使用してキャンペーン指標を取得するプロセスは、複数ステップにわたります。これには、ジョブの作成、ジョブの処理が完了したかの確認、そして最後にデータのダウンロードが含まれます。データファイルは解凍する必要があります。具体的な 4 つのステップを以下に示します。
+
+1. [POST stats/jobs/accounts/:account\_id](/x-ads-api/analytics#asynchronous-analytics) エンドポイントを使用してジョブを作成します。
+2. [GET stats/jobs/accounts/:account\_id](/x-ads-api/analytics#asynchronous-analytics) エンドポイントに一定間隔でリクエストを行い、ジョブの処理が完了したか確認します。
+3. ジョブの処理が完了したら、データファイルをダウンロードします。
+4. データファイルを解凍します。
+
+データファイルで返されるレスポンスオブジェクトは、同期アナリティクスエンドポイントのレスポンスと同じ JSON スキーマを持ちます。
+
+セグメント化されたキャンペーン指標は、非同期アナリティクスエンドポイントを介してのみ利用可能です。キャンペーン指標は、ロケーション、性別、興味、キーワードなどで内訳することができます。オプションの完全なリストについては、[Metrics and Segmentation](/x-ads-api/analytics#metrics-and-segmentation) ページを参照してください。セグメント化された指標をリクエストするには、ジョブ作成時に `segmentation_type` リクエストパラメータを使用します。
+
+#### 例
+
+このセクションでは、非同期アナリティクスエンドポイントの使用方法を示します。
+
+まず、[POST stats/jobs/accounts/:account\_id](/x-ads-api/analytics#asynchronous-analytics) エンドポイントを使用してジョブを作成します。以下の例では、特定のラインアイテムについて 1 週間にわたるエンゲージメント指標 (インプレッション、いいね、クリックなど) をリクエストしています。(リクエストされた期間は 3 月 20 日まで含みますが、タイムスタンプが深夜 0 時に設定されているため 3 月 20 日自体は含まないことに注意してください。)
+
+```text
+$ twurl -X POST -H ads-api.x.com "/12/stats/jobs/accounts/18ce54d4x5t?entity=LINE_ITEM&entity_ids=el32n&start_time=2026-03-12T00:00:00Z&end_time=2026-03-20T00:00:00Z&granularity=TOTAL&placement=ALL_ON_TWITTER&metric_groups=ENGAGEMENT"
+```
+
+```json
+    {
+      "request": {
+        "params": {
+          "start_time": "2026-03-12T00:00:00Z",
+          "entity_ids": [
+            "el32n"
+          ],
+          "end_time": "2026-03-20T00:00:00Z",
+          "placement": "ALL_ON_TWITTER",
+          "granularity": "TOTAL",
+          "entity": "LINE_ITEM",
+          "metric_groups": [
+            "ENGAGEMENT"
+          ]
+        }
+      },
+      "data": {
+        "start_time": "2026-03-12T00:00:00Z",
+        "segmentation_type": null,
+        "url": null,
+        "id_str": "1120829647711653888",
+        "entity_ids": [
+          "el32n"
+        ],
+        "end_time": "2026-03-20T00:00:00Z",
+        "country": null,
+        "placement": "ALL_ON_TWITTER",
+        "id": 1120829647711653888,
+        "expires_at": null,
+        "account_id": "18ce54d4x5t",
+        "status": "PROCESSING",
+        "granularity": "TOTAL",
+        "entity": "LINE_ITEM",
+        "created_at": "2026-04-01T23:19:46Z",
+        "platform": null,
+        "updated_at": "2026-04-01T23:19:46Z",
+        "metric_groups": [
+          "ENGAGEMENT"
+        ]
+      }
+    }
+```
+
+このレスポンスはラインアイテムの指標を返しません。作成したばかりのジョブに関する情報を提供するだけです。ジョブの状態を確認するにはジョブ ID が必要です。これはレスポンスの `id` と `id_str` の両方の属性に表示されます。
+
+次に、前のレスポンスの `id_str` を使用して、作成したジョブの処理が完了したかをレスポンスの `"status": "SUCCESS"` で確認します。これは、データがダウンロード可能であることを意味します。`url` フィールドにダウンロードリンクが含まれています。
+
+```text
+$ twurl -H ads-api.x.com "/12/stats/jobs/accounts/18ce54d4x5t?job_ids=1120829647711653888"
+```
+
+```json
+    {
+      "request": {
+        "params": {
+          "job_ids": [
+            1120829647711653888
+          ]
+        }
+      },
+      "next_cursor": "1120828505715920896",
+      "data": [
+        {
+          "start_time": "2026-03-12T00:00:00Z",
+          "segmentation_type": null,
+          "url": "https://ton.twimg.com/advertiser-api-async-analytics/stats_job_1120829647711653888.json.gz",
+          "id_str": "1120829647711653888",
+          "entity_ids": [
+            "el32n"
+          ],
+          "end_time": "2026-03-20T00:00:00Z",
+          "country": null,
+          "placement": "ALL_ON_TWITTER",
+          "id": 1120829647711653888,
+          "expires_at": "2026-04-03T23:19:48Z",
+          "account_id": "18ce54d4x5t",
+          "status": "SUCCESS",
+          "granularity": "TOTAL",
+          "entity": "LINE_ITEM",
+          "created_at": "2026-04-01T23:19:46Z",
+          "platform": null,
+          "updated_at": "2026-04-01T23:19:48Z",
+          "metric_groups": [
+            "ENGAGEMENT"
+          ]
+        }
+      ]
+    }
+```
+
+上記の例では単一のジョブ ID を渡していますが、実際には `job_ids` パラメータで最大 200 個のジョブ ID を指定して、複数のジョブの状態を同時に確認することになります。
+
+次に、リストされた `url` の値を使用してデータファイルをダウンロードします。
+
+```text
+    $ wget https://ton.twimg.com/advertiser-api-async-analytics/stats_job_1120829647711653888.json.gz
+```
+
+最後に、データファイルを解凍します。
+
+```text
+`$ gunzip stats_job_1120829647711653888.json.gz`
+```
+
+ファイルの中身を以下に示します。
+
+```json
+    {
+      "data_type": "stats",
+      "time_series_length": 1,
+      "data": [
+        {
+          "id": "el32n",
+          "id_data": [
+            {
+              "segment": null,
+              "metrics": {
+                "impressions": [
+                  3482
+                ],
+                "tweets_send": null,
+                "qualified_impressions": null,
+                "follows": null,
+                "app_clicks": null,
+                "retweets": [
+                  102
+                ],
+                "unfollows": null,
+                "likes": [
+                  15
+                ],
+                "engagements": [
+                  171
+                ],
+                "clicks": [
+                  30
+                ],
+                "card_engagements": null,
+                "poll_card_vote": null,
+                "replies": null,
+                "carousel_swipes": null
+              }
+            }
+          ]
+        }
+      ],
+      "request": {
+        "params": {
+          "start_time": "2026-03-12T00:00:00Z",
+          "segmentation_type": null,
+          "entity_ids": [
+            "el32n"
+          ],
+          "end_time": "2026-03-20T00:00:00Z",
+          "country": null,
+          "placement": "ALL_ON_TWITTER",
+          "granularity": "TOTAL",
+          "entity": "LINE_ITEM",
+          "platform": null,
+          "metric_groups": [
+            "ENGAGEMENT"
+          ]
+        }
+      }
+    }
+```
+
+### リーチと平均フリークエンシー
+
+<Button href="https://app.getpostman.com/run-collection/1d12b9fc623b8e149f87">
+  Postman で実行
+</Button>
+
+#### GET stats/accounts/:account\_id/reach/campaigns
+
+指定したキャンペーンのリーチと平均フリークエンシーのアナリティクスを取得します。
+
+### リソース URL
+
+`https://ads-api.x.com/stats/accounts/:account_id/reach/campaigns`
+
+### パラメータ
+
+| 名前 | 説明 |
+| :-- | :-- |
+| account\_id  <br />_必須_ | 利用するアカウントの識別子。リソースのパス内に表示され、[GET accounts](/x-ads-api/campaign-management/reference#accounts) を除くすべての Advertiser API リクエストで一般に必須のパラメータです。指定するアカウントは認証されたユーザーに紐づいている必要があります。<br /><br />型: string<br /><br />例: `18ce54d4x5t` |
+| campaign\_ids  <br />_必須_ | 識別子のカンマ区切りリストを指定して、レスポンスを目的のキャンペーンに限定します。最大 20 個の ID を指定できます。<br /><br />**注**: 最大 20 個のキャンペーン ID を指定できます。<br /><br />型: string<br /><br />例: `8fgzf` |
+| end\_time  <br />_必須_ | [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) で表現された指定の終了時刻に取得データをスコープします。<br /><br />**注**: 時間単位 (0 分 0 秒) で表現する必要があります。<br /><br />型: string<br /><br />例: `2026-05-26T07:00:00Z` |
+| start\_time  <br />_必須_ | [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) で表現された指定の開始時刻に取得データをスコープします。<br /><br />**注**: 時間単位 (0 分 0 秒) で表現する必要があります。<br /><br />型: string<br /><br />例: `2026-05-19T07:00:00Z` |
+
+### リクエスト例
+
+`GET https://ads-api.x.com/12/stats/accounts/18ce54d4x5t/reach/campaigns?campaign_ids=8fgzf&start_time=2026-05-19&end_time=2026-05-26`
+
+### レスポンス例
+
+```json
+    {
+      "request": {
+        "params": {
+          "campaign_ids": [
+            "8fgzf"
+          ],
+          "start_time": "2026-05-19T00:00:00Z",
+          "end_time": "2026-05-26T00:00:00Z",
+          "account_id": "18ce54d4x5t"
+        }
+      },
+      "data_type": "reach",
+      "data": [
+        {
+          "id": "8fgzf",
+          "total_audience_reach": 1217,
+          "average_frequency": 1.01
+        }
+      ]
+    }
+```
+
+#### GET stats/accounts/:account\_id/reach/funding\_instruments
+
+指定したファンディングインストゥルメントのリーチと平均フリークエンシーのアナリティクスを取得します。
+
+### リソース URL
+
+`https://ads-api.x.com/stats/accounts/:account_id/reach/funding_instruments`
+
+### パラメータ
+
+| 名前 | 説明 |
+| :-- | :-- |
+| account\_id  <br />_必須_ | 利用するアカウントの識別子。リソースのパス内に表示され、[GET accounts](/x-ads-api/campaign-management/reference#accounts) を除くすべての Advertiser API リクエストで一般に必須のパラメータです。指定するアカウントは認証されたユーザーに紐づいている必要があります。<br /><br />型: string<br /><br />例: `18ce54d4x5t` |
+| funding\_instrument\_ids  <br />_必須_ | 識別子のカンマ区切りリストを指定して、レスポンスを目的のファンディングインストゥルメントに限定します。最大 20 個の ID を指定できます。<br /><br />**注**: 最大 20 個のファンディングインストゥルメント ID を指定できます。<br /><br />型: string<br /><br />例: `lygyi` |
+| end\_time  <br />_必須_ | [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) で表現された指定の終了時刻に取得データをスコープします。<br /><br />**注**: 時間単位 (0 分 0 秒) で表現する必要があります。<br /><br />型: string<br /><br />例: `2026-05-26T07:00:00Z` |
+| start\_time  <br />_必須_ | [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) で表現された指定の開始時刻に取得データをスコープします。<br /><br />**注**: 時間単位 (0 分 0 秒) で表現する必要があります。<br /><br />型: string<br /><br />例: `2026-05-19T07:00:00Z` |
+
+### リクエスト例
+
+```text
+GET https://ads-api.x.com/12/stats/accounts/18ce54d4x5t/reach/funding_instruments?funding_instrument_ids=lygyi&start_time=2026-05-19&end_time=2026-05-26
+```
+
+### レスポンス例
+
+```json
+    {
+      "request": {
+        "params": {
+          "funding_instrument_ids": [
+            "lygyi"
+          ],
+          "start_time": "2026-05-19T00:00:00Z",
+          "end_time": "2026-05-26T00:00:00Z",
+          "account_id": "18ce54d4x5t"
+        }
+      },
+      "data_type": "reach",
+      "data": [
+        {
+          "id": "lygyi",
+          "total_audience_reach": 1217,
+          "average_frequency": 1.01
+        }
+      ]
+    }
+```
+
+### 同期アナリティクス
+
+<Button href="https://app.getpostman.com/run-collection/1d12b9fc623b8e149f87">
+  Postman で実行
+</Button>
+
+#### GET stats/accounts/:account\_id
+
+現在のアカウントの同期アナリティクスを取得します。最大期間 (`end_time` - `start_time`) は 7 日間です。
+
+### リソース URL
+
+`https://ads-api.x.com/12/stats/accounts/:account_id`
+
+### パラメータ
+
+| 名前 | 説明 |
+| :-- | :-- |
+| account\_id  <br />_必須_ | 利用するアカウントの識別子。リソースのパス内に表示され、[GET accounts](/x-ads-api/campaign-management/reference#accounts) を除くすべての Advertiser API リクエストで一般に必須のパラメータです。指定するアカウントは認証されたユーザーに紐づいている必要があります。<br /><br />型: string<br /><br />例: `18ce54d4x5t` |
+| end\_time  <br />_必須_ | [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) で表現された指定の終了時刻に取得データをスコープします。<br /><br />**注**: 時間単位 (0 分 0 秒) で表現する必要があります。<br /><br />型: string<br /><br />例: `2026-05-26T07:00:00Z` |
+| entity  <br />_必須_ | データを取得するエンティティタイプ。<br /><br />型: enum<br /><br />利用可能な値: `ACCOUNT`, `CAMPAIGN`, `FUNDING_INSTRUMENT`, `LINE_ITEM`, `PROMOTED_ACCOUNT`, `PROMOTED_TWEET` |
+| entity\_ids  <br />_必須_ | データを取得する具体的なエンティティ。エンティティ ID のカンマ区切りリストを指定します。<br /><br />**注**: 最大 20 個のエンティティ ID を指定できます。<br /><br />型: string<br /><br />例: `8u94t` |
+| granularity  <br />_必須_ | 取得するデータの粒度を指定します。<br /><br />型: enum<br /><br />利用可能な値: `DAY`, `HOUR`, `TOTAL` |
+| metric\_groups  <br />_必須_ | 返される具体的な指標。メトリクスグループのカンマ区切りリストを指定します。詳細は [Metrics and Segmentation](/x-ads-api/analytics#metrics-and-segmentation) を参照してください。<br /><br />**注**: `MOBILE_CONVERSION` データは別途リクエストする必要があります。<br /><br />型: enum<br /><br />利用可能な値: `BILLING`, `ENGAGEMENT`, `LIFE_TIME_VALUE_MOBILE_CONVERSION`, `MOBILE_CONVERSION`, `VIDEO`, `WEB_CONVERSION` |
+| placement  <br />_必須_ | 取得データを特定のプレースメントにスコープします。<br /><br />**注**: 1 リクエストにつき 1 つの値のみ受け付けます。X と X Audience Platform の両方のプレースメントを持つエンティティについては、プレースメント値ごとに別々のリクエストが必要です。<br /><br />型: enum<br /><br />利用可能な値: `ALL_ON_TWITTER`, `SPOTLIGHT`, `TREND` |
+| start\_time  <br />_必須_ | [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) で表現された指定の開始時刻に取得データをスコープします。<br /><br />**注**: 時間単位 (0 分 0 秒) で表現する必要があります。<br /><br />型: string<br /><br />例: `2026-05-19T07:00:00Z` |
+
+### リクエスト例
+
+```text
+GET https://ads-api.x.com/12/stats/accounts/18ce54d4x5t?entity=LINE_ITEM&entity_ids=8u94t&start_time=2026-05-19&end_time=2026-05-26&granularity=TOTAL&placement=ALL_ON_TWITTER&metric_groups=ENGAGEMENT
+```
+
+### レスポンス例
+
+```json
+    {
+      "data_type": "stats",
+      "time_series_length": 1,
+      "data": [
+        {
+          "id": "8u94t",
+          "id_data": [
+            {
+              "segment": null,
+              "metrics": {
+                "impressions": [
+                  1233
+                ],
+                "tweets_send": null,
+                "qualified_impressions": null,
+                "follows": null,
+                "app_clicks": null,
+                "retweets": null,
+                "likes": [
+                  1
+                ],
+                "engagements": [
+                  58
+                ],
+                "clicks": [
+                  58
+                ],
+                "card_engagements": null,
+                "poll_card_vote": null,
+                "replies": null,
+                "carousel_swipes": null
+              }
+            }
+          ]
+        }
+      ],
+      "request": {
+        "params": {
+          "start_time": "2026-05-19T07:00:00Z",
+          "segmentation_type": null,
+          "entity_ids": [
+            "8u94t"
+          ],
+          "end_time": "2026-05-26T07:00:00Z",
+          "country": null,
+          "placement": "ALL_ON_TWITTER",
+          "granularity": "TOTAL",
+          "entity": "LINE_ITEM",
+          "platform": null,
+          "metric_groups": [
+            "ENGAGEMENT"
+          ]
+        }
+      }
+    }
+```
+
+### Active Entities
+
+<Button href="https://app.getpostman.com/run-collection/1d12b9fc623b8e149f87">
+  Postman で実行
+</Button>
+
+#### GET stats/accounts/:account\_id/active\_entities
+
+指定した期間にアナリティクス指標が変化したエンティティに関する詳細を取得します。
+
+このエンドポイントは、アナリティクスエンドポイントと組み合わせて使用すべきです。このエンドポイントの結果は、どの広告エンティティのアナリティクスをリクエストすべきかを示します。使用ガイドラインについては [Active Entities ガイド](/x-ads-api/analytics#active-entities) を参照してください。
+
+変更イベントは時間単位のバケットで利用可能です。
+
+- `start_time` と `end_time` の値は、どの時間バケットをクエリするかを指定します。
+- 返される `data` 配列には、後続のアナリティクスリクエストに含めるべきすべてのエンティティのオブジェクトが含まれます。
+- **重要**: 後続のアナリティクスリクエストで指定すべき日付は、`activity_start_time` と `activity_end_time` の値に基づいて決定する必要があります。
+  - これらの値は、保存された変更イベントが _適用される_ 期間を表します。これはエンティティごとに返されます。
+
+**注**: 最大期間 (`end_time` - `start_time`) は 90 日間です。
+
+### リソース URL
+
+`https://ads-api.x.com/12/stats/accounts/:account_id/active_entities`
+
+### パラメータ
+
+| 名前 | 説明 |
+| :-- | :-- |
+| account\_id  <br />_必須_ | 利用するアカウントの識別子。リソースのパス内に表示され、[GET accounts](/x-ads-api/campaign-management/reference#accounts) を除くすべての Advertiser API リクエストで一般に必須のパラメータです。指定するアカウントは認証されたユーザーに紐づいている必要があります。<br /><br />型: string<br /><br />例: `18ce54d4x5t` |
+| end\_time  <br />_必須_ | [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) で表現された指定の終了時刻に取得データをスコープします。<br /><br />**注**: 時間単位 (0 分 0 秒) で表現する必要があります。<br /><br />型: string<br /><br />例: `2026-05-26T07:00:00Z` |
+| entity  <br />_必須_ | データを取得するエンティティタイプ。<br /><br />型: enum<br /><br />利用可能な値: `CAMPAIGN`, `FUNDING_INSTRUMENT`, `LINE_ITEM`, `PROMOTED_ACCOUNT`, `PROMOTED_TWEET` |
+| start\_time  <br />_必須_ | [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601) で表現された指定の開始時刻に取得データをスコープします。<br /><br />**注**: 時間単位 (0 分 0 秒) で表現する必要があります。<br /><br />型: string<br /><br />例: `2026-05-19T07:00:00Z` |
+| campaign\_ids  <br />_任意_ | 識別子のカンマ区切りリストを指定して、レスポンスを目的のキャンペーンに紐づくエンティティに限定します。最大 200 個の ID を指定できます。<br /><br />**注**: `funding_instrument_ids` および `line_item_ids` とは排他的です。<br /><br />型: string<br /><br />例: `8wku2` |
+| funding\_instrument\_ids  <br />_任意_ | 識別子のカンマ区切りリストを指定して、レスポンスを目的のファンディングインストゥルメントに紐づくエンティティに限定します。最大 200 個の ID を指定できます。<br /><br />**注**: `campaign_ids` および `line_item_ids` とは排他的です。<br /><br />型: string<br /><br />例: `lygyi` |
+| line\_item\_ids  <br />_任意_ | 識別子のカンマ区切りリストを指定して、レスポンスを目的のラインアイテムに紐づくエンティティに限定します。最大 200 個の ID を指定できます。<br /><br />**注**: `campaign_ids` および `line_item_ids` とは排他的です。<br /><br />型: string<br /><br />例: `8v7jo` |
+
+### リクエスト例
+
+`GET https://ads-api.x.com/12/stats/accounts/18ce54d4x5t/active_entities?entity=PROMOTED_TWEET&start_time=2026-02-28&end_time=2026-03-01`
+
+### レスポンス例
+
+```json
+    {
+      "request": {
+        "params": {
+          "account_id": "18ce54d4x5t",
+          "entity": "PROMOTED_TWEET",
+          "start_time": "2026-02-28T08:00:00Z",
+          "end_time": "2026-03-01T08:00:00Z"
+        }
+      },
+      "data": [
+        {
+          "entity_id": "2mvb28",
+          "activity_start_time": "2026-02-28T01:30:07Z",
+          "activity_end_time": "2026-03-01T07:42:55Z",
+          "placements": [
+            "ALL_ON_TWITTER"
+          ]
+        },
+        {
+          "entity_id": "2mvb29",
+          "activity_start_time": "2026-02-27T11:30:07Z",
+          "activity_end_time": "2026-03-01T07:42:50Z",
+          "placements": [
+            "ALL_ON_TWITTER",
+            "PUBLISHER_NETWORK"
+          ]
+        },
+        {
+          "entity_id": "2mvfan",
+          "activity_start_time": "2026-02-27T09:00:05Z",
+          "activity_end_time": "2026-03-01T06:06:36Z",
+          "placements": [
+            "PUBLISHER_NETWORK"
+          ]
+        },
+        {
+          "entity_id": "2n17dx",
+          "activity_start_time": "2026-02-28T02:02:26Z",
+          "activity_end_time": "2026-03-01T07:52:44Z",
+          "placements": [
+            "ALL_ON_TWITTER",
+            "PUBLISHER_NETWORK"
+          ]
+        }
+      ]
+    }
+```
