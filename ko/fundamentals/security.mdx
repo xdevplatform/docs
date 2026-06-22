@@ -1,0 +1,189 @@
+---
+title: 보안
+sidebarTitle: 보안
+icon: shield-halved
+description: 자격 증명 저장, OAuth 처리, 키 회전, 안전한 콜백, 취약점 공개를 포함한 X API 개발자를 위한 보안 모범 사례입니다.
+keywords: ["보안", "API 보안", "OAuth 보안", "API 키 보안", "토큰 보안", "안전한 코딩", "취약점 보고"]
+---
+
+안전한 애플리케이션을 구축하면 사용자와 X 플랫폼 모두를 보호합니다. 이 가이드는 X API 개발자를 위한 필수 보안 관행을 다룹니다.
+
+---
+
+## 핵심 요구 사항
+
+<CardGroup cols={2}>
+  <Card title="TLS 필수" icon="lock">
+    모든 API 요청은 HTTPS를 사용해야 합니다. 평문 HTTP는 거부됩니다.
+  </Card>
+  <Card title="자격 증명 보안" icon="key">
+    API 키나 토큰을 클라이언트 측 코드, 로그 또는 저장소에 노출하지 마세요.
+  </Card>
+</CardGroup>
+
+---
+
+## 자격 증명 보호
+
+API 키와 토큰은 앱의 핵심입니다. 안전하게 보관하세요:
+
+<Steps>
+  <Step title="환경 변수 사용">
+    자격 증명을 코드가 아닌 환경 변수에 저장하세요.
+    ```bash
+    export X_API_KEY="your-api-key"
+    export X_API_SECRET="your-api-secret"
+    ```
+  </Step>
+  <Step title="시크릿 커밋 금지">
+    자격 증명 파일을 `.gitignore`에 추가하세요. `git-secrets` 같은 도구를 사용해 실수로 커밋되는 것을 방지하세요.
+  </Step>
+  <Step title="정기적으로 회전">
+    키를 주기적으로 그리고 손상이 의심되는 경우 즉시 재생성하세요.
+  </Step>
+  <Step title="최소 권한 사용">
+    앱이 실제로 필요한 OAuth 스코프만 요청하세요.
+  </Step>
+</Steps>
+
+### 자격 증명이 손상된 경우
+
+1. [Developer Console](https://console.x.com)에서 **즉시 재생성**하세요
+2. **기존 토큰 무효화** — 재생성하면 기존 자격 증명이 자동으로 무효화됩니다
+3. **사용량 감사** — 무단 API 활동을 확인하세요
+4. **앱 업데이트** — 모든 환경에 새 자격 증명을 배포하세요
+
+---
+
+## 애플리케이션 보안
+
+### 입력 검증
+
+사용자 입력을 절대 신뢰하지 마세요. 사용하기 전에 모든 데이터를 검증하고 정제하세요:
+
+```python
+# Bad - vulnerable to injection
+query = f"from:{user_input}"
+
+# Good - validate input first
+import re
+if re.match(r'^[a-zA-Z0-9_]{1,15}$', user_input):
+    query = f"from:{user_input}"
+```
+
+### 출력 인코딩
+
+XSS를 방지하기 위해 X API 데이터를 HTML에 표시하기 전에 이스케이프하세요:
+
+```javascript
+// Bad - vulnerable to XSS
+element.innerHTML = tweet.text;
+
+// Good - escape HTML
+element.textContent = tweet.text;
+```
+
+### 방지해야 할 일반적인 취약점
+
+| 취약점 | 방지 |
+|:--------------|:-----------|
+| **XSS** | 렌더링 전에 사용자 생성 콘텐츠를 모두 이스케이프 |
+| **CSRF** | 양식에 anti-CSRF 토큰 사용; OAuth state 매개변수 검증 |
+| **SQL Injection** | 매개변수화된 쿼리 사용, 사용자 입력을 절대 연결하지 않음 |
+| **Open redirects** | 허용 목록에 대해 콜백 URL 검증 |
+
+---
+
+## OAuth 보안
+
+### state 매개변수
+
+CSRF를 방지하기 위해 OAuth 흐름에서 항상 `state` 매개변수를 사용하세요:
+
+```python
+import secrets
+
+# Generate state before authorization
+state = secrets.token_urlsafe(32)
+session['oauth_state'] = state
+
+# Verify state after callback
+if request.args.get('state') != session.get('oauth_state'):
+    abort(403)  # State mismatch - possible CSRF
+```
+
+### 토큰 저장
+
+| 토큰 유형 | 저장 권장 사항 |
+|:-----------|:-----------------------|
+| **Access tokens** | 암호화된 데이터베이스 또는 안전한 보관소 |
+| **Refresh tokens** | 추가 액세스 제어가 있는 암호화된 데이터베이스 |
+| **Bearer tokens** | 환경 변수 또는 안전한 구성 |
+
+---
+
+## 안전한 개발 관행
+
+<CardGroup cols={2}>
+  <Card title="보안 감사" icon="magnifying-glass">
+    정기적인 보안 검토 및 침투 테스트를 수행하세요.
+  </Card>
+  <Card title="의존성 스캔" icon="box">
+    의존성을 최신 상태로 유지하세요. 취약한 패키지를 감지하기 위한 도구를 사용하세요.
+  </Card>
+  <Card title="로깅" icon="file-lines">
+    보안 이벤트를 로깅하되 자격 증명이나 민감한 데이터는 절대 로깅하지 마세요.
+  </Card>
+  <Card title="모니터링" icon="chart-line">
+    비정상적인 API 사용 패턴에 대한 알림을 설정하세요.
+  </Card>
+</CardGroup>
+
+---
+
+## 보안 문제 보고
+
+X에 영향을 미치는 보안 취약점을 발견한 경우:
+
+<Warning>
+**48시간 이내에 보고.** X Developer Platform 사용자는 보안 인시던트 의심 후 48시간 이내에 X에 알려야 합니다.
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="X Bug Bounty" icon="bug" href="https://hackerone.com/twitter">
+    HackerOne을 통해 X 시스템의 취약점을 보고하세요.
+  </Card>
+  <Card title="앱 인시던트" icon="triangle-exclamation" href="https://hackerone.com/twitter">
+    X 데이터를 사용하는 앱이 침해된 경우 동일한 채널을 통해 보고하세요.
+  </Card>
+</CardGroup>
+
+---
+
+## 준수 체크리스트
+
+<Accordion title="X API 개발자를 위한 보안 요구 사항">
+- [ ] 모든 API 요청이 TLS/HTTPS 사용
+- [ ] 자격 증명이 안전하게 저장됨(코드나 로그에 없음)
+- [ ] 사용자 토큰이 저장 시 암호화됨
+- [ ] 모든 사용자 제공 데이터에 대한 입력 검증
+- [ ] XSS 방지를 위한 출력 인코딩
+- [ ] OAuth 흐름에 CSRF 보호
+- [ ] 보안 로깅 활성화(민감한 데이터 제외)
+- [ ] 인시던트 대응 계획 문서화
+- [ ] 의존성이 정기적으로 업데이트됨
+- [ ] 최소 OAuth 스코프 요청
+</Accordion>
+
+---
+
+## 리소스
+
+<CardGroup cols={2}>
+  <Card title="인증 가이드" icon="key" href="/resources/fundamentals/authentication/overview">
+    OAuth를 올바르게 구현하세요.
+  </Card>
+  <Card title="앱 권한" icon="shield-check" href="/resources/fundamentals/developer-apps#app-permissions">
+    최소 필수 권한을 구성하세요.
+  </Card>
+</CardGroup>

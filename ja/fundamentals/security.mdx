@@ -1,0 +1,189 @@
+---
+title: セキュリティ
+sidebarTitle: セキュリティ
+icon: shield-halved
+description: X API 開発者向けのセキュリティベストプラクティス。認証情報の保管、OAuth の取り扱い、キーのローテーション、安全なコールバック、脆弱性の開示について説明します。
+keywords: ["セキュリティ", "API セキュリティ", "OAuth セキュリティ", "API キーのセキュリティ", "トークンのセキュリティ", "セキュアコーディング", "脆弱性報告"]
+---
+
+セキュアなアプリケーションを構築することで、ユーザーと X プラットフォームの両方を保護できます。このガイドでは、X API 開発者にとって必須のセキュリティプラクティスについて説明します。
+
+---
+
+## 基本要件
+
+<CardGroup cols={2}>
+  <Card title="TLS が必要" icon="lock">
+    すべての API リクエストは HTTPS を使用する必要があります。プレーン HTTP は拒否されます。
+  </Card>
+  <Card title="認証情報のセキュリティ" icon="key">
+    API キーやトークンを、クライアントサイドのコード、ログ、リポジトリに公開しないでください。
+  </Card>
+</CardGroup>
+
+---
+
+## 認証情報の保護
+
+API キーとトークンはアプリの鍵です。安全に保管してください:
+
+<Steps>
+  <Step title="環境変数を使用">
+    認証情報はコードではなく環境変数に保存します。
+    ```bash
+    export X_API_KEY="your-api-key"
+    export X_API_SECRET="your-api-secret"
+    ```
+  </Step>
+  <Step title="シークレットをコミットしない">
+    認証情報ファイルを `.gitignore` に追加します。誤ったコミットを防ぐために `git-secrets` などのツールを使用してください。
+  </Step>
+  <Step title="定期的にローテーション">
+    定期的にキーを再生成し、漏洩が疑われる場合は直ちに行います。
+  </Step>
+  <Step title="最小限の権限を使用">
+    アプリが実際に必要とする OAuth スコープのみをリクエストします。
+  </Step>
+</Steps>
+
+### 認証情報が漏洩した場合
+
+1. [Developer Console](https://console.x.com) で **直ちに再生成**
+2. **古いトークンを無効化** — 再生成すると古い認証情報は自動的に無効になります
+3. **使用状況を監査** — 不正な API アクティビティがないか確認します
+4. **アプリを更新** — すべての環境に新しい認証情報をデプロイします
+
+---
+
+## アプリケーションのセキュリティ
+
+### 入力の検証
+
+ユーザー入力を信頼しないでください。使用前にすべてのデータを検証およびサニタイズしてください:
+
+```python
+# 悪い例 - インジェクション脆弱性
+query = f"from:{user_input}"
+
+# 良い例 - まず入力を検証
+import re
+if re.match(r'^[a-zA-Z0-9_]{1,15}$', user_input):
+    query = f"from:{user_input}"
+```
+
+### 出力のエンコーディング
+
+XSS を防ぐために、HTML に表示する前に X API データをエスケープします:
+
+```javascript
+// 悪い例 - XSS 脆弱性
+element.innerHTML = tweet.text;
+
+// 良い例 - HTML をエスケープ
+element.textContent = tweet.text;
+```
+
+### 防止すべき一般的な脆弱性
+
+| 脆弱性 | 予防策 |
+|:--------------|:-----------|
+| **XSS** | レンダリング前にすべてのユーザー生成コンテンツをエスケープ |
+| **CSRF** | フォームで anti-CSRF トークンを使用、OAuth state パラメータを検証 |
+| **SQL インジェクション** | パラメータ化されたクエリを使用、ユーザー入力を絶対に連結しない |
+| **オープンリダイレクト** | コールバック URL を許可リストと照合して検証 |
+
+---
+
+## OAuth セキュリティ
+
+### State パラメータ
+
+CSRF を防ぐために、OAuth フローでは常に `state` パラメータを使用してください:
+
+```python
+import secrets
+
+# 認可前に state を生成
+state = secrets.token_urlsafe(32)
+session['oauth_state'] = state
+
+# コールバック後に state を検証
+if request.args.get('state') != session.get('oauth_state'):
+    abort(403)  # State 不一致 - CSRF の可能性
+```
+
+### トークンの保管
+
+| トークンの種類 | 推奨される保管方法 |
+|:-----------|:-----------------------|
+| **Access tokens** | 暗号化されたデータベースまたは安全な保管庫 |
+| **Refresh tokens** | 追加のアクセス制御を伴う暗号化データベース |
+| **Bearer tokens** | 環境変数または安全な設定 |
+
+---
+
+## 安全な開発プラクティス
+
+<CardGroup cols={2}>
+  <Card title="セキュリティ監査" icon="magnifying-glass">
+    定期的なセキュリティレビューとペネトレーションテストを実施します。
+  </Card>
+  <Card title="依存関係のスキャン" icon="box">
+    依存関係を最新に保ちます。脆弱なパッケージを検出するツールを使用します。
+  </Card>
+  <Card title="ログ記録" icon="file-lines">
+    セキュリティイベントをログに記録しますが、認証情報や機密データは絶対に記録しないでください。
+  </Card>
+  <Card title="モニタリング" icon="chart-line">
+    異常な API 使用パターンに対するアラートを設定します。
+  </Card>
+</CardGroup>
+
+---
+
+## セキュリティ問題の報告
+
+X に影響するセキュリティ脆弱性を発見した場合:
+
+<Warning>
+**48 時間以内に報告。** X Developer Platform のユーザーは、セキュリティインシデントが疑われてから 48 時間以内に X に通知する必要があります。
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="X Bug Bounty" icon="bug" href="https://hackerone.com/twitter">
+    HackerOne を通じて X のシステムの脆弱性を報告してください。
+  </Card>
+  <Card title="あなたのアプリのインシデント" icon="triangle-exclamation" href="https://hackerone.com/twitter">
+    X データを使用するアプリで侵害が発生した場合、同じチャネルから報告してください。
+  </Card>
+</CardGroup>
+
+---
+
+## コンプライアンスチェックリスト
+
+<Accordion title="X API 開発者向けのセキュリティ要件">
+- [ ] すべての API リクエストが TLS/HTTPS を使用
+- [ ] 認証情報が安全に保管 (コードやログ内ではない)
+- [ ] ユーザートークンが保存時に暗号化
+- [ ] すべてのユーザー提供データに対する入力検証
+- [ ] XSS を防ぐための出力エンコーディング
+- [ ] OAuth フローでの CSRF 保護
+- [ ] セキュリティロギングが有効 (機密データなし)
+- [ ] インシデント対応計画が文書化
+- [ ] 依存関係が定期的に更新
+- [ ] 最小限の OAuth スコープがリクエスト
+</Accordion>
+
+---
+
+## リソース
+
+<CardGroup cols={2}>
+  <Card title="認証ガイド" icon="key" href="/resources/fundamentals/authentication/overview">
+    OAuth を正しく実装します。
+  </Card>
+  <Card title="アプリの権限" icon="shield-check" href="/resources/fundamentals/developer-apps#app-permissions">
+    最小限の必要な権限を設定します。
+  </Card>
+</CardGroup>

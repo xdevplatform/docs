@@ -1,0 +1,108 @@
+---
+title: X ID
+sidebarTitle: X ID
+icon: fingerprint
+description: X API における Post およびユーザーの 64 ビット Snowflake ID について、形式、順序、ID インフレーション、JavaScript クライアントでの安全な処理を含めて理解します。
+keywords: ["X ID", "Twitter ID", "ユーザー ID", "ツイート ID", "snowflake ID", "64 ビット整数", "ID 形式", "一意の識別子"]
+---
+
+X API のすべてのオブジェクト — 投稿、ユーザー、リスト、DM、スペース — には固有の ID があります。これらの ID がどのように機能するかを理解することで、信頼性の高い連携を構築できます。
+
+---
+
+## ID 形式
+
+X ID は、「Snowflake」と呼ばれるシステムで生成される **64 ビット符号なし整数** です。各 ID は以下をエンコードします:
+
+- **タイムスタンプ** — オブジェクトが作成された時刻
+- **ワーカー番号** — ID を生成したサーバー
+- **シーケンス番号** — そのミリ秒内の順序
+
+つまり、ID はおおよそ時間順になっています: 高い ID は一般的に新しいオブジェクトを表します。
+
+<Tip>
+ID は単一のオブジェクトタイプ内だけでなく、X 全体でグローバルに一意です。
+</Tip>
+
+---
+
+## 文字列 vs 整数表現
+
+<Warning>
+**コードでは常に文字列 ID を使用してください。** 一部のプログラミング言語 (JavaScript など) では、64 ビット整数を正確に表現できません。
+</Warning>
+
+JavaScript では整数は 53 ビットに制限されます。これにより、大きな ID で精度の損失が発生します:
+
+```javascript
+// これは精度を失います!
+const id = 10765432100123456789;
+console.log(id.toString()); // "10765432100123458000" — 間違っています!
+
+// 代わりに文字列を使用
+const id = "10765432100123456789";
+console.log(id); // "10765432100123456789" — 正しい!
+```
+
+### API バージョン
+
+| バージョン | ID 形式 |
+|:--------|:----------|
+| **X API v2** | ID はデフォルトで文字列として返されます |
+| **X API v1.1** | `id` (整数) と `id_str` (文字列) の両方を返します — 常に `id_str` を使用してください |
+
+---
+
+## ID の取り扱い
+
+### ID の保存
+
+ID は文字列または 64 ビット整数としてデータベースに保存します:
+
+| データベース | 推奨タイプ |
+|:---------|:-----------------|
+| PostgreSQL | `BIGINT` または `TEXT` |
+| MySQL | `BIGINT UNSIGNED` または `VARCHAR(20)` |
+| MongoDB | String |
+| SQLite | `TEXT` (SQLite の整数は最大 63 ビット) |
+
+### ID の比較
+
+時系列順に ID を比較する場合:
+
+```python
+# Python - 64 ビット整数で安全
+if int(id1) > int(id2):
+    print("id1 is newer")
+
+# JavaScript - 文字列として比較 (同じ長さの ID では辞書順で動作)
+# または BigInt を使用
+if (BigInt(id1) > BigInt(id2)) {
+    console.log("id1 is newer");
+}
+```
+
+---
+
+## 一般的な ID の種類
+
+| オブジェクト | ID の例 | 備考 |
+|:-------|:-----------|:------|
+| Post (Tweet) | `1234567890123456789` | Tweet ID とも呼ばれます |
+| User | `2244994945` | 古いアカウントは短い ID を持ちます |
+| List | `1234567890` | |
+| Space | `1YqGodQbNXDxv` | 英数字、Snowflake 形式ではない |
+| DM Event | `1234567890123456789` | |
+
+---
+
+## 関連リソース
+
+<CardGroup cols={2}>
+  <Card title="Data Dictionary" icon="book" href="/x-api/fundamentals/data-dictionary">
+    各オブジェクトタイプの ID フィールドを確認します。
+  </Card>
+  <Card title="Post Lookup" icon="magnifying-glass" href="/x-api/posts/lookup/introduction">
+    ID で投稿を取得します。
+  </Card>
+</CardGroup>
