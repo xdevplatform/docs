@@ -1,0 +1,124 @@
+---
+title: 文字数のカウント
+sidebarTitle: 文字数のカウント
+icon: text-size
+description: X が投稿の文字数をどのようにカウントするか。280 文字制限、加重されたコードポイント、URL の短縮、絵文字と Unicode の取り扱い、エッジケースを含みます。
+keywords: ["文字カウント", "ツイートの長さ", "280 文字", "文字制限", "Unicode", "絵文字の文字", "URL の長さ", "ツイート作成"]
+---
+
+X 上の投稿には最大 **280 文字** を含めることができます。ただし、すべての文字が同じカウントになるわけではありません — 絵文字、URL、特定の Unicode 範囲には特別なカウントルールがあります。
+
+---
+
+## 文字の重み
+
+X は加重された文字カウントシステムを使用します。ほとんどの文字は 1 としてカウントされますが、一部は 2 としてカウントされます:
+
+| 文字の種類 | 重み | 最大文字数 |
+|:---------------|:-------|:---------------|
+| ラテン文字、句読点、一般的な記号 | 1 | 280 |
+| 絵文字 | 2 | 140 絵文字 |
+| CJK (中国語、日本語、韓国語) | 2 | 140 文字 |
+| その他の Unicode | 2 (デフォルト) | 異なります |
+
+<Tip>
+アプリで正確に文字数をカウントするには、オープンソースの [twitter-text](https://github.com/twitter/twitter-text) ライブラリを使用してください。
+</Tip>
+
+---
+
+## 絵文字のカウント
+
+すべての絵文字は、複雑さに関係なく **2 文字** としてカウントされます:
+
+| 絵文字 | 表示 | 文字カウント | Unicode |
+|:------|:--------|:----------------|:--------|
+| 👾 | 単一の絵文字 | 2 | U+1F47E |
+| 🙋🏽 | 肌の色付き | 2 | 🙋 + 🏽 修飾子 |
+| 👨‍🎤 | ZWJ で結合 | 2 | 👨 + ZWJ + 🎤 |
+| 👨‍👩‍👧‍👦 | 家族シーケンス | 2 | 4 絵文字 + 3 ZWJ |
+
+ゼロ幅接合子 (ZWJ) は絵文字を視覚的に結合しますが、カウントには加算されません。
+
+---
+
+## URL の取り扱い
+
+すべての URL は `t.co` 短縮機能でラップされ、元の長さに関係なく **23 文字** としてカウントされます:
+
+```
+https://example.com                    → 23 文字
+https://example.com/very/long/path     → 23 文字
+```
+
+<Note>
+これは投稿テキストで検出された有効な URL すべてに適用されます。
+</Note>
+
+---
+
+## 特別なケース
+
+| コンテンツ | カウントルール |
+|:--------|:--------------|
+| **返信の @mentions** | 返信の先頭に自動入力される @mentions はカウントされません |
+| **新しい @mentions** | 手動で追加する @mentions は通常通りカウントされます |
+| **メディア** | 添付メディア (公式クライアント経由) は 0 文字としてカウント |
+| **ハッシュタグ** | 通常通りカウント (# + タグテキスト) |
+
+---
+
+## テキストエンコーディング
+
+X API には **UTF-8** エンコーディングが必要です。文字長は Unicode Normalization Form C (NFC) を使用して計算されます。
+
+`café` の例:
+
+| 形式 | バイト | 文字数 |
+|:-----|:------|:-----------|
+| NFC (合成) | `c a f é` | 4 |
+| NFD (分解) | `c a f e ́` | 5 |
+
+X は NFC に正規化するため、どちらも 4 文字としてエンコードされます。
+
+---
+
+## 実装
+
+正確な文字数カウントには公式の [twitter-text](https://github.com/twitter/twitter-text) ライブラリを使用してください:
+
+<Tabs>
+  <Tab title="JavaScript">
+```javascript
+import { parseTweet } from 'twitter-text';
+
+const result = parseTweet('Hello, world! 👋');
+console.log(result.weightedLength); // 16
+console.log(result.valid);          // true
+```
+  </Tab>
+  <Tab title="Python">
+```python
+from twitter_text import parse_tweet
+
+result = parse_tweet('Hello, world! 👋')
+print(result.weightedLength)  # 16
+print(result.valid)           # True
+```
+  </Tab>
+</Tabs>
+
+このライブラリは、絵文字シーケンス、URL 検出、Unicode 正規化を含むすべてのエッジケースを処理します。
+
+---
+
+## リソース
+
+<CardGroup cols={2}>
+  <Card title="twitter-text ライブラリ" icon="github" href="https://github.com/twitter/twitter-text">
+    テキスト解析用の公式オープンソースライブラリ。
+  </Card>
+  <Card title="設定ファイル" icon="file-code" href="https://github.com/twitter/twitter-text/tree/master/config">
+    文字重みの定義と Unicode 範囲。
+  </Card>
+</CardGroup>

@@ -1,0 +1,124 @@
+---
+title: Contagem de caracteres
+sidebarTitle: Contagem de caracteres
+icon: text-size
+description: Como o X conta caracteres em Posts, incluindo o limite de 280 caracteres, pontos de código ponderados, encurtamento de URLs, tratamento de emojis e Unicode e casos especiais.
+keywords: ["contagem de caracteres", "tamanho do tweet", "280 caracteres", "limites de caracteres", "Unicode", "caracteres de emoji", "tamanho de URL", "composição de tweet"]
+---
+
+Posts no X podem conter até **280 caracteres**. No entanto, nem todos os caracteres contam da mesma forma — emojis, URLs e certos intervalos Unicode têm regras de contagem especiais.
+
+---
+
+## Pesos dos caracteres
+
+O X usa um sistema ponderado de contagem de caracteres. A maioria dos caracteres conta como 1, mas alguns contam como 2:
+
+| Tipo de caractere | Peso | Máximo de caracteres |
+|:---------------|:-------|:---------------|
+| Latinos, pontuação, símbolos comuns | 1 | 280 |
+| Emojis | 2 | 140 emojis |
+| CJK (chinês, japonês, coreano) | 2 | 140 caracteres |
+| Outros Unicode | 2 (padrão) | Varia |
+
+<Tip>
+Use a biblioteca de código aberto [twitter-text](https://github.com/twitter/twitter-text) para contar caracteres com precisão no seu app.
+</Tip>
+
+---
+
+## Contagem de emojis
+
+Todos os emojis contam como **2 caracteres**, independentemente da complexidade:
+
+| Emoji | Exibição | Contagem de caracteres | Unicode |
+|:------|:--------|:----------------|:--------|
+| 👾 | Emoji único | 2 | U+1F47E |
+| 🙋🏽 | Com tom de pele | 2 | 🙋 + modificador 🏽 |
+| 👨‍🎤 | Combinado com ZWJ | 2 | 👨 + ZWJ + 🎤 |
+| 👨‍👩‍👧‍👦 | Sequência de família | 2 | 4 emojis + 3 ZWJs |
+
+Zero-width joiners (ZWJ) combinam emojis visualmente, mas não somam à contagem.
+
+---
+
+## Tratamento de URLs
+
+Todas as URLs são encapsuladas pelo encurtador `t.co` e contam como **23 caracteres**, independentemente do tamanho original:
+
+```
+https://example.com                    → 23 caracteres
+https://example.com/very/long/path     → 23 caracteres
+```
+
+<Note>
+Isso se aplica a qualquer URL válida detectada no texto do post.
+</Note>
+
+---
+
+## Casos especiais
+
+| Conteúdo | Regra de contagem |
+|:--------|:--------------|
+| **@menções em respostas** | @menções preenchidas automaticamente no início das respostas não contam |
+| **Novas @menções** | @menções adicionadas manualmente contam normalmente |
+| **Mídia** | Mídia anexada (via clientes oficiais) conta como 0 caracteres |
+| **Hashtags** | Contam normalmente (# + texto da tag) |
+
+---
+
+## Codificação de texto
+
+A X API requer codificação **UTF-8**. O comprimento do caractere é calculado usando o Unicode Normalization Form C (NFC).
+
+Exemplo com `café`:
+
+| Forma | Bytes | Caracteres |
+|:-----|:------|:-----------|
+| NFC (composto) | `c a f é` | 4 |
+| NFD (decomposto) | `c a f e ́` | 5 |
+
+O X normaliza para NFC, então ambos codificam para 4 caracteres.
+
+---
+
+## Implementação
+
+Use a biblioteca oficial [twitter-text](https://github.com/twitter/twitter-text) para contagem precisa de caracteres:
+
+<Tabs>
+  <Tab title="JavaScript">
+```javascript
+import { parseTweet } from 'twitter-text';
+
+const result = parseTweet('Hello, world! 👋');
+console.log(result.weightedLength); // 16
+console.log(result.valid);          // true
+```
+  </Tab>
+  <Tab title="Python">
+```python
+from twitter_text import parse_tweet
+
+result = parse_tweet('Hello, world! 👋')
+print(result.weightedLength)  # 16
+print(result.valid)           # True
+```
+  </Tab>
+</Tabs>
+
+A biblioteca lida com todos os casos especiais, incluindo sequências de emojis, detecção de URLs e normalização Unicode.
+
+---
+
+## Recursos
+
+<CardGroup cols={2}>
+  <Card title="Biblioteca twitter-text" icon="github" href="https://github.com/twitter/twitter-text">
+    Biblioteca oficial de código aberto para análise de texto.
+  </Card>
+  <Card title="Arquivo de configuração" icon="file-code" href="https://github.com/twitter/twitter-text/tree/master/config">
+    Definições de pesos de caracteres e intervalos Unicode.
+  </Card>
+</CardGroup>
