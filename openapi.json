@@ -477,6 +477,7 @@
           },
           {
             "OAuth2UserToken" : [
+              "like.read",
               "tweet.read"
             ]
           },
@@ -555,6 +556,7 @@
           {
             "OAuth2UserToken" : [
               "dm.read",
+              "like.read",
               "tweet.read"
             ]
           },
@@ -14045,6 +14047,9 @@
           },
           {
             "$ref" : "#/components/schemas/PostDeleteActivityResponsePayload"
+          },
+          {
+            "$ref" : "#/components/schemas/LikeWithTweetAuthor"
           }
         ],
         "discriminator" : {
@@ -14052,6 +14057,7 @@
           "mapping" : {
             "follow.follow" : "#/components/schemas/FollowActivityResponsePayload",
             "follow.unfollow" : "#/components/schemas/FollowActivityResponsePayload",
+            "like.create" : "#/components/schemas/LikeWithTweetAuthor",
             "news.new" : "#/components/schemas/NewsActivityResponsePayload",
             "post.create" : "#/components/schemas/Tweet",
             "post.delete" : "#/components/schemas/PostDeleteActivityResponsePayload",
@@ -14135,7 +14141,8 @@
               "dm.indicate_typing",
               "dm.read",
               "post.create",
-              "post.delete"
+              "post.delete",
+              "like.create"
             ]
           },
           "filter" : {
@@ -14476,6 +14483,7 @@
                 "description" : "The text blocks that make up the article body.",
                 "items" : {
                   "type" : "object",
+                  "description" : "A DraftJS content block.",
                   "required" : [
                     "text",
                     "type"
@@ -14483,11 +14491,126 @@
                   "properties" : {
                     "data" : {
                       "type" : "object",
-                      "description" : "Block-level metadata for mentions, hashtags, cashtags, and URLs."
-                    },
-                    "depth" : {
-                      "type" : "integer",
-                      "description" : "Nesting depth for list items."
+                      "description" : "Block-level metadata for mentions, hashtags, cashtags, and URLs.",
+                      "properties" : {
+                        "cashtags" : {
+                          "type" : "array",
+                          "description" : "Cashtag spans in this block.",
+                          "items" : {
+                            "type" : "object",
+                            "required" : [
+                              "from_index",
+                              "to_index",
+                              "text"
+                            ],
+                            "properties" : {
+                              "from_index" : {
+                                "type" : "integer",
+                                "description" : "Start index of the tagged span.",
+                                "minimum" : 0
+                              },
+                              "text" : {
+                                "type" : "string",
+                                "description" : "The tagged text."
+                              },
+                              "to_index" : {
+                                "type" : "integer",
+                                "description" : "End index of the tagged span.",
+                                "minimum" : 0
+                              }
+                            },
+                            "additionalProperties" : false
+                          }
+                        },
+                        "hashtags" : {
+                          "type" : "array",
+                          "description" : "Hashtag spans in this block.",
+                          "items" : {
+                            "type" : "object",
+                            "required" : [
+                              "from_index",
+                              "to_index",
+                              "text"
+                            ],
+                            "properties" : {
+                              "from_index" : {
+                                "type" : "integer",
+                                "description" : "Start index of the tagged span.",
+                                "minimum" : 0
+                              },
+                              "text" : {
+                                "type" : "string",
+                                "description" : "The tagged text."
+                              },
+                              "to_index" : {
+                                "type" : "integer",
+                                "description" : "End index of the tagged span.",
+                                "minimum" : 0
+                              }
+                            },
+                            "additionalProperties" : false
+                          }
+                        },
+                        "mentions" : {
+                          "type" : "array",
+                          "description" : "Mention spans in this block.",
+                          "items" : {
+                            "type" : "object",
+                            "required" : [
+                              "from_index",
+                              "to_index",
+                              "text"
+                            ],
+                            "properties" : {
+                              "from_index" : {
+                                "type" : "integer",
+                                "description" : "Start index of the tagged span.",
+                                "minimum" : 0
+                              },
+                              "text" : {
+                                "type" : "string",
+                                "description" : "The tagged text."
+                              },
+                              "to_index" : {
+                                "type" : "integer",
+                                "description" : "End index of the tagged span.",
+                                "minimum" : 0
+                              }
+                            },
+                            "additionalProperties" : false
+                          }
+                        },
+                        "urls" : {
+                          "type" : "array",
+                          "description" : "URL spans in this block.",
+                          "items" : {
+                            "type" : "object",
+                            "required" : [
+                              "from_index",
+                              "to_index",
+                              "text"
+                            ],
+                            "properties" : {
+                              "from_index" : {
+                                "type" : "integer",
+                                "description" : "Start index of the tagged span.",
+                                "minimum" : 0
+                              },
+                              "text" : {
+                                "type" : "string",
+                                "description" : "The tagged text."
+                              },
+                              "to_index" : {
+                                "type" : "integer",
+                                "description" : "End index of the tagged span.",
+                                "minimum" : 0
+                              }
+                            },
+                            "additionalProperties" : false
+                          }
+                        }
+                      },
+                      "additionalProperties" : false
                     },
                     "entity_ranges" : {
                       "type" : "array",
@@ -14502,17 +14625,21 @@
                         "properties" : {
                           "key" : {
                             "type" : "integer",
-                            "description" : "Index into the entities array."
+                            "description" : "Index into the entities array.",
+                            "minimum" : 0
                           },
                           "length" : {
                             "type" : "integer",
-                            "description" : "Length of the entity range."
+                            "description" : "Length of the entity range.",
+                            "minimum" : 0
                           },
                           "offset" : {
                             "type" : "integer",
-                            "description" : "Start offset in the text."
+                            "description" : "Start offset in the text.",
+                            "minimum" : 0
                           }
-                        }
+                        },
+                        "additionalProperties" : false
                       }
                     },
                     "inline_style_ranges" : {
@@ -14528,11 +14655,13 @@
                         "properties" : {
                           "length" : {
                             "type" : "integer",
-                            "description" : "Length of the styled range."
+                            "description" : "Length of the styled range.",
+                            "minimum" : 0
                           },
                           "offset" : {
                             "type" : "integer",
-                            "description" : "Start offset in the text."
+                            "description" : "Start offset in the text.",
+                            "minimum" : 0
                           },
                           "style" : {
                             "type" : "string",
@@ -14543,7 +14672,8 @@
                               "strikethrough"
                             ]
                           }
-                        }
+                        },
+                        "additionalProperties" : false
                       }
                     },
                     "key" : {
@@ -14568,7 +14698,8 @@
                         "atomic"
                       ]
                     }
-                  }
+                  },
+                  "additionalProperties" : false
                 }
               },
               "entities" : {
@@ -14601,15 +14732,20 @@
                               "type" : "string",
                               "description" : "Caption text."
                             },
+                            "entity_key" : {
+                              "type" : "string",
+                              "description" : "Opaque entity key."
+                            },
                             "markdown" : {
                               "type" : "string",
                               "description" : "Markdown content."
                             },
                             "media_items" : {
                               "type" : "array",
-                              "description" : "Media keys. Used with type IMAGE.",
+                              "description" : "Media keys. Used with type image.",
                               "items" : {
                                 "type" : "object",
+                                "description" : "A reference to uploaded media, identified by category and ID.",
                                 "required" : [
                                   "media_category",
                                   "media_id"
@@ -14617,24 +14753,26 @@
                                 "properties" : {
                                   "media_category" : {
                                     "type" : "string",
-                                    "description" : "The media category."
+                                    "description" : "The media category (e.g., TWEET_IMAGE)."
                                   },
                                   "media_id" : {
                                     "type" : "string",
-                                    "description" : "The media ID."
+                                    "description" : "The media ID from the media upload endpoint."
                                   }
-                                }
+                                },
+                                "additionalProperties" : false
                               }
                             },
                             "post_id" : {
                               "type" : "string",
-                              "description" : "The ID of the post to embed. Used with type POST."
+                              "description" : "The ID of the post to embed. Used with type post."
                             },
                             "url" : {
                               "type" : "string",
-                              "description" : "The URL. Used with type LINK."
+                              "description" : "The URL. Used with type link."
                             }
-                          }
+                          },
+                          "additionalProperties" : false
                         },
                         "mutability" : {
                           "type" : "string",
@@ -14654,16 +14792,19 @@
                             "image"
                           ]
                         }
-                      }
+                      },
+                      "additionalProperties" : false
                     }
-                  }
+                  },
+                  "additionalProperties" : false
                 }
               }
-            }
+            },
+            "additionalProperties" : false
           },
           "cover_media" : {
             "type" : "object",
-            "description" : "Optional cover media for the article.",
+            "description" : "A reference to uploaded media, identified by category and ID.",
             "required" : [
               "media_category",
               "media_id"
@@ -14677,14 +14818,16 @@
                 "type" : "string",
                 "description" : "The media ID from the media upload endpoint."
               }
-            }
+            },
+            "additionalProperties" : false
           },
           "title" : {
             "type" : "string",
             "description" : "The title of the article.",
             "minLength" : 1
           }
-        }
+        },
+        "additionalProperties" : false
       },
       "ArticleDraftCreateResponse" : {
         "type" : "object",
