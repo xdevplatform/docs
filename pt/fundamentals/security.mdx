@@ -1,0 +1,189 @@
+---
+title: Segurança
+sidebarTitle: Segurança
+icon: shield-halved
+description: Melhores práticas de segurança para desenvolvedores da X API, incluindo armazenamento de credenciais, tratamento de OAuth, rotação de chaves, callbacks seguras e divulgação de vulnerabilidades.
+keywords: ["segurança", "segurança de API", "segurança OAuth", "segurança de API keys", "segurança de token", "codificação segura", "relatório de vulnerabilidades"]
+---
+
+Desenvolver aplicações seguras protege tanto seus usuários quanto a plataforma X. Este guia cobre práticas essenciais de segurança para desenvolvedores da X API.
+
+---
+
+## Requisitos principais
+
+<CardGroup cols={2}>
+  <Card title="TLS obrigatório" icon="lock">
+    Todas as solicitações de API devem usar HTTPS. HTTP puro é rejeitado.
+  </Card>
+  <Card title="Segurança de credenciais" icon="key">
+    Nunca exponha API keys ou tokens em código do lado do cliente, logs ou repositórios.
+  </Card>
+</CardGroup>
+
+---
+
+## Protegendo credenciais
+
+Suas API keys e tokens são as chaves do seu app. Mantenha-os seguros:
+
+<Steps>
+  <Step title="Use variáveis de ambiente">
+    Armazene credenciais em variáveis de ambiente, não no código.
+    ```bash
+    export X_API_KEY="your-api-key"
+    export X_API_SECRET="your-api-secret"
+    ```
+  </Step>
+  <Step title="Nunca faça commit de segredos">
+    Adicione arquivos de credenciais ao `.gitignore`. Use ferramentas como `git-secrets` para evitar commits acidentais.
+  </Step>
+  <Step title="Rotacione regularmente">
+    Regenere chaves periodicamente e imediatamente se suspeitar de comprometimento.
+  </Step>
+  <Step title="Use permissões mínimas">
+    Solicite apenas os escopos OAuth que seu app realmente precisa.
+  </Step>
+</Steps>
+
+### Se as credenciais forem comprometidas
+
+1. **Regenere imediatamente** no [Developer Console](https://console.x.com)
+2. **Revogue tokens antigos** — regenerar invalida automaticamente as credenciais antigas
+3. **Audite o uso** — verifique atividades de API não autorizadas
+4. **Atualize seu app** — implante novas credenciais em todos os ambientes
+
+---
+
+## Segurança da aplicação
+
+### Validação de entrada
+
+Nunca confie na entrada do usuário. Valide e sanitize todos os dados antes de usá-los:
+
+```python
+# Bad - vulnerable to injection
+query = f"from:{user_input}"
+
+# Good - validate input first
+import re
+if re.match(r'^[a-zA-Z0-9_]{1,15}$', user_input):
+    query = f"from:{user_input}"
+```
+
+### Codificação de saída
+
+Faça escape dos dados da X API antes de exibi-los em HTML para evitar XSS:
+
+```javascript
+// Bad - vulnerable to XSS
+element.innerHTML = tweet.text;
+
+// Good - escape HTML
+element.textContent = tweet.text;
+```
+
+### Vulnerabilidades comuns a prevenir
+
+| Vulnerabilidade | Prevenção |
+|:--------------|:-----------|
+| **XSS** | Faça escape de todo conteúdo gerado pelo usuário antes da renderização |
+| **CSRF** | Use tokens anti-CSRF em formulários; verifique o parâmetro state do OAuth |
+| **SQL Injection** | Use consultas parametrizadas, nunca concatene a entrada do usuário |
+| **Open redirects** | Valide callback URLs contra uma allowlist |
+
+---
+
+## Segurança do OAuth
+
+### Parâmetro state
+
+Sempre use o parâmetro `state` em fluxos OAuth para prevenir CSRF:
+
+```python
+import secrets
+
+# Generate state before authorization
+state = secrets.token_urlsafe(32)
+session['oauth_state'] = state
+
+# Verify state after callback
+if request.args.get('state') != session.get('oauth_state'):
+    abort(403)  # State mismatch - possible CSRF
+```
+
+### Armazenamento de tokens
+
+| Tipo de token | Recomendação de armazenamento |
+|:-----------|:-----------------------|
+| **Access tokens** | Banco de dados criptografado ou cofre seguro |
+| **Refresh tokens** | Banco de dados criptografado com controles de acesso adicionais |
+| **Bearer tokens** | Variáveis de ambiente ou configuração segura |
+
+---
+
+## Práticas de desenvolvimento seguro
+
+<CardGroup cols={2}>
+  <Card title="Auditorias de segurança" icon="magnifying-glass">
+    Realize revisões de segurança regulares e testes de penetração.
+  </Card>
+  <Card title="Verificação de dependências" icon="box">
+    Mantenha as dependências atualizadas. Use ferramentas para detectar pacotes vulneráveis.
+  </Card>
+  <Card title="Logging" icon="file-lines">
+    Registre eventos de segurança, mas nunca registre credenciais ou dados sensíveis.
+  </Card>
+  <Card title="Monitoramento" icon="chart-line">
+    Configure alertas para padrões incomuns de uso da API.
+  </Card>
+</CardGroup>
+
+---
+
+## Relatando problemas de segurança
+
+Se você descobrir uma vulnerabilidade de segurança que afete o X:
+
+<Warning>
+**Reporte em até 48 horas.** Usuários da X Developer Platform devem notificar o X em no máximo 48 horas após suspeitar de um incidente de segurança.
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="X Bug Bounty" icon="bug" href="https://hackerone.com/twitter">
+    Reporte vulnerabilidades nos sistemas do X através do HackerOne.
+  </Card>
+  <Card title="Incidente no seu app" icon="triangle-exclamation" href="https://hackerone.com/twitter">
+    Se seu app que usa dados do X for violado, reporte pelo mesmo canal.
+  </Card>
+</CardGroup>
+
+---
+
+## Checklist de conformidade
+
+<Accordion title="Requisitos de segurança para desenvolvedores da X API">
+- [ ] Todas as solicitações de API usam TLS/HTTPS
+- [ ] Credenciais armazenadas com segurança (não em código ou logs)
+- [ ] Tokens de usuário criptografados em repouso
+- [ ] Validação de entrada em todos os dados fornecidos pelo usuário
+- [ ] Codificação de saída para prevenir XSS
+- [ ] Proteção CSRF em fluxos OAuth
+- [ ] Logging de segurança ativado (sem dados sensíveis)
+- [ ] Plano de resposta a incidentes documentado
+- [ ] Dependências atualizadas regularmente
+- [ ] Escopos OAuth mínimos solicitados
+</Accordion>
+
+---
+
+## Recursos
+
+<CardGroup cols={2}>
+  <Card title="Guia de autenticação" icon="key" href="/resources/fundamentals/authentication/overview">
+    Implemente OAuth corretamente.
+  </Card>
+  <Card title="Permissões do app" icon="shield-check" href="/resources/fundamentals/developer-apps#app-permissions">
+    Configure as permissões mínimas necessárias.
+  </Card>
+</CardGroup>

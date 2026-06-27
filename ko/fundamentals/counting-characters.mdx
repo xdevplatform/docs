@@ -1,0 +1,124 @@
+---
+title: 글자 수 계산
+sidebarTitle: 글자 수 계산
+icon: text-size
+description: 280자 제한, 가중치 코드 포인트, URL 단축, 이모지 및 Unicode 처리, 엣지 케이스를 포함하여 X가 게시물의 글자 수를 계산하는 방법입니다.
+keywords: ["글자 수 계산", "트윗 길이", "280자", "글자 제한", "Unicode", "이모지 글자", "URL 길이", "트윗 작성"]
+---
+
+X의 게시물은 최대 **280자**를 포함할 수 있습니다. 그러나 모든 문자가 동일하게 계산되지는 않습니다 — 이모지, URL 및 특정 Unicode 범위에는 특별한 계산 규칙이 적용됩니다.
+
+---
+
+## 문자 가중치
+
+X는 가중치가 적용된 문자 계산 시스템을 사용합니다. 대부분의 문자는 1로 계산되지만 일부는 2로 계산됩니다:
+
+| 문자 유형 | 가중치 | 최대 글자 수 |
+|:---------------|:-------|:---------------|
+| Latin, 구두점, 일반 기호 | 1 | 280 |
+| 이모지 | 2 | 이모지 140개 |
+| CJK (중국어, 일본어, 한국어) | 2 | 글자 140개 |
+| 기타 Unicode | 2 (기본) | 다양함 |
+
+<Tip>
+오픈 소스 [twitter-text](https://github.com/twitter/twitter-text) 라이브러리를 사용해 앱에서 정확하게 글자 수를 계산하세요.
+</Tip>
+
+---
+
+## 이모지 계산
+
+모든 이모지는 복잡도와 관계없이 **2자**로 계산됩니다:
+
+| 이모지 | 표시 | 글자 수 | Unicode |
+|:------|:--------|:----------------|:--------|
+| 👾 | 단일 이모지 | 2 | U+1F47E |
+| 🙋🏽 | 피부톤 포함 | 2 | 🙋 + 🏽 modifier |
+| 👨‍🎤 | ZWJ로 결합 | 2 | 👨 + ZWJ + 🎤 |
+| 👨‍👩‍👧‍👦 | 가족 시퀀스 | 2 | 이모지 4개 + ZWJ 3개 |
+
+Zero-width joiner(ZWJ)는 이모지를 시각적으로 결합하지만 글자 수에는 추가되지 않습니다.
+
+---
+
+## URL 처리
+
+모든 URL은 `t.co` 단축기로 래핑되며 원래 길이와 관계없이 **23자**로 계산됩니다:
+
+```
+https://example.com                    → 23 characters
+https://example.com/very/long/path     → 23 characters
+```
+
+<Note>
+이는 게시물 텍스트에서 감지된 유효한 모든 URL에 적용됩니다.
+</Note>
+
+---
+
+## 특수 케이스
+
+| 콘텐츠 | 계산 규칙 |
+|:--------|:--------------|
+| **답글의 @멘션** | 답글 시작 부분의 자동 채워진 @멘션은 계산되지 않음 |
+| **신규 @멘션** | 수동으로 추가하는 @멘션은 일반적으로 계산됨 |
+| **미디어** | (공식 클라이언트를 통한) 첨부 미디어는 0자로 계산됨 |
+| **해시태그** | 일반적으로 계산됨(# + 태그 텍스트) |
+
+---
+
+## 텍스트 인코딩
+
+X API는 **UTF-8** 인코딩을 요구합니다. 글자 길이는 Unicode Normalization Form C (NFC)를 사용하여 계산됩니다.
+
+`café`의 예:
+
+| 형식 | 바이트 | 글자 수 |
+|:-----|:------|:-----------|
+| NFC (composed) | `c a f é` | 4 |
+| NFD (decomposed) | `c a f e ́` | 5 |
+
+X는 NFC로 정규화하므로 두 형식 모두 4자로 인코딩됩니다.
+
+---
+
+## 구현
+
+정확한 글자 수 계산을 위해 공식 [twitter-text](https://github.com/twitter/twitter-text) 라이브러리를 사용하세요:
+
+<Tabs>
+  <Tab title="JavaScript">
+```javascript
+import { parseTweet } from 'twitter-text';
+
+const result = parseTweet('Hello, world! 👋');
+console.log(result.weightedLength); // 16
+console.log(result.valid);          // true
+```
+  </Tab>
+  <Tab title="Python">
+```python
+from twitter_text import parse_tweet
+
+result = parse_tweet('Hello, world! 👋')
+print(result.weightedLength)  # 16
+print(result.valid)           # True
+```
+  </Tab>
+</Tabs>
+
+라이브러리는 이모지 시퀀스, URL 감지, Unicode 정규화를 포함한 모든 엣지 케이스를 처리합니다.
+
+---
+
+## 리소스
+
+<CardGroup cols={2}>
+  <Card title="twitter-text 라이브러리" icon="github" href="https://github.com/twitter/twitter-text">
+    텍스트 파싱을 위한 공식 오픈 소스 라이브러리입니다.
+  </Card>
+  <Card title="구성 파일" icon="file-code" href="https://github.com/twitter/twitter-text/tree/master/config">
+    문자 가중치 정의 및 Unicode 범위입니다.
+  </Card>
+</CardGroup>

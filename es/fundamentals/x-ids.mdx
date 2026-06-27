@@ -1,0 +1,108 @@
+---
+title: IDs de X
+sidebarTitle: IDs de X
+icon: fingerprint
+description: Comprende los IDs Snowflake de 64 bits en la X API para Posts y usuarios, incluyendo formato, orden, inflación de IDs y manejo seguro en clientes JavaScript.
+keywords: ["IDs de X", "IDs de Twitter", "ID de usuario", "ID de tweet", "ID snowflake", "enteros de 64 bits", "formato de ID", "identificadores únicos"]
+---
+
+Cada objeto en la X API —posts, usuarios, listas, DMs, spaces— tiene un ID único. Entender cómo funcionan estos IDs te ayuda a crear integraciones confiables.
+
+---
+
+## Formato de ID
+
+Los IDs de X son **enteros sin signo de 64 bits** generados con un sistema llamado "Snowflake". Cada ID codifica:
+
+- **Marca de tiempo** — Cuándo se creó el objeto
+- **Número de trabajador** — Qué servidor generó el ID
+- **Número de secuencia** — Orden dentro de ese milisegundo
+
+Esto significa que los IDs están ordenados aproximadamente en el tiempo: los IDs más altos generalmente representan objetos más nuevos.
+
+<Tip>
+Los IDs son únicos a nivel global en toda X, no solo dentro de un mismo tipo de objeto.
+</Tip>
+
+---
+
+## Representación como cadena vs. entero
+
+<Warning>
+**Usa siempre IDs como cadenas en tu código.** Algunos lenguajes de programación (como JavaScript) no pueden representar con precisión enteros de 64 bits.
+</Warning>
+
+En JavaScript, los enteros están limitados a 53 bits. Esto causa pérdida de precisión con IDs grandes:
+
+```javascript
+// ¡Esto pierde precisión!
+const id = 10765432100123456789;
+console.log(id.toString()); // "10765432100123458000" — ¡incorrecto!
+
+// Usa cadenas en su lugar
+const id = "10765432100123456789";
+console.log(id); // "10765432100123456789" — ¡correcto!
+```
+
+### Versiones de la API
+
+| Versión | Formato de ID |
+|:--------|:----------|
+| **X API v2** | Los IDs se devuelven como cadenas por defecto |
+| **X API v1.1** | Devuelve tanto `id` (entero) como `id_str` (cadena): usa siempre `id_str` |
+
+---
+
+## Trabajar con IDs
+
+### Almacenar IDs
+
+Almacena los IDs como cadenas o enteros de 64 bits en tu base de datos:
+
+| Base de datos | Tipo recomendado |
+|:---------|:-----------------|
+| PostgreSQL | `BIGINT` o `TEXT` |
+| MySQL | `BIGINT UNSIGNED` o `VARCHAR(20)` |
+| MongoDB | Cadena |
+| SQLite | `TEXT` (los enteros de SQLite tienen un máximo de 63 bits) |
+
+### Comparar IDs
+
+Al comparar IDs para orden cronológico:
+
+```python
+# Python - seguro para enteros de 64 bits
+if int(id1) > int(id2):
+    print("id1 is newer")
+
+# JavaScript - compara como cadenas (lexicográficamente funciona para IDs de la misma longitud)
+# O usa BigInt
+if (BigInt(id1) > BigInt(id2)) {
+    console.log("id1 is newer");
+}
+```
+
+---
+
+## Tipos de ID comunes
+
+| Objeto | Ejemplo de ID | Notas |
+|:-------|:-----------|:------|
+| Post (Tweet) | `1234567890123456789` | También llamado Tweet ID |
+| Usuario | `2244994945` | Las cuentas más antiguas tienen IDs más cortos |
+| Lista | `1234567890` | |
+| Space | `1YqGodQbNXDxv` | Alfanumérico, no en formato Snowflake |
+| Evento de DM | `1234567890123456789` | |
+
+---
+
+## Recursos relacionados
+
+<CardGroup cols={2}>
+  <Card title="Diccionario de datos" icon="book" href="/x-api/fundamentals/data-dictionary">
+    Consulta los campos de ID para cada tipo de objeto.
+  </Card>
+  <Card title="Post Lookup" icon="magnifying-glass" href="/x-api/posts/lookup/introduction">
+    Recupera posts por ID.
+  </Card>
+</CardGroup>

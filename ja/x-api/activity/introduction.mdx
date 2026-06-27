@@ -1,0 +1,169 @@
+---
+title: はじめに
+sidebarTitle: はじめに
+description: "X Activity API の概要です。post.create、post.delete、プロフィール更新、フォロー、いいねなど X 上のユーザーアクティビティイベントをリアルタイムにストリーミング配信するエンドポイント、Webhook 連携、サブスクリプション管理について解説します。"
+keywords: ["activity API", "X Activity API", "activity events", "profile updates", "post.create", "post.delete", "user activity", "real-time events", "activity stream"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+X Activity API (XAA) のエンドポイントグループにより、開発者は X プラットフォーム上で発生するアクティビティイベントを取得できます。
+
+開発者は、`profile.update.bio`、`post.create`、`post.delete` など関心のあるイベントをサブスクライブし、イベントを取得したいユーザーの User ID でフィルタリングできます。その User ID に一致するイベントは、1 秒未満のレイテンシーでアプリに配信されます。
+
+## 配信方法
+
+X Activity API は現在、アプリへのイベント配信について次の方法をサポートしています:
+
+- 永続的な HTTP ストリーム
+- [Webhook](/x-api/webhooks/introduction)
+
+## サポートされているイベントタイプ
+
+現在、X Activity API はカテゴリ別に整理された次のイベントタイプをサポートしています:
+
+### Post イベント
+
+Post イベントは、ユーザーが Post を作成または削除したときにトリガーされます。
+
+| イベント名 | 説明 | フィルター |
+| --- | --- | --- |
+| `post.create` | ユーザーが Post を作成したときに発火します | `user_id` |
+| `post.delete` | ユーザーが Post を削除したときに発火します | `user_id` |
+
+<Note>
+**XAA 経由の Post イベント vs Filtered Stream:** X Activity API は `post.create` および `post.delete` イベントをサポートしています。`user_id` でサブスクライブすることで、ユーザーが Post を作成または削除した際にリアルタイムで通知を受け取れます。
+
+ターゲットを絞ったキーワードフィルタリング、ブール論理、ジオターゲティング、言語フィルター、または Filtered Stream がサポートするその他の演算子が必要な場合は、代わりに [Filtered Stream](/x-api/posts/filtered-stream/introduction) エンドポイントをご利用ください。
+</Note>
+
+### Follow イベント
+
+Follow イベントは、フィルター対象のユーザーが他のユーザーをフォローしたとき、または他のユーザーからフォローされたときにトリガーされます。
+
+| イベント名 | 説明 | フィルター |
+| --- | --- | --- |
+| `follow.follow` | ユーザーが他のユーザーをフォローしたときに発火します | `user_id` |
+| `follow.unfollow` | ユーザーが他のユーザーをアンフォローしたときに発火します | `user_id` |
+
+### Profile イベント
+
+Profile イベントは、ユーザーがプロフィール情報に変更を加えたときにトリガーされます。
+
+| イベント名 | 説明 | フィルター |
+| --- | --- | --- |
+| `profile.update.bio` | ユーザーがプロフィールの自己紹介を更新したときに発火します | `user_id` |
+| `profile.update.profile_picture` | ユーザーがプロフィール画像を更新したときに発火します | `user_id` |
+| `profile.update.banner_picture` | ユーザーがプロフィールバナーを更新したときに発火します | `user_id` |
+| `profile.update.screenname` | ユーザーが表示名を更新したときに発火します | `user_id` |
+| `profile.update.handle` | ユーザーがハンドルを更新したときに発火します | `user_id` |
+| `profile.update.geo` | ユーザーがプロフィールの所在地を更新したときに発火します | `user_id` |
+| `profile.update.url` | ユーザーがプロフィールのウェブサイト URL を更新したときに発火します | `user_id` |
+| `profile.update.verified_badge` | ユーザーが認証バッジを更新したときに発火します | `user_id` |
+| `profile.update.affiliate_badge` | ユーザーがアフィリエイトバッジを更新したときに発火します | `user_id` |
+
+### Chat イベント
+
+Chat イベントは、新しい暗号化メッセージングスタック、つまり XChat に関連するものです。
+
+| イベント名 | 説明 | フィルター |
+| --- | --- | --- |
+| `chat.received` | ユーザーが暗号化されたダイレクトメッセージを受信したときに発火します | `user_id` |
+| `chat.sent` | ユーザーが暗号化されたダイレクトメッセージを送信したときに発火します | `user_id` |
+| `chat.conversation_join` | ユーザーが暗号化されたチャット会話に参加したときに発火します | `user_id` |
+
+### レガシー DM イベント
+
+レガシー DM イベントは、従来の暗号化されていない DM システムに関連するものです。
+
+| イベント名 | 説明 | フィルター |
+| --- | --- | --- |
+| `dm.received` | ユーザーが暗号化されていないダイレクトメッセージを受信したときに発火します | `user_id` |
+| `dm.sent` | ユーザーが暗号化されていないダイレクトメッセージを送信したときに発火します | `user_id` |
+| `dm.read` | フィルター対象のユーザーの暗号化されていない DM メッセージを相手が読んだとき (いわゆる「既読通知」) に発火します | `user_id` |
+| `dm.indicate_typing` | フィルター対象のユーザーに対して、相手がメッセージを入力中であるときに発火します | `user_id` |
+
+### News イベント
+
+News イベントは、Grok によってキュレーションされたトレンドトピックや見出しの更新情報を提供します。
+
+| イベント名 | 説明 | フィルター |
+| --- | --- | --- |
+| `news.new` | Grok によってキュレーションされた新しいトレンドや見出し | `keyword` |
+
+<Note>
+**エンタープライズ限定:** `news.new` イベントは現時点で、Enterprise および Partner ティアのアカウントでのみ利用可能です。
+</Note>
+
+### Spaces イベント
+
+Spaces イベントは、ユーザーが Space を開始または終了したときにトリガーされます。
+
+| イベント名 | 説明 | フィルター |
+| --- | --- | --- |
+| `spaces.start` | ユーザーが Space を開始したときに発火します | `user_id` |
+| `spaces.end` | ユーザーが Space を終了したときに発火します | `user_id` |
+
+今後のリリースでは、XAA はソーシャルインタラクション、コンテンツエンゲージメント、収益化機能などを含む追加のイベントタイプをサポートするよう拡張される予定です。新しいイベントタイプが利用可能になり次第、ドキュメントを継続的に更新していきます。
+
+## イベントのプライバシーと認証
+
+X Activity API は、X アプリと同等の取り扱いとして、**パブリックイベント**と**プライベートイベント**を以下のように区別しています。
+
+### パブリックイベント
+
+パブリックイベントは、公開ユーザーアカウントが公に行うアクティビティであり、すべての X ユーザーから閲覧可能なものです。これらのイベントは X プラットフォーム上のすべてのユーザーに表示され、閲覧にあたってユーザーからの OAuth 認証を必要としません。
+
+**現在のパブリックイベント:**
+- プロフィールの更新 (自己紹介、画像、バナー、所在地、URL、ユーザー名の変更)
+- Post の作成 (`post.create`) と削除 (`post.delete`)
+
+これらのパブリックイベントについては、フィルターで User ID を指定してサブスクリプションを作成し、XAA 経由で受信できます。
+
+### プライベートイベント
+
+プライベートイベントは、OAuth 認証を通じてユーザーの明示的な同意が必要なアクティビティです。ユーザーは X 経由で認証を行い、これらのイベントへのアクセスを開発者アプリに対して明示的に許可する必要があります。
+
+**プライベートイベントの認証要件:**
+- ユーザーは OAuth 2.0 を介してアプリケーションを認証する必要があります
+- アプリケーションは適切な OAuth スコープを取得する必要があります
+- ユーザーは、これらのイベントへのアクセスをアプリに対して明示的に許可する必要があります
+- プライベートイベントのサブスクリプションは、アプリケーションを承認したユーザーに対してのみ作成できます
+
+## サブスクリプションの上限
+
+X Activity API には、アカウントティアに応じて異なるサブスクリプションの上限があります:
+
+| パッケージティア | サブスクリプションの最大数 |
+| --- | --- |
+| セルフサーブ | 1000 |
+| Enterprise | 50,000 |
+| Partner | 100,000 |
+
+## エンドポイント
+
+| メソッド | エンドポイント | 説明 |
+|:-------|:---------|:------------|
+| GET | [`/2/activity/stream`](/x-api/activity/activity-stream) | アクティビティストリームに接続する |
+| POST | [`/2/activity/subscriptions`](/x-api/activity/create-x-activity-subscription) | サブスクリプションを作成する |
+| GET | [`/2/activity/subscriptions`](/x-api/activity/get-x-activity-subscriptions) | サブスクリプションを一覧表示する |
+| PUT | [`/2/activity/subscriptions/:id`](/x-api/activity/update-x-activity-subscription) | サブスクリプションを更新する |
+| DELETE | [`/2/activity/subscriptions/:id`](/x-api/activity/deletes-x-activity-subscription) | サブスクリプションを削除する |
+
+<Note>
+**アカウントのセットアップ**
+
+これらのエンドポイントにアクセスするには、以下が必要です:
+
+* 承認済みの[開発者アカウント](https://developer.x.com/en/portal/petition/essential/basic-info)。
+* Project 内にある[開発者アプリ](/fundamentals/developer-apps)のキーとトークンを使用した認証。
+
+X API v2 エンドポイントへのアクセス取得について詳しくは、[Getting started ガイド](/x-api/getting-started/getting-access)をご覧ください。
+</Note>
+
+<div className="flex">
+<Button href="/x-api/activity/quickstart">
+  クイックスタート
+</Button>
+</div>
+
