@@ -7,10 +7,12 @@ keywords: ["Chat cryptography", "E2EE primer", "encryption basics", "public key 
 
 import { Button } from '/snippets/button.mdx';
 
-This primer explains the cryptographic concepts behind Chat at a conceptual level. You don't need to understand the technical details to build with Chat — the SDKs handle all cryptographic operations for you — but understanding the concepts helps you make better architectural decisions.
+This primer explains the cryptographic ideas behind Chat at a conceptual level. You do not need this depth to build—the [Chat XDK](/xchat/xchat-xdk) performs encryption, decryption, signing, and key storage for you—but the mental model helps when you design your app or debug behavior.
+
+When you are ready to implement, use [Getting Started](/xchat/getting-started) for a full walkthrough and the [API reference](/x-api/chat/get-chat-conversations) in the sidebar for individual routes.
 
 <Note>
-**You don't need to implement any of this yourself.** The Chat XDK handles all encryption, decryption, key management, and signatures. This document is for understanding, not implementation.
+**You don't implement this cryptography yourself.** The Chat XDK handles it. This page is for understanding, not an API checklist.
 </Note>
 
 ---
@@ -20,10 +22,10 @@ This primer explains the cryptographic concepts behind Chat at a conceptual leve
 Chat uses a layered encryption system where:
 
 1. **Messages** are encrypted with a **conversation key** (fast symmetric encryption)
-2. **Conversation keys** are encrypted to each participant using their **public key** (slower asymmetric encryption)
-3. **All messages** are **signed** to prove authenticity
+2. **Conversation keys** are encrypted to each participant using their **identity public key** (asymmetric key exchange)
+3. **Messages are signed** so recipients can verify who sent them and that nothing was altered
 
-This design is efficient because symmetric encryption is fast (good for messages) while asymmetric encryption is secure for key exchange.
+Symmetric encryption is efficient for lots of message traffic; asymmetric encryption is used mainly to **distribute** conversation keys safely.
 
 ```mermaid
 flowchart TB
@@ -43,11 +45,13 @@ flowchart TB
     end
 ```
 
+In the product flow, X transports **ciphertext and key envelopes**—not readable message content or the raw conversation key. Your app uses the Chat XDK for crypto and the [Chat API](/xchat/introduction) (via the XDK in Python/TypeScript, or HTTPS) to register keys and send or receive those encrypted payloads. See [Getting Started](/xchat/getting-started) for how those pieces fit together.
+
 ---
 
 ## Key types explained
 
-Chat uses three types of keys, each with a specific purpose:
+Chat uses three kinds of key material, each with a specific purpose.
 
 ### 1. Identity keypair
 
@@ -58,7 +62,9 @@ Chat uses three types of keys, each with a specific purpose:
 | **Identity public key** | Shared with others; used to encrypt conversation keys *to* you |
 | **Identity private key** | Kept secret; used to decrypt conversation keys sent *to* you |
 
-When someone wants to add you to a conversation, they encrypt the conversation key using your identity public key. Only your identity private key can decrypt it.
+When someone adds you to a conversation, they encrypt the conversation key using your identity public key. Only your identity private key can decrypt it.
+
+Public halves are registered and discovered through the platform’s **public-key** APIs (see Encryption keys under API reference). Private halves stay in the Chat XDK (for example via [Juicebox](#juicebox-distributed-key-storage) or a carefully protected key blob).
 
 ### 2. Signing keypair
 
@@ -69,19 +75,20 @@ When someone wants to add you to a conversation, they encrypt the conversation k
 | **Signing public key** | Shared with others; used to verify your signatures |
 | **Signing private key** | Kept secret; used to sign your messages |
 
-When you send a message, you sign it with your signing private key. Recipients verify the signature using your signing public key.
+When you send a message, it is signed with your signing private key. Recipients verify using your signing public key (also published through the public-key APIs). The Chat XDK signs as part of encrypting a message and can verify on decrypt when you supply the sender’s public key material.
 
 ### 3. Conversation key
 
-**Purpose:** Encrypt and decrypt messages within a specific conversation
+**Purpose:** Encrypt and decrypt messages (and media) within a specific conversation
 
 | Property | Description |
 |:---------|:------------|
 | **Symmetric** | Same key encrypts and decrypts |
 | **Per-conversation** | Each conversation has its own key |
-| **Shared among participants** | All participants have the same key |
+| **Shared among participants** | All participants who should read the thread have a copy |
+| **Versioned** | Keys can rotate; apps should track versions over time |
 
-Conversation keys are randomly generated when a conversation is created or when keys are rotated. They're distributed to participants by encrypting a copy of the key to each participant's identity public key.
+Conversation keys are generated when a conversation is set up or when keys rotate. Each participant gets an **encrypted copy** of the key, produced with their identity public key. After you decrypt your copy once, you keep the **raw** conversation key and use it for fast message (and [media](/xchat/media)) encryption. Setting up those copies for a conversation is done through the Chat XDK together with conversation **key** endpoints—walked through in [Getting Started](/xchat/getting-started#4-set-up-conversation-keys).
 
 ---
 
@@ -94,16 +101,16 @@ Conversation keys are randomly generated when a conversation is created or when 
     You type: "Hello, how are you?"
   </Step>
   <Step title="Get the conversation key">
-    Your app retrieves the conversation key for this chat (decrypting it with your identity private key if needed).
+    Your app uses the raw conversation key for this chat (from setup or from an earlier key-distribution event), for the right key version.
   </Step>
   <Step title="Encrypt the message">
-    The Chat XDK encrypts your message using the conversation key. The result is random-looking bytes that can only be decrypted with the same key.
+    The Chat XDK encrypts your message with the conversation key. The result is ciphertext that is useless without that key.
   </Step>
   <Step title="Sign the message">
-    The Chat XDK signs the encrypted message with your signing private key. This creates a digital signature that proves you authored this exact message.
+    The Chat XDK signs the encrypted payload with your signing private key, proving you authored this exact content.
   </Step>
   <Step title="Send to X">
-    Your app sends the encrypted message + signature to X via the API. X stores and delivers it without being able to read the contents.
+    Your app sends the encrypted payload and signature to X through the Chat **send message** API. X stores and delivers bytes it cannot read as plaintext.
   </Step>
 </Steps>
 
@@ -111,70 +118,73 @@ Conversation keys are randomly generated when a conversation is created or when 
 
 <Steps>
   <Step title="Receive encrypted data">
-    Your app receives an encrypted message from X (via webhook, stream, or polling).
+    Your app receives ciphertext from X—via [webhooks or an activity stream](/xchat/real-time-events), or by reading conversation **events** for history.
   </Step>
   <Step title="Get the conversation key">
-    Your app retrieves the conversation key for this chat. If this is your first message in the conversation, you'll need to decrypt your copy of the conversation key using your identity private key.
+    Use your cached raw key, or obtain it by decrypting your copy from a key-distribution (key change) event if this is new or rotated.
   </Step>
   <Step title="Verify the signature">
-    The Chat XDK verifies the signature using the sender's signing public key. This confirms the message came from the claimed sender and wasn't tampered with.
+    The Chat XDK checks the signature using the sender’s signing public key (and related identity binding), so you know who sent it and that it was not modified.
   </Step>
   <Step title="Decrypt the message">
-    The Chat XDK decrypts the message using the conversation key. You can now read: "Hello, how are you?"
+    The Chat XDK decrypts with the conversation key. You can now read: "Hello, how are you?"
   </Step>
 </Steps>
+
+Implementation of encrypt, send, receive, and decrypt is in [Getting Started](/xchat/getting-started) and the [Chat XDK](/xchat/xchat-xdk) reference.
 
 ---
 
 ## Key distribution explained
 
-One of the trickier parts of end-to-end encryption is **key distribution** — how do participants get the conversation key securely?
+A central challenge in end-to-end encryption is **key distribution**: how participants get the conversation key **without** X (or an observer) seeing that key in the clear.
 
 ### Initial key setup
 
-When a conversation is created:
+When a conversation is prepared for messaging:
 
-1. A random conversation key is generated
-2. For **each participant**, the conversation key is encrypted using that participant's identity public key
-3. Each participant receives their own encrypted copy of the conversation key
-4. Each participant decrypts their copy using their identity private key
+1. A random conversation key is generated (in the Chat XDK)
+2. For **each participant**, that key is encrypted to their **identity public key**
+3. Those encrypted copies are stored and delivered through X’s Chat APIs
+4. Each participant decrypts **their** copy with their identity private key (in the Chat XDK)
 
-This means X never sees the conversation key in plaintext — it only transports encrypted copies.
+X only ever handles the **wrapped** copies, not the raw conversation key.
 
 ### Key change events
 
-When the conversation key is rotated (e.g., when someone joins or leaves a group), a `KeyChange` event is sent containing new encrypted copies of the conversation key for each participant.
+When the conversation key rotates (for example when membership changes), participants receive a **key change** event with new encrypted copies for each member.
 
 Your app should:
-1. Detect `KeyChange` events
-2. Extract and decrypt the new conversation key
-3. Store it for future messages
+
+1. Notice key-change material on live events or in conversation history
+2. Decrypt and store the new conversation key (and version)
+3. Use the latest version for subsequent sends
+
+[Getting Started](/xchat/getting-started#6-receive-and-decrypt) and [Real-time events](/xchat/real-time-events) describe where those events appear in practice.
 
 ---
 
 ## Juicebox: Distributed key storage
 
-Your private keys (identity and signing) need to be stored securely. Chat uses **Juicebox** for this.
+Your **private** identity and signing keys must be stored carefully. Chat integrates **Juicebox** so keys can be recovered with a PIN across devices without giving any single server the full secret.
 
 ### The problem with traditional key storage
 
 | Approach | Problem |
 |:---------|:--------|
-| Store on device only | Lose your device = lose your keys = lose access to all messages |
-| Store in cloud backup | Cloud provider can access your keys |
-| Remember a long key | Humans can't remember 256-bit keys |
+| Store on device only | Lose the device = lose the keys = lose access to message history |
+| Store in an ordinary cloud backup | The provider might access key material |
+| Remember a long key | People cannot reliably memorize high-entropy keys |
 
 ### How Juicebox solves it
 
-Juicebox uses a technique called **secret sharing** combined with PIN protection:
+Juicebox combines **secret sharing** with **PIN protection**:
 
-1. Your private keys are **split into pieces** (called "shares")
-2. Each piece is sent to a **different independent server** (called "realms")
-3. **No single server** has enough information to reconstruct your keys
-4. To recover your keys, you need to:
-   - Provide your **PIN**
-   - Contact **multiple servers** simultaneously
-5. Wrong PINs are rate-limited to prevent brute-force attacks
+1. Private keys are **split into shares**
+2. Shares are held by **independent realms** (separate servers)
+3. **No single realm** has enough information to reconstruct the keys alone
+4. Recovery requires your **PIN** and cooperation from **enough realms**
+5. Wrong PINs are **rate-limited** to slow guessing
 
 ```mermaid
 flowchart LR
@@ -188,42 +198,33 @@ flowchart LR
     end
 ```
 
-This gives you the best of both worlds:
-- **Recoverable**: You can recover your keys on a new device with just your PIN
-- **Secure**: No single party (including Juicebox operators) can access your keys
+You get recoverability (new device + PIN) without a single party holding the whole secret.
 
 <Note>
-In practice you don't configure Juicebox by hand. The Chat XDK embeds the Juicebox client, and the realm configuration it needs is returned by the X API's public-key endpoints (the `juicebox_config` field). See [Getting Started](/xchat/getting-started#step-2-fetch-your-juicebox-config-and-initialize-the-chat-xdk).
+You do not configure Juicebox servers by hand for the normal path. The Chat XDK includes the Juicebox client; realm configuration comes from the X API as **`juicebox_config`** on your public-key record. First-time PIN storage and later unlock are Chat XDK calls—see [Getting Started](/xchat/getting-started#2-initialize-the-chat-xdk) and [register public keys](/xchat/getting-started#3-register-public-keys-one-time). Some apps (especially servers and bots) use an exported key blob instead of Juicebox; protect that material like a password.
 </Note>
 
 ---
 
 ## Signatures explained
 
-Every Chat message includes a **digital signature** that proves:
+Every Chat message includes a **digital signature** that supports:
 
-1. **Authenticity**: The message was created by the claimed sender
-2. **Integrity**: The message hasn't been modified since signing
+1. **Authenticity** — it was produced with the sender’s signing private key  
+2. **Integrity** — the encrypted content was not modified after signing  
 
 ### How signatures work (conceptually)
 
-| Action | Key Used | Result |
+| Action | Key used | Result |
 |:-------|:---------|:-------|
-| **Sign** | Sender's signing private key | Creates a unique signature for this exact message |
-| **Verify** | Sender's signing public key | Confirms signature matches the message and key |
+| **Sign** | Sender’s signing private key | A signature bound to this exact encrypted message |
+| **Verify** | Sender’s signing public key | Confirms the signature matches the message and key |
 
-If anyone modifies even a single character of the message, the signature verification will fail. And since only the sender has the signing private key, no one else can create a valid signature.
+If anything in the signed material changes, verification fails. Only someone with the signing private key can produce a valid signature for that key.
 
-### Signature verification in your app
+### In your app
 
-When you receive a message, the Chat XDK automatically:
-
-1. Extracts the signature from the message
-2. Retrieves the sender's signing public key
-3. Verifies that the signature is valid for the message content
-4. Returns a `verified: true` or `verified: false` flag
-
-You can configure the SDK to reject unverified messages automatically or handle them in your application logic.
+The Chat XDK signs when you encrypt outbound messages and verifies when you decrypt inbound ones—**if** you provide the sender’s public key material (from the public-key APIs). Results typically include a **verified** flag; you can treat unverified messages as suspicious or configure the SDK to reject them. Details are in the [Chat XDK](/xchat/xchat-xdk) reference.
 
 ---
 
@@ -233,20 +234,20 @@ You can configure the SDK to reject unverified messages automatically or handle 
 
 | Threat | Protection |
 |:-------|:-----------|
-| **X reading messages** | Messages are encrypted before reaching X servers |
-| **Network eavesdroppers** | Encrypted in transit + encrypted content |
-| **Message tampering** | Signatures detect any modification |
-| **Sender impersonation** | Only the real sender can create valid signatures |
-| **Unauthorized access to keys** | Keys stored in distributed Juicebox system |
+| **X reading message bodies** | Content is encrypted before it is sent to X |
+| **Network eavesdroppers** | Transport security plus end-to-end encrypted content |
+| **Message tampering** | Signatures detect modification |
+| **Trivial sender impersonation** | Valid signatures require the sender’s signing private key |
+| **Single-server key theft (with Juicebox)** | Shares are split across realms and PIN-gated |
 
-### What Chat does NOT protect against
+### What Chat does **not** protect against
 
-| Threat | Why Not |
+| Threat | Why not |
 |:-------|:--------|
-| **Compromised device** | If your device is compromised, attackers may access decrypted messages |
-| **Metadata** | X knows who is messaging whom and when (just not the content) |
-| **Forward secrecy** | If your identity key is compromised, past conversation keys could be decrypted |
-| **Post-compromise security** | Key rotation doesn't retroactively protect past messages |
+| **Compromised device** | Plaintext and keys may be exposed on an unlocked client |
+| **Metadata** | X can know who messaged whom and when—not the message text |
+| **Forward secrecy** | Compromise of identity keys can expose conversation keys that were wrapped to those keys |
+| **Post-compromise security** | Rotating keys does not rewrite history |
 
 ---
 
@@ -254,17 +255,17 @@ You can configure the SDK to reject unverified messages automatically or handle 
 
 | Term | Definition |
 |:-----|:-----------|
-| **Symmetric encryption** | Same key encrypts and decrypts (fast, used for messages) |
-| **Asymmetric encryption** | Different keys for encrypt vs decrypt (slower, used for key exchange) |
-| **Public key** | Can be shared with anyone; used to encrypt *to* someone or verify their signatures |
-| **Private key** | Must be kept secret; used to decrypt or sign |
-| **Keypair** | A mathematically linked public key + private key |
-| **ECDH** | Elliptic Curve Diffie-Hellman; the algorithm used for key agreement |
-| **ECDSA** | Elliptic Curve Digital Signature Algorithm; used for signatures |
-| **P-256** | The specific elliptic curve used (also called secp256r1) |
-| **Conversation key** | The symmetric key shared by all participants in a conversation |
-| **Secret sharing** | Splitting a secret into pieces where you need multiple pieces to reconstruct |
-| **Realm** | An independent server in the Juicebox system that holds one share of your keys |
+| **Symmetric encryption** | Same key encrypts and decrypts (used for messages and media streams) |
+| **Asymmetric encryption** | Different keys for encrypt vs decrypt (used to wrap conversation keys) |
+| **Public key** | Safe to share; used to encrypt *to* someone or verify their signatures |
+| **Private key** | Must stay secret; used to decrypt or sign |
+| **Keypair** | A linked public key and private key |
+| **ECDH / ECIES** | Algorithms used when wrapping conversation keys to identity keys |
+| **ECDSA** | Signature algorithm used for message authorship |
+| **P-256** | Elliptic curve used in Chat (secp256r1) |
+| **Conversation key** | Symmetric key shared by participants in one conversation (versioned over time) |
+| **Secret sharing** | Splitting a secret so multiple pieces are needed to reconstruct it |
+| **Realm** | An independent Juicebox server holding one share of your key material |
 
 ---
 
@@ -272,9 +273,15 @@ You can configure the SDK to reject unverified messages automatically or handle 
 
 <CardGroup cols={2}>
   <Card title="Getting Started" icon="rocket" href="/xchat/getting-started">
-    Build your first Chat application step-by-step
+    Implement keys, send, and receive step by step
   </Card>
   <Card title="Chat XDK Reference" icon="code" href="/xchat/xchat-xdk">
-    Full API reference for the encryption SDK
+    Encryption SDK methods and types
+  </Card>
+  <Card title="Introduction" icon="book" href="/xchat/introduction">
+    Product overview and architecture
+  </Card>
+  <Card title="Real-time events" icon="bolt" href="/xchat/real-time-events">
+    How encrypted events are delivered
   </Card>
 </CardGroup>

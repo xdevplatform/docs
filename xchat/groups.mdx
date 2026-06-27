@@ -1,0 +1,112 @@
+---
+title: Group conversations
+sidebarTitle: Groups
+description: Multi-participant Chat conversations, keys, and encrypted metadata
+keywords: ["Chat groups", "group DM", "conversation keys", "group name encryption"]
+---
+
+Group chats use the **same encryption model** as 1:1 Chat: one **conversation key** shared by members, wrapped to each member’s **identity public key**, with messages encrypted and signed by the Chat XDK. What changes is **membership**, **how you create the thread**, and often **encrypted title/avatar** fields on the conversation.
+
+1:1 flows are in [Getting Started](/xchat/getting-started). Endpoint details are under **API reference → Conversations and messages**.
+
+---
+
+## How groups differ from 1:1
+
+| Topic | 1:1 | Group |
+|:------|:----|:------|
+| Identity | Often addressed by peer user id in paths | Conversation id typically starts with `g` |
+| Create | Keys + messaging to a user | Create / initialize group APIs, then keys |
+| Participants | You + one peer | Many users; membership can change |
+| Metadata | Minimal | Name, avatar, etc. may be **ciphertext** (decrypt with the conversation key) |
+| Key rotation | Less frequent | Common when people join or leave |
+
+Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the group, publish participant key wraps, send messages, and load events.
+
+---
+
+## Create the group and establish keys
+
+1. Create or initialize the group via the Chat APIs (see **create group conversation** and **initialize chat group** in the sidebar).
+2. Load each member’s identity public key and version (`GET` public-key routes under **Encryption keys**).
+3. Run **`prepare_conversation_keys`** with **all** members (including yourself)—same helper as 1:1, more rows.
+4. Register wraps with **initialize conversation keys** (or the key fields your create/init response expects). Map SDK **`encrypted_key`** → API **`encrypted_conversation_key`**.
+5. Keep the **raw** conversation key and **version** for encrypt/decrypt.
+
+Language samples for `prepare_conversation_keys` and the keys POST are in [Getting Started — conversation keys](/xchat/getting-started#4-set-up-conversation-keys) (add every member to the input list).
+
+When membership changes, call **add members** (sidebar) as required by the API, then expect **key-change** traffic: treat it like [key rotation in Getting Started](/xchat/getting-started#6-receive-and-decrypt) (`extract_conversation_keys` / `decrypt_events`, then encrypt with the latest version). Advanced admin signing helpers (`sign_add_members`, `sign_key_change`) are on the [Chat XDK](/xchat/xchat-xdk) if your flow requires them.
+
+---
+
+## Encrypted group metadata
+
+Some conversation fields (for example display **name** or **avatar URL**) may arrive **encrypted** under the conversation key. That is **not** `encrypt_message`; it is the generic Chat XDK **`encrypt` / `decrypt`** pair (UTF-8 string in, base64 ciphertext out, with the **raw** conversation key).
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    # Decrypt a field from the conversation object (name may vary by API shape)
+    group_name = chat.decrypt(conversation["group_name"], raw_conv_key)
+
+    # Encrypt before update if your API accepts ciphertext metadata
+    encrypted_name = chat.encrypt("Project team", raw_conv_key)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const groupName = chat.decrypt(conversation.groupName, rawConvKey);
+    const encryptedName = chat.encrypt('Project team', rawConvKey);
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    let group_name = chat.decrypt(&conversation_group_name_b64, &raw_conv_key)?;
+    let encrypted_name = chat.encrypt("Project team", &raw_conv_key)?;
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    groupName, err := chat.Decrypt(conversationGroupNameB64, convKeyB64)
+    encryptedName, err := chat.Encrypt("Project team", convKeyB64)
+    _ = groupName
+    _ = encryptedName
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    string groupName = chat.Decrypt(conversationGroupNameB64, rawConvKey);
+    string encryptedName = chat.Encrypt("Project team", rawConvKey);
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    String groupName = chat.decrypt(conversationGroupNameB64, rawConvKey);
+    String encryptedName = chat.encrypt("Project team", rawConvKey);
+    ```
+  </Tab>
+</Tabs>
+
+Use the **current** conversation key version that applies to that metadata. If keys rotated, decrypt with the version that was active when the field was written (or follow product rules if metadata is always rewritten on rotation).
+
+---
+
+## Messages and events
+
+Sending and receiving in a group is the same as 1:1 once you have the raw conversation key:
+
+- **Send:** `encrypt_message` → send-message API ([Getting Started](/xchat/getting-started#5-send-a-message))
+- **Receive:** events API or [real-time delivery](/xchat/real-time-events) → `decrypt_event` / `decrypt_events`
+- **Media:** [Media](/xchat/media) with the group conversation id
+
+Always encrypt with the **latest** key version after a membership-driven rotation.
+
+---
+
+## Checklist
+
+1. Create/initialize the group via Chat APIs  
+2. `prepare_conversation_keys` for **every** member; POST participant key wraps  
+3. Cache raw key + version; update on key-change events  
+4. Decrypt group metadata with `decrypt` when fields are ciphertext  
+5. Send/receive with the same patterns as 1:1  

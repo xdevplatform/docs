@@ -1,465 +1,260 @@
 ---
 title: Real-time Chat Events
-sidebarTitle: Real-time Events
-description: Receive encrypted chat messages in real-time via webhooks
+sidebarTitle: Real-time events
+description: Receive encrypted chat events via webhooks or the activity stream
 ---
 
-import { Button } from '/snippets/button.mdx';
+X delivers **`chat.received`**, **`chat.sent`**, and related chat activity with **ciphertext** in the payload. Decrypt with the [Chat XDK](/xchat/xchat-xdk).
 
-The X Activity API delivers encrypted chat events (`chat.received` and `chat.sent`) to your application in real-time. Combined with webhooks, you can build responsive chat applications that react instantly to new messages.
+| Layer | Role |
+|:------|:-----|
+| **Activity API** | `GET /2/activity/stream`; `POST` / `GET` / `PUT` / `DELETE` `/2/activity/subscriptions` (see OpenAPI security per operation) |
+| **Account Activity webhooks** | Optional `/2/account_activity/webhooks/...` subscription routes if you terminate on your own HTTPS URL |
+| **Chat XDK** | `extract_conversation_keys`, `decrypt_event` / `decrypt_events` |
 
-## Overview
-
-When a user sends or receives an encrypted DM, X can deliver the event to your webhook endpoint within milliseconds. The event payload contains the encrypted message, which you decrypt using the [Chat XDK](/xchat/xchat-xdk).
-
-```mermaid actions={false}
-flowchart LR
-    A["User sends<br/>encrypted DM"] --> B["X Activity API"] --> C["Your webhook"] --> D["Chat XDK<br/>decrypts message"]
-```
-
-## Chat Event Types
-
-| Event Name | Description | When it fires |
-|:-----------|:------------|:--------------|
-| `chat.received` | User receives an encrypted DM | When someone sends your subscribed user a message |
-| `chat.sent` | User sends an encrypted DM | When your subscribed user sends a message |
-| `chat.conversation_join` | User joins a group conversation | When your subscribed user is added to a group chat |
-
-<Note>
-Chat events are **private events** — they require OAuth 2.0 authentication from the user before you can subscribe to their events.
-</Note>
+Private chat event types need authorization for the user you monitor. Encrypted Chat file attachments use **`media_hash_key`** and Chat media download—not Post API `expansions=attachments.media_keys` / `media.fields=variants`.
 
 ---
 
-## Quick Setup
+## Event types
 
-### 1. Register a Webhook
+| Event | When |
+|:------|:-----|
+| `chat.received` | Subscribed user receives an encrypted DM |
+| `chat.sent` | Subscribed user sends an encrypted DM |
+| `chat.conversation_join` | Subscribed user joins a group (when offered) |
 
-First, register a webhook endpoint to receive events:
+---
 
-<CodeGroup>
-```python Python
-from xdk import Client
+## 1. Choose delivery
 
-client = Client(bearer_token="YOUR_BEARER_TOKEN")
+**Activity stream (often simplest for bots):** `GET /2/activity/stream` with an app Bearer token (optional `backfill_minutes`, `start_time`, `end_time` per OpenAPI). Filter client-side for `chat.received` / `chat.sent`.
 
-# Register your webhook URL
-webhook = client.webhooks.create({"url": "https://your-app.com/webhook"})
-print(f"Webhook ID: {webhook.id}")
-```
+**Activity subscriptions:** manage durable subscriptions with:
 
-```typescript TypeScript
-import { Client } from '@xdevplatform/xdk';
+- `POST /2/activity/subscriptions` — create  
+- `GET /2/activity/subscriptions` — list (paginated)  
+- `PUT /2/activity/subscriptions/{subscription_id}` — update  
+- `DELETE /2/activity/subscriptions/{subscription_id}` or `DELETE /2/activity/subscriptions?ids=` — delete  
 
-const client = new Client({ bearerToken: 'YOUR_BEARER_TOKEN' });
+Request bodies and required scopes are defined in the OpenAPI operation for each route (typically Bearer for app-level XAA management).
 
-// Register your webhook URL
-const webhook = await client.webhooks.create({
-  url: 'https://your-app.com/webhook'
-});
-console.log(`Webhook ID: ${webhook.id}`);
-```
-</CodeGroup>
+**Webhooks (Account Activity-style):** if you terminate events on your HTTPS endpoint, register a webhook, pass CRC challenges, then create subscriptions under `/2/account_activity/webhooks/{webhook_id}/subscriptions/...` (see Account Activity operations in OpenAPI). Python/TypeScript XDK may expose helpers for webhooks and activity when your SDK version includes them.
 
-### 2. Implement CRC Validation
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from xdk import Client
 
-X sends periodic Challenge-Response Check (CRC) requests to verify you control the webhook endpoint. Your server must respond with an HMAC-SHA256 hash.
+    # Stream (app token) — exact helper names depend on your XDK version
+    stream_client = Client(bearer_token="YOUR_BEARER_TOKEN")
+    # for event in stream_client.activity.stream(): ...
 
-<CodeGroup>
-```python Python (Flask)
-import hmac
-import hashlib
-import base64
-from flask import Flask, request, jsonify
-
-app = Flask(__name__)
-CONSUMER_SECRET = "your_consumer_secret"
-
-@app.route('/webhook', methods=['GET'])
-def crc_check():
-    crc_token = request.args.get('crc_token')
-    
-    # Create HMAC SHA-256 hash
-    sha256_hash = hmac.new(
-        CONSUMER_SECRET.encode('utf-8'),
-        msg=crc_token.encode('utf-8'),
-        digestmod=hashlib.sha256
-    ).digest()
-    
-    response_token = base64.b64encode(sha256_hash).decode('utf-8')
-    
-    return jsonify({
-        'response_token': f'sha256={response_token}'
+    # Or create a subscription (check XDK for create_subscription vs activity API)
+    client = Client(bearer_token="YOUR_BEARER_TOKEN")
+    client.activity.create_subscription({
+        "event_type": "chat.received",
+        "filter": {"user_id": "USER_ID_TO_MONITOR"},
     })
-```
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    import { Client } from '@xdevplatform/xdk';
 
-```typescript TypeScript (Express)
-import express from 'express';
-import crypto from 'crypto';
+    const client = new Client({ bearerToken: 'YOUR_BEARER_TOKEN' });
+    await client.activity.createSubscription({
+      event_type: 'chat.received',
+      filter: { user_id: 'USER_ID_TO_MONITOR' },
+    });
+    // Stream: client.activity.stream() when available in your SDK version
+    ```
+  </Tab>
+</Tabs>
 
-const app = express();
-const CONSUMER_SECRET = 'your_consumer_secret';
-
-app.get('/webhook', (req, res) => {
-  const crcToken = req.query.crc_token as string;
-  
-  // Create HMAC SHA-256 hash
-  const hash = crypto
-    .createHmac('sha256', CONSUMER_SECRET)
-    .update(crcToken)
-    .digest('base64');
-  
-  res.json({
-    response_token: `sha256=${hash}`
-  });
-});
-```
-</CodeGroup>
-
-### 3. Subscribe to Chat Events
-
-Create a subscription for the user's chat events:
-
-<CodeGroup>
-```python Python
-# Subscribe to chat events for a user (one subscription per event type)
-received_sub = client.activity.create_subscription(
-    {"event_type": "chat.received", "filter": {"user_id": "USER_ID_TO_MONITOR"}}
-)
-print(f"Subscription: {received_sub.data}")
-
-sent_sub = client.activity.create_subscription(
-    {"event_type": "chat.sent", "filter": {"user_id": "USER_ID_TO_MONITOR"}}
-)
-print(f"Subscription: {sent_sub.data}")
-```
-
-```typescript TypeScript
-// Subscribe to chat events for a user (one subscription per event type)
-const receivedSub = await client.activity.createSubscription({
-  event_type: 'chat.received',
-  filter: { user_id: 'USER_ID_TO_MONITOR' }
-});
-console.log('Subscription:', receivedSub.data);
-
-const sentSub = await client.activity.createSubscription({
-  event_type: 'chat.sent',
-  filter: { user_id: 'USER_ID_TO_MONITOR' }
-});
-console.log('Subscription:', sentSub.data);
-```
-</CodeGroup>
-
-### 4. Handle Incoming Events
-
-When a chat event arrives, decrypt it using the Chat XDK. The encrypted message is in `payload.encoded_event`; the conversation key (when attached) is in `payload.conversation_key_change_event`.
-
-<CodeGroup>
-```python Python (Flask)
-from chat_xdk import Chat
-
-# Initialize Chat XDK (unlocked at startup — see Getting Started)
-chat = Chat(JUICEBOX_CONFIG)
-chat.unlock("YOUR_PIN")
-
-# Cache raw conversation keys in memory (use a database in production)
-# Shape: { conversation_id: { version: key_bytes } }
-conversation_keys = {}
-
-@app.route('/webhook', methods=['POST'])
-def handle_event():
-    event = request.json
-    data = event.get('data', {})
-
-    if data.get('event_type') in ['chat.received', 'chat.sent']:
-        payload = data.get('payload', {})
-        encoded_event = payload.get('encoded_event')
-        conversation_id = payload.get('conversation_id')
-        sender_id = payload.get('sender_id')
-
-        # Refresh keys from the attached key change event (new conversation or rotation)
-        key_change = payload.get('conversation_key_change_event')
-        if key_change:
-            extracted = chat.extract_conversation_keys([key_change])
-            conversation_keys[conversation_id] = extracted['keys']
-
-        # Get stored conversation keys, then decrypt (pass sender signing keys to verify)
-        conv_keys = conversation_keys.get(conversation_id, {})
-        event_obj = chat.decrypt_event(encoded_event, conv_keys, get_signing_keys(sender_id))
-
-        if event_obj.get('type') == 'Message':
-            content = event_obj.get('content', {})
-            if content.get('content_type') == 'Text':
-                print(f"New message: {content.get('text')}")
-                print(f"From: {event_obj.get('sender_id')}")
-                print(f"Verified: {event_obj.get('verified')}")
-
-                # Process the message (e.g., respond, store, analyze)
-                handle_incoming_message(event_obj, conversation_id)
-
-    return '', 200
-```
-
-```typescript TypeScript (Express)
-import { createChat } from 'chat-xdk';
-
-// Initialize Chat XDK (unlocked at startup — see Getting Started)
-const chat = await createChat({ juiceboxConfig, getAuthToken });
-await chat.unlock('YOUR_PIN');
-
-// Cache raw conversation keys in memory (use a database in production)
-const conversationKeys = new Map<string, Record<string, Uint8Array>>();
-
-app.post('/webhook', express.json(), async (req, res) => {
-  const data = req.body?.data ?? {};
-
-  if (data.event_type === 'chat.received' || data.event_type === 'chat.sent') {
-    const payload = data.payload || {};
-    const encodedEvent = payload.encoded_event;
-    const conversationId = payload.conversation_id;
-    const senderId = payload.sender_id;
-
-    // Refresh keys from the attached key change event (new conversation or rotation)
-    if (payload.conversation_key_change_event) {
-      const extracted = chat.extractConversationKeys([payload.conversation_key_change_event]);
-      conversationKeys.set(conversationId, extracted.keys);
-    }
-
-    // Get stored conversation keys, then decrypt (pass sender signing keys to verify)
-    const convKeys = conversationKeys.get(conversationId) || {};
-    const eventObj = chat.decryptEvent(encodedEvent, convKeys, await getSigningKeys(senderId));
-
-    if (eventObj.type === 'message') {
-      const content = eventObj.content;
-      if (content?.contentType === 'text') {
-        console.log('New message:', content.text);
-        console.log('From:', eventObj.senderId);
-        console.log('Verified:', eventObj.verified);
-
-        // Process the message
-        await handleIncomingMessage(eventObj, conversationId);
-      }
-    }
-  }
-
-  res.sendStatus(200);
-});
-```
-</CodeGroup>
-
-<Note>
-**Decrypted event casing differs by SDK.** The Python and Rust bindings use PascalCase event types and snake_case fields (`"Message"`, `content_type`, `sender_id`); the JavaScript/WASM binding uses camelCase throughout (`"message"`, `contentType`, `senderId`). The examples above reflect each language's convention.
-</Note>
+Subscribe to `chat.sent` as well if you need outbound copies. Other languages: call the same `/2/activity/*` HTTPS routes with a Bearer token.
 
 ---
 
-## Event Payload Structure
+## 2. CRC (webhooks only)
 
-Chat events are delivered as JSON wrapped in a `data` envelope. The structure is the same for **webhooks** and the **activity stream** (`GET /2/activity/stream`):
+If you use Account Activity webhooks, respond to Challenge-Response Checks (GET `crc_token`) with HMAC-SHA256 of the token using your consumer secret, in the JSON shape your webhook product expects (typically `sha256=<base64>`).
+
+---
+
+## 3. Decrypt with the Chat XDK
+
+Live fields: **`payload.encoded_event`**, optional **`payload.conversation_key_change_event`**. Deduplicate on **`event_uuid`**.
+
+JavaScript uses camelCase event types (`message`); other bindings use `"Message"` and snake_case fields.
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from chat_xdk import Chat
+
+    chat = Chat(JUICEBOX_CONFIG_JSON)
+    chat.unlock("YOUR_PIN")
+    chat.set_key_version(SIGNING_KEY_VERSION)
+    conversation_keys = {}
+
+    def signing_keys(user_id: str):
+        resp = api_client.chat.get_user_public_keys(
+            user_id,
+            public_key_fields=[
+                "version", "public_key", "signing_public_key", "identity_public_key_signature",
+            ],
+        )
+        return [
+            {
+                "user_id": user_id,
+                "public_key_version": r["version"],
+                "public_key": r["signing_public_key"],
+                "identity_public_key": r["public_key"],
+                "identity_public_key_signature": r["identity_public_key_signature"],
+            }
+            for r in resp.data
+        ]
+
+    data = body.get("data") or {}
+    if data.get("event_type") in ("chat.received", "chat.sent"):
+        p = data.get("payload") or {}
+        cid = p.get("conversation_id")
+        if p.get("conversation_key_change_event"):
+            conversation_keys[cid] = chat.extract_conversation_keys(
+                [p["conversation_key_change_event"]]
+            )["keys"]
+        ev = chat.decrypt_event(
+            p["encoded_event"],
+            conversation_keys.get(cid, {}),
+            signing_keys(p["sender_id"]),
+        )
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    import { createChat } from '@xdevplatform/chat-xdk';
+
+    const chat = await createChat({
+      juiceboxConfig: JUICEBOX_CONFIG_JSON,
+      getAuthToken: async (realmId) => getRealmToken(realmId),
+    });
+    await chat.unlock('YOUR_PIN');
+    chat.setKeyVersion(SIGNING_KEY_VERSION);
+    const conversationKeys = new Map<string, Record<string, Uint8Array>>();
+
+    async function signingKeys(userId: string) {
+      const resp = await apiClient.chat.getUserPublicKeys(userId, {
+        publicKeyFields: [
+          'version', 'public_key', 'signing_public_key', 'identity_public_key_signature',
+        ],
+      });
+      return resp.data.map((r: any) => ({
+        userId,
+        publicKeyVersion: r.version,
+        publicKey: r.signing_public_key,
+        identityPublicKey: r.public_key,
+        identityPublicKeySignature: r.identity_public_key_signature,
+      }));
+    }
+
+    const data = body?.data ?? {};
+    if (data.event_type === 'chat.received' || data.event_type === 'chat.sent') {
+      const p = data.payload ?? {};
+      const cid = p.conversation_id as string;
+      if (p.conversation_key_change_event) {
+        conversationKeys.set(
+          cid,
+          chat.extractConversationKeys([p.conversation_key_change_event]).keys,
+        );
+      }
+      const ev = chat.decryptEvent(
+        p.encoded_event,
+        conversationKeys.get(cid) ?? {},
+        await signingKeys(p.sender_id),
+      );
+    }
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    // chat: ChatCore or Chat, already unlocked / keys imported
+    if let Some(kc) = key_change.as_deref() {
+        let extracted = chat.extract_conversation_keys(&[kc]);
+        conv_keys.extend(extracted.keys);
+    }
+    // sender_signing_keys from GET /2/users/{sender_id}/public_keys
+    let event = chat.decrypt_event(&encoded_event, &conv_keys, &sender_signing_keys)?;
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    if keyChange != "" {
+        extracted, _ := chat.ExtractConversationKeys([]string{keyChange})
+        for v, k := range extracted.Keys {
+            convKeys[v] = k
+        }
+    }
+    event, err := chat.DecryptEvent(encodedEvent, convKeys, senderSigningKeys)
+    if err == nil && event.Type == "Message" {
+        fmt.Println(event.AsMessage().Text())
+    }
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    if (!string.IsNullOrEmpty(keyChangeB64))
+    {
+        var extracted = chat.ExtractConversationKeys(new[] { keyChangeB64 });
+        foreach (var kv in extracted.Keys)
+            convKeys[kv.Key] = kv.Value;
+    }
+    var evt = chat.DecryptEvent(encodedEvent, convKeys, senderSigningKeys);
+    if (evt.GetProperty("type").GetString() == "Message")
+        Console.WriteLine(evt.GetProperty("content").GetProperty("text").GetString());
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    if (keyChangeB64 != null && !keyChangeB64.isEmpty()) {
+        var extracted = chat.extractConversationKeys(List.of(keyChangeB64));
+        convKeys.putAll(extracted.keys);
+    }
+    JsonNode evt = chat.decryptEvent(encodedEvent, convKeys, senderSigningKeys);
+    if ("Message".equals(evt.path("type").asText())) {
+        System.out.println(evt.path("content").path("text").asText());
+    }
+    ```
+  </Tab>
+</Tabs>
+
+History: [`GET …/events`](/x-api/chat/get-chat-conversation-events) + **`decrypt_events`** — see [Getting Started](/xchat/getting-started#6-receive-and-decrypt).
+
+---
+
+## Payload shape (live)
 
 ```json
 {
   "data": {
-    "event_uuid": "abc123def456",
     "event_type": "chat.received",
-    "filter": { "user_id": "1234567890" },
-    "tag": "optional subscription tag",
+    "event_uuid": "…",
     "payload": {
-      "conversation_id": "1234567890-0987654321",
-      "conversation_token": "#EN4d6KF...",
-      "sender_id": "0987654321",
-      "id": "2046813948905676800",
-      "created_at_msec": "1776833448040",
-      "encoded_event": "base64_encoded_message_event...",
-      "conversation_key_version": "1765441245499",
-      "conversation_key_change_event": "base64_encoded_key_change_event...",
-      "message_event_signature": {
-        "public_key_version": "1765441245499",
-        "signature": "base64...",
-        "signature_version": "4",
-        "signing_public_key": "base64..."
-      }
+      "conversation_id": "…",
+      "sender_id": "…",
+      "encoded_event": "…",
+      "conversation_key_version": "…",
+      "conversation_key_change_event": "…"
     }
   }
 }
 ```
 
-| Field | Description |
-|:------|:------------|
-| `data.event_type` | `chat.received`, `chat.sent`, or `chat.conversation_join` |
-| `data.event_uuid` | Unique event ID — use it to deduplicate retried deliveries |
-| `data.filter` | The subscription filter that matched (e.g. `user_id`) |
-| `data.payload.conversation_id` | The conversation identifier (group IDs are prefixed with `g`) |
-| `data.payload.sender_id` | User ID of the message sender |
-| `data.payload.id` | The message ID |
-| `data.payload.encoded_event` | Base64-encoded message event — **decrypt this** with the Chat XDK |
-| `data.payload.conversation_key_version` | Version of the conversation key needed to decrypt `encoded_event` |
-| `data.payload.conversation_key_change_event` | Present when a new key is needed; pass it to `extract_conversation_keys` |
-| `data.payload.encrypted_conversation_key` | Optional — the conversation key encrypted directly for you (decrypt with `decrypt_conversation_key`) |
-| `data.payload.conversation_token` | Optional conversation token |
-| `data.payload.message_event_signature` | Optional signature metadata for the event |
-
-<Warning>
-Earlier drafts of these docs referred to `payload.encrypted_event` and `payload.key_change`. The current field names are **`encoded_event`** (the message to decrypt) and **`conversation_key_change_event`** (the key event to feed into `extract_conversation_keys`).
-</Warning>
-
 ---
 
-## Webhook Requirements
+## Practices
 
-| Requirement | Description |
-|:------------|:------------|
-| **HTTPS** | Webhook URL must use HTTPS |
-| **Publicly accessible** | URL must be reachable from the internet |
-| **No port in URL** | URLs like `https://example.com:5000/webhook` won't work |
-| **Fast response** | Respond within 10 seconds |
-| **200 OK** | Return 200 status to acknowledge receipt |
-| **CRC support** | Respond to Challenge-Response Check requests |
-
----
-
-## Signature Verification
-
-Each webhook POST includes an `x-twitter-webhooks-signature` header. Verify this signature to confirm X is the source:
-
-<CodeGroup>
-```python Python
-import hmac
-import hashlib
-import base64
-
-def verify_signature(payload: bytes, signature: str, consumer_secret: str) -> bool:
-    expected = 'sha256=' + base64.b64encode(
-        hmac.new(
-            consumer_secret.encode('utf-8'),
-            msg=payload,
-            digestmod=hashlib.sha256
-        ).digest()
-    ).decode('utf-8')
-    
-    return hmac.compare_digest(signature, expected)
-
-# In your webhook handler:
-@app.route('/webhook', methods=['POST'])
-def handle_event():
-    signature = request.headers.get('x-twitter-webhooks-signature', '')
-    
-    if not verify_signature(request.data, signature, CONSUMER_SECRET):
-        return 'Invalid signature', 401
-    
-    # Process event...
-```
-
-```typescript TypeScript
-import crypto from 'crypto';
-
-function verifySignature(
-  payload: Buffer,
-  signature: string,
-  consumerSecret: string
-): boolean {
-  const expected = 'sha256=' + crypto
-    .createHmac('sha256', consumerSecret)
-    .update(payload)
-    .digest('base64');
-  
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expected)
-  );
-}
-
-// In your webhook handler:
-app.post('/webhook', express.raw({ type: '*/*' }), (req, res) => {
-  const signature = req.headers['x-twitter-webhooks-signature'] as string;
-  
-  if (!verifySignature(req.body, signature, CONSUMER_SECRET)) {
-    return res.status(401).send('Invalid signature');
-  }
-  
-  // Process event...
-});
-```
-</CodeGroup>
-
----
-
-## Subscription Limits
-
-| Package Tier | Maximum Subscriptions |
-|:-------------|:---------------------|
-| Self-serve | 1,000 |
-| Enterprise | 50,000 |
-| Partner | 100,000 |
-
----
-
-## Best Practices
-
-<CardGroup cols={2}>
-  <Card title="Respond quickly" icon="bolt">
-    Return 200 OK as soon as you receive the event. Process messages asynchronously.
-  </Card>
-  <Card title="Handle duplicates" icon="copy">
-    Use `event_uuid` to deduplicate events. X may retry delivery.
-  </Card>
-  <Card title="Cache conversation keys" icon="key">
-    Cache the raw conversation keys returned by `extract_conversation_keys` so you don't re-run ECIES on every event.
-  </Card>
-  <Card title="Monitor health" icon="heart-pulse">
-    Log and monitor CRC checks. Failed CRCs will disable your webhook.
-  </Card>
-</CardGroup>
-
----
-
-## API Reference
-
-### Activity Subscriptions
-
-Manage which chat events you receive:
-
-| Method | Endpoint | Description |
-|:-------|:---------|:------------|
-| POST | [`/2/activity/subscriptions`](/x-api/activity/create-x-activity-subscription) | Subscribe to `chat.received` / `chat.sent` events |
-| GET | [`/2/activity/subscriptions`](/x-api/activity/get-x-activity-subscriptions) | List your active subscriptions |
-| PUT | [`/2/activity/subscriptions/{subscription_id}`](/x-api/activity/update-x-activity-subscription) | Update subscription filters |
-| DELETE | [`/2/activity/subscriptions/{subscription_id}`](/x-api/activity/deletes-x-activity-subscription) | Remove a subscription |
-
-### Activity Stream
-
-Connect to receive events in real-time:
-
-| Method | Endpoint | Description |
-|:-------|:---------|:------------|
-| GET | [`/2/activity/stream`](/x-api/activity/activity-stream) | Persistent HTTP stream for subscribed events |
-
-### Webhook Management
-
-Register and manage webhook endpoints:
-
-| Method | Endpoint | Description |
-|:-------|:---------|:------------|
-| POST | [`/2/webhooks`](/x-api/webhooks/create-webhook) | Register a new webhook URL |
-| GET | [`/2/webhooks`](/x-api/webhooks/get-webhook) | List your registered webhooks |
-| PUT | [`/2/webhooks/:webhook_id`](/x-api/webhooks/validate-webhook) | Trigger CRC check / re-enable webhook |
-| DELETE | [`/2/webhooks/:webhook_id`](/x-api/webhooks/delete-webhook) | Delete a webhook |
-
----
-
-## Related Resources
-
-<CardGroup cols={2}>
-  <Card title="X Activity API" icon="bell" href="/x-api/activity/introduction">
-    Full Activity API documentation with all event types
-  </Card>
-  <Card title="Webhooks API" icon="webhook" href="/x-api/webhooks/introduction">
-    Webhook management endpoints and security details
-  </Card>
-  <Card title="Chat XDK Reference" icon="code" href="/xchat/xchat-xdk">
-    Complete encryption/decryption API reference
-  </Card>
-  <Card title="Getting Started" icon="rocket" href="/xchat/getting-started">
-    End-to-end tutorial for building encrypted chat
-  </Card>
-</CardGroup>
+- Verify webhook signatures per platform requirements
+- Cache conversation keys and sender public keys
+- Apply key-change blobs before decrypting dependent messages
+- Deduplicate on `event_uuid`
