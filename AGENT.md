@@ -23,7 +23,7 @@ This document provides guidance for AI agents, coding assistants, and LLM-based 
    - Every page supports this. Use it instead of the HTML view when possible.
 
 4. **MCP Server** (for tool-using agents)
-   - https://docs.x.com/tools/mcp — Full Model Context Protocol server exposing 200+ X API endpoints + documentation search.
+   - https://docs.x.com/tools/mcp — Hosted X MCP (`api.x.com/mcp` via `xurl`) + documentation search MCP.
 
 5. **skill.md** (capability summary)
    - https://docs.x.com/skill.md — Structured description of every action an agent can perform with the X API (agentskills.io format).
