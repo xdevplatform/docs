@@ -1,0 +1,348 @@
+---
+title: MCP 서버
+sidebarTitle: MCP
+description: Grok 및 Cursor와 같은 AI 도구를 Model Context Protocol 서버를 통해 X API 및 X 개발자 문서에 연결하세요 — xurl을 통한 호스팅된 X MCP 및 문서 검색.
+keywords: ["XMCP", "MCP", "Model Context Protocol", "docs MCP", "AI agent", "AI tools", "Grok", "Cursor", "xurl", "OpenAPI", "MCP server"]
+---
+
+AI 도구에서 X와 함께 작업할 수 있는 두 가지 [MCP](https://modelcontextprotocol.io)(Model Context Protocol) 서버가 제공됩니다:
+
+| 서버 | 기능 | URL |
+|:-------|:-------------|:----|
+| **X MCP** | X API 엔드포인트 호출 (게시물 검색, 사용자 조회, 북마크, 트렌드, 뉴스, Articles 등) | `https://api.x.com/mcp` (호스팅됨; `xurl mcp`를 통해 연결) |
+| **Docs MCP** | X API 문서 검색 및 읽기 | `https://docs.x.com/mcp` (호스팅됨) |
+
+---
+
+## X MCP — X API
+
+MCP 호환 AI 도구(Grok Build, Cursor, Claude, VS Code 등)를 **X API**에 직접 연결하여 전체 아카이브 검색, 사용자 조회, 북마크 관리, 트렌드 및 뉴스 가져오기, Articles 초안 작성을 모두 본인의 X 계정 권한으로 수행할 수 있습니다.
+
+X API는 **`https://api.x.com/mcp`**에서 호스팅되는 **Streamable HTTP** MCP 서버를 노출합니다(프로토콜 `2025-06-18`, `serverInfo: xmcp`). 오픈 소스 **`xurl mcp`** 브리지를 통해 접근하며, 이 브리지가 OAuth를 처리하고 매 호출마다 최신 Bearer token을 주입합니다.
+
+### 한눈에 보는 기능
+
+| 카테고리 | 모델이 수행할 수 있는 작업 |
+|---|---|
+| **Posts** | 게시물 가져오기, 좋아요/리포스트/인용한 사용자 보기, 최근 카운트 |
+| **Search** | 전체 아카이브 게시물 검색, 사용자 검색, 뉴스 검색 |
+| **Users** | 현재 사용자 식별, ID/핸들로 조회, 사용자의 게시물·타임라인·멘션 읽기 |
+| **Bookmarks** | 북마크 나열/추가/제거 및 북마크 폴더 관리 |
+| **News & Trends** | 뉴스 기사 가져오기, 위치(WOEID)별 트렌드 가져오기 |
+| **Articles** | Articles 초안 작성 및 게시 |
+
+### 작동 방식
+
+X의 OAuth는 *본인 소유의* 개발자 앱을 요구합니다(동적 클라이언트 등록이 없으며 `api.x.com/mcp`는 네이티브 MCP OAuth 디스커버리를 광고하지 않습니다). 따라서 클라이언트를 URL로 직접 가리키는 대신, 앱 ID를 소유하고 1회 로그인을 수행하며 토큰을 항상 최신 상태로 유지하는 작은 로컬 브리지를 실행합니다.
+
+```mermaid
+flowchart LR
+    A["MCP client<br/>(Grok Build, Cursor, …)"] -- "stdio JSON-RPC" --> B["xurl mcp<br/>(local bridge)"]
+    B -- "HTTPS + Authorization: Bearer" --> C[("api.x.com/mcp")]
+    B <-- "OAuth2 PKCE login + auto-refresh" --> D["X OAuth"]
+```
+
+- 브리지는 **npm 런처**(`npx`)를 통해 실행되므로 **별도의 설치 단계가 필요 없습니다**.
+- **캐시된 토큰 없이 처음 실행할 때**, 브라우저를 열어 1회 OAuth2 로그인을 수행한 후 토큰을 캐시하고 이후 **자동 갱신**합니다.
+- 모든 진단 정보는 **stderr**로 출력되며, **stdout은 깔끔한 JSON-RPC 채널로 유지됩니다**.
+
+### 시작하기 전에
+
+1. [X 개발자 포털](https://developer.x.com)에서 **OAuth 2.0**이 활성화된 **X 앱을 생성**합니다.
+2. 첫 실행 시 브라우저 로그인에 필요한 **리다이렉트 URI** `http://localhost:8080/callback`을 앱에 등록합니다. 다른 URI를 사용하려면 `REDIRECT_URI`를 설정하고 해당 URI를 등록하세요.
+3. **`CLIENT_ID`와 `CLIENT_SECRET`을 복사**해 두세요 — 클라이언트 설정에 입력해야 합니다.
+4. **Node.js를 설치**해 두세요 (`npx`에 필요).
+5. **[xurl](https://github.com/xdevplatform/xurl) 설치**를 권장합니다:
+
+   ```bash
+   brew install --cask xdevplatform/tap/xurl      # Homebrew
+   npm install -g @xdevplatform/xurl              # npm (global)
+   curl -fsSL https://raw.githubusercontent.com/xdevplatform/xurl/main/install.sh | bash
+   ```
+
+<Note>
+**첫 로그인에는 브라우저가 필요합니다.** 헤드리스/원격 환경에서는 먼저 `xurl auth oauth2 --headless`(코드 붙여넣기 방식)로 별도 인증을 수행하면, 이후 브리지는 캐시된 토큰을 재사용합니다. [Headless](/tools/mcp#headless--remote-machines)를 참고하세요.
+</Note>
+
+### 클라이언트 연결
+
+#### 1. Grok Build
+
+한 번의 명령으로 서버를 추가합니다(`-e` 플래그는 서버의 환경 변수가 되고, `--` 뒤의 인자는 `npx`로 전달됩니다):
+
+```bash
+grok mcp add xapi npx \
+  -e CLIENT_ID=YOUR_X_APP_CLIENT_ID \
+  -e CLIENT_SECRET=YOUR_X_APP_CLIENT_SECRET \
+  -- -y @xdevplatform/xurl mcp https://api.x.com/mcp
+```
+
+이는 `~/.grok/config.toml`에 다음과 같이 기록됩니다(직접 편집할 수도 있습니다):
+
+```toml
+[mcp_servers.xapi]
+command = "npx"
+args = ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"]
+enabled = true
+startup_timeout_sec = 300          # give the first-run browser login time
+
+[mcp_servers.xapi.env]
+CLIENT_ID = "YOUR_X_APP_CLIENT_ID"
+CLIENT_SECRET = "YOUR_X_APP_CLIENT_SECRET"
+```
+
+확인 및 나열:
+
+```bash
+grok mcp doctor xapi      # ✓ server started, ✓ handshake OK, ✓ tools discovered
+grok mcp list
+```
+
+도구를 처음 호출할 때(또는 `doctor` 실행 시) 브라우저가 열려 X 로그인을 진행합니다 — 1회 완료하면 됩니다.
+
+#### 2. Cursor
+
+`~/.cursor/mcp.json`(전역, 모든 프로젝트) 또는 `.cursor/mcp.json`(이 프로젝트만)을 생성하세요:
+
+```json
+{
+  "mcpServers": {
+    "xapi": {
+      "command": "npx",
+      "args": ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"],
+      "env": {
+        "CLIENT_ID": "YOUR_X_APP_CLIENT_ID",
+        "CLIENT_SECRET": "YOUR_X_APP_CLIENT_SECRET"
+      }
+    }
+  }
+}
+```
+
+그런 다음 **Cursor → Settings → MCP**를 열고 **xapi**에 녹색 표시와 도구 목록이 표시되는지 확인하세요. 처음 사용할 때 Cursor가 브리지를 실행하고 브라우저가 열려 로그인을 진행합니다; 핸드셰이크가 완료되면 도구 목록이 채워집니다.
+
+#### 3. Claude Desktop
+
+`claude_desktop_config.json`을 편집하세요(macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`):
+
+```json
+{
+  "mcpServers": {
+    "xapi": {
+      "command": "npx",
+      "args": ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"],
+      "env": { "CLIENT_ID": "YOUR_X_APP_CLIENT_ID", "CLIENT_SECRET": "YOUR_X_APP_CLIENT_SECRET" }
+    }
+  }
+}
+```
+
+Claude Desktop을 재시작하면 X 도구가 도구(🔌) 메뉴에 표시됩니다.
+
+#### 4. VS Code (GitHub Copilot / Agent mode)
+
+`.vscode/mcp.json`에 추가하세요:
+
+```json
+{
+  "servers": {
+    "xapi": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"],
+      "env": { "CLIENT_ID": "YOUR_X_APP_CLIENT_ID", "CLIENT_SECRET": "YOUR_X_APP_CLIENT_SECRET" }
+    }
+  }
+}
+```
+
+#### 5. 모든 MCP 클라이언트
+
+범용 stdio 설정은 다음과 같습니다:
+
+| 필드 | 값 |
+|---|---|
+| `command` | `npx` |
+| `args` | `["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"]` |
+| `env` | `CLIENT_ID`, `CLIENT_SECRET` |
+| 시작 타임아웃 | **≥ 300초** (첫 실행 로그인이 완료될 수 있도록) |
+
+`xurl`을 네이티브로 설치했다면 `command`/`args`를 `"command": "xurl", "args": ["mcp", "https://api.x.com/mcp"]`로 교체하세요.
+
+### 인증
+
+#### OAuth 2.0 사용자 컨텍스트 (기본)
+
+브리지는 **사용자 본인**으로 인증되며(PKCE 흐름), 도구는 사용자 계정의 스코프로 동작합니다. 자격 증명 해석 순서: **`CLIENT_ID`/`CLIENT_SECRET` 환경 변수 → `~/.xurl`에 있는 활성 앱**. 토큰은 `~/.xurl`에 캐시되고 자동으로 갱신됩니다(`401` 발생 시 강제 갱신 포함).
+
+#### 첫 실행 브라우저 로그인
+
+캐시된 토큰이 없으면 브리지는 stderr로 다음을 출력하고 브라우저를 엽니다:
+
+```
+[xurl mcp] no valid OAuth2 token; opening the browser to sign in -- complete the login to start the bridge...
+[xurl mcp] authentication complete; starting bridge
+```
+
+MCP 핸드셰이크는 로그인이 완료될 때까지 보류됩니다 — 그래서 클라이언트에 넉넉한 `startup_timeout_sec`이 필요합니다.
+
+#### 헤드리스 / 원격 환경
+
+접근 가능한 브라우저가 없나요? 한 번 별도로 인증한 후 클라이언트를 시작하세요:
+
+```bash
+xurl auth oauth2 --headless                 # prints an auth URL; you paste back the redirect URL/code
+xurl auth oauth2 --app my-app --headless    # for a specific app
+```
+
+#### App 전용 (직접 URL, 브리지 없음)
+
+읽기 엔드포인트의 경우 브리지를 건너뛰고 **정적 App 전용 Bearer token**으로 클라이언트를 URL에 직접 연결할 수 있습니다 — 사용자 정의 헤더가 있는 원격 MCP를 지원하는 클라이언트에 유용합니다:
+
+```toml
+# ~/.grok/config.toml
+[mcp_servers.xapi_direct]
+url = "https://api.x.com/mcp"
+enabled = true
+
+[mcp_servers.xapi_direct.headers]
+Authorization = "Bearer YOUR_APP_ONLY_BEARER_TOKEN"
+```
+
+절충점: 자동 갱신이 없고 사용자 컨텍스트도 없습니다(사용자로서의 액션 불가). 전체 기능을 위해서는 브리지 사용을 권장합니다.
+
+#### 여러 앱과 계정
+
+```bash
+xurl --app my-app mcp                  # bridge using a specific registered app
+xurl mcp -u alice https://api.x.com/mcp  # act as a specific OAuth2 user
+```
+
+클라이언트 설정에서는 `args`에 `"--app", "my-app"` 또는 `"-u", "alice"`를 추가하세요.
+
+### 설정 레퍼런스
+
+| 설정 | 위치 | 비고 |
+|---|---|---|
+| `CLIENT_ID` / `CLIENT_SECRET` | `env` | X 앱 자격 증명(또는 `~/.xurl`의 등록된 앱에 의존) |
+| `REDIRECT_URI` | `env` | 콜백을 재정의; 앱에 등록되어 있어야 함. 기본값 `http://localhost:8080/callback` |
+| `startup_timeout_sec` | 클라이언트 설정 | 첫 실행 로그인이 완료되도록 **≥ 300**으로 설정 |
+| `[URL]` 위치 인자 | `args` | 기본값 `https://api.x.com/mcp` |
+| `--app NAME` | `args` | 특정 등록된 앱 사용 |
+| `-u, --username` | `args` | 특정 OAuth2 사용자로 동작 |
+
+고급 환경 변수 재정의(거의 필요 없음): `AUTH_URL`, `TOKEN_URL`, `API_BASE_URL`, `INFO_URL`.
+
+### 검증 및 문제 해결
+
+```bash
+grok mcp doctor xapi          # Grok Build: end-to-end check
+# or test the bridge by hand (Ctrl-C to exit):
+npx -y @xdevplatform/xurl mcp https://api.x.com/mcp
+```
+
+| 증상 | 원인 / 해결 |
+|---|---|
+| 시작 시 클라이언트 타임아웃 | `startup_timeout_sec`를 300 이상으로 올리세요; 브리지가 브라우저 로그인을 대기 중입니다 |
+| 브라우저가 열리지 않음 | 디스플레이 없음(헤드리스) → 먼저 `xurl auth oauth2 --headless`를 실행; `npx`가 해석되는지 확인 |
+| `401` / `token refresh failed` | 앱 자격 증명이 잘못되었거나 리프레시 토큰이 폐기됨 → 다시 로그인(`xurl auth oauth2 [--app NAME]`) |
+| 브라우저에서 리다이렉트/콜백 오류 | `http://localhost:8080/callback`이 앱에 등록되지 않음(또는 `REDIRECT_URI` 불일치) |
+| 로그인 후 `client-not-enrolled` | 앱이 올바른 X 패키지/환경에 없음 → 포털에서 **Pay-per-use** + **Production**으로 이동 |
+| `npx`가 오래된 버전을 가져옴 | 프라이빗 레지스트리 미러가 기본값 → `args`에 `--registry=https://registry.npmjs.org/` 고정 |
+| 비어 있거나 깨진 도구 출력 | 클라이언트를 `--verbose`로 실행하지 마세요; stdout은 깔끔한 JSON-RPC 채널로 유지되어야 합니다 |
+
+### 보안 및 모범 사례
+
+- **`~/.xurl`과 액세스 토큰을 비밀로 취급하세요** — 채팅, 로그, 공유 설정에 붙여넣지 마세요. 원시 비밀을 커밋하는 대신 환경 변수를 참조하는 프로젝트별 `.mcp.json`/`.grok/config.toml`을 선호하세요.
+- MCP에는 **필요한 스코프만 가진 전용 앱을 사용**하세요.
+- **쓰기는 속도 제한에 포함**되며(북마크, `article_publish`) 읽기보다 더 엄격합니다; 가끔 `429`가 발생할 수 있으니 백오프하세요.
+- **브리지는 로컬에서 실행됩니다** — 자격 증명은 TLS를 통해 `api.x.com`에 전송되는 Bearer token을 제외하고 컴퓨터를 떠나지 않습니다.
+
+---
+
+## Docs MCP — 문서 검색
+
+X API 문서를 위한 MCP 서버가 `https://docs.x.com/mcp`에 호스팅되어 있습니다. AI 도구에 연결하여 워크플로우를 벗어나지 않고 문서 페이지를 검색하고 읽을 수 있습니다.
+
+### 사용 가능한 도구
+
+| 도구 | 설명 |
+|:-----|:------------|
+| `search_x` | X 문서 전반에서 관련 정보, 코드 예제, API 레퍼런스, 가이드 검색 |
+| `get_page_x` | 경로로 특정 문서 페이지의 전체 내용 조회 |
+
+### 설정
+
+MCP 클라이언트 설정에 docs MCP 서버를 추가하세요:
+
+```json
+{
+  "mcpServers": {
+    "x-docs": {
+      "url": "https://docs.x.com/mcp"
+    }
+  }
+}
+```
+
+X API로 빌드하면서 AI 어시스턴트가 엔드포인트 세부 정보, 인증 가이드 또는 코드 예제를 실시간으로 조회하기를 원할 때 유용합니다.
+
+---
+
+## 두 서버를 함께 사용하기
+
+두 MCP 서버를 동시에 연결할 수 있습니다. 이를 통해 AI 어시스턴트가 문서를 조회하는 동시에 API를 호출할 수 있습니다.
+
+**Grok Build** (`~/.grok/config.toml`):
+
+```toml
+[mcp_servers.xapi]
+command = "npx"
+args = ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"]
+enabled = true
+startup_timeout_sec = 300
+
+[mcp_servers.xapi.env]
+CLIENT_ID = "YOUR_X_APP_CLIENT_ID"
+CLIENT_SECRET = "YOUR_X_APP_CLIENT_SECRET"
+
+[mcp_servers.x-docs]
+url = "https://docs.x.com/mcp"
+enabled = true
+```
+
+**Cursor / Claude 스타일** (`mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "xapi": {
+      "command": "npx",
+      "args": ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"],
+      "env": {
+        "CLIENT_ID": "YOUR_X_APP_CLIENT_ID",
+        "CLIENT_SECRET": "YOUR_X_APP_CLIENT_SECRET"
+      }
+    },
+    "x-docs": {
+      "url": "https://docs.x.com/mcp"
+    }
+  }
+}
+```
+
+---
+
+## OpenAPI 사양
+
+모든 X API v2 엔드포인트에 대한 머신 판독 가능한 API 사양입니다.
+
+| 리소스 | URL |
+|:---------|:----|
+| **OpenAPI Spec (JSON)** | [`https://api.x.com/2/openapi.json`](https://api.x.com/2/openapi.json) |
+
+```bash
+curl https://api.x.com/2/openapi.json -o openapi.json
+```
+
+이를 사용하여 API 클라이언트를 자동 생성하고, [Postman](https://www.postman.com/xapidevelopers/x-api-public-workspace/collection/34902927-2efc5689-99c6-4ab6-8091-996f35c2fd80)으로 가져오고, 커스텀 AI 에이전트에 공급하거나 요청/응답 스키마를 검증할 수 있습니다.
