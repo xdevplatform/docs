@@ -46,9 +46,22 @@ flowchart LR
 - On **first run with no cached token**, it opens your browser for a one-time OAuth2 login, then caches and **auto-refreshes** the token forever after.
 - All diagnostics go to **stderr**; **stdout stays a clean JSON-RPC channel**.
 
-### Before you begin
+### Getting started
 
-1. **Create an X app** in the [X Developer Portal](https://developer.x.com) with **OAuth 2.0** enabled.
+Pick one of two routes:
+
+* **Simple — App-only Bearer.** Paste your app's Bearer token into an `Authorization` header on the MCP client. No bridge, no browser login. Read-only endpoints; no user context (can't act as you). Works with clients that support remote MCP with custom headers.
+* **Full — `xurl mcp` bridge (OAuth 2.0 user context).** A local bridge handles the OAuth 2.0 PKCE login and auto-refreshes tokens, so the model acts with your account's scopes. Required for writes (bookmarks, Articles) and any user-context tool.
+
+#### Simple route (app-only Bearer)
+
+1. **Create an X app** in the [X Developer Portal](https://developer.x.com).
+2. **Copy your App-only Bearer token** from the app's "Keys and tokens" page.
+3. Point your client at `https://api.x.com/mcp` with the token as an `Authorization` header — see [App-only (direct URL, no bridge)](#app-only-direct-url-no-bridge) below for the snippet.
+
+#### Full route (xurl bridge)
+
+1. **Create an X app** with **OAuth 2.0** enabled.
 2. **Register the redirect URI** `http://localhost:8080/callback` on the app (required for the first-run browser login). To use a different one, set `REDIRECT_URI` and register that instead.
 3. **Copy your `CLIENT_ID` and `CLIENT_SECRET`** — you'll put them in the client config.
 4. **Have Node.js installed** (for `npx`).
@@ -68,18 +81,9 @@ flowchart LR
 
 #### 1. Grok Build
 
-Add the server with one command (the `-e` flags become the server's environment, args after `--` go to `npx`):
+<CodeGroup>
 
-```bash
-grok mcp add xapi npx \
-  -e CLIENT_ID=YOUR_X_APP_CLIENT_ID \
-  -e CLIENT_SECRET=YOUR_X_APP_CLIENT_SECRET \
-  -- -y @xdevplatform/xurl mcp https://api.x.com/mcp
-```
-
-That writes this to `~/.grok/config.toml` (you can also edit it directly):
-
-```toml
+```toml xurl bridge (~/.grok/config.toml)
 [mcp_servers.xapi]
 command = "npx"
 args = ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"]
@@ -89,6 +93,26 @@ startup_timeout_sec = 300          # give the first-run browser login time
 [mcp_servers.xapi.env]
 CLIENT_ID = "YOUR_X_APP_CLIENT_ID"
 CLIENT_SECRET = "YOUR_X_APP_CLIENT_SECRET"
+```
+
+```toml App-only Bearer (~/.grok/config.toml)
+[mcp_servers.xapi]
+url = "https://api.x.com/mcp"
+enabled = true
+
+[mcp_servers.xapi.headers]
+Authorization = "Bearer YOUR_APP_ONLY_BEARER_TOKEN"
+```
+
+</CodeGroup>
+
+Or add the xurl bridge with one command (the `-e` flags become the server's environment, args after `--` go to `npx`):
+
+```bash
+grok mcp add xapi npx \
+  -e CLIENT_ID=YOUR_X_APP_CLIENT_ID \
+  -e CLIENT_SECRET=YOUR_X_APP_CLIENT_SECRET \
+  -- -y @xdevplatform/xurl mcp https://api.x.com/mcp
 ```
 
 Verify and list:
@@ -104,7 +128,9 @@ The first time a tool is invoked (or on `doctor`), your browser opens for the X 
 
 Create `~/.cursor/mcp.json` (global, all projects) or `.cursor/mcp.json` (this project only):
 
-```json
+<CodeGroup>
+
+```json xurl bridge
 {
   "mcpServers": {
     "xapi": {
@@ -119,13 +145,30 @@ Create `~/.cursor/mcp.json` (global, all projects) or `.cursor/mcp.json` (this p
 }
 ```
 
+```json App-only Bearer
+{
+  "mcpServers": {
+    "xapi": {
+      "url": "https://api.x.com/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_APP_ONLY_BEARER_TOKEN"
+      }
+    }
+  }
+}
+```
+
+</CodeGroup>
+
 Then open **Cursor → Settings → MCP**, confirm **xapi** shows a green dot and its tools. On first use Cursor spawns the bridge and your browser opens for login; the tool list populates once the handshake completes.
 
 #### 3. Claude Desktop
 
 Edit `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`):
 
-```json
+<CodeGroup>
+
+```json xurl bridge
 {
   "mcpServers": {
     "xapi": {
@@ -137,13 +180,28 @@ Edit `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/
 }
 ```
 
+```json App-only Bearer
+{
+  "mcpServers": {
+    "xapi": {
+      "url": "https://api.x.com/mcp",
+      "headers": { "Authorization": "Bearer YOUR_APP_ONLY_BEARER_TOKEN" }
+    }
+  }
+}
+```
+
+</CodeGroup>
+
 Restart Claude Desktop; the X tools appear in the tools (🔌) menu.
 
 #### 4. VS Code (GitHub Copilot / Agent mode)
 
 Add to `.vscode/mcp.json`:
 
-```json
+<CodeGroup>
+
+```json xurl bridge
 {
   "servers": {
     "xapi": {
@@ -156,9 +214,23 @@ Add to `.vscode/mcp.json`:
 }
 ```
 
+```json App-only Bearer
+{
+  "servers": {
+    "xapi": {
+      "type": "http",
+      "url": "https://api.x.com/mcp",
+      "headers": { "Authorization": "Bearer YOUR_APP_ONLY_BEARER_TOKEN" }
+    }
+  }
+}
+```
+
+</CodeGroup>
+
 #### 5. Any MCP client
 
-The universal stdio config is:
+**xurl bridge (stdio):**
 
 | Field | Value |
 |---|---|
@@ -168,6 +240,13 @@ The universal stdio config is:
 | startup timeout | **≥ 300s** (so the first-run login can finish) |
 
 If you installed `xurl` natively, replace `command`/`args` with `"command": "xurl", "args": ["mcp", "https://api.x.com/mcp"]`.
+
+**App-only Bearer (remote HTTP):**
+
+| Field | Value |
+|---|---|
+| `url` | `https://api.x.com/mcp` |
+| `headers.Authorization` | `Bearer YOUR_APP_ONLY_BEARER_TOKEN` |
 
 ### Authentication
 
