@@ -1,0 +1,348 @@
+---
+title: Servidores MCP
+sidebarTitle: MCP
+description: Conecta herramientas de IA como Grok y Cursor a la X API y a la documentación para desarrolladores de X mediante servidores Model Context Protocol — X MCP alojado vía xurl y búsqueda en la documentación.
+keywords: ["XMCP", "MCP", "Model Context Protocol", "docs MCP", "AI agent", "AI tools", "Grok", "Cursor", "xurl", "OpenAPI", "MCP server"]
+---
+
+Hay dos servidores [MCP](https://modelcontextprotocol.io) (Model Context Protocol) disponibles para trabajar con X desde herramientas de IA:
+
+| Servidor | Qué hace | URL |
+|:-------|:-------------|:----|
+| **X MCP** | Llama a los endpoints de la X API (buscar posts, consultar usuarios, marcadores, tendencias, noticias, Articles y más) | `https://api.x.com/mcp` (alojado; conéctate vía `xurl mcp`) |
+| **Docs MCP** | Busca y lee la documentación de la X API | `https://docs.x.com/mcp` (alojado) |
+
+---
+
+## X MCP — X API
+
+Conecta cualquier herramienta de IA compatible con MCP (Grok Build, Cursor, Claude, VS Code, …) directamente a la **X API** para que pueda buscar en el archivo completo, consultar usuarios, gestionar marcadores, obtener tendencias y noticias, y redactar borradores de Articles — todo con los permisos de tu propia cuenta de X.
+
+La X API expone un servidor MCP alojado con **Streamable HTTP** en **`https://api.x.com/mcp`** (protocolo `2025-06-18`, `serverInfo: xmcp`). Accedes a él a través del puente de código abierto **`xurl mcp`**, que se encarga del OAuth por ti e inyecta un Bearer token nuevo en cada llamada.
+
+### Capacidades de un vistazo
+
+| Categoría | Lo que el modelo puede hacer |
+|---|---|
+| **Posts** | Obtener posts, ver quiénes dieron like / repostearon / citaron, conteos recientes |
+| **Búsqueda** | Búsqueda de posts en el archivo completo, búsqueda de usuarios, búsqueda de noticias |
+| **Usuarios** | Resolver el usuario actual, buscar por id / handle, leer posts, timeline y menciones de un usuario |
+| **Marcadores** | Listar / agregar / quitar marcadores y gestionar carpetas de marcadores |
+| **Noticias y tendencias** | Obtener noticias, obtener tendencias para una ubicación (WOEID) |
+| **Articles** | Crear borradores de Articles y publicarlos |
+
+### Cómo funciona
+
+El OAuth de X requiere *tu propia* app de desarrollador (no hay registro dinámico de clientes y `api.x.com/mcp` no anuncia el descubrimiento OAuth nativo de MCP). Por eso, en lugar de apuntar tu cliente directamente a la URL, ejecutas un pequeño puente local que posee la identidad de la app, realiza el inicio de sesión único y mantiene el token actualizado.
+
+```mermaid
+flowchart LR
+    A["MCP client<br/>(Grok Build, Cursor, …)"] -- "stdio JSON-RPC" --> B["xurl mcp<br/>(local bridge)"]
+    B -- "HTTPS + Authorization: Bearer" --> C[("api.x.com/mcp")]
+    B <-- "OAuth2 PKCE login + auto-refresh" --> D["X OAuth"]
+```
+
+- El puente se ejecuta mediante el **lanzador de npm** (`npx`), por lo que **no hay un paso de instalación aparte**.
+- En la **primera ejecución sin token en caché**, abre tu navegador para un inicio de sesión OAuth2 único, y luego almacena en caché y **refresca automáticamente** el token para siempre.
+- Todos los diagnósticos van a **stderr**; **stdout permanece como un canal JSON-RPC limpio**.
+
+### Antes de empezar
+
+1. **Crea una app de X** en el [X Developer Portal](https://developer.x.com) con **OAuth 2.0** habilitado.
+2. **Registra la URI de redirección** `http://localhost:8080/callback` en la app (requerida para el inicio de sesión por navegador en la primera ejecución). Para usar otra, define `REDIRECT_URI` y registra esa en su lugar.
+3. **Copia tu `CLIENT_ID` y `CLIENT_SECRET`** — los colocarás en la configuración del cliente.
+4. **Ten Node.js instalado** (para `npx`).
+5. Recomendamos que **instales [xurl](https://github.com/xdevplatform/xurl)**:
+
+   ```bash
+   brew install --cask xdevplatform/tap/xurl      # Homebrew
+   npm install -g @xdevplatform/xurl              # npm (global)
+   curl -fsSL https://raw.githubusercontent.com/xdevplatform/xurl/main/install.sh | bash
+   ```
+
+<Note>
+**El primer inicio de sesión necesita un navegador.** En una máquina sin interfaz gráfica o remota, autentícate primero fuera de banda con `xurl auth oauth2 --headless` (flujo de pegar un código), y luego el puente simplemente reutilizará el token en caché. Consulta [Headless](/tools/mcp#headless--remote-machines).
+</Note>
+
+### Conecta tu cliente
+
+#### 1. Grok Build
+
+Agrega el servidor con un solo comando (los flags `-e` se convierten en el entorno del servidor, los argumentos después de `--` van a `npx`):
+
+```bash
+grok mcp add xapi npx \
+  -e CLIENT_ID=YOUR_X_APP_CLIENT_ID \
+  -e CLIENT_SECRET=YOUR_X_APP_CLIENT_SECRET \
+  -- -y @xdevplatform/xurl mcp https://api.x.com/mcp
+```
+
+Esto escribe lo siguiente en `~/.grok/config.toml` (también puedes editarlo directamente):
+
+```toml
+[mcp_servers.xapi]
+command = "npx"
+args = ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"]
+enabled = true
+startup_timeout_sec = 300          # give the first-run browser login time
+
+[mcp_servers.xapi.env]
+CLIENT_ID = "YOUR_X_APP_CLIENT_ID"
+CLIENT_SECRET = "YOUR_X_APP_CLIENT_SECRET"
+```
+
+Verifica y lista:
+
+```bash
+grok mcp doctor xapi      # ✓ server started, ✓ handshake OK, ✓ tools discovered
+grok mcp list
+```
+
+La primera vez que se invoque una herramienta (o al ejecutar `doctor`), tu navegador se abrirá para iniciar sesión en X — complétalo una vez y listo.
+
+#### 2. Cursor
+
+Crea `~/.cursor/mcp.json` (global, para todos los proyectos) o `.cursor/mcp.json` (solo este proyecto):
+
+```json
+{
+  "mcpServers": {
+    "xapi": {
+      "command": "npx",
+      "args": ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"],
+      "env": {
+        "CLIENT_ID": "YOUR_X_APP_CLIENT_ID",
+        "CLIENT_SECRET": "YOUR_X_APP_CLIENT_SECRET"
+      }
+    }
+  }
+}
+```
+
+Luego abre **Cursor → Settings → MCP**, confirma que **xapi** muestra un punto verde y sus herramientas. En el primer uso, Cursor inicia el puente y tu navegador se abre para iniciar sesión; la lista de herramientas se completa una vez que finaliza el handshake.
+
+#### 3. Claude Desktop
+
+Edita `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`):
+
+```json
+{
+  "mcpServers": {
+    "xapi": {
+      "command": "npx",
+      "args": ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"],
+      "env": { "CLIENT_ID": "YOUR_X_APP_CLIENT_ID", "CLIENT_SECRET": "YOUR_X_APP_CLIENT_SECRET" }
+    }
+  }
+}
+```
+
+Reinicia Claude Desktop; las herramientas de X aparecen en el menú de herramientas (🔌).
+
+#### 4. VS Code (GitHub Copilot / modo Agent)
+
+Agrega a `.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "xapi": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"],
+      "env": { "CLIENT_ID": "YOUR_X_APP_CLIENT_ID", "CLIENT_SECRET": "YOUR_X_APP_CLIENT_SECRET" }
+    }
+  }
+}
+```
+
+#### 5. Cualquier cliente MCP
+
+La configuración universal de stdio es:
+
+| Campo | Valor |
+|---|---|
+| `command` | `npx` |
+| `args` | `["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"]` |
+| `env` | `CLIENT_ID`, `CLIENT_SECRET` |
+| timeout de arranque | **≥ 300s** (para que el inicio de sesión en la primera ejecución pueda completarse) |
+
+Si instalaste `xurl` de forma nativa, reemplaza `command`/`args` por `"command": "xurl", "args": ["mcp", "https://api.x.com/mcp"]`.
+
+### Autenticación
+
+#### Contexto de usuario OAuth 2.0 (predeterminado)
+
+El puente se autentica como **tú** (flujo PKCE), por lo que las herramientas actúan con los scopes de tu cuenta. Orden de resolución de credenciales: **variables de entorno `CLIENT_ID`/`CLIENT_SECRET` → la app activa en `~/.xurl`**. Los tokens se almacenan en caché en `~/.xurl` y se refrescan automáticamente (incluyendo un refresh forzado tras un `401`).
+
+#### Inicio de sesión en navegador en la primera ejecución
+
+Sin un token en caché, el puente imprime en stderr y abre tu navegador:
+
+```
+[xurl mcp] no valid OAuth2 token; opening the browser to sign in -- complete the login to start the bridge...
+[xurl mcp] authentication complete; starting bridge
+```
+
+El handshake de MCP se mantiene en espera hasta que termines — por eso los clientes necesitan un `startup_timeout_sec` generoso.
+
+#### Headless / máquinas remotas
+
+¿No hay un navegador accesible? Autentícate una vez fuera de banda y luego inicia el cliente:
+
+```bash
+xurl auth oauth2 --headless                 # prints an auth URL; you paste back the redirect URL/code
+xurl auth oauth2 --app my-app --headless    # for a specific app
+```
+
+#### Solo aplicación (URL directa, sin puente)
+
+Para endpoints de lectura puedes omitir el puente y apuntar un cliente directamente a la URL con un **Bearer token estático de solo aplicación** — útil para clientes que admiten MCP remoto con headers personalizados:
+
+```toml
+# ~/.grok/config.toml
+[mcp_servers.xapi_direct]
+url = "https://api.x.com/mcp"
+enabled = true
+
+[mcp_servers.xapi_direct.headers]
+Authorization = "Bearer YOUR_APP_ONLY_BEARER_TOKEN"
+```
+
+Contrapartida: sin auto-refresh y sin contexto de usuario (sin acciones como tú). Se recomienda el puente para tener funcionalidad completa.
+
+#### Múltiples apps y cuentas
+
+```bash
+xurl --app my-app mcp                  # bridge using a specific registered app
+xurl mcp -u alice https://api.x.com/mcp  # act as a specific OAuth2 user
+```
+
+En una configuración de cliente, agrega `"--app", "my-app"` o `"-u", "alice"` a `args`.
+
+### Referencia de configuración
+
+| Ajuste | Dónde | Notas |
+|---|---|---|
+| `CLIENT_ID` / `CLIENT_SECRET` | `env` | Las credenciales de tu app de X (o apóyate en una app registrada en `~/.xurl`) |
+| `REDIRECT_URI` | `env` | Sobrescribe el callback; debe estar registrado en la app. Por defecto `http://localhost:8080/callback` |
+| `startup_timeout_sec` | configuración del cliente | Establece **≥ 300** para que el inicio de sesión en la primera ejecución pueda completarse |
+| `[URL]` posicional | `args` | Por defecto `https://api.x.com/mcp` |
+| `--app NAME` | `args` | Usa una app registrada específica |
+| `-u, --username` | `args` | Actúa como un usuario OAuth2 específico |
+
+Sobrescrituras avanzadas de variables de entorno (rara vez necesarias): `AUTH_URL`, `TOKEN_URL`, `API_BASE_URL`, `INFO_URL`.
+
+### Verifica y resuelve problemas
+
+```bash
+grok mcp doctor xapi          # Grok Build: end-to-end check
+# or test the bridge by hand (Ctrl-C to exit):
+npx -y @xdevplatform/xurl mcp https://api.x.com/mcp
+```
+
+| Síntoma | Causa / Solución |
+|---|---|
+| El cliente excede el tiempo de espera al arrancar | Aumenta `startup_timeout_sec` a 300+; el puente está esperando tu inicio de sesión en el navegador |
+| El navegador nunca se abre | Sin display (headless) → ejecuta primero `xurl auth oauth2 --headless`; asegúrate de que `npx` se resuelva |
+| `401` / `token refresh failed` | Credenciales de la app incorrectas, o refresh token revocado → vuelve a ejecutar el inicio de sesión (`xurl auth oauth2 [--app NAME]`) |
+| Error de redirect/callback en el navegador | `http://localhost:8080/callback` no está registrado en la app (o `REDIRECT_URI` no coincide) |
+| `client-not-enrolled` después de iniciar sesión | La app no está en el paquete/entorno correcto de X → en el portal muévela a **Pay-per-use** + **Production** |
+| `npx` descarga una versión obsoleta | Hay un mirror de registro privado por defecto → fija `--registry=https://registry.npmjs.org/` en `args` |
+| Salida vacía o ilegible de las herramientas | No ejecutes el cliente con `--verbose`; stdout debe permanecer como un canal JSON-RPC limpio |
+
+### Seguridad y mejores prácticas
+
+- **Trata `~/.xurl` y los access tokens como secretos** — no los pegues en chats, logs ni configuraciones compartidas. Prefiere archivos `.mcp.json`/`.grok/config.toml` por proyecto que referencien variables de entorno antes que comprometer secretos en texto plano.
+- **Usa una app dedicada** para MCP con solo los scopes que necesites.
+- **Las escrituras cuentan para los límites de tasa** (marcadores, `article_publish`) y son más estrictas que las lecturas; espera `429`s ocasionales y aplica back off.
+- **El puente es local** — tus credenciales nunca salen de tu máquina excepto como un Bearer token enviado por TLS a `api.x.com`.
+
+---
+
+## Docs MCP — búsqueda en la documentación
+
+Hay un servidor MCP para la documentación de la X API alojado en `https://docs.x.com/mcp`. Conéctalo a tu herramienta de IA para buscar y leer páginas de documentación sin salir de tu flujo de trabajo.
+
+### Herramientas disponibles
+
+| Herramienta | Descripción |
+|:-----|:------------|
+| `search_x` | Busca en la documentación de X información relevante, ejemplos de código, referencias de la API y guías |
+| `get_page_x` | Recupera el contenido completo de una página de documentación específica por su ruta |
+
+### Configuración
+
+Agrega el servidor MCP de la documentación a la configuración de tu cliente MCP:
+
+```json
+{
+  "mcpServers": {
+    "x-docs": {
+      "url": "https://docs.x.com/mcp"
+    }
+  }
+}
+```
+
+Esto es útil cuando estás construyendo con la X API y quieres que tu asistente de IA consulte sobre la marcha detalles de endpoints, guías de autenticación o ejemplos de código.
+
+---
+
+## Usando ambos servidores juntos
+
+Puedes conectar ambos servidores MCP simultáneamente. Esto le da a tu asistente de IA la capacidad de consultar la documentación *y* llamar a la API.
+
+**Grok Build** (`~/.grok/config.toml`):
+
+```toml
+[mcp_servers.xapi]
+command = "npx"
+args = ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"]
+enabled = true
+startup_timeout_sec = 300
+
+[mcp_servers.xapi.env]
+CLIENT_ID = "YOUR_X_APP_CLIENT_ID"
+CLIENT_SECRET = "YOUR_X_APP_CLIENT_SECRET"
+
+[mcp_servers.x-docs]
+url = "https://docs.x.com/mcp"
+enabled = true
+```
+
+**Estilo Cursor / Claude** (`mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "xapi": {
+      "command": "npx",
+      "args": ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"],
+      "env": {
+        "CLIENT_ID": "YOUR_X_APP_CLIENT_ID",
+        "CLIENT_SECRET": "YOUR_X_APP_CLIENT_SECRET"
+      }
+    },
+    "x-docs": {
+      "url": "https://docs.x.com/mcp"
+    }
+  }
+}
+```
+
+---
+
+## Especificación OpenAPI
+
+La especificación de la API legible por máquina para todos los endpoints de la X API v2.
+
+| Recurso | URL |
+|:---------|:----|
+| **Especificación OpenAPI (JSON)** | [`https://api.x.com/2/openapi.json`](https://api.x.com/2/openapi.json) |
+
+```bash
+curl https://api.x.com/2/openapi.json -o openapi.json
+```
+
+Puedes usarla para autogenerar clientes de API, importarla en [Postman](https://www.postman.com/xapidevelopers/x-api-public-workspace/collection/34902927-2efc5689-99c6-4ab6-8091-996f35c2fd80), alimentarla en agentes de IA personalizados o validar esquemas de petición/respuesta.
