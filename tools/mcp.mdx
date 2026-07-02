@@ -63,7 +63,7 @@ Pick one of two routes:
 
 1. **Create an X app** with **OAuth 2.0** enabled.
 2. **Register the redirect URI** `http://localhost:8080/callback` on the app (required for the first-run browser login). To use a different one, set `REDIRECT_URI` and register that instead.
-3. **Copy your `CLIENT_ID` and `CLIENT_SECRET`** — you'll put them in the client config.
+3. **Copy your `CLIENT_ID` and `CLIENT_SECRET`** — you'll put them in the client config. If you ever run `xurl auth oauth2` manually (e.g., the headless flow below), export them as environment variables in that shell first — the login fails in the browser without them.
 4. **Have Node.js installed** (for `npx`).
 5. We recommend you **install [xurl](https://github.com/xdevplatform/xurl)**:
 
@@ -270,6 +270,11 @@ The MCP handshake is held until you finish — that's why clients need a generou
 No reachable browser? Authenticate once out-of-band, then start the client:
 
 ```bash
+# Required: the env block in your client config only applies to the bridge,
+# not to manual xurl runs — export the credentials in this shell first.
+export CLIENT_ID="YOUR_X_APP_CLIENT_ID"
+export CLIENT_SECRET="YOUR_X_APP_CLIENT_SECRET"
+
 xurl auth oauth2 --headless                 # prints an auth URL; you paste back the redirect URL/code
 xurl auth oauth2 --app my-app --headless    # for a specific app
 ```
@@ -291,6 +296,10 @@ Authorization = "Bearer YOUR_APP_ONLY_BEARER_TOKEN"
 Trade-off: no auto-refresh and no user context (no actions as you). The bridge is recommended for full functionality.
 
 #### Multiple apps & accounts
+
+<Note>
+The OAuth login authorizes **whichever X account is logged in when the browser opens** — not necessarily the account that owns the app. If you're posting on behalf of a secondary/bot account, switch to that account in your browser before completing the login (or use `-u` to pick a previously authorized user).
+</Note>
 
 ```bash
 xurl --app my-app mcp                  # bridge using a specific registered app
@@ -325,6 +334,7 @@ npx -y @xdevplatform/xurl mcp https://api.x.com/mcp
 | Client times out on startup | Raise `startup_timeout_sec` to 300+; the bridge is waiting on your browser login |
 | Browser never opens | No display (headless) → run `xurl auth oauth2 --headless` first; ensure `npx` resolves |
 | `401` / `token refresh failed` | App credentials wrong, or refresh token revoked → re-run the login (`xurl auth oauth2 [--app NAME]`) |
+| Browser shows "Something went wrong — You weren't able to give access to the App" | `CLIENT_ID`/`CLIENT_SECRET` not set where `xurl` runs → put them in the client's `env` block, or `export` them in your shell before running `xurl auth oauth2` manually |
 | Redirect/callback error in browser | `http://localhost:8080/callback` not registered on the app (or `REDIRECT_URI` mismatch) |
 | `client-not-enrolled` after login | App isn't in the right X package/environment → in the portal move it to **Pay-per-use** + **Production** |
 | `npx` pulls a stale version | A private registry mirror is default → pin `--registry=https://registry.npmjs.org/` in `args` |
