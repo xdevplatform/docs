@@ -16,7 +16,7 @@ Dois servidores [MCP](https://modelcontextprotocol.io) (Model Context Protocol) 
 
 ## X MCP — X API
 
-Conecte qualquer ferramenta de IA compatível com MCP (Grok Build, Cursor, Claude, VS Code, …) diretamente à **X API**. O modelo pode então pesquisar todo o arquivo, consultar usuários, gerenciar bookmarks, buscar trends e news e redigir Articles — tudo com as permissões da sua própria conta X.
+Conecte qualquer ferramenta de IA compatível com MCP (Grok Build, Cursor, Claude, VS Code, entre outras) diretamente à **X API**. O modelo pode então pesquisar todo o arquivo, consultar usuários, gerenciar bookmarks, buscar trends e news e redigir Articles — tudo com as permissões da sua própria conta X.
 
 A X API expõe um servidor MCP hospedado em **Streamable HTTP** em **`https://api.x.com/mcp`** (protocolo `2025-06-18`, `serverInfo: xmcp`). Você o acessa por meio da ponte open-source **`xurl mcp`**, que cuida do OAuth para você e injeta um Bearer token novo em cada chamada.
 
@@ -50,7 +50,7 @@ flowchart LR
 
 Escolha um dos dois caminhos:
 
-* **Simples — Bearer app-only.** Cole o Bearer token do seu app em um cabeçalho `Authorization` no cliente MCP. Sem ponte, sem login no navegador. Endpoints somente de leitura; sem contexto de usuário (não age em seu nome). Funciona com clientes que suportam MCP remoto com cabeçalhos customizados.
+* **Simples — Bearer app-only.** Cole o Bearer token do seu app em um cabeçalho `Authorization` no cliente MCP. Sem ponte, sem login pelo navegador. Endpoints somente de leitura; sem contexto de usuário (não age em seu nome). Funciona com clientes que suportam MCP remoto com cabeçalhos customizados.
 * **Completo — ponte `xurl mcp` (contexto de usuário OAuth 2.0).** Uma ponte local cuida do login OAuth 2.0 PKCE e atualiza os tokens automaticamente, então o modelo age com os escopos da sua conta. Necessário para escritas (bookmarks, Articles) e qualquer ferramenta de contexto de usuário.
 
 #### Caminho simples (Bearer app-only)
@@ -63,7 +63,7 @@ Escolha um dos dois caminhos:
 
 1. **Crie um app X** com **OAuth 2.0** habilitado.
 2. **Registre o redirect URI** `http://localhost:8080/callback` no app (necessário para o login pelo navegador na primeira execução). Para usar outro, defina `REDIRECT_URI` e registre esse no lugar.
-3. **Copie seu `CLIENT_ID` e `CLIENT_SECRET`** — você os colocará na configuração do cliente.
+3. **Copie seu `CLIENT_ID` e `CLIENT_SECRET`** — você os colocará na configuração do cliente. Se algum dia você executar `xurl auth oauth2` manualmente (por exemplo, no fluxo headless abaixo), exporte-os como variáveis de ambiente nesse shell antes — o login falha no navegador sem eles.
 4. **Tenha o Node.js instalado** (para o `npx`).
 5. Recomendamos que você **instale o [xurl](https://github.com/xdevplatform/xurl)**:
 
@@ -270,6 +270,11 @@ O handshake do MCP fica em espera até você concluir — por isso os clientes p
 Sem navegador acessível? Autentique-se uma vez fora de banda e depois inicie o cliente:
 
 ```bash
+# Obrigatório: o bloco env na configuração do seu cliente só se aplica à ponte,
+# não a execuções manuais do xurl — exporte as credenciais neste shell primeiro.
+export CLIENT_ID="YOUR_X_APP_CLIENT_ID"
+export CLIENT_SECRET="YOUR_X_APP_CLIENT_SECRET"
+
 xurl auth oauth2 --headless                 # prints an auth URL; you paste back the redirect URL/code
 xurl auth oauth2 --app my-app --headless    # for a specific app
 ```
@@ -291,6 +296,10 @@ Authorization = "Bearer YOUR_APP_ONLY_BEARER_TOKEN"
 Contrapartida: sem auto-refresh e sem contexto de usuário (sem ações em seu nome). A ponte é recomendada para funcionalidade completa.
 
 #### Múltiplos apps e contas
+
+<Note>
+O login OAuth autoriza **a conta X que estiver logada quando o navegador abrir** — não necessariamente a conta dona do app. Se você estiver postando em nome de uma conta secundária/bot, troque para essa conta no seu navegador antes de concluir o login (ou use `-u` para escolher um usuário já autorizado).
+</Note>
 
 ```bash
 xurl --app my-app mcp                  # bridge using a specific registered app
@@ -325,6 +334,7 @@ npx -y @xdevplatform/xurl mcp https://api.x.com/mcp
 | Cliente expira na inicialização | Aumente `startup_timeout_sec` para 300+; a ponte está esperando seu login pelo navegador |
 | Navegador nunca abre | Sem display (headless) → execute `xurl auth oauth2 --headless` primeiro; garanta que `npx` resolva |
 | `401` / `token refresh failed` | Credenciais do app erradas, ou refresh token revogado → refaça o login (`xurl auth oauth2 [--app NAME]`) |
+| Navegador mostra "Something went wrong — You weren't able to give access to the App" | `CLIENT_ID`/`CLIENT_SECRET` não definidos onde o `xurl` roda → coloque-os no bloco `env` do cliente, ou faça `export` deles no seu shell antes de executar `xurl auth oauth2` manualmente |
 | Erro de redirect/callback no navegador | `http://localhost:8080/callback` não registrado no app (ou `REDIRECT_URI` divergente) |
 | `client-not-enrolled` após login | O app não está no pacote/ambiente X correto → no portal, mova-o para **Pay-per-use** + **Production** |
 | `npx` puxa uma versão antiga | Um mirror de registry privado está como padrão → fixe `--registry=https://registry.npmjs.org/` em `args` |
