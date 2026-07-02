@@ -63,7 +63,7 @@ Elige una de dos rutas:
 
 1. **Crea una app de X** con **OAuth 2.0** habilitado.
 2. **Registra la URI de redirección** `http://localhost:8080/callback` en la app (requerida para el inicio de sesión por navegador en la primera ejecución). Para usar otra, define `REDIRECT_URI` y registra esa en su lugar.
-3. **Copia tu `CLIENT_ID` y `CLIENT_SECRET`** — los colocarás en la configuración del cliente.
+3. **Copia tu `CLIENT_ID` y `CLIENT_SECRET`** — los colocarás en la configuración del cliente. Si alguna vez ejecutas `xurl auth oauth2` manualmente (por ejemplo, el flujo headless de más abajo), expórtalos como variables de entorno en esa shell primero — el inicio de sesión falla en el navegador sin ellos.
 4. **Ten Node.js instalado** (para `npx`).
 5. Recomendamos que **instales [xurl](https://github.com/xdevplatform/xurl)**:
 
@@ -270,6 +270,11 @@ El handshake de MCP se mantiene en espera hasta que termines — por eso los cli
 ¿No hay un navegador accesible? Autentícate una vez fuera de banda y luego inicia el cliente:
 
 ```bash
+# Requerido: el bloque env en la configuración de tu cliente solo se aplica al puente,
+# no a las ejecuciones manuales de xurl — exporta las credenciales en esta shell primero.
+export CLIENT_ID="YOUR_X_APP_CLIENT_ID"
+export CLIENT_SECRET="YOUR_X_APP_CLIENT_SECRET"
+
 xurl auth oauth2 --headless                 # prints an auth URL; you paste back the redirect URL/code
 xurl auth oauth2 --app my-app --headless    # for a specific app
 ```
@@ -291,6 +296,10 @@ Authorization = "Bearer YOUR_APP_ONLY_BEARER_TOKEN"
 Contrapartida: sin auto-refresh y sin contexto de usuario (sin acciones como tú). Se recomienda el puente para tener funcionalidad completa.
 
 #### Múltiples apps y cuentas
+
+<Note>
+El inicio de sesión OAuth autoriza **la cuenta de X que tengas iniciada cuando se abra el navegador** — no necesariamente la cuenta propietaria de la app. Si vas a publicar en nombre de una cuenta secundaria o bot, cambia a esa cuenta en el navegador antes de completar el inicio de sesión (o usa `-u` para elegir un usuario previamente autorizado).
+</Note>
 
 ```bash
 xurl --app my-app mcp                  # bridge using a specific registered app
@@ -325,6 +334,7 @@ npx -y @xdevplatform/xurl mcp https://api.x.com/mcp
 | El cliente excede el tiempo de espera al arrancar | Aumenta `startup_timeout_sec` a 300+; el puente está esperando tu inicio de sesión en el navegador |
 | El navegador nunca se abre | Sin display (headless) → ejecuta primero `xurl auth oauth2 --headless`; asegúrate de que `npx` se resuelva |
 | `401` / `token refresh failed` | Credenciales de la app incorrectas, o refresh token revocado → vuelve a ejecutar el inicio de sesión (`xurl auth oauth2 [--app NAME]`) |
+| El navegador muestra "Something went wrong — You weren't able to give access to the App" | `CLIENT_ID`/`CLIENT_SECRET` no están definidos donde se ejecuta `xurl` → agrégalos al bloque `env` del cliente, o haz `export` en tu shell antes de ejecutar `xurl auth oauth2` manualmente |
 | Error de redirect/callback en el navegador | `http://localhost:8080/callback` no está registrado en la app (o `REDIRECT_URI` no coincide) |
 | `client-not-enrolled` después de iniciar sesión | La app no está en el paquete/entorno correcto de X → en el portal muévela a **Pay-per-use** + **Production** |
 | `npx` descarga una versión obsoleta | Hay un mirror de registro privado por defecto → fija `--registry=https://registry.npmjs.org/` en `args` |
