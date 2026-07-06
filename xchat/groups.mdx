@@ -27,15 +27,86 @@ Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the gro
 
 ## Create the group and establish keys
 
-1. Create or initialize the group via the Chat APIs (see **create group conversation** and **initialize chat group** in the sidebar).
-2. Load each member’s identity public key and version (`GET` public-key routes under **Encryption keys**).
-3. Run **`prepare_conversation_keys`** with **all** members (including yourself)—same helper as 1:1, more rows.
-4. Register wraps with **initialize conversation keys** (or the key fields your create/init response expects). Map SDK **`encrypted_key`** → API **`encrypted_conversation_key`**.
+1. Mint the group id with `POST /2/chat/conversations/group/initialize` — the response's `data.conversation_id` is the `g…` id you use everywhere below.
+2. Load each member's identity public key and `public_key_version` (`GET` public-key routes under **Encryption keys**).
+3. Run **`prepare_group_create`** once, with **all** members (including yourself), the `g…` id, and the member/admin id lists. One call generates the conversation key, wraps it for every member, and signs the create — it returns **two** action signatures (the conversation-key change and the group create).
+4. `POST /2/chat/conversations/group` with the group members/admins, `conversation_key_version`, `conversation_participant_keys` (SDK **`encrypted_key`** → API **`encrypted_conversation_key`**), and **both** `action_signatures`. Validation failures come back as stable, human-readable messages, for example `"Too many members: adding these members would exceed the allowed group size."` or `"Cannot add all members: one or more of the requested members cannot be added to this conversation."`.
 5. Keep the **raw** conversation key and **version** for encrypt/decrypt.
 
-Language samples for `prepare_conversation_keys` and the keys POST are in [Getting Started — conversation keys](/xchat/getting-started#4-set-up-conversation-keys) (add every member to the input list).
+<Tabs>
+  <Tab title="Python">
+    ```python
+    prepared = chat.prepare_group_create(
+        "YOUR_USER_ID", signing_key_version, member_public_keys,
+        group_id,  # g… id from POST /2/chat/conversations/group/initialize
+        member_ids, admin_ids, title="Project team",
+    )
+    # POST /2/chat/conversations/group with group_members, group_admins,
+    # conversation_key_version, conversation_participant_keys, and BOTH
+    # entries of prepared["action_signatures"]
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const prepared = chat.prepareGroupCreate(
+      myUserId, signingKeyVersion, memberPublicKeys,
+      groupId, // g… id from POST /2/chat/conversations/group/initialize
+      memberIds, adminIds, 'Project team',
+    );
+    // prepared.actionSignatures has two entries — send both
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    let prepared = chat.prepare_group_create(
+        &sender_id, &signing_key_version, &member_public_keys,
+        &group_id, &member_ids, &admin_ids,
+        Some("Project team"), None, None,
+    )?;
+    // prepared.action_signatures has two entries — send both
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    prepared, err := chat.PrepareGroupCreate(chatxdk.PrepareGroupCreateParams{
+        SenderID: myUserID, SigningKeyVersion: signingKeyVersion,
+        PublicKeys: memberPublicKeys, ConversationID: groupID,
+        MemberIDs: memberIDs, AdminIDs: adminIDs, Title: "Project team",
+    })
+    // prepared.ActionSignatures has two entries — send both
+    _ = prepared
+    _ = err
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    var prepared = chat.PrepareGroupCreate(new PrepareGroupCreateParams {
+        SenderId = myUserId, SigningKeyVersion = signingKeyVersion,
+        PublicKeys = memberPublicKeys, ConversationId = groupId,
+        MemberIds = memberIds, AdminIds = adminIds, Title = "Project team",
+    });
+    // prepared.ActionSignatures has two entries — send both
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    PrepareGroupCreateParams params = new PrepareGroupCreateParams();
+    params.senderId = myUserId;
+    params.signingKeyVersion = signingKeyVersion;
+    params.publicKeys = memberPublicKeys;
+    params.conversationId = groupId;
+    params.memberIds = memberIds;
+    params.adminIds = adminIds;
+    params.title = "Project team";
+    PreparedConversationChange prepared = chat.prepareGroupCreate(params);
+    // prepared.actionSignatures has two entries — send both
+    ```
+  </Tab>
+</Tabs>
 
-When membership changes, call **add members** (sidebar) as required by the API, then expect **key-change** traffic: treat it like [key rotation in Getting Started](/xchat/getting-started#6-receive-and-decrypt) (`extract_conversation_keys` / `decrypt_events`, then encrypt with the latest version). Advanced admin signing helpers (`sign_add_members`, `sign_key_change`) are on the [Chat XDK](/xchat/xchat-xdk) if your flow requires them.
+The body mapping for participant keys and action signatures (`message_id`, `encoded_message_event_detail`, nested `message_event_signature`) is the same as the keys POST in [Getting Started — conversation keys](/xchat/getting-started#4-set-up-conversation-keys).
+
+When membership changes, call **`prepare_group_members_change`** with the new member ids plus the current roster (members, admins, pending members, and the current title/avatar/TTL if set). It rotates the conversation key and, like group create, returns **two** action signatures — POST all of it to **add members** (`POST /2/chat/conversations/{id}/members`). Then expect **key-change** traffic: treat it like [key rotation in Getting Started](/xchat/getting-started#6-receive-and-decrypt) (`extract_conversation_keys` / `decrypt_events`, then encrypt with the latest version).
 
 ---
 
@@ -105,8 +176,9 @@ Always encrypt with the **latest** key version after a membership-driven rotatio
 
 ## Checklist
 
-1. Create/initialize the group via Chat APIs  
-2. `prepare_conversation_keys` for **every** member; POST participant key wraps  
+1. Mint the `g…` id with `POST /2/chat/conversations/group/initialize`  
+2. `prepare_group_create` with **every** member; POST participant key wraps and **both** action signatures to `POST /2/chat/conversations/group`  
 3. Cache raw key + version; update on key-change events  
-4. Decrypt group metadata with `decrypt` when fields are ciphertext  
-5. Send/receive with the same patterns as 1:1  
+4. On membership changes, `prepare_group_members_change` (two signatures) → `POST …/{id}/members`  
+5. Decrypt group metadata with `decrypt` when fields are ciphertext  
+6. Send/receive with the same patterns as 1:1  
