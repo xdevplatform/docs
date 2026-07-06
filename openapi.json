@@ -1151,7 +1151,7 @@
           {
             "name" : "id",
             "in" : "path",
-            "description" : "The recipient's user ID for a 1:1 conversation, or a group conversation ID (prefixed with 'g').",
+            "description" : "The recipient's user ID for a 1:1 conversation, the hyphen-separated 1:1 conversation ID (e.g. '123-456'), or a group conversation ID (prefixed with 'g').",
             "required" : true,
             "schema" : {
               "$ref" : "#/components/schemas/ChatConversationOrRecipientId"
@@ -1232,17 +1232,17 @@
         "tags" : [
           "Chat"
         ],
-        "summary" : "Initialize Conversation Keys",
-        "description" : "Initializes encryption keys for a Chat conversation. This is the first step\nbefore sending messages in a new 1:1 conversation.\n\nFor 1:1 conversations, provide the recipient's user ID as the conversation_id.\nThe server constructs the canonical conversation ID from the authenticated user\nand recipient.\n\nThe request body must contain the conversation key version and participant keys\n(the conversation key encrypted for each participant using their public key).\n\n**Workflow (1:1 conversation):**\n1. Generate a conversation key using the SDK\n2. Encrypt the key for both participants using their public keys\n3. Call this endpoint to register the keys\n4. Send messages using `POST /chat/conversations/{id}/messages`\n\n**Authentication:**\n- Requires OAuth 1.0a User Context or OAuth 2.0 User Context\n- Required scopes: `tweet.read`, `users.read`, `dm.write`\n",
+        "summary" : "Add Conversation Keys",
+        "description" : "Adds (initializes or rotates) the encryption keys for a Chat conversation.\nCall this before sending messages in a new 1:1 conversation, and again with a\nnewer key version to rotate the conversation key.\n\nFor 1:1 conversations, provide the recipient's user ID as the conversation_id.\nThe server constructs the canonical conversation ID from the authenticated user\nand recipient.\n\nThe request body must contain the conversation key version and participant keys\n(the conversation key encrypted for each participant using their public key).\n\n**Workflow (new 1:1 conversation):**\n1. Generate a conversation key using the SDK\n2. Encrypt the key for both participants using their public keys\n3. Call this endpoint to register the keys\n4. Send messages using `POST /chat/conversations/{id}/messages`\n\nTo rotate the keys of an existing conversation, repeat the same call with a\nnewer conversation key version.\n\n**Authentication:**\n- Requires OAuth 1.0a User Context or OAuth 2.0 User Context\n- Required scopes: `tweet.read`, `users.read`, `dm.write`\n",
         "externalDocs" : {
           "url" : "https://developer.x.com/"
         },
-        "operationId" : "initializeChatConversationKeys",
+        "operationId" : "addConversationKeys",
         "parameters" : [
           {
             "name" : "id",
             "in" : "path",
-            "description" : "The recipient's user ID for a 1:1 conversation, or a group conversation ID (prefixed with 'g').",
+            "description" : "The recipient's user ID for a 1:1 conversation, the hyphen-separated 1:1 conversation ID (e.g. '123-456'), or a group conversation ID (prefixed with 'g').",
             "required" : true,
             "schema" : {
               "$ref" : "#/components/schemas/ChatConversationOrRecipientId"
@@ -1316,7 +1316,7 @@
           {
             "name" : "id",
             "in" : "path",
-            "description" : "The Chat group conversation ID.",
+            "description" : "The Chat group conversation ID (prefixed with 'g').",
             "required" : true,
             "schema" : {
               "$ref" : "#/components/schemas/ChatConversationOrRecipientId"
@@ -1390,7 +1390,7 @@
           {
             "name" : "id",
             "in" : "path",
-            "description" : "The recipient's user ID for a 1:1 conversation, or a group conversation ID (prefixed with 'g').",
+            "description" : "The recipient's user ID for a 1:1 conversation, the hyphen-separated 1:1 conversation ID (e.g. '123-456'), or a group conversation ID (prefixed with 'g').",
             "required" : true,
             "schema" : {
               "$ref" : "#/components/schemas/ChatConversationOrRecipientId"
@@ -1464,7 +1464,7 @@
           {
             "name" : "id",
             "in" : "path",
-            "description" : "The recipient's user ID for a 1:1 conversation, or a group conversation ID (prefixed with 'g').",
+            "description" : "The recipient's user ID for a 1:1 conversation, the hyphen-separated 1:1 conversation ID (e.g. '123-456'), or a group conversation ID (prefixed with 'g').",
             "required" : true,
             "schema" : {
               "$ref" : "#/components/schemas/ChatConversationOrRecipientId"
@@ -1538,7 +1538,7 @@
           {
             "name" : "id",
             "in" : "path",
-            "description" : "The recipient's user ID for a 1:1 conversation, or a group conversation ID (prefixed with 'g').",
+            "description" : "The recipient's user ID for a 1:1 conversation, the hyphen-separated 1:1 conversation ID (e.g. '123-456'), or a group conversation ID (prefixed with 'g').",
             "required" : true,
             "schema" : {
               "$ref" : "#/components/schemas/ChatConversationOrRecipientId"
@@ -1810,7 +1810,7 @@
           {
             "name" : "id",
             "in" : "path",
-            "description" : "The recipient's user ID for a 1:1 conversation, or a group conversation ID (prefixed with 'g').",
+            "description" : "The recipient's user ID for a 1:1 conversation, the hyphen-separated 1:1 conversation ID (e.g. '123-456'), or a group conversation ID (prefixed with 'g').",
             "required" : true,
             "schema" : {
               "$ref" : "#/components/schemas/ChatConversationOrRecipientId"
@@ -15044,24 +15044,70 @@
           }
         }
       },
+      "ChatActionMessageEventSignature" : {
+        "type" : "object",
+        "description" : "Message event signature supplied with an action signature.",
+        "required" : [
+          "signature",
+          "public_key_version",
+          "signature_version"
+        ],
+        "properties" : {
+          "message_signing_key_info_list" : {
+            "type" : "array",
+            "description" : "List of signing key information for message verification.",
+            "items" : {
+              "$ref" : "#/components/schemas/ChatMessageSigningKeyInfo"
+            }
+          },
+          "public_key_version" : {
+            "type" : "string",
+            "description" : "The version of the public key used for signing.",
+            "pattern" : "^[0-9]+$"
+          },
+          "signature" : {
+            "type" : "string",
+            "description" : "The signature of the message event.",
+            "minLength" : 1,
+            "pattern" : "^[A-Za-z0-9+/=_-]+$"
+          },
+          "signature_version" : {
+            "type" : "string",
+            "description" : "The version of the signature algorithm.",
+            "pattern" : "^[0-9]+$"
+          },
+          "signing_public_key" : {
+            "type" : "string",
+            "description" : "The public key used for signing."
+          }
+        }
+      },
       "ChatActionSignature" : {
         "type" : "object",
         "description" : "Cryptographic signature for a chat action.",
+        "required" : [
+          "message_id",
+          "encoded_message_event_detail",
+          "message_event_signature"
+        ],
         "properties" : {
           "encoded_message_event_detail" : {
             "type" : "string",
-            "description" : "Base64-encoded message event detail."
+            "description" : "Base64-encoded message event detail.",
+            "minLength" : 1,
+            "pattern" : "^[A-Za-z0-9+/=_-]+$"
           },
           "message_event_signature" : {
-            "$ref" : "#/components/schemas/ChatMessageEventSignature"
+            "$ref" : "#/components/schemas/ChatActionMessageEventSignature"
           },
           "message_id" : {
             "type" : "string",
-            "description" : "ID of the message being signed."
+            "description" : "Client-generated ID of the message being signed.",
+            "minLength" : 1
           },
           "signature_payload" : {
             "type" : "string",
-            "description" : "Cryptographic signature payload."
+            "description" : "Payload string the client signed; used only in server-side failure logs."
           }
         }
       },
@@ -15175,7 +15221,7 @@
         "type" : "object",
         "properties" : {
           "data" : {
-            "$ref" : "#/components/schemas/ChatPublicKey"
+            "$ref" : "#/components/schemas/PublicKey"
           },
           "errors" : {
             "type" : "array",
@@ -15214,7 +15260,7 @@
           },
           "id" : {
             "type" : "string",
-            "description" : "The unique identifier for this conversation."
+            "description" : "The unique identifier for this conversation: the hyphen-separated participant pair for a 1:1 conversation (e.g. '123-456'), or a 'g'-prefixed ID for a group."
           },
           "is_muted" : {
             "type" : "boolean",
@@ -15361,7 +15407,7 @@
             "properties" : {
               "conversation_id" : {
                 "type" : "string",
-                "description" : "The ID of the created conversation."
+                "description" : "The ID of the created group conversation (prefixed with 'g')."
               },
               "conversation_key_change_sequence_id" : {
                 "type" : "string",
@@ -15501,6 +15547,10 @@
           "data" : {
             "type" : "object",
             "properties" : {
+              "conversation_id" : {
+                "type" : "string",
+                "description" : "Canonical ID of the conversation the keys were added to: the hyphen-joined participant pair for a one-to-one (for example `123-456`), or the g-prefixed ID for a group. Use this ID for subsequent requests and to match conversation events."
+              },
               "sequence_id" : {
                 "type" : "string",
                 "description" : "Sequence ID of the conversation key change event. Use this to track key changes in the conversation event stream."
@@ -15551,15 +15601,15 @@
           },
           "realm_state_string" : {
             "type" : "string",
-            "description" : "Serialized realm state for key recovery."
+            "description" : "Serialized realm state for key recovery. Only returned when registering a key."
           },
           "recover_threshold" : {
             "type" : "integer",
-            "description" : "Threshold required to recover the key."
+            "description" : "Threshold required to recover the key. Only returned when registering a key."
           },
           "register_threshold" : {
             "type" : "integer",
-            "description" : "Threshold required to register the key."
+            "description" : "Threshold required to register the key. Only returned when registering a key."
           },
           "token_map" : {
             "type" : "array",
@@ -15581,7 +15631,7 @@
                     },
                     "public_key" : {
                       "type" : "string",
-                      "description" : "Realm public key."
+                      "description" : "Realm public key. Only returned when registering a key."
                     },
                     "token" : {
                       "type" : "string",
@@ -15755,7 +15805,7 @@
             "properties" : {
               "conversation_id" : {
                 "type" : "string",
-                "description" : "Conversation id associated with the upload.",
+                "description" : "Conversation ID associated with the upload: the colon-separated participant pair for a 1:1 conversation, or a 'g'-prefixed ID for a group.",
                 "example" : "1603419216513746946:1603419216513746946"
               },
               "media_hash_key" : {
@@ -15781,7 +15831,7 @@
         "properties" : {
           "conversation_id" : {
             "type" : "string",
-            "description" : "The conversation ID this message belongs to."
+            "description" : "The conversation ID this message belongs to, in the form embedded in events: the colon-separated participant pair for a 1:1 conversation (e.g. '123:456'), or a 'g'-prefixed ID for a group."
           },
           "conversation_token" : {
             "type" : "string",
@@ -15864,31 +15914,6 @@
           "signing_public_key" : {
             "type" : "string",
             "description" : "The signing public key."
-          }
-        }
-      },
-      "ChatPublicKey" : {
-        "type" : "object",
-        "description" : "A user's public key with associated key recovery configuration.",
-        "properties" : {
-          "identity_public_key_signature" : {
-            "type" : "string",
-            "description" : "DER-encoded signature proving the signing key is bound to the identity key (base64 encoded)."
-          },
-          "juicebox_config" : {
-            "$ref" : "#/components/schemas/ChatJuiceboxConfig"
-          },
-          "public_key" : {
-            "type" : "string",
-            "description" : "Identity public key (base64 encoded)."
-          },
-          "signing_public_key" : {
-            "type" : "string",
-            "description" : "Signing public key (base64 encoded)."
-          },
-          "version" : {
-            "type" : "string",
-            "description" : "Public key version."
           }
         }
       },
@@ -21852,58 +21877,26 @@
       },
       "PublicKey" : {
         "type" : "object",
-        "description" : "Public key information for Chat encryption",
+        "description" : "A user's public key with associated key recovery configuration.",
         "properties" : {
           "identity_public_key_signature" : {
             "type" : "string",
             "description" : "DER-encoded signature proving the signing key is bound to the identity key (base64 encoded)."
           },
+          "juicebox_config" : {
+            "$ref" : "#/components/schemas/ChatJuiceboxConfig"
+          },
           "public_key" : {
             "type" : "string",
             "description" : "Identity public key (base64 encoded)."
           },
+          "public_key_version" : {
+            "type" : "string",
+            "description" : "Public key version."
+          },
           "signing_public_key" : {
             "type" : "string",
             "description" : "Signing public key (base64 encoded)."
-          },
-          "token_map" : {
-            "type" : "object",
-            "description" : "Juicebox configuration.",
-            "properties" : {
-              "key_store_token_map_json" : {
-                "type" : "string",
-                "description" : "Raw JSON for Juicebox SDK."
-              },
-              "max_guess_count" : {
-                "type" : "integer",
-                "description" : "Maximum guess count for Juicebox."
-              },
-              "realms" : {
-                "type" : "array",
-                "description" : "List of Juicebox realms.",
-                "items" : {
-                  "type" : "object",
-                  "properties" : {
-                    "address" : {
-                      "type" : "string",
-                      "description" : "Realm URL."
-                    },
-                    "realm_id" : {
-                      "type" : "string",
-                      "description" : "Realm identifier."
-                    },
-                    "token" : {
-                      "type" : "string",
-                      "description" : "JWT auth token for realm."
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "version" : {
-            "type" : "string",
-            "description" : "Public key version."
           }
         }
       },
@@ -26476,16 +26469,16 @@
               "identity_public_key_signature",
               "juicebox_config",
               "public_key",
-              "signing_public_key",
-              "version"
+              "public_key_version",
+              "signing_public_key"
             ]
           },
           "example" : [
             "identity_public_key_signature",
             "juicebox_config",
             "public_key",
-            "signing_public_key",
-            "version"
+            "public_key_version",
+            "signing_public_key"
           ]
         },
         "explode" : false,
