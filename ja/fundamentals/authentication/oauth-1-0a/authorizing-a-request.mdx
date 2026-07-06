@@ -1,0 +1,144 @@
+---
+title: リクエストの認可
+description: "consumer key、nonce、signature、timestamp、token、version フィールドを含む OAuth 1.0a Authorization ヘッダーを構築して、X API リクエストに署名します。"
+sidebarTitle: リクエストの認可
+keywords: ["リクエスト認可", "OAuth 認可", "リクエスト認可", "OAuth 1.0a 認可", "API リクエスト認可"]
+---
+
+import { Button } from "/snippets/button.mdx";
+
+### リクエストの認可
+
+このドキュメントの目的は、X API に認可済みリクエストを送信するために、HTTP リクエストをどのように変更するかを示すことです。
+
+X の API はすべて HTTP プロトコルに基づいています。つまり、X の API を使用するために書くソフトウェアは、X のサーバーに一連の構造化されたメッセージを送信します。例えば、「**Hello Ladies + Gentlemen, a signed OAuth request!**」というテキストを Tweet として投稿するリクエストは次のようになります:
+```
+POST /1.1/statuses/update.json?include_entities=true HTTP/1.1
+Accept: */*
+Connection: close
+User-Agent: OAuth gem v0.4.4
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 76
+Host: api.x.com
+
+status=Hello%20Ladies%20%2b%20Gentlemen%2c%20a%20signed%20OAuth%20request%21
+```
+どの HTTP ライブラリでも、上記のリクエストを最小限の労力で生成・発行できるはずです。しかし、上記のリクエストは以下の点を判別する方法がないため、無効と見なされます:
+
+1.  どのアプリケーションがリクエストを行っているのか
+2.  リクエストがどのユーザーに代わって投稿しているのか
+3.  ユーザーがそのアプリケーションに自身に代わって投稿する認可を与えたかどうか
+4.  リクエストが送信中に第三者によって改ざんされていないかどうか
+
+アプリケーションがこの情報を提供できるようにするため、X の API は [OAuth 1.0a プロトコル](http://tools.ietf.org/html/rfc5849) に依存しています。ごく簡略化して言うと、X の実装では、認可が必要なリクエストに、上記の質問に答えるのに十分な情報を含む追加の HTTP Authorization ヘッダーを含める必要があります。上記の HTTP リクエストにこのヘッダーを追加したものは以下のようになります (通常、Authorization ヘッダーは 1 行である必要がありますが、ここでは可読性のため折り返しています):
+```
+POST /1.1/statuses/update.json?include_entities=true HTTP/1.1
+Accept: */*
+Connection: close
+User-Agent: OAuth gem v0.4.4
+Content-Type: application/x-www-form-urlencoded
+Authorization:
+OAuth oauth\_consumer\_key="xvz1evFS4wEEPTGEFPHBog",
+oauth_nonce="kYjzVBB8Y0ZFabxSWbWovY3uYSQ2pTgmZeNu2VS4cg",
+oauth_signature="tnnArxj06cWHq44gCs1OSKk%2FjLY%3D",
+oauth\_signature\_method="HMAC-SHA1",
+oauth_timestamp="1318622958",
+oauth_token="370773112-GmHxMAgYyLbNEtIKZeRNFsMKPR9EyMZeS9weJAEb",
+oauth_version="1.0"
+Content-Length: 76
+Host: api.x.com
+
+status=Hello%20Ladies%20%2b%20Gentlemen%2c%20a%20signed%20OAuth%20request%21
+```
+このリクエストが作成されたとき、X API により有効なものとして受け付けられたはずです。
+
+この署名プロセスがあなたのインテグレーションの範囲を超えているように感じる場合は、OAuth を使わずに X API と対話できる [Web Intents](https://dev.x.com/web/intents) の利用を検討してください。
+ 
+
+**パラメーターの収集**
+
+ヘッダーには 7 つのキー/値のペアが含まれており、キーはすべて「oauth_」で始まっていることが分かるはずです。任意の X API リクエストに対して、これら 7 つの値を収集し同様のヘッダーを作成することで、そのリクエストの認可を指定できます。各値がどのように生成されたかを以下に説明します:
+
+**Consumer key**
+
+oauth_consumer_key は、どのアプリケーションがリクエストを行っているかを識別します。この値は、[Developer Console](/resources/fundamentals/developer-portal) 内のあなたの [X アプリ](/resources/fundamentals/developer-apps) の設定ページから取得します。
+
+|     |     |
+| :--- | :--- |
+| oauth_consumer_key | xvz1evFS4wEEPTGEFPHBog |
+
+**Nonce**
+
+oauth_nonce パラメーターは、ユニークなリクエストごとにアプリケーションが生成すべき一意のトークンです。X はこの値を使って、リクエストが複数回送信されたかどうかを判定します。このリクエストの値は 32 バイトのランダムデータを base64 エンコードし、非単語文字を取り除いて生成されていますが、比較的ランダムな英数字の文字列を生成する方法であればなんでも問題ありません。
+
+|     |     |
+| :--- | :--- |
+| oauth_nonce | kYjzVBB8Y0ZFabxSWbWovY3uYSQ2pTgmZeNu2VS4cg |
+
+**Signature**
+
+oauth_signature パラメーターには、他のすべてのリクエストパラメーターと 2 つの secret 値を署名アルゴリズムに通して生成された値が含まれます。この署名の目的は、リクエストが送信中に変更されていないこと、リクエストを送信しているアプリケーションを検証し、そのアプリケーションがユーザーのアカウントとやり取りする認可を持っていることを X が検証できるようにすることです。
+
+このリクエストの oauth_signature を計算するプロセスは、[署名の作成](/resources/fundamentals/authentication/oauth-1-0a/creating-a-signature) で説明されています。
+
+|     |     |
+| :--- | :--- |
+| oauth_signature | tnnArxj06cWHq44gCs1OSKk/jLY= |
+
+**Signature method**
+
+X で使用される oauth_signature_method は HMAC-SHA1 です。X の API に送信される認可済みのリクエストには、この値を使用する必要があります。
+
+|     |     |
+| :--- | :--- |
+| oauth_signature_method | HMAC-SHA1 |
+
+**Timestamp**
+
+oauth_timestamp パラメーターは、リクエストが作成されたタイミングを示します。この値はリクエストが生成される時点の Unix エポックからの秒数であり、ほとんどのプログラミング言語で簡単に生成できます。X は過去に作成されたリクエストを拒否するため、リクエストを生成するコンピューターの時刻を NTP で同期させておくことが重要です。
+
+|     |     |
+| :--- | :--- |
+| oauth_timestamp | 1318622958 |
+
+**Token**
+
+oauth_token パラメーターは通常、ユーザーがそのアカウントへのアクセスをあなたのアプリケーションと共有することを許可したことを表します。この値が渡されない、または異なる形式のトークンとなる認証リクエストがいくつかありますが、詳細は [Access Token の取得](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens) で説明されています。ほとんどの汎用的なリクエストでは、いわゆる **access token** を使用します。
+
+有効な [access token](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens) は、[Developer Console](/resources/fundamentals/developer-portal) 上のあなたの [X アプリ](/resources/fundamentals/developer-apps) の設定ページで自分のアカウント用に生成できます。
+
+|     |     |
+| :--- | :--- |
+| oauth_token | 370773112-GmHxMAgYyLbNEtIKZeRNFsMKPR9EyMZeS9weJAEb |
+
+**Version**
+
+oauth_version パラメーターは、X API に送信されるすべてのリクエストで常に 1.0 である必要があります。
+
+|     |     |
+| :--- | :--- |
+| oauth_version | 1.0 |
+
+
+#### ヘッダー文字列の作成
+
+ヘッダー文字列を作成するには、DST という文字列に書き込むと想像してください。
+
+1.  DST に文字列「OAuth 」(末尾のスペースを含む) を追加します。
+2.  上記の 7 つのパラメーターの各キー/値のペアについて:
+    1.  キーを [パーセントエンコード](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens) して DST に追加します。
+    2.  等号「=」を DST に追加します。
+    3.  ダブルクォート「"」を DST に追加します。
+    4.  値を [パーセントエンコード](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens) して DST に追加します。
+    5.  ダブルクォート「"」を DST に追加します。
+    6.  残りのキー/値のペアがある場合は、カンマ「,」とスペース「 」を DST に追加します。
+
+この文字列を作成する際、値のパーセントエンコーディングには特に注意してください。例えば、oauth_signature の値 tnnArxj06cWHq44gCs1OSKk/jLY= は tnnArxj06cWHq44gCs1OSKk%2FjLY%3D としてエンコードする必要があります。
+
+上記で収集したパラメーターに対してこれらの手順を実行すると、次の文字列が得られます:
+
+```
+OAuth oauth\_consumer\_key="xvz1evFS4wEEPTGEFPHBog", oauth\_nonce="kYjzVBB8Y0ZFabxSWbWovY3uYSQ2pTgmZeNu2VS4cg", oauth\_signature="tnnArxj06cWHq44gCs1OSKk%2FjLY%3D", oauth\_signature\_method="HMAC-SHA1", oauth\_timestamp="1318622958", oauth\_token="370773112-GmHxMAgYyLbNEtIKZeRNFsMKPR9EyMZeS9weJAEb", oauth_version="1.0"
+```
+
+この値をリクエストの Authorization ヘッダーとして設定します。

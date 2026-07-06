@@ -1,0 +1,227 @@
+---
+title: X로 로그인
+description: "OAuth 1.0a request token 흐름을 사용하여 웹사이트와 모바일 앱에서 Sign in with X를 구현하고 사용자를 인증하여 액세스 토큰을 얻습니다."
+keywords: ["X로 로그인", "Sign in with X", "X 로그인", "OAuth 로그인", "소셜 로그인", "X 인증", "로그인 통합"]
+---
+
+import { Button } from "/snippets/button.mdx";
+
+Sign in with X라고도 알려진 Log in with X를 사용하면 X 사용자가 단 한 번의 클릭만으로 등록된 사용자 계정의 혜택을 누릴 수 있는 버튼을 사이트나 애플리케이션에 배치할 수 있습니다. 이는 웹사이트, iOS, 모바일 및 데스크톱 애플리케이션에서 작동합니다.
+
+## 기능
+
+* 사용 편의성 - 사이트를 처음 방문한 방문자는 처음 로그인하기 위해 두 번의 버튼 클릭만 하면 됩니다.
+* X 통합 - Log in with X 흐름은 사용자를 대신하여 X API를 사용할 수 있는 권한을 부여할 수 있습니다.
+* OAuth 기반 - 다양한 클라이언트 라이브러리와 예제 코드가 Log in with X API와 호환됩니다.
+
+## 사용 가능 대상
+
+* 브라우저 - 사용자가 브라우저에 접근할 수 있다면 Log in with X와 통합할 수 있습니다. 브라우저 로그인 흐름에 대해 알아보세요.
+* 모바일 기기 - 웹에 연결된 모든 모바일 기기에서 Log in with X를 활용할 수 있습니다. 모바일 로그인 흐름에 대해 알아보세요.
+
+## Log in with X 구현하기
+
+Log in with X의 브라우저 및 모바일 웹 구현은 OAuth를 기반으로 합니다. 이 페이지는 로그인 흐름을 위한 액세스 토큰을 얻는 데 필요한 요청을 보여줍니다.
+
+"Log in with X" 흐름을 사용하려면 [X 앱 설정](/resources/fundamentals/developer-apps)으로 이동하여 _"Allow this app to be used to Sign in with X?"_ 옵션이 활성화되어 있는지 확인하세요.
+
+이 페이지는 독자가 OAuth 1.0a 프로토콜을 사용하여 요청에 서명하는 방법을 알고 있다고 가정합니다. 요청에 서명하는 방법을 알고 싶으면 [요청 승인](/resources/fundamentals/authentication/oauth-1-0a/authorizing-a-request) 페이지를 읽어보세요.
+
+이 페이지의 요청 서명을 확인하려면 사용된 consumer secret은 다음과 같습니다: L8qq9PZyRg6ieKGEKhZolGC0vJWLw8iEJ88DRdyOg. 이 값은 테스트 목적이며 실제 요청에는 작동하지 않습니다.
+
+request token 얻기, 사용자 리다이렉트, request token을 access token으로 변환하기를 통해 Log in with X를 구현하는 세 단계는 아래와 같습니다.
+<Tabs>
+<Tab title="Step 1">
+### 1단계: request token 얻기
+
+로그인 흐름을 시작하려면 [X 앱](/resources/fundamentals/developer-apps)이 [POST oauth/request_token](/resources/fundamentals/authentication/api-reference#post-oauth-request-token)에 서명된 메시지를 보내 request token을 얻어야 합니다. 이 요청에서 유일한 매개변수는 oauth_callback이며, 이는 사용자가 2단계를 완료할 때 리다이렉트되기를 원하는 URL의 URL 인코딩된 버전이어야 합니다. 나머지 매개변수는 OAuth 서명 프로세스에 의해 추가됩니다.
+
+<Note>
+**참고:** [POST oauth/request_token](/resources/fundamentals/authentication/api-reference#post-oauth-request-token) 엔드포인트와 함께 사용하는 [콜백 URL](/resources/fundamentals/developer-apps#callback-urls)은 [Developer Console](/resources/fundamentals/developer-portal)의 [X 앱 설정](/resources/fundamentals/developer-apps) 내에 등록되어야 합니다.
+</Note>
+
+<Frame>
+  <img src="/images/auth-4.png.twimg.1920.png" alt=""/>
+</Frame>
+
+
+**예시 요청 (Authorization 헤더는 줄바꿈되어 있습니다):**
+
+```
+POST /oauth/request_token HTTP/1.1
+User-Agent: themattharris' HTTP Client
+Host: api.x.com
+Accept: */*
+Authorization:
+        OAuth oauth_callback="http%3A%2F%2Flocalhost%2Fsign-in-with-twitter%2F",
+              oauth_consumer_key="cChZNFj6T5R0TigYB9yd1w",
+              oauth_nonce="ea9ec8429b68d6b77cd5600adbbb0456",
+              oauth_signature="F1Li3tvehgcraF8DMJ7OyxO4w9Y%3D",
+              oauth_signature_method="HMAC-SHA1",
+              oauth_timestamp="1318467427",
+              oauth_version="1.0"
+```
+
+앱은 응답의 HTTP 상태를 확인해야 합니다. 200 이외의 값은 실패를 나타냅니다. 응답 본문에는 oauth_token, oauth\_token\_secret 및 oauth\_callback\_confirmed 매개변수가 포함됩니다. 앱은 oauth\_callback\_confirmed가 true인지 확인하고 나머지 두 값을 다음 단계에서 사용하기 위해 저장해야 합니다.
+
+**예시 응답 (응답 본문은 줄바꿈되어 있습니다):**
+
+```
+HTTP/1.1 200 OK
+Date: Thu, 13 Oct 2011 00:57:06 GMT
+Status: 200 OK
+Content-Type: text/html; charset=utf-8
+Content-Length: 146
+Pragma: no-cache
+Expires: Tue, 31 Mar 1981 05:00:00 GMT
+Cache-Control: no-cache, no-store, must-revalidate, pre-check=0, post-check=0
+Vary: Accept-Encoding
+Server: tfe
+
+oauth_token=NPcudxy0yU5T3tBzho7iCotZ3cnetKwcTIRlX0iwRl0&
+oauth_token_secret=veNRnAWe6inFuo8o2u8SLLZLjolYDmDP7SzL0YfYI&
+oauth_callback_confirmed=true
+
+```
+</Tab>
+<Tab title="Step 2">
+### 2단계: 사용자 리다이렉트
+
+다음 단계는 아래 Browser sign-in flow에 설명된 대로 사용자가 적절한 흐름을 완료할 수 있도록 X로 사용자를 안내하는 것입니다. 사용자를 [GET oauth/authenticate](/resources/fundamentals/authentication/api-reference#get-oauth-authenticate)로 안내하고, 1단계에서 얻은 request token은 oauth_token 매개변수로 전달되어야 합니다.
+
+웹사이트에서 이를 구현하는 가장 매끄러운 방법은 원래의 "로그인" 요청에 대한 응답으로 HTTP 302 리다이렉트를 발행하는 것입니다. 모바일 및 데스크톱 앱은 새 브라우저 창을 열거나 임베디드 웹 뷰를 통해 URL로 안내해야 합니다.
+
+**리다이렉트할 예시 URL:**
+
+https://api.x.com/oauth/authenticate?oauth_token=NPcudxy0yU5T3tBzho7iCotZ3cnetKwcTIRlX0iwRl0
+
+로그인 엔드포인트는 사용자의 상태에 따라 다음 세 가지 방식 중 하나로 동작합니다:
+
+1.  **로그인되어 있고 승인됨**: 사용자가 x.com에 로그인되어 있고 이미 호출 애플리케이션을 승인한 경우, 즉시 인증되어 유효한 OAuth request token과 함께 콜백 URL로 반환됩니다. x.com으로의 리다이렉트는 사용자에게 명확하게 표시되지 않습니다.
+2.  **로그인되어 있지만 승인되지 않음**: 사용자가 x.com에 로그인되어 있지만 호출 애플리케이션을 승인하지 않은 경우, 호출 애플리케이션과 액세스를 공유하는 요청이 표시됩니다. 인증 요청을 수락한 후 사용자는 유효한 OAuth request token과 함께 콜백 URL로 리다이렉트됩니다.
+3.  **로그인되어 있지 않음**: 사용자가 x.com에 로그인되어 있지 않은 경우, 동일한 화면에서 자격 증명을 입력하고 애플리케이션이 정보에 액세스할 수 있는 권한을 부여하도록 요청됩니다. 로그인하면 사용자는 유효한 OAuth request token과 함께 콜백 URL로 반환됩니다.
+
+인증에 성공하면 callback_url은 oauth_token과 oauth_verifier 매개변수를 포함한 요청을 받게 됩니다. 애플리케이션은 토큰이 1단계에서 받은 request token과 일치하는지 확인해야 합니다.
+
+**클라이언트의 리다이렉트에서 온 요청 (쿼리스트링 매개변수는 줄바꿈되어 있음):**
+
+```
+GET /sign-in-with-twitter/?
+        oauth_token=NPcudxy0yU5T3tBzho7iCotZ3cnetKwcTIRlX0iwRl0&
+        oauth_verifier=uw7NjWHT6OJ1MpJOXsHfNxoAhPKpgI8BlYDhxEjIBY HTTP/1.1
+Host: localhost
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/535.5 (KHTML, like Gecko) Chrome/16.0.891.1 Safari/535.5
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Referer: http://localhost/sign-in-with-twitter/
+Accept-Encoding: gzip,deflate,sdch
+Accept-Language: en-US,en;q=0.8
+Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.3
+```
+</Tab>
+<Tab title="Step 3">
+### 3단계: request token을 access token으로 변환
+
+request token을 사용 가능한 access token으로 렌더링하려면 애플리케이션이 2단계에서 얻은 oauth_verifier 값을 포함하여 [POST oauth/access_token](/resources/fundamentals/authentication/api-reference#post-oauth-access-token) 엔드포인트에 요청해야 합니다. request token 역시 헤더의 oauth_token 부분에 전달되지만, 이는 서명 프로세스에 의해 추가됩니다.
+
+**예시 요청 (Authorization 헤더 줄바꿈됨):**
+
+```
+POST /oauth/access_token HTTP/1.1
+User-Agent: themattharris' HTTP Client
+Host: api.x.com
+Accept: */*
+Authorization: OAuth oauth_consumer_key="cChZNFj6T5R0TigYB9yd1w",
+                      oauth_nonce="a9900fe68e2573b27a37f10fbad6a755",
+                      oauth_signature="39cipBtIOHEEnybAR4sATQTpl2I%3D",
+                      oauth_signature_method="HMAC-SHA1",
+                      oauth_timestamp="1318467427",
+                      oauth_token="NPcudxy0yU5T3tBzho7iCotZ3cnetKwcTIRlX0iwRl0",
+                      oauth_version="1.0"
+Content-Length: 57
+Content-Type: application/x-www-form-urlencoded
+
+oauth_verifier=uw7NjWHT6OJ1MpJOXsHfNxoAhPKpgI8BlYDhxEjIBY
+```
+성공 응답에는 oauth_token과 oauth\_token\_secret 매개변수가 포함됩니다. 토큰과 토큰 시크릿은 저장되어 X API에 대한 향후 인증된 요청에 사용되어야 합니다. 사용자의 신원을 확인하려면 [GET account/verify_credentials](https://dev.x.com/rest/reference/get/account/verify_credentials)를 사용하세요.
+
+**예시 응답 (응답 본문은 줄바꿈되어 있습니다):**
+
+
+```
+HTTP/1.1 200 OK
+Date: Thu, 13 Oct 2011 00:57:08 GMT
+Status: 200 OK
+Content-Type: text/html; charset=utf-8
+Content-Length: 157
+Pragma: no-cache
+Expires: Tue, 31 Mar 1981 05:00:00 GMT
+Cache-Control: no-cache, no-store, must-revalidate, pre-check=0, post-check=0
+Vary: Accept-Encoding
+Server: tfe
+
+oauth_token=7588892-kagSNqWge8gB1WwE3plnFsJHAZVfxWD7Vb57p0b4&
+oauth_token_secret=PbKfYqSryyeKDWz4ebtY3o5ogNLG11WJuZBc9fQrQo
+```
+</Tab>
+</Tabs>
+<Tabs>
+<Tab title="추가 리소스">
+### Log in with X 리소스
+
+#### 클라이언트 라이브러리
+
+[X 라이브러리](/resources/tools-and-libraries)에 나열된 클라이언트 라이브러리는 Log in with X 구현에 도움이 됩니다. 이전 단계에서 설명한 대로 /oauth/authenticate 엔드포인트를 사용하세요.
+
+#### Brand Toolkit
+
+X는 애플리케이션이 일관된 브랜딩을 위해 공식 [X Brand Toolkit](https://about.x.com/en/who-we-are/brand-toolkit)을 사용하는 것을 선호합니다. 이러한 자산을 저장하고 'Login with X' 버튼을 만들 때 사용하세요.
+</Tab>
+<Tab title="Browser sign in flow">
+브라우저 로그인 흐름은 웹 브라우저를 열거나 임베드할 수 있는 웹사이트와 애플리케이션에 적합합니다. 매우 상위 수준에서:
+
+* 애플리케이션은 "Sign in with X" 링크 또는 버튼을 렌더링합니다.
+* 사용자가 로그인 버튼을 클릭합니다.
+* 현재 웹 브라우저가 X로 리다이렉트됩니다(또는 새 브라우저가 열리고 X로 안내됩니다).
+* 필요한 경우 사용자는 X에서 로그인 및 인증 단계를 완료합니다.
+* X는 사용자의 인증 정보를 전달하며 애플리케이션이 제어하는 URL로 다시 리다이렉트됩니다.
+
+X는 인증을 추적하므로, 이미 X.com에 로그인되어 애플리케이션을 승인한 사용자에게는 UI가 표시되지 않습니다 - 대신 자동으로 애플리케이션으로 리다이렉트됩니다.
+
+### 데스크톱 흐름
+
+<Frame>
+  <img src="/images/browser_111.png" alt=""/>
+</Frame>
+흐름을 설명하기 위해 위에 표시된 웹사이트("The greatest website ever created")가 이 API를 구현했다고 가정합니다. 랜딩 페이지의 Sign in with X 버튼이 그것을 보여줍니다.
+
+사용자가 Sign in 버튼을 클릭하면 표시되는 페이지는 로그인 여부와 이전에 애플리케이션이 계정에 액세스하는 것을 허용했는지 여부에 따라 달라집니다.
+
+사용자가 x.com에 로그인했지만 액세스 권한을 부여하지 않은 경우, 요청된 권한 목록과 Sign In 및 Cancel 버튼이 표시됩니다.
+
+사용자가 x.com에 로그인하지 않은 경우 사용자 이름과 비밀번호에 대한 입력 필드가 표시됩니다. 사용자가 이미 애플리케이션에 액세스 권한을 부여한 경우에도 권한 목록은 여전히 표시됩니다.
+
+<Frame>
+  <img src="/images/browser_2.png" alt=""/>
+</Frame>
+<Frame>
+  <img src="/images/browser_3.png" alt=""/>
+</Frame>
+<Frame>
+  <img src="/images/browser_4.png" alt=""/>
+</Frame>
+
+사용자가 유효한 자격 증명(필요한 경우)을 입력하고 "Sign In"을 클릭하면, X는 로그인 흐름을 시작한 웹사이트로 사용자를 리다이렉트합니다.
+
+사용자가 이미 x.com에 로그인되어 있고 웹사이트에 액세스 권한을 부여한 경우, 이 리다이렉트는 즉시 발생합니다.
+
+</Tab>
+<Tab title="Mobile sign in flow">
+모바일 웹 브라우저의 UI 흐름은 Browser sign in flow와 정확히 동일하게 작동하지만 모바일 브라우저에 최적화되어 있습니다.
+
+아래는 로그인, 로그아웃 및 리다이렉트 화면의 스크린샷입니다:
+
+<Frame>
+  <img src="/images/authorize-login-screenshot.png" alt="Mobile sign in flow" />
+</Frame>
+</Tab>
+</Tabs>

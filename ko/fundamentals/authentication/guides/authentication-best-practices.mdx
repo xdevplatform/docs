@@ -1,0 +1,99 @@
+---
+title: 모범 사례
+keywords: ["인증 모범 사례", "OAuth 모범 사례", "보안 모범 사례", "API 키 보안", "토큰 보안", "인증 보안"]
+
+description: "API 키와 토큰은 매우 신중하게 보호해야 합니다. 이 자격 증명은 개발자 App과 이를 승인한 X 계정에 직접 연결되어 있습니다."
+---
+
+import { Button } from "/snippets/button.mdx";
+
+API 키와 토큰은 매우 신중하게 보호해야 합니다. 
+
+이러한 자격 증명은 [개발자 App](/resources/fundamentals/developer-apps) 및 개발자를 대신하여 요청을 보낼 수 있도록 승인한 X 계정에 직접 연결되어 있습니다. 키가 유출되면 악의적인 행위자가 이를 사용하여 개발자 App 또는 승인된 사용자를 대신하여 X 엔드포인트에 요청할 수 있으며, 이는 예상치 못한 rate limit에 도달하거나, 유료 액세스 할당량을 소진하거나, 심지어 개발자 App이 정지될 수 있음을 의미합니다.
+
+다음 섹션에는 API 키와 토큰을 관리할 때 고려해야 할 모범 사례가 포함되어 있습니다.
+
+
+## API 키 및 토큰 재생성
+
+API 키가 노출되었다고 판단되는 경우, 다음 단계에 따라 API 키를 재생성해야 합니다:
+
+1.  [Developer Console의 "Apps" 페이지](https://developer.x.com/en/portal/projects-and-apps.html)로 이동합니다.
+2.  해당 App 옆에 있는 "Keys and tokens" 아이콘(🗝)을 클릭합니다.
+3.  재생성하려는 키 및 토큰 세트 옆에 있는 "Regenerate" 버튼을 클릭합니다. 
+
+
+
+Access Token 또는 Bearer Token을 프로그래밍 방식으로 재생성하려면 인증 엔드포인트를 사용할 수 있습니다.
+
+* Access Token을 재생성하려면 [POST oauth/invalidate_token](/resources/fundamentals/authentication/api-reference#post-oauth2-invalidate-token) 엔드포인트를 사용하여 토큰을 무효화한 다음 [3-legged OAuth flow](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens)를 사용하여 토큰을 재생성해야 합니다.
+* Bearer Token을 재생성하려면 [POST oauth2/invalidate_token](/resources/fundamentals/authentication/api-reference#post-oauth2-invalidate-token) 엔드포인트를 사용하여 토큰을 무효화한 다음 [POST oauth2/token](/resources/fundamentals/authentication/api-reference#post-oauth2-token) 엔드포인트를 사용하여 토큰을 재생성해야 합니다.
+
+
+
+## 시크릿을 위한 중앙 파일 사용
+
+시크릿을 포함하기 위해 .ENV 파일이나 다른 종류의 .yaml 파일을 사용하는 것은 도움이 될 수 있는 옵션이지만, 이러한 파일을 실수로 git 저장소에 커밋하는 것을 방지하는 강력한 .gitignore 파일을 반드시 준비해야 합니다.
+
+
+## 환경 변수
+
+환경 변수를 활용하는 코드를 작성하는 것이 도움이 될 수 있습니다. 
+
+다음은 Python으로 작성된 예제입니다:
+
+```python
+import os
+
+consumer_key = os.environ.get("CONSUMER_KEY")
+
+consumer_secret = os.environ.get("CONSUMER_SECRET")
+```
+
+터미널 내에서 다음과 같이 작성하시면 됩니다:
+
+```bash
+export CONSUMER_KEY='xxxxxxxxxxxxxxxxxxx'
+export CONSUMER_SECRET='xxxxxxxxxxxxxxxxxxxxxxx'
+```
+
+## 소스 코드 및 버전 관리
+
+개발자가 가장 흔하게 저지르는 보안 실수는 GitHub 및 BitBucket과 같이 접근 가능한 버전 관리 시스템의 소스 코드에 API 키와 토큰을 커밋하는 것입니다. 이러한 코드 저장소 중 상당수는 공개적으로 접근 가능합니다. 이 실수는 공개 코드 저장소에서 매우 자주 발생하기 때문에 API 키를 스크레이핑하는 수익성 있는 봇이 존재할 정도입니다.
+
+* 서버 환경 변수를 사용하세요. API 키를 환경 변수에 저장하면 코드와 버전 관리에서 제외됩니다. 또한 환경별로 서로 다른 키를 쉽게 사용할 수 있습니다.
+* 소스 관리에서 제외된 구성 파일을 사용하세요. 파일 이름을 [.gitignore](https://git-scm.com/docs/gitignore) 파일에 추가하여 파일이 버전 관리에 의해 추적되지 않도록 하세요.
+* 버전 관리를 사용한 후 코드에서 API 키를 제거하더라도, 이전 버전의 코드베이스에 액세스하여 API 키에 접근할 수 있을 가능성이 큽니다. 다음 섹션에서 설명한 대로 API 키를 재생성하세요.
+
+## 데이터베이스
+
+액세스 토큰을 데이터베이스에 저장해야 하는 경우 다음 사항에 유의하세요:
+
+* 액세스 토큰이 토큰 소유자만 읽을 수 있도록 데이터베이스에 대한 액세스를 제한하세요.
+* 액세스 토큰용 데이터베이스 테이블에 대한 편집/쓰기 권한을 제한하세요 - 이는 키 관리 시스템으로 자동화되어야 합니다.
+* 데이터 저장소에 저장하기 전에 액세스 토큰을 암호화하세요.
+
+## 비밀번호 관리 도구
+
+1password 또는 Last Pass와 같은 비밀번호 관리 도구는 키와 토큰을 안전한 장소에 보관하는 데 도움이 될 수 있습니다. 팀 공유 비밀번호 관리 도구 내에서 이를 공유하는 것은 피하는 것이 좋습니다.
+
+## 웹 스토리지 및 쿠키
+
+웹 스토리지에는 LocalStorage와 SessionStorage 두 가지 유형이 있습니다. 이는 쿠키 저장소보다 웹 스토리지의 저장 용량이 훨씬 크기 때문에 쿠키 사용에 대한 개선책으로 만들어졌습니다. 그러나 각 스토리지 옵션에는 서로 다른 장단점이 있습니다.
+ 
+
+**웹 스토리지: LocalStorage**
+
+로컬 웹 스토리지에 저장된 모든 것은 영구적입니다. 이는 데이터가 명시적으로 삭제될 때까지 지속됨을 의미합니다. 프로젝트의 필요에 따라 이를 긍정적으로 볼 수도 있습니다. 그러나 데이터에 대한 모든 변경/추가가 해당 웹페이지의 향후 방문 시 사용 가능하기 때문에 LocalStorage 사용에 주의해야 합니다. 일반적으로 LocalStorage 사용을 권장하지 않지만 몇 가지 예외가 있을 수 있습니다. LocalStorage를 사용하기로 결정한 경우, 동일 출처 정책을 지원하므로 여기에 저장된 모든 데이터는 동일한 출처를 통해서만 사용할 수 있다는 점을 알아두면 좋습니다. LocalStorage 사용의 추가적인 성능 이점은 모든 HTTP 요청에 대해 데이터를 서버로 다시 보낼 필요가 없기 때문에 클라이언트-서버 트래픽이 감소한다는 것입니다.
+ 
+
+**웹 스토리지: SessionStorage**
+
+SessionStorage는 LocalStorage와 유사하지만, 주요 차이점은 SessionStorage가 영구적이지 않다는 점입니다. SessionStorage에 쓰기 위해 사용된 창(사용 중인 브라우저에 따라 탭)이 닫히면 데이터가 손실됩니다. 이는 사용자 세션 내에서 토큰에 대한 읽기 액세스를 제한하는 데 유용합니다. 보안 측면에서 생각할 때 SessionStorage를 사용하는 것이 일반적으로 LocalStorage보다 더 바람직합니다. LocalStorage와 마찬가지로 동일 출처 정책 지원 및 클라이언트-서버 트래픽 감소의 이점이 SessionStorage에도 적용됩니다.
+ 
+
+**쿠키**
+
+쿠키는 세션 데이터를 저장하는 보다 전통적인 방법입니다. 각 쿠키에 대해 만료 시간을 설정할 수 있으므로 취소 및 액세스 제한이 용이합니다. 그러나 데이터가 모든 HTTP 요청에 대해 서버로 다시 전송되기 때문에 쿠키를 사용하면 클라이언트-서버 트래픽이 확실히 증가합니다. 쿠키를 사용하기로 결정한 경우 세션 하이재킹으로부터 보호해야 합니다. 기본적으로 쿠키는 HTTP를 통해 일반 텍스트로 전송되며, 이로 인해 패킷 스니핑 및/또는 공격자가 트래픽을 수정할 수 있는 중간자 공격에 그 내용이 취약해집니다. 데이터를 전송 중에 보호하려면 항상 HTTPS를 적용해야 합니다. 이는 기밀성, (데이터의) 무결성 및 인증을 제공합니다. 그러나 웹 애플리케이션이나 사이트가 HTTP와 HTTPS 모두를 통해 사용 가능한 경우 쿠키에 'Secure' 플래그도 사용하는 것이 좋습니다. 이렇게 하면 공격자가 사용자에게 사이트의 HTTP 버전 링크를 보내고 결과 HTTP 요청을 도청하는 것을 방지할 수 있습니다.
+
+쿠키를 사용할 때 세션 하이재킹에 대한 또 다른 보조 방어책은 영향력이 큰 작업이 수행되기 전에 사용자의 신원을 다시 확인하는 것입니다. 쿠키의 보안을 개선하기 위해 고려해야 할 또 다른 플래그는 'HttpOnly' 플래그입니다. 이 플래그는 브라우저에 해당 쿠키가 지정된 서버에서만 액세스 가능하도록 지시합니다. 클라이언트 측 스크립트의 모든 시도는 이 플래그에 의해 금지되므로 대부분의 크로스 사이트 스크립팅(XSS) 공격으로부터 보호하는 데 도움이 됩니다.

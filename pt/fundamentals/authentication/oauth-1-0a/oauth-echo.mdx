@@ -1,0 +1,44 @@
+---
+title: OAuth Echo
+description: "Use OAuth Echo para delegar com segurança a autenticação do X a um provedor de mídia de terceiros em uploads, usando os headers x-auth-service-provider e verify-credentials."
+sidebarTitle: OAuth Echo
+keywords: ["OAuth echo", "OAuth echo test", "verificação OAuth", "echo test", "OAuth 1.0a echo", "verificar OAuth"]
+---
+
+import { Button } from "/snippets/button.mdx";
+
+### OAuth Echo
+
+OAuth Echo é uma forma de delegar com segurança a autorização OAuth a um terceiro enquanto interage com uma API.
+
+Há quatro partes envolvidas nessa interação:
+
+* **o Usuário** que está usando o X por meio de uma aplicação X autorizada específica
+* **o Consumer**, ou a aplicação X que está tentando interagir com o provedor de mídia terceiro (por exemplo, o site de compartilhamento de fotos)
+* **o Delegator**, ou o provedor de mídia terceiro
+* **o Service Provider**, ou seja, o próprio X
+     
+
+Essencialmente, prepare uma solicitação para que o delegator envie à X API em nome de uma aplicação e de um usuário. Adicione o que, de outra forma, seria uma solicitação OAuth assinada dentro de um header HTTP e peça que o delegator envie essa solicitação ao X após concluir a operação intermediária.
+
+Aqui vai um exemplo: o Usuário quer fazer upload de uma foto. O Consumer vai chamar upload no Delegator com um POST. O POST deve conter a imagem, mas também deve conter dois itens adicionais como headers HTTP:
+
+* `x-auth-service-provider` — na prática, este é o realm para o qual a delegação de identidade deve ser enviada. No caso do X, defina como https://api.x.com/1.1/account/verify_credentials.json. Integrações do X baseadas em iOS5 adicionarão um parâmetro application_id extra a essa URL, que também será usado para calcular o oauth_signature utilizado em x-verify-credentials-authorization.
+* `x-verify-credentials-authorization` — o Consumer deve criar todos os parâmetros OAuth necessários para poder chamar https://api.x.com/1.1/account/verify_credentials.json usando OAuth no header HTTP (por exemplo, deve parecer com OAuth oauth\_consumer\_key=”...”, oauth\_token=”...”, oauth\_signature\_method=”...”, oauth\_signature=”...”, oauth\_timestamp=”...”, oauth\_nonce=”...”, oauth_version=”...” ).
+     
+
+Lembre-se de que todo o período de transação precisa ocorrer dentro de um intervalo de tempo em que o `oauth_timestamp` ainda seja válido.
+
+Alternativamente, em vez de enviar esses dois parâmetros no header, eles poderiam ser enviados no POST como x\_auth\_service_provider e x\_verify\_credentials_authorization — nesse caso, lembre-se de fazer o escape e incluir os parâmetros na signature base string do OAuth — de forma semelhante à codificação de parâmetros em qualquer solicitação. É preferível usar headers HTTP para manter as operações o mais separadas possível.
+
+O objetivo do Delegator, neste ponto, é verificar se o Usuário é quem diz ser antes de salvar a mídia. Assim que o Delegator recebe todos os dados acima via seu método de upload, ele deve armazenar temporariamente a imagem e então construir uma chamada ao endpoint especificado no header x-auth-service-provider — neste caso, https://api.x.com/1.1/account/verify_credentials.json, usando o mesmo header de autenticação OAuth fornecido pelo Consumer no header x-verify-credentials-authorization.
+ 
+
+#### Boas práticas do OAuth Echo
+
+Use a URL fornecida por `x-auth-service-provider` para realizar a consulta, _não_ um valor hard-coded. O Apple iOS, por exemplo, adiciona um parâmetro application_id extra a todas as solicitações OAuth, e sua existência deve ser mantida em cada etapa do OAuth Echo.
+
+Para a parte de autorização OAuth, pegue o valor do header x-verify-credentials-authorization e coloque-o em seu próprio header Authorization na chamada ao service provider. Para maior segurança, confirme que o valor em `x-auth-service-provider` é o esperado.
+
+* Se o Service Provider retornar HTTP 200, ótimo. O Delegator deve armazenar permanentemente a imagem, gerar uma URL e retorná-la.
+* Se o Service Provider não retornar HTTP 200, descarte a imagem e retorne um erro ao Consumer.

@@ -1,0 +1,166 @@
+---
+title: OAuth 2.0 Authorization Code Flow with PKCE
+description: "authorize URL 및 토큰 교환을 포함한 OAuth 2.0 Authorization Code Flow with PKCE로 X API v2 엔드포인트에 사용자를 연결하는 단계별 가이드입니다."
+sidebarTitle: OAuth 2.0 사용자를 대신하여 요청하기
+keywords: ["OAuth 2.0 user access token", "user access token", "OAuth 2.0 user context", "사용자 인증", "OAuth 2.0 사용자", "access token"]
+---
+
+### OAuth 2.0 Authorization Code Flow with PKCE를 사용하여 엔드포인트에 연결하는 방법
+
+
+#### 엔드포인트에 연결하는 방법
+
+사용자를 인증하려면 App이 승인 흐름을 구현해야 합니다. 이 승인 흐름을 사용하면 사용자를 X의 승인 대화 상자로 안내할 수 있습니다. 여기에서 기본 X 경험은 승인 대화 상자를 표시하고 App을 대신하여 승인을 처리합니다. 사용자는 App을 승인하거나 권한을 거부할 수 있습니다. 사용자가 선택한 후 X는 사용자를 App으로 리다이렉트하며, 여기서 authorization code를 액세스 토큰으로 교환하거나(사용자가 App을 승인한 경우) 거부를 처리할 수 있습니다(사용자가 App을 승인하지 않은 경우).
+
+#### Confidential client 작업
+
+confidential client로 작업하는 경우, 토큰 엔드포인트에 요청할 때 base64 인코딩을 사용하여 authorization 헤더를 생성하기 위해 [basic authentication](https://datatracker.ietf.org/doc/html/rfc2617#section-2) 스키마를 사용해야 합니다.
+
+`userid`와 `password`는 자격 증명의 base64 인코딩된 문자열 내에서 단일 콜론(":") 문자로 구분됩니다.
+
+예는 다음과 같습니다:
+
+      `-header 'Authorization: Basic V1ROclFTMTRiVWhwTWw4M2FVNWFkVGQyTldNNk1UcGphUTotUm9LeDN4NThKQThTbTlKSXQyZm1BanEzcTVHWC1icVozdmpKeFNlR3NkbUd0WEViUA=='`
+
+
+user agent가 Client ID "Aladdin"과 비밀번호 "open sesame"을 보내고자 한다면 다음 헤더 필드를 사용합니다:
+
+      `Authorization: Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==`
+
+
+basic authorization 헤더를 생성하려면 [Developer Console](https://developer.x.com/en/portal/dashboard) 내부의 앱 "Keys and Tokens" 페이지에서 얻을 수 있는 Client ID와 Client Secret에 base64 인코딩이 필요합니다.
+
+#### OAuth 2.0을 사용하여 연결하는 단계
+
+**1단계: Authorize URL 구성**
+
+App은 승인해야 하는 스코프를 나타내는 X에 대한 authorize URL을 구성해야 합니다. 예를 들어, App이 Tweet, 사용자를 조회하고 팔로우를 관리해야 하는 경우 다음 스코프를 요청해야 합니다:
+
+`tweet.read%20users.read%20follows.read%20follows.write`
+
+URL에는 다른 필수 매개변수 외에도 `code_challenge`와 state 매개변수가 포함됩니다. 프로덕션에서는 `code_challenge`에 임의의 문자열을 사용해야 합니다.
+
+**2단계: GET oauth2/authorize**
+
+사용자가 인증하도록 하고 애플리케이션에 authorization code를 전송합니다. App에서 OAuth 2.0을 활성화한 경우 앱의 "Keys and Tokens" 페이지에서 Client ID를 찾을 수 있습니다.
+
+사용자를 리다이렉트할 예시 URL은 다음과 같습니다:
+
+```
+https://x.com/i/oauth2/authorize?response_type=code&client_id=M1M5R3BMVy13QmpScXkzTUt5OE46MTpjaQ&redirect_uri=https://www.example.com&scope=tweet.read%20users.read%20follows.read%20follows.write&state=state&code_challenge=challenge&code_challenge_method=plain
+```
+
+offline_access가 포함된 예시 URL은 다음과 같습니다:
+
+```
+https://x.com/i/oauth2/authorize?response_type=code&client_id=M1M5R3BMVy13QmpScXkzTUt5OE46MTpjaQ&redirect_uri=https://www.example.com&scope=tweet.read%20users.read%20follows.read%20offline.access&state=state&code_challenge=challenge&code_challenge_method=plain
+```
+
+인증에 성공하면 redirect_uri는 auth_code 매개변수를 포함한 요청을 받게 됩니다. 애플리케이션은 state 매개변수를 확인해야 합니다.
+
+클라이언트의 리다이렉트로부터의 예시 요청은 다음과 같습니다:
+
+```
+https://www.example.com/?state=state&code=VGNibzFWSWREZm01bjN1N3dicWlNUG1oa2xRRVNNdmVHelJGY2hPWGxNd2dxOjE2MjIxNjA4MjU4MjU6MToxOmFjOjE
+```
+
+**3단계: POST oauth2/token - Access Token**
+
+이 시점에서 authorization code를 사용하여 액세스 토큰과 refresh token을 생성할 수 있습니다(`offline.access` 스코프가 요청된 경우에만). 다음 엔드포인트에 POST 요청을 할 수 있습니다:
+
+```
+https://api.x.com/2/oauth2/token
+```
+
+헤더를 통해 `application/x-www-form-urlencoded`의 `Content-Type`을 전달해야 합니다. 또한, 요청에 `code`, `grant_type`, `client_id` 및 `redirect_uri`, 그리고 `code_verifier`가 있어야 합니다.
+
+다음은 public client에 대한 예시 토큰 요청입니다:
+
+```json
+curl --location --request POST 'https://api.x.com/2/oauth2/token' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--data-urlencode 'code=VGNibzFWSWREZm01bjN1N3dicWlNUG1oa2xRRVNNdmVHelJGY2hPWGxNd2dxOjE2MjIxNjA4MjU4MjU6MToxOmFjOjE' \
+--data-urlencode 'grant_type=authorization_code' \
+--data-urlencode 'client_id=rG9n6402A3dbUJKzXTNX4oWHJ' \
+--data-urlencode 'redirect_uri=https://www.example.com' \
+--data-urlencode 'code_verifier=challenge'
+```
+
+
+다음은 confidential client를 사용하는 예시입니다:
+
+```json
+curl --location --request POST 'https://api.x.com/2/oauth2/token' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--header 'Authorization: Basic V1ROclFTMTRiVWhwTWw4M2FVNWFkVGQyTldNNk1UcGphUTotUm9LeDN4NThKQThTbTlKSXQyZm1BanEzcTVHWC1icVozdmpKeFNlR3NkbUd0WEViUA=='\
+--data-urlencode 'code=VGNibzFWSWREZm01bjN1N3dicWlNUG1oa2xRRVNNdmVHelJGY2hPWGxNd2dxOjE2MjIxNjA4MjU4MjU6MToxOmFjOjE' \
+--data-urlencode 'grant_type=authorization_code' \
+--data-urlencode 'redirect_uri=https://www.example.com' \
+--data-urlencode 'code_verifier=challenge'
+```
+
+**4단계: API에 연결**
+
+이제 OAuth 2.0을 사용하여 엔드포인트에 연결할 준비가 되었습니다. 이렇게 하려면 [Bearer Token 인증](/resources/fundamentals/authentication/oauth-2-0/application-only)을 사용하는 것과 마찬가지로 API에 요청합니다. Bearer Token을 전달하는 대신 마지막 단계에서 생성한 액세스 토큰을 사용합니다. 응답으로 요청하는 엔드포인트에 해당하는 적절한 페이로드가 표시되어야 합니다. 이 요청은 public 및 confidential 클라이언트 모두에게 동일합니다.
+
+
+예시 요청은 다음과 같습니다:
+
+```json
+curl --location --request GET 'https://api.x.com/2/tweets?ids=1261326399320715264,1278347468690915330' \
+--header 'Authorization: Bearer Q0Mzb0VhZ0V5dmNXSTEyNER2MFNfVW50RzdXdTN6STFxQlVkTGhTc1lCdlBiOjE2MjIxNDc3NDM5MTQ6MToxOmF0OjE'
+```
+
+**5단계: POST oauth2/token - refresh token**
+
+Refresh token을 사용하면 애플리케이션이 사용자에게 프롬프트하지 않고 새 액세스 토큰을 얻을 수 있습니다. 다음 엔드포인트에 POST 요청을 하여 refresh token을 생성할 수 있습니다: https://api.x.com/2/oauth2/token 헤더를 통해 `application/x-www-form-urlencoded`의 `Content-Type`을 추가해야 합니다. 또한 refresh_token을 전달하고 grant_type을 `refresh_token`으로 설정하며 `client_id`를 정의해야 합니다.
+
+이 요청은 public client에서 작동합니다:
+
+```json
+POST 'https://api.x.com/2/oauth2/token' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--data-urlencode 'refresh_token=bWRWa3gzdnk3WHRGU1o0bmRRcTJ5VUxWX1lZTDdJSUtmaWcxbTVxdEFXcW5tOjE2MjIxNDc3NDM5MTQ6MToxOnJ0OjE' \
+--data-urlencode 'grant_type=refresh_token' \
+--data-urlencode 'client_id=rG9n6402A3dbUJKzXTNX4oWHJ'
+```
+
+다음은 confidential client에 대한 예시입니다:
+
+```json
+POST 'https://api.x.com/2/oauth2/token' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--header 'Authorization: Basic V1ROclFTMTRiVWhwTWw4M2FVNWFkVGQyTldNNk1UcGphUTotUm9LeDN4NThKQThTbTlKSXQyZm1BanEzcTVHWC1icVozdmpKeFNlR3NkbUd0WEViUA=='\
+--data-urlencode 'refresh_token=bWRWa3gzdnk3WHRGU1o0bmRRcTJ5VUxWX1lZTDdJSUtmaWcxbTVxdEFXcW5tOjE2MjIxNDc3NDM5MTQ6MToxOnJ0OjE'\
+--data-urlencode 'grant_type=refresh_token'
+```
+
+
+**6단계: POST oauth2/revoke - Token 취소**
+
+Revoke token은 액세스 토큰이나 refresh token을 무효화합니다. 이는 클라이언트에서 "log out" 기능을 활성화하는 데 사용되며, 더 이상 필요하지 않을 수 있는 승인 흐름과 관련된 보안 자격 증명을 정리할 수 있게 합니다. Revoke token은 App이 사용자가 아닌 토큰을 취소하기 위한 것입니다. App이 부여된 액세스를 프로그래밍 방식으로 취소하려는 경우 다음 URL에 POST 요청을 하여 revoke token 요청을 생성할 수 있습니다:
+
+```
+https://api.x.com/2/oauth2/revoke
+```
+
+헤더를 통해 `application/x-www-form-urlencoded`의 `Content-Type`, 토큰 및 client_id를 전달해야 합니다.
+
+경우에 따라 사용자가 App에 부여한 액세스를 취소하려는 경우 [연결된 앱 페이지](https://x.com/settings/connected_apps)를 방문하여 액세스를 취소할 수 있습니다.
+
+```bash
+curl --location --request POST 'https://api.x.com/2/oauth2/revoke' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--data-urlencode 'token=Q0Mzb0VhZ0V5dmNXSTEyNER2MFNfVW50RzdXdTN6STFxQlVkTGhTc1lCdlBiOjE2MjIxNDc3NDM5MTQ6MToxOmF0OjE' \
+--data-urlencode 'client_id=rG9n6402A3dbUJKzXTNX4oWHJ'
+```
+
+
+이 요청은 confidential client에서 작동합니다:
+
+```bash
+curl --location --request POST 'https://api.x.com/2/oauth2/revoke' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--header 'Authorization: Basic V1ROclFTMTRiVWhwTWw4M2FVNWFkVGQyTldNNk1UcGphUTotUm9LeDN4NThKQThTbTlKSXQyZm1BanEzcTVHWC1icVozdmpKeFNlR3NkbUd0WEViUA=='\
+--data-urlencode 'token=Q0Mzb0VhZ0V5dmNXSTEyNER2MFNfVW50RzdXdTN6STFxQlVkTGhTc1lCdlBiOjE2MjIxNDc3NDM5MTQ6MToxOmF0OjE'
+```
