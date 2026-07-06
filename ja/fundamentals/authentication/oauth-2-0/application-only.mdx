@@ -1,0 +1,220 @@
+---
+title: app-only 認証と OAuth 2.0 Bearer Token
+sidebarTitle: OAuth 2.0 App-Only (Bearer Token)
+description: サーバー間のリードオンリーな公開データアクセスに対して、OAuth 2.0 App-Only Bearer Token で X API リクエストを認証します (ユーザーコンテキスト不要)。
+keywords: ["app-only 認証", "OAuth 2.0 app-only", "Bearer Token 認証", "app-only auth", "読み取り専用アクセス", "公開データアクセス"]
+
+
+---
+
+### app-only 認証と OAuth 2.0 Bearer Token
+
+X では、特定のユーザーではなく、アプリケーション自身に代わって認証済みのリクエストを発行する仕組みを提供しています。X の実装は、[OAuth 2 仕様](http://tools.ietf.org/html/rfc6749) の [Client Credentials Grant](http://tools.ietf.org/html/rfc6749#section-4.4) フローに基づいています。
+
+application-only 認証にはユーザーコンテキストが含まれず、アプリケーションが自身に代わって API リクエストを行う認証形式です。この方式は、公開情報への読み取り専用アクセスのみが必要なデベロッパー向けです。
+
+application-only 認証は、アプリの consumer API キー、または App only Access Token (Bearer Token) を使って実行できます。これは、X API に対して行えるリクエストが、認証されたユーザーを必要としないものに限られることを意味します。
+
+application-only 認証では、以下のようなアクションを実行できます:
+
+* ユーザータイムラインの取得
+* 任意のアカウントのフレンドやフォロワーへのアクセス
+* リストリソースへのアクセス
+* 投稿の検索
+
+なお、ユーザーに代わってリクエストを発行するには、[OAuth 1.0a](/resources/fundamentals/authentication/oauth-1-0a/api-key-and-secret) または PKCE を用いた [OAuth 2.0 Authorization Code Flow](/resources/fundamentals/authentication/oauth-2-0/authorization-code) が必須です。[API リファレンス](/resources/fundamentals/authentication/api-reference) ページで、API の使用に必要な認証方式を確認できます。以下を実行するには、ユーザー認証、ユーザーコンテキスト、および [access token](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens) が必要になります:
+
+* 投稿やその他のリソースの投稿
+* ユーザーの検索
+* 任意の geo エンドポイントの使用
+* Direct Messages やアカウント認証情報へのアクセス
+* ユーザーのメールアドレスの取得
+
+
+#### 認証フロー
+
+この方式を使用するには、[App only Access Token](/resources/fundamentals/authentication/oauth-2-0/application-only) ([Bearer Token](/resources/fundamentals/authentication/oauth-2-0/bearer-tokens) とも呼ばれます) が必要です。consumer key と secret を [POST oauth2/token](/resources/fundamentals/authentication/api-reference#post-oauth2-token) エンドポイントに渡すことで、App only Access Token (Bearer Token) を生成できます。
+
+application-only 認証フローは次の手順で実行されます:
+
+* アプリケーションが consumer key と secret を特別にエンコードされた一連の認証情報にエンコードします。
+* アプリケーションが [POST oauth2/token](/resources/fundamentals/authentication/api-reference#post-oauth2-token) エンドポイントにリクエストを行い、これらの認証情報を [App only Access Token](/resources/fundamentals/authentication/oauth-2-0/application-only) と交換します。
+* REST API にアクセスする際、アプリケーションは App only Access Token を使用して認証を行います。
+
+リクエストに署名する必要がないため、この方式は標準の OAuth 1.0a モデルよりもはるかにシンプルです。
+<Frame>
+  <img src="/images/auth-5.png.twimg.1920.png" alt=""/>
+</Frame>
+
+#### application-only 認証について
+
+**トークンはパスワード**
+
+consumer key と secret、および App only Access Token (Bearer Token) 自体は、アプリケーションに代わってリクエストを行う権限を付与するものであることに留意してください。これらの値はパスワードと同等に機密扱いとし、信頼できない第三者と共有・配布してはいけません。
+
+**SSL 必須**
+
+すべてのリクエスト (トークンの取得および使用の両方) は HTTPS エンドポイントを使用する _必要_ があります。[TLS を使用した X API への接続](/resources/fundamentals/authentication/guides/tls) に記載されているベストプラクティスに従ってください — ピア検証は **常に** 実施してください。
+
+**ユーザーコンテキストなし**
+
+application-only 認証でリクエストを発行する場合、「現在のユーザー」という概念は存在しません。したがって、[POST statuses/update](/x-api/posts/creation-of-a-post) のようなエンドポイントは application-only 認証では動作しません。ユーザーに代わってリクエストを発行する方法の詳細は、[OAuth の使用](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens) を参照してください。
+
+**レート制限**
+
+アプリケーションには 2 種類のレート制限プールがあります。
+
+access token を持つユーザーに代わって行われるリクエスト (ユーザーコンテキスト) は、application-only 認証で使用されるレート制限コンテキストとは別のプールから消費されます。つまり、ユーザーに代わって行われたリクエストは app-only 認証で利用可能なレート制限を消費せず、app-only 認証で行われたリクエストはユーザーベース認証で使用されるレート制限を消費しません。
+
+[API レート制限](/x-api/fundamentals/rate-limits) について詳しく学び、[制限を確認](https://developer.x.com/en/portal/products) してください。
+
+#### application-only リクエストの発行
+
+**ステップ 1: consumer key と secret のエンコード**
+
+Bearer Token を取得するために、アプリケーションの consumer key と secret を認証情報にエンコードする手順は次のとおりです:
+
+1.  consumer key と consumer secret を [RFC 1738](http://www.ietf.org/rfc/rfc1738.txt) に従って URL エンコードします。執筆時点では、これによって実際に consumer key や secret の値が変わることはありませんが、将来これらの値のフォーマットが変わる可能性を考慮して、このステップを実行してください。
+2.  エンコードされた consumer key、コロン文字「:」、およびエンコードされた consumer secret を連結して 1 つの文字列にします。
+3.  前のステップの文字列を [Base64 エンコード](http://en.wikipedia.org/wiki/Base64) します。
+
+以下は、このアルゴリズムの結果を示すサンプル値です。このページで使用している consumer secret はテスト目的であり、実際のリクエストでは動作しません。
+
+|     |     |
+| :--- | :--- |
+| Consumer key | xvz1evFS4wEEPTGEFPHBog |
+| Consumer secret | L8qq9PZyRg6ieKGEKhZolGC0vJWLw8iEJ88DRdyOg |
+| RFC 1738 エンコード済み consumer<br/><br/>key (変更なし) | xvz1evFS4wEEPTGEFPHBog |
+| RFC 1738 エンコード済み consumer<br/><br/>secret (変更なし) | L8qq9PZyRg6ieKGEKhZolGC0vJWLw8iEJ88DRdyOg |
+| Bearer Token 認証情報 | xvz1evFS4wEEPTGEFPHBog:L8qq9PZyRg6ieKGEKhZolGC0vJWLw8iEJ88DRdyOg |
+| Base64 エンコード済み Bearer Token 認証情報 | :: eHZ6MWV2RlM0d0VFUFRHRUZQSEJvZzpMOHFxOVBaeVJnNmllS0dFS2hab2xHQzB2SldMdzhpRUo4OERSZHlPZw== |
+
+**ステップ 2: App only Access Token (Bearer Token) の取得**
+
+ステップ 1 で計算された値を、[POST oauth2/token](/resources/fundamentals/authentication/api-reference#post-oauth2-token) へのリクエストによって App only Access Token と交換する必要があります:
+
+* リクエストは HTTP POST リクエストである必要があります。
+* リクエストには `Basic <ステップ 1 の base64 エンコード済み値>` の値を持つ `Authorization` ヘッダーを含める必要があります。
+* リクエストには `application/x-www-form-urlencoded;charset=UTF-8` の値を持つ `Content-Type` ヘッダーを含める必要があります。
+* リクエストの本文は `grant_type=client_credentials` である必要があります。
+
+**リクエスト例 (Authorization ヘッダーは改行されています):**
+
+```json
+POST /oauth2/token HTTP/1.1
+Host: api.x.com
+User-Agent: My X App v1.0.23
+Authorization: Basic eHZ6MWV2RlM0d0VFUFRHRUZQSEJvZzpMOHFxOVBaeVJn
+                     NmllS0dFS2hab2xHQzB2SldMdzhpRUo4OERSZHlPZw==
+Content-Type: application/x-www-form-urlencoded;charset=UTF-8
+Content-Length: 29
+Accept-Encoding: gzip
+
+grant\_type=client\_credentials
+```
+
+リクエストが正しくフォーマットされている場合、サーバーは JSON エンコードされたペイロードを返します:
+
+**レスポンス例:**
+```json
+HTTP/1.1 200 OK
+Status: 200 OK
+Content-Type: application/json; charset=utf-8
+...
+Content-Encoding: gzip
+Content-Length: 140
+
+{"token\_type":"bearer","access\_token":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA%2FAAAAAAAAAAAAAAAAAAAA%3DAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}
+```
+アプリケーションは、返されたオブジェクトの `token_type` キーに関連付けられた値が `bearer` であることを確認する必要があります。`access_token` キーに関連付けられた値が App only Access Token (Bearer Token) です。
+
+なお、1 つのアプリケーションに対して有効な App only Access Token は同時に 1 つのみです。同じ認証情報で `/oauth2/token` に再度リクエストを送っても、無効化されるまで同じトークンが返されます。
+
+**ステップ 3: App only Access Token (Bearer Token) で API リクエストを認証**
+
+App only Access Token (Bearer Token) は、application-only 認証をサポートする API エンドポイントへのリクエスト発行に使用できます。App Access Token を使用するには、通常の HTTPS リクエストを構築し、`Bearer <ステップ 2 の base64 bearer token 値>` の値を持つ `Authorization` ヘッダーを含めます。署名は不要です。
+
+**リクエスト例 (Authorization ヘッダーは改行されています):**
+
+```
+GET /1.1/statuses/user\_timeline.json?count=100&screen\_name=twitterapi HTTP/1.1
+Host: api.x.com
+User-Agent: My X App v1.0.23
+Authorization: Bearer AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA%2FAAAAAAAAAAAA
+                      AAAAAAAA%3DAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+Accept-Encoding: gzip
+```
+
+**App only Access Token (Bearer Token) の無効化**
+
+App only Access Token が漏洩したり、何らかの理由で無効化する必要が生じた場合は、[POST oauth2/invalidate_token](/resources/fundamentals/authentication/api-reference#post-oauth2-invalidate-token) を呼び出してください。
+
+**リクエスト例 (Authorization ヘッダーは改行されています):**
+
+```bash
+POST /oauth2/invalidate_token HTTP/1.1
+Authorization: Basic eHZ6MWV2RlM0d0VFUFRHRUZQSEJvZzpMOHFxOVBaeVJn
+                     NmllS0dFS2hab2xHQzB2SldMdzhpRUo4OERSZHlPZw==
+User-Agent: My X App v1.0.23
+Host: api.x.com
+Accept: */*
+Content-Length: 119
+Content-Type: application/x-www-form-urlencoded
+
+access_token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA%2FAAAAAAAAAAAAAAAAAAAA%3DAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+```
+
+**レスポンス例:**
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+Content-Length: 127
+...
+
+{"access_token":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA%2FAAAAAAAAAAAAAAAAAAAA%3DAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}
+```
+#### 一般的なエラーケース
+
+このセクションでは、Bearer Token の取得と使用における一般的な誤りについて説明します。ここに記載されていないエラーレスポンスも存在するため、未処理のエラーコードやレスポンスに注意してください。
+
+**App only Access Token を取得または取り消すための無効なリクエスト**
+
+以下の試行:
+
+* 無効なリクエスト (例: `grant_type=client_credentials` の欠落) で App only Access Token (Bearer Token) を取得しようとする場合。
+* 誤っているか期限切れのアプリ認証情報で App only Access Token (Bearer Token) を取得または取り消そうとする場合。
+* 誤っているか取り消された App only Access Token (Bearer Token) を無効化しようとする場合。
+* 短時間のうちに App only Access Token (Bearer Token) を頻繁に取得しようとする場合。
+
+は次のような結果になります:
+```json
+HTTP/1.1 403 Forbidden
+Content-Length: 105
+Content-Type: application/json; charset=utf-8
+...
+
+{"errors":\[{"code":99,"label":"authenticity\_token\_error","message":"Unable to verify your credentials"}\]}
+```
+#### 無効な App only Access Token (Bearer Token) を含む API リクエスト
+
+不正または取り消された Access Token で API リクエストを行うと、次のような結果になります:
+```json
+HTTP/1.1 401 Unauthorized
+Content-Type: application/json; charset=utf-8
+Content-Length: 61
+...
+
+{"errors":\[{"message":"Invalid or expired token","code":89}\]}
+```
+#### application-only 認証をサポートしないエンドポイントで App only Access Token (Bearer Token) を使用した場合
+
+ユーザーコンテキストを必要とするエンドポイント (`statuses/home_timeline` など) を App only Access Token (Bearer Token) でリクエストすると、次のような結果になります:
+```json
+HTTP/1.1 403 Forbidden
+Content-Type: application/json; charset=utf-8
+Content-Length: 91
+...
+
+{"errors":\[{"message":"Your credentials do not allow access to this resource","code":220}\]}
+```

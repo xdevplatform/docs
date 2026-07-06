@@ -1,0 +1,144 @@
+---
+title: 요청 승인
+description: "consumer key, nonce, signature, timestamp, token 및 version 필드를 포함하여 X API 요청에 서명하기 위한 OAuth 1.0a Authorization 헤더를 구성합니다."
+sidebarTitle: 요청 승인
+keywords: ["요청 승인", "OAuth 승인", "요청 승인", "OAuth 1.0a 승인", "API 요청 승인"]
+---
+
+import { Button } from "/snippets/button.mdx";
+
+### 요청 승인
+
+이 문서의 목적은 X API에 승인된 요청을 보내기 위해 HTTP 요청을 수정하는 방법을 보여주는 것입니다.
+
+X의 모든 API는 HTTP 프로토콜을 기반으로 합니다. 이는 X의 API를 사용하는 소프트웨어가 구조화된 메시지 시리즈를 X 서버로 전송한다는 것을 의미합니다. 예를 들어, "**Hello Ladies + Gentlemen, a signed OAuth request!**" 텍스트를 Tweet으로 게시하는 요청은 다음과 같이 보일 것입니다:
+```
+POST /1.1/statuses/update.json?include_entities=true HTTP/1.1
+Accept: */*
+Connection: close
+User-Agent: OAuth gem v0.4.4
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 76
+Host: api.x.com
+
+status=Hello%20Ladies%20%2b%20Gentlemen%2c%20a%20signed%20OAuth%20request%21
+```
+모든 HTTP 라이브러리는 위의 요청을 최소한의 어려움으로 생성하고 발행할 수 있어야 합니다. 그러나 위의 요청은 다음을 알 방법이 없기 때문에 유효하지 않은 것으로 간주됩니다:
+
+1.  어떤 애플리케이션이 요청을 하고 있는지
+2.  요청이 어떤 사용자를 대신하여 게시되고 있는지
+3.  사용자가 애플리케이션에 자신을 대신하여 게시할 수 있는 권한을 부여했는지 여부
+4.  요청이 전송 중에 제3자에 의해 조작되었는지 여부
+
+애플리케이션이 이 정보를 제공할 수 있도록, X의 API는 [OAuth 1.0a 프로토콜](http://tools.ietf.org/html/rfc5849)에 의존합니다. 매우 단순화된 수준에서, X의 구현은 승인이 필요한 요청이 위에 나열된 질문에 답할 수 있는 충분한 정보를 포함하는 추가 HTTP Authorization 헤더를 포함해야 합니다. 이 헤더를 포함하도록 수정된 위에 표시된 HTTP 요청의 버전은 다음과 같습니다(일반적으로 Authorization 헤더는 한 줄에 있어야 하지만 여기서는 가독성을 위해 줄바꿈되어 있습니다):
+```
+POST /1.1/statuses/update.json?include_entities=true HTTP/1.1
+Accept: */*
+Connection: close
+User-Agent: OAuth gem v0.4.4
+Content-Type: application/x-www-form-urlencoded
+Authorization:
+OAuth oauth\_consumer\_key="xvz1evFS4wEEPTGEFPHBog",
+oauth_nonce="kYjzVBB8Y0ZFabxSWbWovY3uYSQ2pTgmZeNu2VS4cg",
+oauth_signature="tnnArxj06cWHq44gCs1OSKk%2FjLY%3D",
+oauth\_signature\_method="HMAC-SHA1",
+oauth_timestamp="1318622958",
+oauth_token="370773112-GmHxMAgYyLbNEtIKZeRNFsMKPR9EyMZeS9weJAEb",
+oauth_version="1.0"
+Content-Length: 76
+Host: api.x.com
+
+status=Hello%20Ladies%20%2b%20Gentlemen%2c%20a%20signed%20OAuth%20request%21
+```
+이 요청이 생성되었을 때, X API에 의해 유효한 것으로 승인되었을 것입니다.
+
+이 서명 프로세스가 통합의 범위를 벗어난다고 느껴진다면, OAuth를 사용하지 않고도 X API와 상호 작용할 수 있는 [Web Intents](https://dev.x.com/web/intents)를 사용하는 것을 고려해보세요.
+ 
+
+**매개변수 수집**
+
+헤더에 7개의 키/값 쌍이 포함되어 있으며, 모든 키가 "oauth_" 문자열로 시작한다는 것을 확인할 수 있습니다. 주어진 X API 요청에 대해 이 7개의 값을 수집하고 유사한 헤더를 생성하면 요청에 대한 승인을 지정할 수 있습니다. 각 값이 생성된 방법은 아래에 설명되어 있습니다:
+
+**Consumer key**
+
+oauth\_consumer\_key는 요청을 하는 애플리케이션을 식별합니다. [Developer Console](/resources/fundamentals/developer-portal)의 [X 앱](/resources/fundamentals/developer-apps) 설정 페이지에서 이 값을 얻을 수 있습니다.
+
+|     |     |
+| :--- | :--- |
+| oauth\_consumer\_key | xvz1evFS4wEEPTGEFPHBog |
+
+**Nonce**
+
+oauth_nonce 매개변수는 애플리케이션이 각 고유 요청에 대해 생성해야 하는 고유 토큰입니다. X는 이 값을 사용하여 요청이 여러 번 제출되었는지 확인합니다. 이 요청의 값은 32바이트의 무작위 데이터를 base64 인코딩하고 모든 비단어 문자를 제거하여 생성되었지만, 상대적으로 무작위한 영숫자 문자열을 생성하는 어떤 접근 방식도 여기에 적합합니다.
+
+|     |     |
+| :--- | :--- |
+| oauth_nonce | kYjzVBB8Y0ZFabxSWbWovY3uYSQ2pTgmZeNu2VS4cg |
+
+**Signature**
+
+oauth_signature 매개변수는 다른 모든 요청 매개변수와 두 개의 시크릿 값을 서명 알고리즘에 실행하여 생성되는 값을 포함합니다. 서명의 목적은 X가 요청이 전송 중에 수정되지 않았는지 확인하고, 요청을 보내는 애플리케이션을 확인하며, 애플리케이션이 사용자 계정과 상호 작용할 수 있는 권한을 가지고 있는지 확인할 수 있도록 하기 위함입니다.
+
+이 요청에 대한 oauth_signature를 계산하는 프로세스는 [Signature 생성](/resources/fundamentals/authentication/oauth-1-0a/creating-a-signature)에 설명되어 있습니다.
+
+|     |     |
+| :--- | :--- |
+| oauth_signature | tnnArxj06cWHq44gCs1OSKk/jLY= |
+
+**Signature method**
+
+X에서 사용하는 oauth\_signature\_method는 HMAC-SHA1입니다. 이 값은 X API에 전송되는 모든 승인된 요청에 사용되어야 합니다.
+
+|     |     |
+| :--- | :--- |
+| oauth\_signature\_method | HMAC-SHA1 |
+
+**Timestamp**
+
+oauth_timestamp 매개변수는 요청이 생성된 시간을 나타냅니다. 이 값은 요청이 생성된 시점의 Unix epoch 이후 초 수여야 하며, 대부분의 프로그래밍 언어에서 쉽게 생성될 수 있어야 합니다. X는 과거에 너무 오래 전에 생성된 요청을 거부하므로 요청을 생성하는 컴퓨터의 시계를 NTP와 동기화하는 것이 중요합니다.
+
+|     |     |
+| :--- | :--- |
+| oauth_timestamp | 1318622958 |
+
+**Token**
+
+oauth_token 매개변수는 일반적으로 사용자가 애플리케이션에 자신의 계정 액세스를 공유할 수 있는 권한을 나타냅니다. 이 값이 전달되지 않거나 다른 형태의 토큰인 몇 가지 인증 요청이 있지만, 이는 [access token 얻기](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens)에서 자세히 다룹니다. 대부분의 일반적인 요청의 경우 **access token**이라고 부르는 것을 사용합니다.
+
+[Developer Console](/resources/fundamentals/developer-portal)의 [X 앱](/resources/fundamentals/developer-apps) 설정 페이지에서 계정에 대한 유효한 [access token](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens)을 생성할 수 있습니다.
+
+|     |     |
+| :--- | :--- |
+| oauth_token | 370773112-GmHxMAgYyLbNEtIKZeRNFsMKPR9EyMZeS9weJAEb |
+
+**Version**
+
+oauth_version 매개변수는 X API에 전송되는 모든 요청에 대해 항상 1.0이어야 합니다.
+
+|     |     |
+| :--- | :--- |
+| oauth_version | 1.0 |
+
+
+#### 헤더 문자열 구성하기
+
+헤더 문자열을 구성하려면 DST라는 이름의 문자열에 쓴다고 상상해보세요.
+
+1.  "OAuth " 문자열(끝 공백 포함)을 DST에 추가합니다.
+2.  위에 나열된 7개 매개변수의 각 키/값 쌍에 대해:
+    1.  키를 [퍼센트 인코딩](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens)하고 DST에 추가합니다.
+    2.  등호 문자 '='를 DST에 추가합니다.
+    3.  큰따옴표 '"'를 DST에 추가합니다.
+    4.  값을 [퍼센트 인코딩](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens)하고 DST에 추가합니다.
+    5.  큰따옴표 '"'를 DST에 추가합니다.
+    6.  남은 키/값 쌍이 있는 경우, 쉼표 ','와 공백 ' '를 DST에 추가합니다.
+
+이 문자열을 구성할 때 값의 퍼센트 인코딩에 특히 주의하세요. 예를 들어, tnnArxj06cWHq44gCs1OSKk/jLY= 값을 가진 oauth_signature는 tnnArxj06cWHq44gCs1OSKk%2FjLY%3D로 인코딩되어야 합니다.
+
+위에서 수집한 매개변수에 대해 이러한 단계를 수행하면 다음 문자열이 생성됩니다:
+
+```
+OAuth oauth\_consumer\_key="xvz1evFS4wEEPTGEFPHBog", oauth\_nonce="kYjzVBB8Y0ZFabxSWbWovY3uYSQ2pTgmZeNu2VS4cg", oauth\_signature="tnnArxj06cWHq44gCs1OSKk%2FjLY%3D", oauth\_signature\_method="HMAC-SHA1", oauth\_timestamp="1318622958", oauth\_token="370773112-GmHxMAgYyLbNEtIKZeRNFsMKPR9EyMZeS9weJAEb", oauth_version="1.0"
+```
+
+이 값은 요청의 Authorization 헤더로 설정되어야 합니다.

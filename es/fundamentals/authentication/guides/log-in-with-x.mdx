@@ -1,0 +1,228 @@
+---
+title: Iniciar sesión con X
+description: "Implementa Iniciar sesión con X en sitios web y aplicaciones móviles utilizando el flujo de request token de OAuth 1.0a para autenticar usuarios y obtener access tokens."
+keywords: ["Iniciar sesión con X", "Sign in with X", "inicio de sesión con X", "inicio de sesión OAuth", "inicio de sesión social", "autenticación de X", "integración de inicio de sesión"]
+---
+
+import { Button } from "/snippets/button.mdx";
+
+Usa Iniciar sesión con X, también conocido como Sign in with X, para colocar un botón en tu sitio o aplicación que permita a los usuarios de X disfrutar de los beneficios de una cuenta de usuario registrada con tan solo un clic. Esto funciona en sitios web, iOS y aplicaciones móviles y de escritorio.
+
+## Características
+
+* Facilidad de uso — Un nuevo visitante a tu sitio solo tiene que hacer clic en dos botones para iniciar sesión por primera vez.
+* Integración con X — El flujo de Iniciar sesión con X puede conceder autorización para usar las APIs de X en nombre de tus usuarios.
+* Basado en OAuth — Existen numerosas bibliotecas cliente y códigos de ejemplo compatibles con la API de Iniciar sesión con X.
+
+## Disponible para
+
+* Navegadores — Si tus usuarios pueden acceder a un navegador, puedes integrar Iniciar sesión con X. Aprende sobre el flujo de inicio de sesión en el navegador.
+* Dispositivos móviles — Cualquier dispositivo móvil con conexión web puede aprovechar Iniciar sesión con X. Aprende sobre el flujo de inicio de sesión móvil.
+
+## Implementación de Iniciar sesión con X
+
+Las implementaciones para navegador y web móvil de Iniciar sesión con X están basadas en OAuth. Esta página muestra las solicitudes necesarias para obtener un access token para el flujo de inicio de sesión.
+
+Para usar el flujo "Iniciar sesión con X", ve a la [configuración de tu X app](/resources/fundamentals/developer-apps) y asegúrate de que la opción _"Allow this app to be used to Sign in with X?"_ esté habilitada.
+
+Esta página asume que el lector sabe cómo firmar solicitudes usando el protocolo OAuth 1.0a. Si quieres saber cómo firmar una solicitud, lee la página [Autorización de una solicitud](/resources/fundamentals/authentication/oauth-1-0a/authorizing-a-request).
+
+Si quieres comprobar la firma de las solicitudes en esta página, el consumer secret utilizado es: L8qq9PZyRg6ieKGEKhZolGC0vJWLw8iEJ88DRdyOg. Este valor es para propósitos de prueba y no funcionará para solicitudes reales.
+
+Los tres pasos para implementar Iniciar sesión con X mediante la obtención de un request token, la redirección del usuario y la conversión de un request token en un access token se enumeran a continuación.
+<Tabs>
+<Tab title="Paso 1">
+### Paso 1: Obtener un request token
+
+Para iniciar un flujo de inicio de sesión, tu [X app](/resources/fundamentals/developer-apps) debe obtener un request token enviando un mensaje firmado a [POST oauth/request_token](/resources/fundamentals/authentication/api-reference#post-oauth-request-token). El único parámetro único en esta solicitud es oauth_callback, que debe ser una versión codificada en URL de la URL a la que deseas que tu usuario sea redirigido cuando complete el paso 2. Los parámetros restantes son añadidos por el proceso de firma de OAuth.
+
+<Note>
+**Nota:** Cualquier [URL de callback](/resources/fundamentals/developer-apps#callback-urls) que uses con el endpoint [POST oauth/request_token](/resources/fundamentals/authentication/api-reference#post-oauth-request-token) deberá estar registrada dentro de la [configuración de la X app](/resources/fundamentals/developer-apps) en la [Developer Console](/resources/fundamentals/developer-portal).
+</Note>
+
+<Frame>
+  <img src="/images/auth-4.png.twimg.1920.png" alt=""/>
+</Frame>
+
+
+**Solicitud de ejemplo (el encabezado Authorization ha sido dividido en varias líneas):**
+
+```
+POST /oauth/request_token HTTP/1.1
+User-Agent: themattharris' HTTP Client
+Host: api.x.com
+Accept: */*
+Authorization:
+        OAuth oauth_callback="http%3A%2F%2Flocalhost%2Fsign-in-with-twitter%2F",
+              oauth_consumer_key="cChZNFj6T5R0TigYB9yd1w",
+              oauth_nonce="ea9ec8429b68d6b77cd5600adbbb0456",
+              oauth_signature="F1Li3tvehgcraF8DMJ7OyxO4w9Y%3D",
+              oauth_signature_method="HMAC-SHA1",
+              oauth_timestamp="1318467427",
+              oauth_version="1.0"
+```
+
+Tu app debe examinar el estado HTTP de la respuesta. Cualquier valor distinto de 200 indica un error. El cuerpo de la respuesta contendrá los parámetros oauth_token, oauth\_token\_secret y oauth\_callback\_confirmed. Tu app debe verificar que oauth\_callback\_confirmed sea true y almacenar los otros dos valores para los siguientes pasos.
+
+**Respuesta de ejemplo (el cuerpo de la respuesta ha sido dividido en varias líneas):**
+
+```
+HTTP/1.1 200 OK
+Date: Thu, 13 Oct 2011 00:57:06 GMT
+Status: 200 OK
+Content-Type: text/html; charset=utf-8
+Content-Length: 146
+Pragma: no-cache
+Expires: Tue, 31 Mar 1981 05:00:00 GMT
+Cache-Control: no-cache, no-store, must-revalidate, pre-check=0, post-check=0
+Vary: Accept-Encoding
+Server: tfe
+
+oauth_token=NPcudxy0yU5T3tBzho7iCotZ3cnetKwcTIRlX0iwRl0&
+oauth_token_secret=veNRnAWe6inFuo8o2u8SLLZLjolYDmDP7SzL0YfYI&
+oauth_callback_confirmed=true
+
+```
+</Tab>
+<Tab title="Paso 2">
+### Paso 2: Redirigir al usuario
+
+El siguiente paso es dirigir al usuario a X para que pueda completar el flujo apropiado, como se describe en Flujo de inicio de sesión del navegador más abajo. Dirige al usuario a [GET oauth/authenticate](/resources/fundamentals/authentication/api-reference#get-oauth-authenticate), y el request token obtenido en el paso 1 debe pasarse como el parámetro oauth_token.
+
+La forma más fluida en que un sitio web puede implementar esto sería emitir una redirección HTTP 302 como respuesta a la solicitud original de "iniciar sesión". Las aplicaciones móviles y de escritorio deberían abrir una nueva ventana del navegador o dirigirse a la URL a través de una vista web incrustada.
+
+**URL de ejemplo a la que redirigir:**
+
+https://api.x.com/oauth/authenticate?oauth_token=NPcudxy0yU5T3tBzho7iCotZ3cnetKwcTIRlX0iwRl0
+
+El endpoint de inicio de sesión se comportará de una de tres maneras dependiendo del estado del usuario:
+
+1.  **Con sesión iniciada y aprobado**: Si el usuario ha iniciado sesión en x.com y ya ha aprobado la aplicación llamante, será autenticado inmediatamente y devuelto a la URL de callback con un OAuth request token válido. La redirección a x.com no es obvia para el usuario.
+2.  **Con sesión iniciada pero no aprobado**: Si el usuario ha iniciado sesión en x.com pero no ha aprobado la aplicación llamante, se mostrará una solicitud para compartir el acceso con la aplicación llamante. Después de aceptar la solicitud de autorización, el usuario será redirigido a la URL de callback con un OAuth request token válido.
+3.  **Sin sesión iniciada**: Si el usuario no ha iniciado sesión en x.com, se le pedirá que ingrese sus credenciales y otorgue acceso a la aplicación para acceder a su información en la misma pantalla. Una vez iniciada la sesión, el usuario será devuelto a la URL de callback con un OAuth request token válido.
+
+Tras una autenticación exitosa, tu callback_url recibirá una solicitud que contiene los parámetros oauth_token y oauth_verifier. Tu aplicación debe verificar que el token coincida con el request token recibido en el paso 1.
+
+**Solicitud desde la redirección del cliente (parámetros de querystring divididos en varias líneas):**
+
+```
+GET /sign-in-with-twitter/?
+        oauth_token=NPcudxy0yU5T3tBzho7iCotZ3cnetKwcTIRlX0iwRl0&
+        oauth_verifier=uw7NjWHT6OJ1MpJOXsHfNxoAhPKpgI8BlYDhxEjIBY HTTP/1.1
+Host: localhost
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/535.5 (KHTML, like Gecko) Chrome/16.0.891.1 Safari/535.5
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Referer: http://localhost/sign-in-with-twitter/
+Accept-Encoding: gzip,deflate,sdch
+Accept-Language: en-US,en;q=0.8
+Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.3
+```
+</Tab>
+<Tab title="Paso 3">
+### Paso 3: Convertir el request token en un access token
+
+Para convertir el request token en un access token utilizable, tu aplicación debe realizar una solicitud al endpoint [POST oauth/access_token](/resources/fundamentals/authentication/api-reference#post-oauth-access-token), conteniendo el valor de oauth_verifier obtenido en el paso 2. El request token también se pasa en la parte oauth_token del encabezado, pero esto se habrá añadido durante el proceso de firma.
+
+**Solicitud de ejemplo (encabezado Authorization dividido en varias líneas):**
+
+```
+POST /oauth/access_token HTTP/1.1
+User-Agent: themattharris' HTTP Client
+Host: api.x.com
+Accept: */*
+Authorization: OAuth oauth_consumer_key="cChZNFj6T5R0TigYB9yd1w",
+                      oauth_nonce="a9900fe68e2573b27a37f10fbad6a755",
+                      oauth_signature="39cipBtIOHEEnybAR4sATQTpl2I%3D",
+                      oauth_signature_method="HMAC-SHA1",
+                      oauth_timestamp="1318467427",
+                      oauth_token="NPcudxy0yU5T3tBzho7iCotZ3cnetKwcTIRlX0iwRl0",
+                      oauth_version="1.0"
+Content-Length: 57
+Content-Type: application/x-www-form-urlencoded
+
+oauth_verifier=uw7NjWHT6OJ1MpJOXsHfNxoAhPKpgI8BlYDhxEjIBY
+```
+Una respuesta exitosa contiene los parámetros oauth_token y oauth\_token\_secret. El token y el token secret deben almacenarse y usarse para futuras solicitudes autenticadas a la X API. Para determinar la identidad del usuario, usa [GET account/verify_credentials](https://dev.x.com/rest/reference/get/account/verify_credentials).
+
+**Respuesta de ejemplo (el cuerpo de la respuesta ha sido dividido en varias líneas):**
+
+
+```
+HTTP/1.1 200 OK
+Date: Thu, 13 Oct 2011 00:57:08 GMT
+Status: 200 OK
+Content-Type: text/html; charset=utf-8
+Content-Length: 157
+Pragma: no-cache
+Expires: Tue, 31 Mar 1981 05:00:00 GMT
+Cache-Control: no-cache, no-store, must-revalidate, pre-check=0, post-check=0
+Vary: Accept-Encoding
+Server: tfe
+
+oauth_token=7588892-kagSNqWge8gB1WwE3plnFsJHAZVfxWD7Vb57p0b4&
+oauth_token_secret=PbKfYqSryyeKDWz4ebtY3o5ogNLG11WJuZBc9fQrQo
+```
+</Tab>
+</Tabs>
+<Tabs>
+<Tab title="Recursos adicionales">
+### Recursos de Iniciar sesión con X
+
+#### Bibliotecas cliente
+
+Las bibliotecas cliente listadas en [Bibliotecas de X](/resources/tools-and-libraries) te ayudarán a implementar Iniciar sesión con X. Usa el endpoint /oauth/authenticate, como se describe en los pasos anteriores.
+
+#### Brand Toolkit
+
+X preferiría que tu aplicación utilice el [Brand Toolkit oficial de X](https://about.x.com/en/who-we-are/brand-toolkit) para mantener una imagen de marca coherente. Guarda estos recursos y úsalos al crear un botón "Iniciar sesión con X".
+</Tab>
+<Tab title="Flujo de inicio de sesión en el navegador">
+El flujo de inicio de sesión en el navegador es apropiado para sitios web y aplicaciones que pueden abrir o incrustar un navegador web. En un nivel muy alto:
+
+* La aplicación muestra un enlace o botón "Iniciar sesión con X".
+* El usuario hace clic en el botón de iniciar sesión.
+* El navegador web actual se redirige a X (o se abre un nuevo navegador y se dirige a X).
+* El usuario completa un paso de inicio de sesión y autorización en X si es necesario.
+* X redirige de vuelta a una URL bajo el control de la aplicación, pasando la información de autorización del usuario.
+
+X realiza un seguimiento de las autorizaciones, por lo que para los usuarios que ya han iniciado sesión en X.com y que han autorizado la aplicación, no se muestra ninguna interfaz: en su lugar, se les redirige automáticamente de vuelta a la aplicación.
+
+### Flujo de escritorio
+
+<Frame>
+  <img src="/images/browser_111.png" alt=""/>
+</Frame>
+Para demostrar los flujos, imagina que el sitio web que se muestra arriba ("The greatest website ever created") ha implementado esta API, como se muestra por el botón Iniciar sesión con X en la página de destino.
+
+Cuando el usuario hace clic en el botón Iniciar sesión, la página que ve depende de si ha iniciado sesión y si ha permitido previamente que la aplicación acceda a su cuenta.
+
+Cuando el usuario ha iniciado sesión en x.com pero no ha otorgado acceso, se muestra una lista de permisos solicitados, junto con los botones Iniciar sesión y Cancelar.
+
+Cuando el usuario no ha iniciado sesión en x.com, se mostrarán campos de entrada para nombre de usuario y contraseña. Ten en cuenta que incluso si el usuario ya ha otorgado acceso a la aplicación, la lista de permisos aún se mostrará.
+
+<Frame>
+  <img src="/images/browser_2.png" alt=""/>
+</Frame>
+<Frame>
+  <img src="/images/browser_3.png" alt=""/>
+</Frame>
+<Frame>
+  <img src="/images/browser_4.png" alt=""/>
+</Frame>
+
+Después de que el usuario ingrese credenciales válidas (si es necesario) y haga clic en "Iniciar sesión", X redirigirá al usuario al sitio web que inició el flujo de inicio de sesión.
+
+En el caso en que el usuario ya haya iniciado sesión en x.com y haya otorgado acceso al sitio web, esta redirección ocurre inmediatamente.
+
+</Tab>
+<Tab title="Flujo de inicio de sesión móvil">
+El flujo de la interfaz para navegadores web móviles funciona exactamente como el flujo de inicio de sesión del navegador, pero está optimizado para navegadores móviles.
+
+A continuación se muestran capturas de pantalla de las pantallas con sesión iniciada, sin sesión iniciada y de redirección:
+
+<Frame>
+  <img src="/images/authorize-login-screenshot.png" alt="Flujo de inicio de sesión móvil" />
+</Frame>
+</Tab>
+</Tabs>
+

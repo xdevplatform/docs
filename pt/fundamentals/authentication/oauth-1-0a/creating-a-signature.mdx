@@ -1,0 +1,155 @@
+---
+title: Criando uma assinatura
+description: "Gere uma assinatura OAuth 1.0a HMAC-SHA1 para solicitações da X API coletando parâmetros, construindo a signature base string e assinando com suas chaves."
+sidebarTitle: Creating a signature
+keywords: ["assinatura OAuth", "criar assinatura", "assinatura OAuth 1.0a", "assinatura HMAC", "geração de assinatura", "assinatura OAuth"]
+---
+
+import { Button } from "/snippets/button.mdx";
+
+### Criando uma assinatura
+
+Esta página explica como gerar uma assinatura OAuth 1.0a HMAC-SHA1 para uma solicitação HTTP. Essa assinatura será adequada para passar à X API como parte de uma solicitação autorizada, conforme descrito em [autorizando uma solicitação.](/resources/fundamentals/authentication/oauth-1-0a/authorizing-a-request)
+
+A solicitação usada para demonstrar a assinatura é um POST para https://api.x.com/1.1/statuses/update.json. A solicitação crua se parece com isto:
+```
+POST /1.1/statuses/update.json?include_entities=true HTTP/1.1
+Accept: */*
+Connection: close
+User-Agent: OAuth gem v0.4.4
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 76
+Host: api.x.com
+
+status=Hello%20Ladies%20%2b%20Gentlemen%2c%20a%20signed%20OAuth%20request%21
+```
+**Coletando o método e a URL da solicitação**
+
+Para produzir uma assinatura, comece determinando o método HTTP e a URL da solicitação. Ambos são conhecidos na hora de criar a solicitação, então são fáceis de obter.
+
+O método da solicitação será quase sempre GET ou POST para solicitações da X API.
+
+|     |     |
+| :--- | :--- |
+| HTTP Method | POST |
+
+A base URL é a URL para a qual a solicitação é direcionada, sem quaisquer parâmetros de query string ou hash. É importante usar o protocolo correto aqui, então certifique-se de que a parte “https://” da URL corresponda à solicitação real enviada à API.
+
+|     |     |
+| :--- | :--- |
+| Base URL | https://api.x.com/1.1/statuses/update.json |
+
+
+#### Coletando parâmetros
+
+Em seguida, reúna todos os parâmetros incluídos na solicitação. Existem dois lugares para esses parâmetros adicionais — a URL (como parte da query string) e o corpo da solicitação. A solicitação de exemplo inclui um único parâmetro em cada local:
+```
+POST /1.1/statuses/update.json?include_entities=true HTTP/1.1
+Accept: */*
+Connection: close
+User-Agent: OAuth gem v0.4.4
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 76
+Host: api.x.com
+
+status=Hello%20Ladies%20%2b%20Gentlemen%2c%20a%20signed%20OAuth%20request%21
+```
+Uma solicitação HTTP tem parâmetros com URL encoding, mas você deve coletar os valores crus. Além dos parâmetros da solicitação, cada parâmetro oauth_* precisa ser incluído na assinatura, então colete-os também. Aqui estão os parâmetros de [autorizando uma solicitação](/resources/fundamentals/authentication/oauth-1-0a/authorizing-a-request):
+
+|     |     |
+| :--- | :--- |
+| status | Hello Ladies + Gentlemen, a signed OAuth request! |
+| include_entities | true |
+| oauth_consumer_key | xvz1evFS4wEEPTGEFPHBog |
+| oauth_nonce | kYjzVBB8Y0ZFabxSWbWovY3uYSQ2pTgmZeNu2VS4cg |
+| oauth_signature_method | HMAC-SHA1 |
+| oauth_timestamp | 1318622958 |
+| oauth_token | 370773112-GmHxMAgYyLbNEtIKZeRNFsMKPR9EyMZeS9weJAEb |
+| oauth_version | 1.0 |
+
+Esses valores precisam ser codificados em uma única string, que será usada mais adiante. O processo para construir a string é muito específico:
+
+1.  Faça o [percent encode](/resources/fundamentals/authentication/oauth-1-0a/percent-encoding-parameters) de cada chave e valor que será assinado.
+2.  Ordene a lista de parâmetros em ordem alfabética [[1]](/resources/fundamentals/authentication/oauth-1-0a/creating-a-signature) pela chave codificada [[2]](/resources/fundamentals/authentication/oauth-1-0a/creating-a-signature).
+3.  Para cada par chave/valor:
+4.  Anexe a chave codificada à string de saída.
+5.  Anexe o caractere ‘=’ à string de saída.
+6.  Anexe o valor codificado à string de saída.
+7.  Se houver mais pares chave/valor, anexe um caractere ‘&’ à string de saída.
+     
+
+\[1\] A especificação OAuth diz para ordenar lexicograficamente, que é a ordenação alfabética padrão em muitas bibliotecas.
+
+\[2\] No caso de dois parâmetros com a mesma chave codificada, a especificação OAuth diz para continuar ordenando com base no valor. No entanto, o X não aceita chaves duplicadas em solicitações à API.
+ 
+
+**Parameter string**
+
+A seguinte _parameter string_ será produzida repetindo esses passos com os parâmetros coletados acima:
+
+| status                   | Hello Ladies + Gentlemen, a signed OAuth request!  |
+|:--------------------------|:----------------------------------------------------|
+| `include_entities`       | true                                               |
+| `oauth_consumer_key`     | xvz1evFS4wEEPTGEFPHBog                             |
+| `oauth_nonce`            | kYjzVBB8Y0ZFabxSWbWovY3uYSQ2pTgmZeNu2VS4cg         |
+| `oauth_signature_method` | HMAC-SHA1                                          |
+| `oauth_timestamp`        | 1318622958                                         |
+| `oauth_token`            | 370773112-GmHxMAgYyLbNEtIKZeRNFsMKPR9EyMZeS9weJAEb |
+| `oauth_version`          | 1.0                                                |
+
+#### Criando a signature base string
+
+Os três valores coletados até aqui devem ser unidos em uma única string, a partir da qual a assinatura será gerada. Ela é chamada de **signature base string** pela especificação OAuth.
+
+Para codificar o método HTTP, a base URL e a parameter string em uma única string:
+
+1.  Converta o método HTTP para maiúsculas e defina a string de saída como esse valor.
+2.  Anexe o caractere ‘&’ à string de saída.
+3.  Faça o [percent encode](/resources/fundamentals/authentication/oauth-1-0a/percent-encoding-parameters) da URL e anexe-a à string de saída.
+4.  Anexe o caractere ‘&’ à string de saída.
+5.  Faça o [percent encode](/resources/fundamentals/authentication/oauth-1-0a/percent-encoding-parameters) da parameter string e anexe-a à string de saída.
+     
+
+Isso produzirá a seguinte _signature base string_:
+```
+POST&https%3A%2F%2Fapi.x.com%2F1.1%2Fstatuses%2Fupdate.json&include_entities%3Dtrue%26oauth_consumer_key%3Dxvz1evFS4wEEPTGEFPHBog%26oauth_nonce%3DkYjzVBB8Y0ZFabxSWbWovY3uYSQ2pTgmZeNu2VS4cg%26oauth_signature_method%3DHMAC-SHA1%26oauth_timestamp%3D1318622958%26oauth_token%3D370773112-GmHxMAgYyLbNEtIKZeRNFsMKPR9EyMZeS9weJAEb%26oauth_version%3D1.0%26status%3DHello%2520Ladies%2520%252B%2520Gentlemen%252C%2520a%2520signed%2520OAuth%2520request%2521
+```
+Certifique-se de fazer o percent encode da parameter string. A signature base string deve conter exatamente 2 caracteres ampersand ‘&’. Os caracteres de porcentagem ‘%’ na parameter string devem ser codificados como %25 na signature base string.
+ 
+
+#### Obtendo uma signing key
+
+Os últimos dados a coletar são os segredos que identificam o [X app](/resources/fundamentals/developer-apps) fazendo a solicitação e o usuário em nome do qual a solicitação está sendo feita. É muito importante notar que esses valores são incrivelmente sensíveis e nunca devem ser compartilhados com ninguém.
+
+O valor que identifica seu app para o X é chamado de **consumer secret** e pode ser encontrado no [Developer Console](/resources/fundamentals/developer-portal) visualizando a [página de detalhes do app](/resources/fundamentals/developer-apps). Ele será o mesmo para toda solicitação enviada pelo seu X app.
+
+|     |     |
+| :--- | :--- |
+| Consumer secret | kAcSOqF21Fu85e7zjz7ZN2U4ZRhfV3WpwPAoE3Z7kBw |
+
+O valor que identifica a conta em nome da qual sua aplicação está atuando é chamado de **OAuth token secret**. Esse valor pode ser obtido de várias formas, todas descritas em [obtendo access tokens](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens).
+
+|     |     |
+| :--- | :--- |
+| OAuth token secret | LswwdoUaIvS8ltyTt5jkRh4J50vUPVVHtR2YPi5kE |
+
+Novamente, é muito importante manter esses valores privados à sua aplicação. Se você acredita que seus valores foram comprometidos, regenere seus tokens (os tokens desta página foram marcados como inválidos para solicitações reais).
+
+Esses dois valores precisam ser combinados para formar uma **signing key** que será usada para gerar a assinatura. A signing key é simplesmente o token secret com [percent encoding](/resources/fundamentals/authentication/oauth-1-0a/percent-encoding-parameters):
+
+Observe que há alguns fluxos, como ao obter um [request token](/resources/fundamentals/authentication/oauth-1-0a/obtaining-user-access-tokens), em que o token secret ainda não é conhecido. Nesse caso, a signing key deve consistir no **consumer secret** com [percent encoding](/resources/fundamentals/authentication/oauth-1-0a/percent-encoding-parameters) seguido de um caractere ampersand ‘&’.
+
+|     |     |
+| :--- | :--- |
+| Signing key | kAcSOqF21Fu85e7zjz7ZN2U4ZRhfV3WpwPAoE3Z7kBw&LswwdoUaIvS8ltyTt5jkRh4J50vUPVVHtR2YPi5kE |
+
+
+#### Calculando a assinatura
+
+Por fim, a assinatura é calculada passando a signature base string e a signing key pelo algoritmo de hashing HMAC-SHA1. Os detalhes do algoritmo são explicados como função hash_hmac.
+
+A saída da função de assinatura HMAC é uma string binária. Ela precisa ser codificada em base64 para produzir a string da assinatura. Por exemplo, a saída dada a base string e a signing key desta página é 2E CF 77 84 98 99 6D 0D DA 90 5D C7 17 7C 75 07 3F 3F CD 4E. Esse valor, convertido para base64, é a assinatura OAuth desta solicitação:
+
+|     |     |
+| :--- | :--- |
+| OAuth signature | Ls93hJiZbQ3akF3HF3x1Bz8/zU4= |
