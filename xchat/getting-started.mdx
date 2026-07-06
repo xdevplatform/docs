@@ -115,7 +115,7 @@ Create an API client with your **user** OAuth 2.0 access token:
 
 ## 2. Initialize the Chat XDK
 
-Load private keys with **Juicebox** (PIN + `juicebox_config` from the API) or a **key blob** (`import_keys`). Then set your registered public-key **version**.
+Load private keys with **Juicebox** (PIN + `juicebox_config` from the API) or a **key blob** (`import_keys`). Then set your registered public-key version (`public_key_version` on your record).
 
 <Tabs>
   <Tab title="Python">
@@ -126,12 +126,12 @@ Load private keys with **Juicebox** (PIN + `juicebox_config` from the API) or a 
     resp = client.chat.get_user_public_keys(
         "YOUR_USER_ID",
         public_key_fields=[
-            "version", "public_key", "signing_public_key",
+            "public_key_version", "public_key", "signing_public_key",
             "identity_public_key_signature", "juicebox_config",
         ],
     )
     record = resp.data[0]
-    signing_key_version = str(record["version"])
+    signing_key_version = str(record["public_key_version"])
 
     chat = Chat(json.dumps(record["juicebox_config"]))
     chat.unlock("YOUR_PIN")  # after first-time setup() — see next section
@@ -144,12 +144,12 @@ Load private keys with **Juicebox** (PIN + `juicebox_config` from the API) or a 
 
     const resp = await client.chat.getUserPublicKeys('YOUR_USER_ID', {
       publicKeyFields: [
-        'version', 'public_key', 'signing_public_key',
+        'public_key_version', 'public_key', 'signing_public_key',
         'identity_public_key_signature', 'juicebox_config',
       ],
     });
     const record = resp.data[0];
-    const signingKeyVersion = String(record.version);
+    const signingKeyVersion = String(record.public_key_version);
 
     const chat = await createChat({
       juiceboxConfig: JSON.stringify(record.juicebox_config),
@@ -343,24 +343,26 @@ Use a strong PIN for Juicebox. Losing the PIN or an unprotected key blob can pre
 
 ## 4. Set up conversation keys
 
-Call **`prepare_conversation_keys`** with each participant’s identity public key and version, then register the result with the conversation keys API. Map SDK field **`encrypted_key`** to API field **`encrypted_conversation_key`**. Keep the **raw** conversation key for sending.
+Call **`prepare_conversation_key_change`** with your user ID, your signing key version, and every participant's identity public key. One call generates a fresh conversation key, encrypts it for each participant, and signs the change. POST the result to the **add conversation keys** endpoint (`POST /2/chat/conversations/{id}/keys`)—the body needs `conversation_key_version`, `conversation_participant_keys` (SDK `encrypted_key` → API `encrypted_conversation_key`), and **`action_signatures`** (required; the API rejects the call without them). Keep the **raw** conversation key for sending.
 
-If the conversation already has keys, skip this step and recover keys from events (step 6).
+The response returns the canonical conversation id (`data.conversation_id`—the hyphen-joined pair for a 1:1, or the `g…` id for a group) and the key change's `data.sequence_id`. Use that returned id for subsequent requests instead of reconstructing it client-side. The same call also **rotates** keys later: pass the existing conversation id to `prepare_conversation_key_change` and POST with the newer key version.
 
 <Tabs>
   <Tab title="Python">
     ```python
     def public_key_input(user_id: str) -> dict:
         r = client.chat.get_user_public_keys(
-            user_id, public_key_fields=["version", "public_key"]
+            user_id, public_key_fields=["public_key_version", "public_key"]
         ).data[0]
-        return {"user_id": user_id, "public_key": r["public_key"], "key_version": r["version"]}
+        return {"user_id": user_id, "public_key": r["public_key"], "key_version": r["public_key_version"]}
 
-    prepared = chat.prepare_conversation_keys([
-        public_key_input("YOUR_USER_ID"),
-        public_key_input("RECIPIENT_USER_ID"),
-    ])
-    client.chat.initialize_conversation_keys(
+    prepared = chat.prepare_conversation_key_change(
+        "YOUR_USER_ID",
+        signing_key_version,
+        [public_key_input("YOUR_USER_ID"), public_key_input("RECIPIENT_USER_ID")],
+        # conversation_id=None for a new 1:1; pass the id to rotate later
+    )
+    resp = client.chat.add_conversation_keys(
         "RECIPIENT_USER_ID",
         {
             "conversation_key_version": prepared["conversation_key_version"],
@@ -372,8 +374,22 @@ If the conversation already has keys, skip this step and recover keys from event
                 }
                 for pk in prepared["participant_keys"]
             ],
+            "action_signatures": [
+                {
+                    "message_id": sig["message_id"],
+                    "encoded_message_event_detail": sig["encoded_message_event_detail"],
+                    "message_event_signature": {
+                        "signature": sig["signature"],
+                        "public_key_version": sig["public_key_version"],
+                        "signature_version": sig["signature_version"],
+                    },
+                }
+                for sig in prepared["action_signatures"]
+            ],
         },
     )
+    conversation_id = resp.data["conversation_id"]  # canonical id for later requests
+    sequence_id = resp.data["sequence_id"]
     conv_key = prepared["conversation_key"]
     conv_key_version = prepared["conversation_key_version"]
     ```
@@ -382,30 +398,49 @@ If the conversation already has keys, skip this step and recover keys from event
     ```typescript
     async function publicKeyInput(userId: string) {
       const r = (await client.chat.getUserPublicKeys(userId, {
-        publicKeyFields: ['version', 'public_key'],
+        publicKeyFields: ['public_key_version', 'public_key'],
       })).data[0];
-      return { userId, publicKey: r.public_key, keyVersion: r.version };
+      return { userId, publicKey: r.public_key, keyVersion: r.public_key_version };
     }
 
-    const prepared = chat.prepareConversationKeys([
+    // Omit conversationId for a new 1:1; pass the id to rotate later
+    const prepared = chat.prepareConversationKeyChange('YOUR_USER_ID', signingKeyVersion, [
       await publicKeyInput('YOUR_USER_ID'),
       await publicKeyInput('RECIPIENT_USER_ID'),
     ]);
-    await client.chat.initializeConversationKeys('RECIPIENT_USER_ID', {
+    const resp = await client.chat.addConversationKeys('RECIPIENT_USER_ID', {
       conversation_key_version: prepared.conversationKeyVersion,
       conversation_participant_keys: prepared.participantKeys.map((pk) => ({
         user_id: pk.userId,
         encrypted_conversation_key: pk.encryptedKey,
         public_key_version: pk.publicKeyVersion,
       })),
+      action_signatures: prepared.actionSignatures.map((sig) => ({
+        message_id: sig.messageId,
+        encoded_message_event_detail: sig.encodedMessageEventDetail,
+        message_event_signature: {
+          signature: sig.signature,
+          public_key_version: sig.publicKeyVersion,
+          signature_version: sig.signatureVersion,
+        },
+      })),
     });
+    const conversationId = resp.data.conversation_id; // canonical id for later requests
+    const sequenceId = resp.data.sequence_id;
     const convKey = prepared.conversationKey;
     const convKeyVersion = prepared.conversationKeyVersion;
     ```
   </Tab>
   <Tab title="Rust">
     ```rust
-    let prepared = chat.prepare_conversation_keys(&public_key_inputs)?;
+    // public_key_inputs: Vec<PublicKeyInput> from GET public keys
+    // (user_id, public_key, key_version ← public_key_version)
+    let prepared = chat.prepare_conversation_key_change(
+        &sender_id,
+        &signing_key_version,
+        &public_key_inputs,
+        None, // new 1:1; pass Some(id) to rotate later
+    )?;
     let participant_keys: Vec<_> = prepared
         .participant_keys
         .iter()
@@ -417,39 +452,70 @@ If the conversation already has keys, skip this step and recover keys from event
             })
         })
         .collect();
+    let action_signatures: Vec<_> = prepared
+        .action_signatures
+        .iter()
+        .map(|sig| {
+            serde_json::json!({
+                "message_id": sig.message_id,
+                "encoded_message_event_detail": sig.encoded_message_event_detail,
+                "message_event_signature": {
+                    "signature": sig.signature,
+                    "public_key_version": sig.public_key_version,
+                    "signature_version": sig.signature_version,
+                },
+            })
+        })
+        .collect();
     let body = serde_json::json!({
         "conversation_key_version": prepared.conversation_key_version,
         "conversation_participant_keys": participant_keys,
+        "action_signatures": action_signatures,
     });
-    http.post(format!("https://api.x.com/2/chat/conversations/{recipient_id}/keys"))
+    let resp: serde_json::Value = http
+        .post(format!("https://api.x.com/2/chat/conversations/{recipient_id}/keys"))
         .header("Authorization", &auth)
         .json(&body)
-        .send()?;
+        .send()?
+        .json()?;
+    // Canonical id for later requests
+    let conversation_id = resp["data"]["conversation_id"].as_str().unwrap().to_string();
     let conv_key = prepared.conversation_key;
     let conv_key_version = prepared.conversation_key_version;
     ```
   </Tab>
   <Tab title="Go">
     ```go
-    prepared, err := chat.PrepareConversationKeys([]chatxdk.PublicKeyInput{
-        {UserID: myUserID, PublicKey: myIdentityPubB64, KeyVersion: myVersion},
-        {UserID: recipientID, PublicKey: theirIdentityPubB64, KeyVersion: theirVersion},
-    })
-    type part struct {
-        UserID                   string `json:"user_id"`
-        EncryptedConversationKey string `json:"encrypted_conversation_key"`
-        PublicKeyVersion         string `json:"public_key_version"`
-    }
-    var parts []part
+    // KeyVersion comes from the public_key_version field on each record
+    prepared, err := chat.PrepareConversationKeyChange(myUserID, signingKeyVersion,
+        []chatxdk.PublicKeyInput{
+            {UserID: myUserID, PublicKey: myIdentityPubB64, KeyVersion: myKeyVersion},
+            {UserID: recipientID, PublicKey: theirIdentityPubB64, KeyVersion: theirKeyVersion},
+        }, "") // empty id for a new 1:1; pass the id to rotate later
+    var parts []map[string]string
     for _, pk := range prepared.ParticipantKeys {
-        parts = append(parts, part{
-            UserID: pk.UserID, EncryptedConversationKey: pk.EncryptedKey,
-            PublicKeyVersion: pk.PublicKeyVersion,
+        parts = append(parts, map[string]string{
+            "user_id":                    pk.UserID,
+            "encrypted_conversation_key": pk.EncryptedKey,
+            "public_key_version":         pk.PublicKeyVersion,
+        })
+    }
+    var sigs []map[string]any
+    for _, sig := range prepared.ActionSignatures {
+        sigs = append(sigs, map[string]any{
+            "message_id":                   sig.MessageID,
+            "encoded_message_event_detail": sig.EncodedMessageEventDetail,
+            "message_event_signature": map[string]string{
+                "signature":          sig.Signature,
+                "public_key_version": sig.PublicKeyVersion,
+                "signature_version":  sig.SignatureVersion,
+            },
         })
     }
     body, _ := json.Marshal(map[string]any{
         "conversation_key_version":      prepared.ConversationKeyVersion,
         "conversation_participant_keys": parts,
+        "action_signatures":             sigs,
     })
     req, _ := http.NewRequest(http.MethodPost,
         "https://api.x.com/2/chat/conversations/"+recipientID+"/keys",
@@ -457,40 +523,60 @@ If the conversation already has keys, skip this step and recover keys from event
     req.Header.Set("Authorization", "Bearer "+accessToken)
     req.Header.Set("Content-Type", "application/json")
     resp, err := httpClient.Do(req)
+    // Response data.conversation_id is the canonical id for later requests
     // prepared.ConversationKey is base64(raw key) — pass to EncryptMessage
     _ = resp
     ```
   </Tab>
   <Tab title="C#">
     ```csharp
-    var prepared = chat.PrepareConversationKeys(new[] {
+    // KeyVersion comes from the public_key_version field on each record
+    var prepared = chat.PrepareConversationKeyChange(myUserId, signingKeyVersion, new[] {
         new PublicKeyInput { UserId = myUserId, PublicKey = myPk, KeyVersion = myVer },
         new PublicKeyInput { UserId = recipientId, PublicKey = theirPk, KeyVersion = theirVer },
-    });
-    var initBody = new {
+    }); // conversationId: null for a new 1:1; pass the id to rotate later
+    var keysBody = new {
         conversation_key_version = prepared.ConversationKeyVersion,
         conversation_participant_keys = prepared.ParticipantKeys.Select(pk => new {
             user_id = pk.UserId,
             encrypted_conversation_key = pk.EncryptedKey,
             public_key_version = pk.PublicKeyVersion,
         }),
+        action_signatures = prepared.ActionSignatures.Select(sig => new {
+            message_id = sig.MessageId,
+            encoded_message_event_detail = sig.EncodedMessageEventDetail,
+            message_event_signature = new {
+                signature = sig.Signature,
+                public_key_version = sig.PublicKeyVersion,
+                signature_version = sig.SignatureVersion,
+            },
+        }),
     };
-    var json = System.Text.Json.JsonSerializer.Serialize(initBody);
+    var json = System.Text.Json.JsonSerializer.Serialize(keysBody);
     using var content = new StringContent(json, Encoding.UTF8, "application/json");
     using var resp = await http.PostAsync(
         $"https://api.x.com/2/chat/conversations/{Uri.EscapeDataString(recipientId)}/keys",
         content);
     resp.EnsureSuccessStatusCode();
-    byte[] convKey = prepared.ConversationKey;
+    var data = System.Text.Json.JsonDocument.Parse(await resp.Content.ReadAsStringAsync())
+        .RootElement.GetProperty("data");
+    string conversationId = data.GetProperty("conversation_id").GetString()!; // canonical id
+    byte[] convKey = prepared.ConversationKey!;
     string convKeyVersion = prepared.ConversationKeyVersion;
     ```
   </Tab>
   <Tab title="Java">
     ```java
-    PreparedConversationKeys prepared = chat.prepareConversationKeys(List.of(
-        new PublicKeyInput(myUserId, myIdentityPubB64, myVersion),
-        new PublicKeyInput(recipientId, theirIdentityPubB64, theirVersion)
-    ));
+    // keyVersion comes from the public_key_version field on each record
+    PublicKeyInput mine = new PublicKeyInput();
+    mine.userId = myUserId; mine.publicKey = myIdentityPubB64; mine.keyVersion = myKeyVersion;
+    PublicKeyInput theirs = new PublicKeyInput();
+    theirs.userId = recipientId; theirs.publicKey = theirIdentityPubB64; theirs.keyVersion = theirKeyVersion;
+
+    PreparedConversationChange prepared = chat.prepareConversationKeyChange(
+        myUserId, signingKeyVersion, List.of(mine, theirs),
+        null); // null for a new 1:1; pass the id to rotate later
+
     List<Map<String, String>> parts = new ArrayList<>();
     for (var pk : prepared.participantKeys) {
         parts.add(Map.of(
@@ -498,17 +584,31 @@ If the conversation already has keys, skip this step and recover keys from event
             "encrypted_conversation_key", pk.encryptedKey,
             "public_key_version", pk.publicKeyVersion));
     }
-    String body = new ObjectMapper().writeValueAsString(Map.of(
+    List<Map<String, Object>> sigs = new ArrayList<>();
+    for (var sig : prepared.actionSignatures) {
+        sigs.add(Map.of(
+            "message_id", sig.messageId,
+            "encoded_message_event_detail", sig.encodedMessageEventDetail,
+            "message_event_signature", Map.of(
+                "signature", sig.signature,
+                "public_key_version", sig.publicKeyVersion,
+                "signature_version", sig.signatureVersion)));
+    }
+    ObjectMapper mapper = new ObjectMapper();
+    String body = mapper.writeValueAsString(Map.of(
         "conversation_key_version", prepared.conversationKeyVersion,
-        "conversation_participant_keys", parts));
+        "conversation_participant_keys", parts,
+        "action_signatures", sigs));
     HttpRequest req = HttpRequest.newBuilder()
         .uri(URI.create("https://api.x.com/2/chat/conversations/" + recipientId + "/keys"))
         .header("Authorization", "Bearer " + accessToken)
         .header("Content-Type", "application/json")
         .POST(HttpRequest.BodyPublishers.ofString(body))
         .build();
-    http.send(req, HttpResponse.BodyHandlers.ofString());
-    byte[] convKey = prepared.conversationKey;
+    HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+    JsonNode data = mapper.readTree(resp.body()).path("data");
+    String conversationId = data.path("conversation_id").asText(); // canonical id
+    byte[] convKey = prepared.getConversationKey();
     String convKeyVersion = prepared.conversationKeyVersion;
     ```
   </Tab>
@@ -526,7 +626,7 @@ Encrypt with the **raw** conversation key (in Go, pass that key as **base64**). 
 | `encoded_event_signature` / … | `encoded_message_event_signature` |
 | Your generated id | `message_id` |
 
-Use a **hyphenated** conversation id in the URL path when the API requires it (`:` → `-`).
+Use a **hyphenated** conversation id in the URL path when the API requires it (`:` → `-`). The SDK itself is flexible: `encrypt_message` and `encrypt_reply` accept the id in any form you hold—`A:B` from events, `A-B` from listings or URL paths (in either order), or just the recipient's user id—and canonicalize it before signing. Group `g…` ids pass through unchanged.
 
 <Tabs>
   <Tab title="Python">
@@ -701,13 +801,13 @@ Use [webhooks or the activity stream](/xchat/real-time-events) for live traffic,
         resp = client.chat.get_user_public_keys(
             user_id,
             public_key_fields=[
-                "version", "public_key", "signing_public_key", "identity_public_key_signature",
+                "public_key_version", "public_key", "signing_public_key", "identity_public_key_signature",
             ],
         )
         return [
             {
                 "user_id": user_id,
-                "public_key_version": r["version"],
+                "public_key_version": r["public_key_version"],
                 "public_key": r["signing_public_key"],
                 "identity_public_key": r["public_key"],
                 "identity_public_key_signature": r["identity_public_key_signature"],
@@ -737,17 +837,17 @@ Use [webhooks or the activity stream](/xchat/real-time-events) for live traffic,
     async function signingKeysFor(userId: string) {
       const resp = await client.chat.getUserPublicKeys(userId, {
         publicKeyFields: [
-          'version', 'public_key', 'signing_public_key', 'identity_public_key_signature',
+          'public_key_version', 'public_key', 'signing_public_key', 'identity_public_key_signature',
         ],
       });
       return resp.data.map((r: {
-        version: string;
+        public_key_version: string;
         public_key: string;
         signing_public_key: string;
         identity_public_key_signature: string;
       }) => ({
         userId,
-        publicKeyVersion: r.version,
+        publicKeyVersion: r.public_key_version,
         publicKey: r.signing_public_key,
         identityPublicKey: r.public_key,
         identityPublicKeySignature: r.identity_public_key_signature,
@@ -781,7 +881,7 @@ Use [webhooks or the activity stream](/xchat/real-time-events) for live traffic,
   <Tab title="Rust">
     ```rust
     // Build Vec<SigningKeyEntry> from GET /2/users/{id}/public_keys
-    // (version, public_key, signing_public_key, identity_public_key_signature)
+    // (public_key_version, public_key, signing_public_key, identity_public_key_signature)
 
     if let Some(kc) = key_change_b64.as_deref() {
         let extracted = chat.extract_conversation_keys(&[kc]);
