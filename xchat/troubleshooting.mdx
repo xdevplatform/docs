@@ -1,0 +1,201 @@
+---
+title: Troubleshooting
+sidebarTitle: Troubleshooting
+description: X Chat encryption and Chat XDK issues
+keywords: ["X Chat errors", "Chat XDK", "decryption", "Juicebox", "encryption"]
+---
+
+This page covers problems that are **specific to X Chat encryption and the Chat XDK**—keys, Juicebox, decrypt/verify, and building encrypted send payloads.
+
+For webhooks, OAuth, HTTP status codes, and rate limits, use the general [X API](/x-api/introduction) and [authentication](/fundamentals/authentication/overview) documentation.
+
+---
+
+## Keys and Juicebox
+
+### Unlock fails (invalid PIN)
+
+- Confirm the PIN matches the one used with `setup`
+- Wait between attempts; realms rate-limit wrong guesses and can lock recovery after too many failures
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    try:
+        chat.unlock(pin)
+    except ValueError as e:
+        print(e)  # may mention InvalidPin or guesses remaining
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    try {
+      await chat.unlock(pin);
+    } catch (e) {
+      console.error((e as Error).message);
+    }
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    chat.unlock(pin_bytes).await?;
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    if err := chat.Unlock(pin, juiceboxConfigJSON); err != nil {
+        log.Println(err)
+    }
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    try { chat.Unlock(pin, juiceboxConfigJson); }
+    catch (Exception e) { Console.WriteLine(e.Message); }
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    try { chat.unlock(pin, juiceboxConfigJson); }
+    catch (Exception e) { System.out.println(e.getMessage()); }
+    ```
+  </Tab>
+</Tabs>
+
+### Encrypt or decrypt fails because keys are not loaded
+
+Load private keys first, then set the public-key **version** from your record on X.
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    chat.unlock(pin)  # or: chat.import_keys(blob)
+    chat.set_key_version(signing_key_version)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    await chat.unlock(pin);
+    chat.setKeyVersion(signingKeyVersion);
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    chat.import_keys(&blob)?;
+    chat.set_key_version(&signing_key_version);
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    _ = chat.ImportKeys(privateKeysB64)
+    chat.SetKeyVersion(signingKeyVersion)
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    chat.ImportKeys(blobBytes);
+    chat.SetKeyVersion(signingKeyVersion);
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    chat.importKeys(blobBytes);
+    chat.setKeyVersion(signingKeyVersion);
+    ```
+  </Tab>
+</Tabs>
+
+### Missing conversation key for a message
+
+You do not have the **raw** key for that message’s `conversation_key_version`.
+
+1. Decrypt key material from `conversation_key_change_event` (live events) or `meta.conversation_key_events` (history) with `extract_conversation_keys`, **or** include those blobs in `decrypt_events`
+2. Confirm conversation keys were initialized and you are still a participant for that version (see [Getting Started](/xchat/getting-started#4-set-up-conversation-keys))
+
+### Peer has no public keys
+
+They may not have finished onboarding. After they register, load `public_key`, `signing_public_key`, `identity_public_key_signature`, and `version` from **API reference → Encryption keys**.
+
+---
+
+## Decryption and signatures
+
+### Decrypt fails
+
+- Stale or wrong **raw** conversation key, or wrong key version
+- Incomplete `encoded_event` string
+- Event type is not an encrypted message you can treat as decryptable content
+
+### Signature does not verify
+
+- Supply a full signing-key entry for the **sender** (all fields required by the Chat XDK—see the [Chat XDK](/xchat/xchat-xdk) reference)
+- Re-fetch their public keys if they rotated versions
+- To fail closed when verification fails:
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    chat.set_reject_unverified(True)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    chat.setRejectUnverified(true);
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    chat.set_reject_unverified(true);
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    chat.SetRejectUnverified(true)
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    chat.SetRejectUnverified(true);
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    chat.setRejectUnverified(true);
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Building the send payload
+
+These mistakes are specific to X Chat encryption (not general HTTP errors):
+
+| Issue | Fix |
+|:------|:----|
+| Wrong key bytes | Pass the **raw** conversation key into the Chat XDK (Go: base64 encoding of those bytes), not the encrypted key string from the API |
+| Wrong JSON field names | Map `encrypted_content` → `encoded_message_create_event` and `encoded_event_signature` → `encoded_message_event_signature` |
+| Missing message id | Generate `message_id` yourself and send the same value in the request body |
+| Version mismatch | Align `conversation_key_version` with the key you use; align signing key version with `set_key_version` / your public-key record |
+| Path id form | Use a hyphenated conversation id in the URL when the API requires it (`:` → `-`) |
+
+---
+
+## Media encrypt and decrypt
+
+- Use the **same** conversation key (and version) as the message that references the attachment
+- Treat download responses as **ciphertext** until you run `decrypt_stream`
+- Infer MIME type **after** decrypt; the download `Content-Type` is often not the real image type
+
+Details: [Media](/xchat/media).
+
+---
+
+## Safe debugging
+
+When investigating crypto failures:
+
+- Log conversation ids, event ids, and key **versions** only
+- Do **not** log plaintext, PINs, private keys, or full key blobs
+- Confirm `set_key_version` matches the `version` on your public-key record
+- For incomplete history, page **all** event pages so key-change metadata is not skipped before decrypting
