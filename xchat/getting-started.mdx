@@ -345,7 +345,11 @@ Use a strong PIN for Juicebox. Losing the PIN or an unprotected key blob can pre
 
 Call **`prepare_conversation_key_change`** with your user ID, your signing key version, and every participant's identity public key. One call generates a fresh conversation key, encrypts it for each participant, and signs the change. POST the result to the **add conversation keys** endpoint (`POST /2/chat/conversations/{id}/keys`)—the body needs `conversation_key_version`, `conversation_participant_keys` (SDK `encrypted_key` → API `encrypted_conversation_key`), and **`action_signatures`** (required; the API rejects the call without them). Keep the **raw** conversation key for sending.
 
-The response returns the canonical conversation id (`data.conversation_id`—the hyphen-joined pair for a 1:1, or the `g…` id for a group) and the key change's `data.sequence_id`. Use that returned id for subsequent requests instead of reconstructing it client-side. The same call also **rotates** keys later: pass the existing conversation id to `prepare_conversation_key_change` and POST with the newer key version.
+The response returns the canonical conversation id (`data.conversation_id`—the hyphen-joined pair for a 1:1, or the g-prefixed id for a group) and the key change's `data.sequence_id`. Use that returned id for subsequent requests instead of reconstructing it client-side. The same call also **rotates** keys later: pass the existing conversation id to `prepare_conversation_key_change` and POST with the newer key version. Rotate when you suspect the conversation key was exposed—rotation protects **future** messages only; messages encrypted under earlier key versions stay readable to anyone who holds those versions.
+
+<Warning>
+**Verify fetched keys before wrapping.** `prepare_conversation_key_change` encrypts the fresh conversation key to whatever public keys you pass. Check each fetched record first with `verify_key_binding(identity, signing, signature)`—passing the record's `public_key`, `signing_public_key`, and `identity_public_key_signature` fields from the public-keys API—so a substituted identity key cannot receive the conversation key.
+</Warning>
 
 <Tabs>
   <Tab title="Python">
@@ -623,10 +627,10 @@ Encrypt with the **raw** conversation key (in Go, pass that key as **base64**). 
 | Chat XDK field | Request body field |
 |:---------------|:-------------------|
 | `encrypted_content` / `encryptedContent` / `EncryptedContent` | `encoded_message_create_event` |
-| `encoded_event_signature` / … | `encoded_message_event_signature` |
+| `encoded_event_signature` / `encodedEventSignature` / `EncodedEventSignature` | `encoded_message_event_signature` |
 | Your generated id | `message_id` |
 
-Use a **hyphenated** conversation id in the URL path when the API requires it (`:` → `-`). The SDK itself is flexible: `encrypt_message` and `encrypt_reply` accept the id in any form you hold—`A:B` from events, `A-B` from listings or URL paths (in either order), or just the recipient's user id—and canonicalize it before signing. Group `g…` ids pass through unchanged.
+Use a **hyphenated** conversation id in the URL path when the API requires it (`:` → `-`). The SDK itself is flexible: `encrypt_message` and `encrypt_reply` accept the id in any form you hold—`A:B` from events, `A-B` from listings or URL paths (in either order), or just the recipient's user id—and canonicalize it before signing. Group ids (prefixed with `g`) pass through unchanged.
 
 <Tabs>
   <Tab title="Python">

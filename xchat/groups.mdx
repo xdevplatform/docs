@@ -27,18 +27,20 @@ Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the gro
 
 ## Create the group and establish keys
 
-1. Mint the group id with `POST /2/chat/conversations/group/initialize` — the response's `data.conversation_id` is the `g…` id you use everywhere below.
-2. Load each member's identity public key and `public_key_version` (`GET` public-key routes under **Encryption keys**).
-3. Run **`prepare_group_create`** once, with **all** members (including yourself), the `g…` id, and the member/admin id lists. One call generates the conversation key, wraps it for every member, and signs the create — it returns **two** action signatures (the conversation-key change and the group create).
+1. Mint the group id with `POST /2/chat/conversations/group/initialize` — the response's `data.conversation_id` is the g-prefixed id you use everywhere below.
+2. Load each member's identity public key and `public_key_version` (`GET` public-key routes under **Encryption keys**; [`GET /2/users/public_keys`](/x-api/users/get-public-keys-for-multiple-users) fetches several users in one request). Verify each record with `verify_key_binding` before using it (see the warning in [Getting Started](/xchat/getting-started#4-set-up-conversation-keys)).
+3. Run **`prepare_group_create`** once, with **all** members (including yourself), the g-prefixed id, and the member/admin id lists. One call generates the conversation key, wraps it for every member, and signs the create — it returns **two** action signatures (the conversation-key change and the group create).
 4. `POST /2/chat/conversations/group` with the group members/admins, `conversation_key_version`, `conversation_participant_keys` (SDK **`encrypted_key`** → API **`encrypted_conversation_key`**), and **both** `action_signatures`. Validation failures come back as stable, human-readable messages, for example `"Too many members: adding these members would exceed the allowed group size."` or `"Cannot add all members: one or more of the requested members cannot be added to this conversation."`.
 5. Keep the **raw** conversation key and **version** for encrypt/decrypt.
+
+The `title` and `avatar_url` you pass to `prepare_group_create` are signed and embedded verbatim in the group-create event, and the server matches them against the request — so the `group_name` / `group_avatar_url` values in the POST body must be **byte-identical** to what you passed the SDK, or the call fails signature validation.
 
 <Tabs>
   <Tab title="Python">
     ```python
     prepared = chat.prepare_group_create(
         "YOUR_USER_ID", signing_key_version, member_public_keys,
-        group_id,  # g… id from POST /2/chat/conversations/group/initialize
+        group_id,  # g-prefixed id from POST /2/chat/conversations/group/initialize
         member_ids, admin_ids, title="Project team",
     )
     # POST /2/chat/conversations/group with group_members, group_admins,
@@ -50,7 +52,7 @@ Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the gro
     ```typescript
     const prepared = chat.prepareGroupCreate(
       myUserId, signingKeyVersion, memberPublicKeys,
-      groupId, // g… id from POST /2/chat/conversations/group/initialize
+      groupId, // g-prefixed id from POST /2/chat/conversations/group/initialize
       memberIds, adminIds, 'Project team',
     );
     // prepared.actionSignatures has two entries — send both
@@ -108,11 +110,15 @@ The body mapping for participant keys and action signatures (`message_id`, `enco
 
 When membership changes, call **`prepare_group_members_change`** with the new member ids plus the current roster (members, admins, pending members, and the current title/avatar/TTL if set). It rotates the conversation key and, like group create, returns **two** action signatures — POST all of it to **add members** (`POST /2/chat/conversations/{id}/members`). Then expect **key-change** traffic: treat it like [key rotation in Getting Started](/xchat/getting-started#6-receive-and-decrypt) (`extract_conversation_keys` / `decrypt_events`, then encrypt with the latest version).
 
+Because `prepare_group_members_change` generates a **fresh** conversation key wrapped only to the roster you pass, new members receive the new key version and cannot decrypt messages sent under earlier versions. The reverse is not true: rotation never revokes access to **earlier** versions — anyone who already holds an old key can still read the messages encrypted under it. If you suspect a conversation key was exposed, rotate with `prepare_conversation_key_change`; this protects future messages only.
+
 ---
 
 ## Encrypted group metadata
 
 Some conversation fields (for example display **name** or **avatar URL**) may arrive **encrypted** under the conversation key. That is **not** `encrypt_message`; it is the generic Chat XDK **`encrypt` / `decrypt`** pair (UTF-8 string in, base64 ciphertext out, with the **raw** conversation key).
+
+Whether a given field is stored encrypted is decided by the client that writes it: `prepare_group_create` signs and sends the title exactly as you provide it (the conversation key does not exist until that call generates it, so a create-time title cannot be encrypted under it). When you read a conversation whose fields are ciphertext, decrypt them with `decrypt` and the key version that was active when the field was written.
 
 <Tabs>
   <Tab title="Python">
@@ -176,9 +182,9 @@ Always encrypt with the **latest** key version after a membership-driven rotatio
 
 ## Checklist
 
-1. Mint the `g…` id with `POST /2/chat/conversations/group/initialize`  
+1. Mint the g-prefixed id with `POST /2/chat/conversations/group/initialize`  
 2. `prepare_group_create` with **every** member; POST participant key wraps and **both** action signatures to `POST /2/chat/conversations/group`  
 3. Cache raw key + version; update on key-change events  
-4. On membership changes, `prepare_group_members_change` (two signatures) → `POST …/{id}/members`  
+4. On membership changes, `prepare_group_members_change` (two signatures) → `POST /2/chat/conversations/{id}/members`  
 5. Decrypt group metadata with `decrypt` when fields are ciphertext  
 6. Send/receive with the same patterns as 1:1  
