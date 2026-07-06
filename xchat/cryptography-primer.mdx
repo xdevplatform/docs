@@ -226,6 +226,14 @@ If anything in the signed material changes, verification fails. Only someone wit
 
 The Chat XDK signs when you encrypt outbound messages and verifies when you decrypt inbound ones—**if** you provide the sender’s public key material (from the public-key APIs). Results typically include a **verified** flag; you can treat unverified messages as suspicious or configure the SDK to reject them. Details are in the [Chat XDK](/xchat/xchat-xdk) reference.
 
+### Signed state changes (action signatures)
+
+Messages are not the only signed material. Every call that changes conversation state—adding or rotating conversation keys, creating a group, adding members—must carry one or more **action signatures**: the sender signs a payload describing exactly what the change does (for a key change, that payload includes the new conversation key itself), and the API rejects the request if the signatures are missing or malformed.
+
+Because the server never holds the plaintext conversation key, it cannot check a key change's signature cryptographically; it validates that the signed, encoded description of the change matches the request it received. The **cryptographic** check happens at the edges: each recipient's Chat XDK verifies the signature against the sender's signing public key when it decrypts the key-change event. The Chat XDK's `prepare` methods produce these signatures for you—group creates and member adds return **two** (the key change plus the group action), and both must be sent.
+
+Signatures are bound to the event contents and are immutable: an event whose signature does not verify can never become valid later. See [Troubleshooting](/xchat/troubleshooting) for how to treat those.
+
 ---
 
 ## Security properties

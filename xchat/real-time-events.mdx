@@ -9,7 +9,7 @@ X delivers **`chat.received`**, **`chat.sent`**, and related X Chat activity wit
 | Layer | Role |
 |:------|:-----|
 | **Activity API** | `GET /2/activity/stream`; `POST` / `GET` / `PUT` / `DELETE` `/2/activity/subscriptions` (see OpenAPI security per operation) |
-| **Account Activity webhooks** | Optional `/2/account_activity/webhooks/...` subscription routes if you terminate on your own HTTPS URL |
+| **Account Activity webhooks** | Optional `/2/account_activity/webhooks/{webhook_id}` subscription routes if you terminate on your own HTTPS URL |
 | **Chat XDK** | `extract_conversation_keys`, `decrypt_event` / `decrypt_events` |
 
 Private X Chat event types need authorization for the user you monitor. Encrypted X Chat file attachments use **`media_hash_key`** and X Chat media download—not Post API `expansions=attachments.media_keys` / `media.fields=variants`.
@@ -39,7 +39,7 @@ Private X Chat event types need authorization for the user you monitor. Encrypte
 
 Request bodies and required scopes are defined in the OpenAPI operation for each route (typically Bearer for app-level XAA management).
 
-**Webhooks (Account Activity-style):** if you terminate events on your HTTPS endpoint, register a webhook, pass CRC challenges, then create subscriptions under `/2/account_activity/webhooks/{webhook_id}/subscriptions/...` (see Account Activity operations in OpenAPI). Python/TypeScript XDK may expose helpers for webhooks and activity when your SDK version includes them.
+**Webhooks (Account Activity-style):** if you terminate events on your HTTPS endpoint, register a webhook, pass CRC challenges, then create subscriptions under `/2/account_activity/webhooks/{webhook_id}/subscriptions/all` (see Account Activity operations in OpenAPI). Python/TypeScript XDK may expose helpers for webhooks and activity when your SDK version includes them.
 
 <Tabs>
   <Tab title="Python">
@@ -48,7 +48,8 @@ Request bodies and required scopes are defined in the OpenAPI operation for each
 
     # Stream (app token) — exact helper names depend on your XDK version
     stream_client = Client(bearer_token="YOUR_BEARER_TOKEN")
-    # for event in stream_client.activity.stream(): ...
+    # for event in stream_client.activity.stream():
+    #     handle_payload(event)  # see "Decrypt with the Chat XDK" below
 
     # Or create a subscription (check XDK for create_subscription vs activity API)
     client = Client(bearer_token="YOUR_BEARER_TOKEN")
@@ -228,7 +229,7 @@ JavaScript uses camelCase event types (`message`); other bindings use `"Message"
   </Tab>
 </Tabs>
 
-History: [`GET …/events`](/x-api/chat/get-chat-conversation-events) + **`decrypt_events`** — see [Getting Started](/xchat/getting-started#6-receive-and-decrypt).
+History: [`GET /2/chat/conversations/{id}/events`](/x-api/chat/get-chat-conversation-events) + **`decrypt_events`** — see [Getting Started](/xchat/getting-started#6-receive-and-decrypt).
 
 ---
 
@@ -238,13 +239,13 @@ History: [`GET …/events`](/x-api/chat/get-chat-conversation-events) + **`decry
 {
   "data": {
     "event_type": "chat.received",
-    "event_uuid": "…",
+    "event_uuid": "0f52b591-4b7e-4f13-92cd-30e6b2a3f18a",
     "payload": {
-      "conversation_id": "…",
-      "sender_id": "…",
-      "encoded_event": "…",
-      "conversation_key_version": "…",
-      "conversation_key_change_event": "…"
+      "conversation_id": "1215441834412953600-1843439638876491776",
+      "sender_id": "1843439638876491776",
+      "encoded_event": "BASE64_ENCODED_MESSAGE_EVENT",
+      "conversation_key_version": "1782945126642",
+      "conversation_key_change_event": "BASE64_ENCODED_KEY_CHANGE_EVENT"
     }
   }
 }

@@ -52,7 +52,7 @@ App walkthrough: [Getting Started](/xchat/getting-started). Sample bots: [chat-x
 
 ## Quick start
 
-Decrypt a backlog, cache keys, decrypt one event, encrypt a reply. Wire the send body to [`POST …/messages`](/x-api/chat/send-chat-message) as in [Getting Started](/xchat/getting-started).
+Decrypt a backlog, cache keys, decrypt one event, encrypt a reply. Wire the send body to [`POST /2/chat/conversations/{id}/messages`](/x-api/chat/send-chat-message) as in [Getting Started](/xchat/getting-started).
 
 <Tabs>
   <Tab title="Python">
@@ -237,7 +237,9 @@ Construct the SDK, store private keys (Juicebox PIN or a local key blob), regist
     defer chat.Close()
 
     // Prefer ImportKeys for servers; Juicebox unlock where supported
-    if err := chat.ImportKeys(privateKeysB64); err != nil { /* ... */ }
+    if err := chat.ImportKeys(privateKeysB64); err != nil {
+        log.Fatal(err)
+    }
     chat.SetKeyVersion(version)
     publics, err := chat.GetPublicKeys()
     blob, err := chat.ExportKeys()
@@ -284,12 +286,20 @@ Three **prepare** methods each make one call do everything a key change needs: g
 
 Keep the **raw** key bytes (Go: base64 of those bytes) for `encrypt_message` and media; never pass the API’s encrypted envelope into encrypt.
 
+<Warning>
+**Verify fetched keys before wrapping.** The prepare methods encrypt the fresh conversation key to whatever public keys you pass. Before passing them, call `verify_key_binding(identity, signing, signature)` on each fetched record—its `public_key`, `signing_public_key`, and `identity_public_key_signature` fields from the public-keys API—so a substituted identity key cannot receive the conversation key.
+</Warning>
+
 Use `extract_conversation_keys` on key-change event payloads to rebuild `{ keys, latest_version }`. `decrypt_conversation_key` unwraps a single ECIES blob.
 
 <Tabs>
   <Tab title="Python">
     ```python
-    # participants: [{"user_id": ..., "public_key": ..., "key_version": ...}, ...]
+    # One entry per participant public key, from the public-keys API:
+    # participants = [
+    #     {"user_id": "1215441834412953600", "public_key": "BASE64_IDENTITY_PUBLIC_KEY", "key_version": "1733889755256"},
+    #     {"user_id": "1843439638876491776", "public_key": "BASE64_IDENTITY_PUBLIC_KEY", "key_version": "1766181805686"},
+    # ]
     prepared = chat.prepare_conversation_key_change(my_user_id, signing_key_version, participants)
     # prepared["conversation_key"]   — raw bytes for encrypt_message
     # prepared["participant_keys"]   — per-user wraps; rename encrypted_key → encrypted_conversation_key on POST
@@ -456,7 +466,7 @@ Pass **signing keys** so the SDK can verify senders. Map API public-key fields i
 
 Use **`encrypt_reply`**, **`encrypt_add_reaction`**, and **`encrypt_remove_reaction`** for replies and reactions (`sequence_id` targets the parent). **`encrypt` / `decrypt`** are for UTF-8 metadata under the conversation key (for example an encrypted group name)—not message envelopes. **`encrypt_stream` / `decrypt_stream`** encrypt attachment bytes; see [Media](/xchat/media). Low-level **`sign` / `verify` / `verify_key_binding`** support advanced flows; conversation-key changes, group creates, and member adds are signed by the [prepare methods](#conversation-keys).
 
-The conversation id passed to `encrypt_message` / `encrypt_reply` can be any form you hold—`A:B` from events, `A-B` from listings or URL paths (in either order), or the bare recipient user id—the SDK canonicalizes it before signing. Group `g…` ids pass through unchanged.
+The conversation id passed to `encrypt_message` / `encrypt_reply` can be any form you hold—`A:B` from events, `A-B` from listings or URL paths (in either order), or the bare recipient user id—the SDK canonicalizes it before signing. Group ids (prefixed with `g`) pass through unchanged.
 
 <Tabs>
   <Tab title="Python">
@@ -464,16 +474,20 @@ The conversation id passed to `encrypt_message` / `encrypt_reply` can be any for
     payload = chat.encrypt_message(
         message_id, sender_id, conversation_id, raw_conversation_key, "Hello",
         conversation_key_version, signing_key_version,
-        # media_hash_key=..., entities=..., expires_at=..., ...
+        # Optional keyword args: entities, attachments, should_notify, ttl_msec
     )
     body = {
         "message_id": message_id,
         "encoded_message_create_event": payload["encrypted_content"],
         "encoded_message_event_signature": payload["encoded_event_signature"],
     }
-    # POST body to /2/chat/.../messages
+    # POST body to /2/chat/conversations/{id}/messages
 
-    reply = chat.encrypt_reply(..., sequence_id=parent_sequence_id, text="Sounds good")
+    reply = chat.encrypt_reply(
+        reply_message_id, sender_id, conversation_id, raw_conversation_key,
+        "Sounds good", conversation_key_version, signing_key_version,
+        parent_sequence_id,  # reply_to_sequence_id — the message being replied to
+    )
     name_ct = chat.encrypt("Group title", raw_conversation_key)
     title = chat.decrypt(name_ct, raw_conversation_key)
     ```
@@ -490,7 +504,11 @@ The conversation id passed to `encrypt_message` / `encrypt_reply` can be any for
       encoded_message_event_signature: payload.encodedEventSignature,
     };
 
-    const reply = chat.encryptReply({ /* ... */ sequenceId: parentSequenceId, text: 'Sounds good' });
+    const reply = chat.encryptReply(
+      replyMessageId, senderId, conversationId, rawConversationKey,
+      'Sounds good', conversationKeyVersion, signingKeyVersion,
+      parentSequenceId, // replyToSequenceId — the message being replied to
+    );
     const nameCt = chat.encrypt('Group title', rawConversationKey);
     const title = chat.decrypt(nameCt, rawConversationKey);
     ```
