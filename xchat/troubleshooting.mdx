@@ -110,11 +110,11 @@ Load private keys first, then set the public-key **version** from your record on
 You do not have the **raw** key for that message’s `conversation_key_version`.
 
 1. Decrypt key material from `conversation_key_change_event` (live events) or `meta.conversation_key_events` (history) with `extract_conversation_keys`, **or** include those blobs in `decrypt_events`
-2. Confirm conversation keys were initialized and you are still a participant for that version (see [Getting Started](/xchat/getting-started#4-set-up-conversation-keys))
+2. Confirm conversation keys were added for that version and you are still a participant (see [Getting Started](/xchat/getting-started#4-set-up-conversation-keys))
 
 ### Peer has no public keys
 
-They may not have finished onboarding. After they register, load `public_key`, `signing_public_key`, `identity_public_key_signature`, and `version` from **API reference → Encryption keys**.
+They may not have finished onboarding. After they register, load `public_key`, `signing_public_key`, `identity_public_key_signature`, and `public_key_version` from **API reference → Encryption keys**.
 
 ---
 
@@ -165,6 +165,10 @@ They may not have finished onboarding. After they register, load `public_key`, `
   </Tab>
 </Tabs>
 
+### Old events permanently fail verification
+
+Errors like `signature missing or no matching signing key` or an ECDSA mismatch on **old** events are permanent. Signatures are immutable and verified by rebuilding the signed payload from the event itself, so an event that was signed over different bytes (or never signed) fails on every future load—no retry, key refresh, or API call can heal it. Treat these events as tombstones, not retryable errors. Rotating the conversation key starts a clean, verifiable history from that point forward; new messages are unaffected.
+
 ---
 
 ## Building the send payload
@@ -177,7 +181,11 @@ These mistakes are specific to X Chat encryption (not general HTTP errors):
 | Wrong JSON field names | Map `encrypted_content` → `encoded_message_create_event` and `encoded_event_signature` → `encoded_message_event_signature` |
 | Missing message id | Generate `message_id` yourself and send the same value in the request body |
 | Version mismatch | Align `conversation_key_version` with the key you use; align signing key version with `set_key_version` / your public-key record |
-| Path id form | Use a hyphenated conversation id in the URL when the API requires it (`:` → `-`) |
+| Path id form | URL paths still need the hyphenated conversation id (`:` → `-`), but for signing the SDK accepts any form: `A:B`, `A-B` (either order), or the bare recipient user id—all canonicalize to the same signed bytes |
+
+### API returns 400 for a state-changing call
+
+Every state-changing chat call—adding or rotating conversation keys, creating a group, adding members—requires **`action_signatures`** in the request body, validated at the API boundary. A missing or malformed entry (each needs `message_id`, `encoded_message_event_detail`, and a `message_event_signature` with `signature`, `public_key_version`, and `signature_version`) returns an HTTP 400 problem-details response immediately. Use the SDK prepare methods (`prepare_conversation_key_change`, `prepare_group_create`, `prepare_group_members_change`) and send **all** returned signatures—group create and member adds return two.
 
 ---
 
@@ -197,5 +205,5 @@ When investigating crypto failures:
 
 - Log conversation ids, event ids, and key **versions** only
 - Do **not** log plaintext, PINs, private keys, or full key blobs
-- Confirm `set_key_version` matches the `version` on your public-key record
+- Confirm `set_key_version` matches the `public_key_version` on your public-key record
 - For incomplete history, page **all** event pages so key-change metadata is not skipped before decrypting

@@ -274,51 +274,65 @@ Optional: `set_reject_unverified` so decrypt fails when a signature cannot be ve
 
 ## Conversation keys
 
-For a new conversation (or rotation), **prefer** `prepare_conversation_keys`: it generates a conversation key and wraps a copy for each participant’s identity public key. Post those wraps to the initialize-keys (or key-change) API—rename SDK field `encrypted_key` to **`encrypted_conversation_key`**. Keep the **raw** key bytes (Go: often base64 of those bytes) for `encrypt_message` and media; never pass the API’s encrypted envelope into encrypt.
+Three **prepare** methods each make one call do everything a key change needs: generate a fresh conversation key, encrypt it for every participant (from the public keys you pass), and sign the change. All return the same **`PreparedConversationChange`** shape, ready to POST—rename SDK field `encrypted_key` to **`encrypted_conversation_key`** in `conversation_participant_keys`, and map the action signatures into the required **`action_signatures`** body field.
 
-Use `extract_conversation_keys` on key-change event payloads to rebuild `{ keys, latest_version }`. `decrypt_conversation_key` unwraps a single ECIES blob; `encrypt_conversation_key_for_recipients` re-wraps an existing key for many users.
+| Scenario | Method | Action signatures returned |
+|:---------|:-------|:---------------------------|
+| Start a 1:1 (omit the conversation id—the SDK derives it) or rotate any conversation’s key (pass the id) | `prepare_conversation_key_change` | 1 |
+| Create a group (id minted by `POST /2/chat/conversations/group/initialize`) | `prepare_group_create` | 2—send both |
+| Add members to a group | `prepare_group_members_change` | 2—send both |
+
+Keep the **raw** key bytes (Go: base64 of those bytes) for `encrypt_message` and media; never pass the API’s encrypted envelope into encrypt.
+
+Use `extract_conversation_keys` on key-change event payloads to rebuild `{ keys, latest_version }`. `decrypt_conversation_key` unwraps a single ECIES blob.
 
 <Tabs>
   <Tab title="Python">
     ```python
-    prepared = chat.prepare_conversation_keys(participants)
-    # prepared["conversation_key"]  — raw bytes for encrypt_message
-    # prepared["encrypted_keys"]    — per-user wraps; rename encrypted_key → encrypted_conversation_key on POST
+    # participants: [{"user_id": ..., "public_key": ..., "key_version": ...}, ...]
+    prepared = chat.prepare_conversation_key_change(my_user_id, signing_key_version, participants)
+    # prepared["conversation_key"]   — raw bytes for encrypt_message
+    # prepared["participant_keys"]   — per-user wraps; rename encrypted_key → encrypted_conversation_key on POST
+    # prepared["action_signatures"]  — required on the POST body
 
     extracted = chat.extract_conversation_keys(key_change_blobs)
     keys = extracted["keys"]
     latest = extracted["latest_version"]
     raw = keys[latest]
 
-    one = chat.decrypt_conversation_key(encrypted_blob, sender_identity_public_key)
+    one = chat.decrypt_conversation_key(encrypted_blob)
     ```
   </Tab>
   <Tab title="TypeScript">
     ```typescript
-    const prepared = chat.prepareConversationKeys(participants);
+    const prepared = chat.prepareConversationKeyChange(myUserId, signingKeyVersion, participants);
     // prepared.conversationKey — Uint8Array for encryptMessage
-    // prepared.encryptedKeys — POST with encryptedConversationKey field names
+    // prepared.participantKeys / prepared.actionSignatures — POST body fields
 
     const extracted = chat.extractConversationKeys(keyChangeBlobs);
     const raw = extracted.keys[extracted.latestVersion!];
 
-    const one = chat.decryptConversationKey(encryptedBlob, senderIdentityPublicKey);
+    const one = chat.decryptConversationKey(encryptedBlob);
     ```
   </Tab>
   <Tab title="Rust">
     ```rust
-    let prepared = chat.prepare_conversation_keys(&participants)?;
-    let extracted = chat.extract_conversation_keys(&key_change_blobs)?;
-    let raw = &extracted.keys[&extracted.latest_version];
-    let one = chat.decrypt_conversation_key(&encrypted_blob, &sender_identity_pk)?;
+    let prepared = chat.prepare_conversation_key_change(
+        &my_user_id, &signing_key_version, &participants, None,
+    )?;
+    let extracted = chat.extract_conversation_keys(&key_change_blobs);
+    let latest = extracted.latest_version.as_deref().unwrap_or_default();
+    let raw = &extracted.keys[latest];
+    let one = chat.decrypt_conversation_key(&encrypted_blob)?;
     ```
   </Tab>
   <Tab title="Go">
     ```go
-    prepared, err := chat.PrepareConversationKeys(participants)
-    // prepared.ConversationKey is typically base64 of the raw key for later EncryptMessage
+    prepared, err := chat.PrepareConversationKeyChange(myUserID, signingKeyVersion, participants, "")
+    // prepared.ConversationKey is base64 of the raw key for later EncryptMessage
+    // prepared.ParticipantKeys / prepared.ActionSignatures — POST body fields
     extracted, err := chat.ExtractConversationKeys(keyChangeBlobs)
-    one, err := chat.DecryptConversationKey(encryptedBlob, senderIdentityPK)
+    one, err := chat.DecryptConversationKey(encryptedBlob)
     _ = prepared
     _ = extracted
     _ = one
@@ -327,21 +341,24 @@ Use `extract_conversation_keys` on key-change event payloads to rebuild `{ keys,
   </Tab>
   <Tab title="C#">
     ```csharp
-    var prepared = chat.PrepareConversationKeys(participants);
+    var prepared = chat.PrepareConversationKeyChange(myUserId, signingKeyVersion, participants);
     var extracted = chat.ExtractConversationKeys(keyChangeBlobs);
     var raw = extracted.Keys[extracted.LatestVersion];
-    var one = chat.DecryptConversationKey(encryptedBlob, senderIdentityPublicKey);
+    var one = chat.DecryptConversationKey(encryptedBlob);
     ```
   </Tab>
   <Tab title="Java">
     ```java
-    PreparedConversationKeys prepared = chat.prepareConversationKeys(participants);
-    ExtractedConversationKeys extracted = chat.extractConversationKeys(keyChangeBlobs);
+    PreparedConversationChange prepared = chat.prepareConversationKeyChange(
+        myUserId, signingKeyVersion, participants, null);
+    ConversationKeyBundle extracted = chat.extractConversationKeys(keyChangeBlobs);
     byte[] raw = extracted.keys.get(extracted.latestVersion);
-    byte[] one = chat.decryptConversationKey(encryptedBlob, senderIdentityPublicKey);
+    byte[] one = chat.decryptConversationKey(encryptedBlob);
     ```
   </Tab>
 </Tabs>
+
+For group create and member adds, pass the params each method needs (member/admin id lists for `prepare_group_create`; new plus current roster for `prepare_group_members_change`)—see [Groups](/xchat/groups#create-the-group-and-establish-keys) for samples. Both return **two** action signatures; the POST must include both.
 
 ---
 
@@ -349,14 +366,14 @@ Use `extract_conversation_keys` on key-change event payloads to rebuild `{ keys,
 
 **`decrypt_events`** is for history and backlog: it pulls conversation keys from the stream, returns decrypted messages, and **collects** per-event errors instead of failing the whole batch. **`decrypt_event`** is for a single live event when you already have a key cache; it raises/throws on failure.
 
-Pass **signing keys** so the SDK can verify senders. Map API public-key fields into `SigningKeyEntry`: `version` → `public_key_version`, `signing_public_key` → `public_key`, `public_key` → `identity_public_key`, plus `identity_public_key_signature` and `user_id`. Omit or pass an empty list to skip verification (not recommended in production).
+Pass **signing keys** so the SDK can verify senders. Map API public-key fields into `SigningKeyEntry`: `public_key_version` → `public_key_version` (same name), `signing_public_key` → `public_key`, `public_key` → `identity_public_key`, plus `identity_public_key_signature` and `user_id`. Omit or pass an empty list to skip verification (not recommended in production).
 
 <Tabs>
   <Tab title="Python">
     ```python
     signing_keys = [{
         "user_id": uid,
-        "public_key_version": row["version"],
+        "public_key_version": row["public_key_version"],
         "public_key": row["signing_public_key"],
         "identity_public_key": row["public_key"],
         "identity_public_key_signature": row["identity_public_key_signature"],
@@ -378,7 +395,7 @@ Pass **signing keys** so the SDK can verify senders. Map API public-key fields i
     ```typescript
     const signingKeys = apiPublicKeys.map((row) => ({
       userId: uid,
-      publicKeyVersion: row.version,
+      publicKeyVersion: row.public_key_version,
       publicKey: row.signing_public_key,
       identityPublicKey: row.public_key,
       identityPublicKeySignature: row.identity_public_key_signature,
@@ -437,7 +454,9 @@ Pass **signing keys** so the SDK can verify senders. Map API public-key fields i
 
 **`encrypt_message`** builds the signed ciphertext for a text message (optional entities, attachments via `media_hash_key`, TTL, notify flags). Map the returned payload into the send-message body: `encrypted_content` → **`encoded_message_create_event`**, `encoded_event_signature` → **`encoded_message_event_signature`**, plus your **`message_id`**.
 
-Use **`encrypt_reply`**, **`encrypt_add_reaction`**, and **`encrypt_remove_reaction`** for replies and reactions (`sequence_id` targets the parent). **`encrypt` / `decrypt`** are for UTF-8 metadata under the conversation key (for example an encrypted group name)—not message envelopes. **`encrypt_stream` / `decrypt_stream`** encrypt attachment bytes; see [Media](/xchat/media). Low-level **`sign` / `verify` / `verify_key_binding`** and group helpers **`sign_add_members` / `sign_key_change`** support advanced flows.
+Use **`encrypt_reply`**, **`encrypt_add_reaction`**, and **`encrypt_remove_reaction`** for replies and reactions (`sequence_id` targets the parent). **`encrypt` / `decrypt`** are for UTF-8 metadata under the conversation key (for example an encrypted group name)—not message envelopes. **`encrypt_stream` / `decrypt_stream`** encrypt attachment bytes; see [Media](/xchat/media). Low-level **`sign` / `verify` / `verify_key_binding`** support advanced flows; conversation-key changes, group creates, and member adds are signed by the [prepare methods](#conversation-keys).
+
+The conversation id passed to `encrypt_message` / `encrypt_reply` can be any form you hold—`A:B` from events, `A-B` from listings or URL paths (in either order), or the bare recipient user id—the SDK canonicalizes it before signing. Group `g…` ids pass through unchanged.
 
 <Tabs>
   <Tab title="Python">
@@ -659,7 +678,7 @@ These conceptual types show up across languages (exact field names differ; JS of
 - **SendPayload** — return value of `encrypt_message` and related encrypt helpers; map into the Chat API send body.
 - **PublicKeyRegistrationPayload** — output of `generate_keypairs` / public-key getters for the add-public-key API.
 - **SigningKeyEntry** — sender public material passed into decrypt for signature verification.
-- **PreparedConversationKeys** — output of `prepare_conversation_keys` (raw key + per-participant wraps).
+- **PreparedConversationChange** — output of the three prepare methods: the derived or passed `conversation_id`, the raw `conversation_key` (Go: base64 string), `conversation_key_version`, `participant_keys` (`user_id`, `encrypted_key`, `public_key_version`), and `action_signatures` (`message_id`, `encoded_message_event_detail`, `signature`, `signature_version`, `public_key_version`, optional `signature_payload`—omitted on key-change signatures because that payload embeds the plaintext key).
 - **DecryptEventsResult** — messages, optional errors, and extracted `conversation_keys`.
 
 For complete field lists, use language stubs in the [chat-xdk repo](https://github.com/xdevplatform/chat-xdk) (`docs/API.md`, `*.pyi`, `index.d.ts`).
@@ -669,6 +688,8 @@ For complete field lists, use language stubs in the [chat-xdk repo](https://gith
 ## Errors
 
 Python typically raises **`ValueError`** with a descriptive message (for example an invalid PIN). TypeScript/JavaScript throws **`Error`**. Go returns `(value, error)`. Prefer **`decrypt_events`** for history so one bad event does not abort the batch; inspect the errors collection for partial failures.
+
+Some verification errors are **permanent**. Signatures are immutable and verified by rebuilding the signed payload from the event itself, so an old event that fails with `signature missing or no matching signing key` or an ECDSA mismatch will fail on every future load—no retry, key refresh, or API call can heal it. Treat these as tombstones, not transient errors. Rotating the conversation key starts a clean, verifiable history from that point forward.
 
 ---
 
