@@ -101,10 +101,10 @@ Decrypt a backlog, cache keys, decrypt one event, encrypt a reply. Wire the send
     const event = chat.decryptEvent(oneEventB64, cached, senderSigningKeys);
 
     const rawKey = cached[result.conversationKeys.latestVersion!];
-    const payload = chat.encryptMessage(
-      messageId, senderId, conversationId, rawKey, 'Hi!',
+    const payload = chat.encryptMessage({
+      messageId, senderId, conversationId, conversationKey: rawKey, text: 'Hi!',
       conversationKeyVersion, signingKeyVersion,
-    );
+    });
     ```
   </Tab>
   <Tab title="Rust">
@@ -113,8 +113,11 @@ Decrypt a backlog, cache keys, decrypt one event, encrypt a reply. Wire the send
     let result = chat.decrypt_events(&raw_events, &signing_keys);
     let cached = &result.conversation_keys.keys;
     let event = chat.decrypt_event(one_event_b64, cached, &sender_signing_keys)?;
+    // cached values are XChatConversationKey; encrypt_message wants owned bytes
+    let latest = result.conversation_keys.latest_version.as_deref().unwrap_or_default();
+    let conv_key = cached[latest].to_bytes();
     let payload = chat.encrypt_message(EncryptMessageParams::new(
-        &message_id, &sender_id, &conversation_id, &raw_key, "Hi!",
+        &message_id, &sender_id, &conversation_id, conv_key, "Hi!",
         &conversation_key_version, &signing_key_version,
     ))?;
     ```
@@ -123,7 +126,8 @@ Decrypt a backlog, cache keys, decrypt one event, encrypt a reply. Wire the send
     ```go
     chat := chatxdk.New()
     defer chat.Close()
-    _ = chat.ImportKeys(privateKeysB64)
+    blob, _ := chatxdk.Base64ToBytes(privateKeysB64)
+    _ = chat.ImportKeys(blob)
     chat.SetKeyVersion(signingKeyVersion)
 
     result, err := chat.DecryptEvents(rawEvents, signingKeys)
@@ -239,7 +243,8 @@ Construct the SDK, store private keys (Juicebox PIN or a local key blob), regist
     defer chat.Close()
 
     // Prefer ImportKeys for servers; Juicebox unlock where supported
-    if err := chat.ImportKeys(privateKeysB64); err != nil {
+    keyBlob, _ := chatxdk.Base64ToBytes(privateKeysB64)
+    if err := chat.ImportKeys(keyBlob); err != nil {
         log.Fatal(err)
     }
     chat.SetKeyVersion(version)
@@ -272,7 +277,7 @@ Construct the SDK, store private keys (Juicebox PIN or a local key blob), regist
   </Tab>
 </Tabs>
 
-The Juicebox config you pass at construction accepts three shapes: the X API `juicebox_config` object (recommended—passed verbatim), a full `sdk_config` wrapper, or a bare `token_map`.
+The Juicebox config accepts three shapes: the X API `juicebox_config` object (recommended—passed verbatim), a full `sdk_config` wrapper, or a bare `token_map`.
 
 Optional: signature verification is **on by default** (`reject_unverified = true`)—call `set_reject_unverified(false)` to disable it (not recommended); `update_config` if Juicebox realm config changes; `is_unlocked` / `has_identity_key` for UI state. Full field lists live in the [chat-xdk repo](https://github.com/xdevplatform/chat-xdk) stubs.
 
@@ -507,34 +512,35 @@ The conversation id passed to `encrypt_message` / `encrypt_reply` can be any for
   </Tab>
   <Tab title="TypeScript">
     ```typescript
-    const payload = chat.encryptMessage(
-      messageId, senderId, conversationId, rawConversationKey, 'Hello',
+    const payload = chat.encryptMessage({
+      messageId, senderId, conversationId, conversationKey: rawConversationKey, text: 'Hello',
       conversationKeyVersion, signingKeyVersion,
-    );
+    });
     const body = {
       message_id: messageId,
       encoded_message_create_event: payload.encryptedContent,
       encoded_message_event_signature: payload.encodedEventSignature,
     };
 
-    const reply = chat.encryptReply(
-      replyMessageId, senderId, conversationId, rawConversationKey,
-      'Sounds good', conversationKeyVersion, signingKeyVersion,
-      parentSequenceId, // replyToSequenceId — the message being replied to
-    );
+    const reply = chat.encryptReply({
+      messageId: replyMessageId, senderId, conversationId, conversationKey: rawConversationKey,
+      text: 'Sounds good', conversationKeyVersion, signingKeyVersion,
+      replyToSequenceId: parentSequenceId, // the message being replied to
+    });
     const nameCt = chat.encrypt('Group title', rawConversationKey);
     const title = chat.decrypt(nameCt, rawConversationKey);
     ```
   </Tab>
   <Tab title="Rust">
     ```rust
+    // conv_key: XChatConversationKey from extract_conversation_keys / decrypt_conversation_key
     let payload = chat.encrypt_message(EncryptMessageParams::new(
-        &message_id, &sender_id, &conversation_id, &raw_key, "Hello",
+        &message_id, &sender_id, &conversation_id, conv_key.to_bytes(), "Hello",
         &conversation_key_version, &signing_key_version,
     ))?;
     // Map payload fields into the send-message JSON body as above
-    let name_ct = chat.encrypt("Group title", &raw_key)?;
-    let title = chat.decrypt(&name_ct, &raw_key)?;
+    let name_ct = chat.encrypt("Group title", &conv_key)?;
+    let title = chat.decrypt(&name_ct, &conv_key)?;
     ```
   </Tab>
   <Tab title="Go">
@@ -608,8 +614,9 @@ Encrypt file bytes with the **same** conversation key used for text, upload via 
   </Tab>
   <Tab title="Rust">
     ```rust
-    let ciphertext = chat.encrypt_stream(&file_bytes, &raw_key)?;
-    let plain = chat.decrypt_stream(&ciphertext, &raw_key)?;
+    // conv_key: &XChatConversationKey from extract_conversation_keys / decrypt_conversation_key
+    let ciphertext = chat.encrypt_stream(&file_bytes, &conv_key)?;
+    let plain = chat.decrypt_stream(&ciphertext, &conv_key)?;
     ```
   </Tab>
   <Tab title="Go">
@@ -703,7 +710,9 @@ Base64/hex helpers, MIME sniffing, and image dimensions are available as module-
     const hexed = bytesToHex(raw);
     const raw3 = hexToBytes(hexed);
     const mime = detectMimeType(fileBytes);
-    const { width, height } = detectImageDimensions(fileBytes);
+    const dims = detectImageDimensions(fileBytes);
+    const width = dims?.width ?? 0;
+    const height = dims?.height ?? 0;
     ```
   </Tab>
   <Tab title="Rust">
@@ -713,17 +722,20 @@ Base64/hex helpers, MIME sniffing, and image dimensions are available as module-
     let hexed = chat_xdk_core::bytes_to_hex(&raw);
     let raw3 = chat_xdk_core::hex_to_bytes(&hexed);
     let mime = chat_xdk_core::detect_mime_type(&file_bytes);
-    let (w, h) = chat_xdk_core::detect_image_dimensions(&file_bytes)?;
+    let dims = chat_xdk_core::detect_image_dimensions(&file_bytes);
+    let (w, h) = dims.map(|d| (d.width, d.height)).unwrap_or((0, 0));
     ```
   </Tab>
   <Tab title="Go">
     ```go
-    b64 := chatxdk.BytesToBase64(raw)
+    b64, _ := chatxdk.BytesToBase64(raw)
     raw2, err := chatxdk.Base64ToBytes(b64)
     hexed, err := chatxdk.BytesToHex(raw)
     raw3, err := chatxdk.HexToBytes(hexed)
-    mime := chatxdk.DetectMimeType(fileBytes)
-    w, h, err := chatxdk.DetectImageDimensions(fileBytes)
+    mime, _ := chatxdk.DetectMimeType(fileBytes)
+    dims, _ := chatxdk.DetectImageDimensions(fileBytes)
+    w, h := dims.Width, dims.Height
+    _ = b64
     _ = raw2
     _ = hexed
     _ = raw3
@@ -740,7 +752,9 @@ Base64/hex helpers, MIME sniffing, and image dimensions are available as module-
     var hexed = ChatXdkUtilities.BytesToHex(raw);
     var raw3 = ChatXdkUtilities.HexToBytes(hexed);
     var mime = ChatXdkUtilities.DetectMimeType(fileBytes);
-    var (w, h) = ChatXdkUtilities.DetectImageDimensions(fileBytes);
+    var dims = ChatXdkUtilities.DetectImageDimensions(fileBytes);
+    var w = dims?.Width ?? 0;
+    var h = dims?.Height ?? 0;
     ```
   </Tab>
   <Tab title="Java">
@@ -750,7 +764,8 @@ Base64/hex helpers, MIME sniffing, and image dimensions are available as module-
     String hexed = ChatXdkUtilities.bytesToHex(raw);
     byte[] raw3 = ChatXdkUtilities.hexToBytes(hexed);
     String mime = ChatXdkUtilities.detectMimeType(fileBytes);
-    int[] wh = ChatXdkUtilities.detectImageDimensions(fileBytes);
+    ImageDimensions wh = ChatXdkUtilities.detectImageDimensions(fileBytes);
+    long width = wh.width, height = wh.height;
     ```
   </Tab>
 </Tabs>
