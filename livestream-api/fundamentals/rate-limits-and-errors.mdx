@@ -1,0 +1,68 @@
+---
+title: Rate Limits and Errors
+sidebarTitle: Rate Limits & Errors
+description: "Rate limiting behavior, common HTTP status codes, key validation rules, and example error responses for the X Livestream API."
+keywords: ["Livestream rate limits", "error codes", "400 Bad Request", "404", "429", "x-rate-limit"]
+---
+
+## Rate limits
+
+Standard X API rate limiting applies (headers: `x-rate-limit-*`). Limits for Livestream endpoints may be higher or specially tiered — contact your X partner manager for current quotas.
+
+## Common HTTP status codes
+
+| Status | Meaning |
+|:-------|:--------|
+| `200` | Success (some DELETE/END return a minimal body) |
+| `307` | Temporary redirect (only for `/2/region`) |
+| `400` | Bad Request (invalid params, `user_id` mismatch, extra fields on END, missing active stream on create broadcast, etc.) |
+| `401` | Unauthorized (bad/expired OAuth) |
+| `403` | Forbidden (app not allow-listed, insufficient access level, suspended user, or lacking broadcast privileges) |
+| `404` | Not Found (resource does not exist, or source has no active RTMP stream yet when creating a broadcast) |
+| `412` | Precondition Failed (user not eligible for live streaming) |
+| `429` | Too Many Requests (rate limit) |
+| `5xx` | Server error |
+
+## Key validation rules that produce 400
+
+- Authenticated user ID (from token) does not match `:user_id` in the path.
+- Publishing/ending with inconsistent state (e.g. publishing an already-ended broadcast).
+- Including `title`/`locale`/etc. when `state: "END"`.
+- Missing required fields (`name` + `region` for a source; `source_id` + `region` for a broadcast).
+- Creating a broadcast before the source is actively receiving an RTMP feed.
+
+## Example error responses
+
+**400 — Validation (missing field):**
+
+```json
+{
+  "errors": ["name: field is required"]
+}
+```
+
+**404 — Resource not found (or source has no active stream):**
+
+```json
+{
+  "errors": [
+    {
+      "message": "Sorry, that page does not exist",
+      "code": 34
+    }
+  ]
+}
+```
+
+**400 — Invalid broadcast ID or bad state transition:**
+
+```json
+{
+  "error_type": "badRequest",
+  "message": "missing or invalid broadcast_id=..."
+}
+```
+
+<Note>
+The platform often returns the same generic 404 for "source not ingesting yet" or "broadcast in wrong state". Inspect your source's `is_stream_active` and the broadcast `state` before retrying.
+</Note>

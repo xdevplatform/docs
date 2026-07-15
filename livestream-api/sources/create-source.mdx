@@ -1,0 +1,89 @@
+---
+title: Create Stream Source
+sidebarTitle: Create Stream Source
+description: "POST /2/users/:user_id/sources creates a new persistent RTMP/RTMPS ingest point with a unique stream key and recommended encoder configuration."
+keywords: ["create stream source", "POST sources", "RTMP ingest point", "stream key", "rtmps_url"]
+---
+
+Creates a new RTMP ingest point.
+
+**Endpoint:** `POST /2/users/:user_id/sources`
+
+## Path parameters
+
+| Name | Type | Required | Description |
+|:-----|:-----|:---------|:------------|
+| `user_id` | string | Yes | Numeric X user ID of the broadcaster. Must match the authenticated token. |
+
+## Request body
+
+```json
+{
+  "name": "My Primary Encoder",
+  "region": "eu-central-1"
+}
+```
+
+| Field | Type | Required | Description |
+|:------|:-----|:---------|:------------|
+| `name` | string | Yes | Human-readable label for this source (for your own organization). Does not affect functionality. |
+| `region` | string | Yes | AWS-style region code (e.g. `"us-east-1"`, `"eu-central-1"`). Use the value from [`/2/region`](/livestream-api/sources/get-recommended-region). Determines the ingest server location. |
+
+## Example request
+
+```bash
+curl -X POST "https://api.x.com/2/users/172483972/sources" \
+  -H "Authorization: OAuth ..." \
+  -H "Content-Type: application/json" \
+  -d '{"name":"My Primary Encoder","region":"eu-central-1"}'
+```
+
+## Success response (200)
+
+```json
+{
+  "source": {
+    "id": "6ep48v6ar5q4",
+    "owner_id": 172483972,
+    "name": "My Primary Encoder",
+    "video_service": {
+      "value": 0,
+      "name": "...",
+      "original_name": "..."
+    },
+    "is360": false,
+    "creation_time": 1772029802844,
+    "creation_origin": {
+      "value": 1,
+      "name": "PublicApi",
+      "original_name": "PUBLIC_API"
+    },
+    "recommended_configuration": {
+      "audio_codec": "AAC",
+      "audio_sampling_rate": 44100,
+      "audio_bitrate": 128000.0,
+      "audio_num_channels": 2,
+      "video_codec": "H.264/AVC",
+      "video_bitrate": 4000000.0,
+      "video_framerate": 30.0,
+      "video_keyframe_interval_in_seconds": 3.0,
+      "video_width": 1280,
+      "video_height": 720
+    },
+    "rtmp_region": "eu-central-1",
+    "rtmp_url": "rtmp://de.pscp.tv:80/x",
+    "rtmps_url": "rtmps://de.pscp.tv:443/x",
+    "rtmp_stream_key": "6ep48v6ar5q4",
+    "is_stream_active": false
+  }
+}
+```
+
+## Notes
+
+- Newly created sources have no `stream_attributes` or `compatibility_info` (those appear after the source first receives video).
+- `rtmp_stream_key == id`. Use the `rtmps_url` (port 443) in production for TLS.
+- The `recommended_configuration` tells you ideal encoder settings (bitrate, resolution, keyframe interval, etc.).
+- `is_stream_active` becomes `true` while the source is currently receiving an RTMP feed.
+- `owner_id` is a JSON **number**, not a string — for real (19-digit) X user IDs it exceeds the safe-integer range of many languages (e.g. JavaScript) and loses precision when parsed normally. Do not rely on `owner_id`; use your authenticated numeric user id (or a broadcast's `twitter_user_id`, which is a string).
+- `video_service`, `creation_origin` (and similar `{ value, name, original_name }` objects) are classification fields. `value` is a stable integer; `name` / `original_name` are opaque labels. You can safely ignore these unless you need the integer code.

@@ -1,0 +1,27 @@
+---
+title: Best Practices and Notes
+sidebarTitle: Best Practices
+description: "Operational best practices for the Livestream API: RTMPS in production, ingest-before-create, strict END bodies, ID handling, replays, and error handling."
+keywords: ["best practices", "RTMPS", "low latency", "replays", "precision-safe IDs", "livestream tips"]
+---
+
+- **Always use `rtmps_url` (TLS) in production** instead of `rtmp_url`.
+- **Start the RTMP feed before Create Broadcast.** The API returns 404 otherwise (a generic "page does not exist" in some cases).
+- **Call END with only `{ "state": "END" }`.** Extra fields cause 400.
+- **Use your numeric X user id for the `:user_id` path** (the `twitter_user_id` value), not the broadcast object's alphanumeric `user_id` field. A mismatch with your token's user id returns 400.
+- **Low latency (`is_low_latency: true`):** Great for Q&A / interactive broadcasts. May have slightly lower quality or stability under poor network conditions.
+- **Reuse sources across broadcasts.** One source per encoder/region is typical.
+- **Chat is read-only via these endpoints.** Sending chat requires different (viewer) flows not covered here.
+- **Large numbers are precision-unsafe as JSON numbers:** millisecond timestamps and most IDs are returned as strings — keep them as strings. The exception, `owner_id`, is delivered as a number and will lose precision for real (19-digit) user IDs; don't rely on it (use `twitter_user_id` / your authenticated id).
+- **Thumbnails** (`image_url`, `image_url_small`, `image_url_medium`): Signed URLs that refresh while the broadcast is live.
+- **Viewer counts** (`total_watching`, `total_watched`): Returned as strings.
+- **Replays:** After END, `available_for_replay` and `replay_url` (in `video_access` on later gets) may become available depending on platform settings and duration.
+- **Testing:** Use a dedicated test account that has been granted broadcast privileges. Delete test broadcasts/sources when done.
+- **The announcement post is asynchronous:** `tweet_id` is not in the publish response — read it from a follow-up GET on the broadcast. `tweet_error`, when present, signals a failed post (the broadcast still goes live regardless).
+- **Don't depend on DELETE/END body shapes:** treat a 2xx as success rather than parsing a specific body (END returns `{ "success": true }`; deletes return minimal/varying bodies).
+- **Error handling:** Treat a 404 on create-broadcast as "source not ingesting yet" — poll `is_stream_active` before retrying.
+- **Compliance:** Follow X's live streaming policies, terms, and any regional restrictions. The API surfaces some copyright/geoblock info in other endpoints.
+
+## Support
+
+For app allow-listing, rate-limit or quota changes, or questions about API behavior, contact your X partner manager. We recommend validating your integration against the live API with a dedicated test account before deploying to production.

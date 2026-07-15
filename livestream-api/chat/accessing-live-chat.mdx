@@ -1,0 +1,154 @@
+---
+title: Accessing Live Chat (Read Access)
+sidebarTitle: Accessing Live Chat
+description: "Obtain read-only WebSocket access to a broadcast's live chat via a two-step unauthenticated token handoff, then connect and parse chat messages."
+keywords: ["live chat", "chat token", "accessChatPublic", "WebSocket", "chatapi", "live_video_stream"]
+---
+
+Obtaining a WebSocket connection for **read access** to a broadcast's live chat requires a short unauthenticated handoff using two endpoints. No OAuth signing is used for these steps.
+
+These two endpoints are required for any live chat feature.
+
+## Step 1: Get a chat token
+
+**Endpoint:** `GET https://api.twitter.com/1.1/live_video_stream/status/{mediaKey}`
+
+<Note>
+This is a legacy endpoint and must be called against `api.twitter.com` (not `api.x.com`).
+</Note>
+
+**Auth:** None (unauthenticated).
+
+**Headers** (commonly sent for compatibility):
+
+```
+x-periscope-user-agent: Twitter/m5
+```
+
+### Path parameters
+
+| Name | Type | Required | Description |
+|:-----|:-----|:---------|:------------|
+| `mediaKey` | string | Yes | `media_key` from the [Create Broadcast](/livestream-api/broadcasts/create-broadcast) or [Get Broadcast](/livestream-api/broadcasts/get-broadcast) response (format `28_{id}`). |
+
+### Example request
+
+```bash
+curl "https://api.twitter.com/1.1/live_video_stream/status/28_2026675106832068613" \
+  -H "x-periscope-user-agent: Twitter/m5"
+```
+
+### Success response
+
+For chat purposes (the endpoint returns more fields for playback clients):
+
+```json
+{
+  "chatToken": "23uU8f8NSyHF8U56BR2Fl0vld0lhrotyHToihIBDR5MAy72L4ypBisjvA..."
+}
+```
+
+- The `chatToken` is only available once the broadcast is live (`RUNNING`). Before then, this endpoint returns an error or a response without a `chatToken` — retry after publishing.
+- The `chatToken` is an opaque value used only for the next step.
+- **Watch the casing:** this response field is camelCase `chatToken`, but the Step 2 request body key is snake_case `chat_token`.
+
+## Step 2: Access chat
+
+**Endpoint:** `POST https://proxsee.pscp.tv/api/v2/accessChatPublic`
+
+**Auth:** None.
+
+**Headers:**
+
+```
+content-type: application/json
+x-periscope-user-agent: Twitter/m5
+x-idempotence: <current timestamp ms or nonce>
+x-attempt: 1
+```
+
+Send `x-idempotence` (a timestamp in ms or any unique nonce) and `x-attempt` (a retry counter starting at 1) for compatibility. A unique `x-idempotence` per logical request, reused across retries of that request, is the safe convention.
+
+### Request body
+
+```json
+{
+  "chat_token": "<chatToken value from Step 1>"
+}
+```
+
+### Example request
+
+```bash
+curl -X POST "https://proxsee.pscp.tv/api/v2/accessChatPublic" \
+  -H "Content-Type: application/json" \
+  -H "x-periscope-user-agent: Twitter/m5" \
+  -H "x-idempotence: 1772031973914" \
+  -H "x-attempt: 1" \
+  -d '{"chat_token":"<chatToken value from Step 1>"}'
+```
+
+### Success response
+
+```json
+{
+  "endpoint": "https://prod-chat-ancillary-eu-central-1.pscp.tv",
+  "access_token": "23uU8f8NSyHF8U56BR2Fl0vld0lhrotyHToihIBDR5MAy72L4ypBisjvA..."
+}
+```
+
+The exact `endpoint` host is returned by the server and may vary by region and broadcast. Always use the value returned in the response — do not hardcode it.
+
+(For ended broadcasts/replays, `replay_endpoint` and `replay_access_token` may be present instead; your code should fall back to those.)
+
+### Response fields
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `endpoint` | string | Chat server base URL (https). Convert to `wss://` and append `/chatapi/v1/chatnow` for the WebSocket URL. |
+| `access_token` | string | Token for authenticating the WebSocket session. |
+
+## Step 3: Connect the WebSocket
+
+Each WebSocket message is a JSON frame with a `kind` field:
+
+| `kind` | Direction | Purpose |
+|:-------|:----------|:--------|
+| `3` | client → server | Authenticate the session using the `access_token`. |
+| `2` | client → server | Subscribe to a chat room (wraps an inner `kind: 1` body containing the room). |
+| `1` | server → client | An incoming chat message (also the inner kind used inside the subscribe frame). |
+
+After obtaining `endpoint` + `access_token`:
+
+1. Connect: `wss://<host from endpoint>/chatapi/v1/chatnow`
+
+2. On open, send two frames, each a JSON string. The `payload` (and the inner `body`) are themselves JSON-encoded strings — the cleanest way to build them is to construct nested objects and stringify each layer:
+
+```javascript
+// Auth (kind 3)
+ws.send(JSON.stringify({
+  payload: JSON.stringify({ access_token: accessToken }),
+  kind: 3,
+}));
+
+// Subscribe (kind 2) — note: room is the broadcast id, NOT the media_key
+ws.send(JSON.stringify({
+  payload: JSON.stringify({ body: JSON.stringify({ room: broadcastId }), kind: 1 }),
+  kind: 2,
+}));
+```
+
+3. Incoming chat messages arrive as `kind === 1` frames whose payload is double-JSON-encoded. Decode by parsing each layer:
+
+```javascript
+const outer = JSON.parse(raw);               // { payload, kind: 1 }
+const inner = JSON.parse(outer.payload);     // { body, kind, ... }
+const body = typeof inner.body === "string" ? JSON.parse(inner.body) : inner.body;
+// body => { body: "<text>", username, displayName?, uuid?, timestamp? }
+```
+
+See the reference implementation in the [code sample](/livestream-api/code-sample) for a complete working example of the chat access handoff, WebSocket connection, and message parsing (including replay support).
+
+## Rate limiting and errors
+
+The status endpoint participates in X API rate limits. The access chat endpoint may have its own limits or return errors for invalid/expired tokens or non-live broadcasts.
