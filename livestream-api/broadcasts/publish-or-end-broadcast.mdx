@@ -1,0 +1,113 @@
+---
+title: Publish (Go Live) or End a Broadcast
+sidebarTitle: Publish or End Broadcast
+description: "PUT /2/users/:user_id/broadcasts/:broadcast_id/state publishes a broadcast (go live) with state PUBLISH, or ends it with state END."
+keywords: ["publish broadcast", "go live", "end broadcast", "broadcast state", "chat_option", "should_not_tweet"]
+---
+
+Both actions use the same endpoint with different `state` values.
+
+**Endpoint:** `PUT /2/users/:user_id/broadcasts/:broadcast_id/state`
+
+## Publish (state: "PUBLISH")
+
+Transitions `NOT_STARTED` → `RUNNING`. The broadcast becomes publicly visible on X. By default an announcement post is created. (Set `should_not_tweet: true` to suppress it.)
+
+### Request body
+
+```json
+{
+  "state": "PUBLISH",
+  "title": "Live from the studio! Q&A time.",
+  "should_not_tweet": false,
+  "locale": "en",
+  "chat_option": 2
+}
+```
+
+| Field | Type | Required | Description |
+|:------|:-----|:---------|:------------|
+| `state` | string | Yes | Must be `"PUBLISH"`. |
+| `title` | string | No | Broadcast title / status text (also used for the announcement post if sent). Subject to X post length limits. |
+| `should_not_tweet` | boolean | No | Set `true` to suppress the automatic announcement post. Default `false` (a post is sent). |
+| `locale` | string | No | BCP 47 tag (e.g. `"en"`, `"en_US"`). Affects discovery/recommendation. |
+| `chat_option` | integer | No | Controls who can chat — see the values table below. If omitted, the platform applies its default (observed as `3`, verified accounts). |
+
+### Chat option values
+
+`chat_option` is an integer enum controlling who can participate in chat:
+
+| Value | Meaning |
+|:------|:--------|
+| `0` | None (no option set) |
+| `1` | Chat disabled |
+| `2` | Everyone |
+| `3` | Verified accounts |
+| `4` | Accounts the broadcaster follows |
+| `5` | The broadcaster's subscribers |
+
+If you omit `chat_option` when publishing, the platform applies its default (observed as `3`, verified accounts).
+
+### Example request
+
+```bash
+curl -X PUT "https://api.x.com/2/users/172483972/broadcasts/1AxRnanzLOrxl/state" \
+  -H "Authorization: OAuth ..." \
+  -H "Content-Type: application/json" \
+  -d '{"state":"PUBLISH","title":"Live from the studio! Q&A time.","chat_option":2}'
+```
+
+### Response (on success)
+
+```json
+{
+  "broadcast": {
+    ... full broadcast object with state: "RUNNING",
+    "status": "Live from the studio! Q&A time.",
+    "start_ms": "1772032035735",
+    "language": "en",
+    "chat_option": 2,
+    ...
+  }
+}
+```
+
+- `start_ms` is set when it becomes live.
+- The announcement post is created **asynchronously**. `tweet_id` is typically not present in this publish response — re-fetch the broadcast (`GET .../broadcasts/:broadcast_id`) a moment later to read `tweet_id` once the post exists.
+- `tweet_error`: when present, an empty string means the post succeeded and a non-empty value describes why it failed (the broadcast still goes live regardless). This field may be absent from the response entirely.
+- `language` defaults to `"en"` if you don't send `locale`.
+
+## End (state: "END")
+
+Transitions `RUNNING` → `ENDED`. Irreversible; you cannot restart a broadcast.
+
+### Request body (strict)
+
+```json
+{
+  "state": "END"
+}
+```
+
+<Warning>
+Do **not** include `title`, `should_not_tweet`, `locale`, or `chat_option` when ending. The server explicitly rejects them with `400` if any of these fields are present.
+</Warning>
+
+### Example request
+
+```bash
+curl -X PUT "https://api.x.com/2/users/172483972/broadcasts/1AxRnanzLOrxl/state" \
+  -H "Authorization: OAuth ..." \
+  -H "Content-Type: application/json" \
+  -d '{"state":"END"}'
+```
+
+### Response
+
+```json
+{
+  "success": true
+}
+```
+
+After ending, stop your encoder. A replay may be available later if `available_for_replay` was `true` (or per platform policy).

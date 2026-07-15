@@ -1,0 +1,92 @@
+---
+title: Data Models
+sidebarTitle: Data Models
+description: "Object shapes returned by the Livestream API: Source, StreamAttributes, CompatibilityInfo, Broadcast, and VideoAccess."
+keywords: ["data models", "Source object", "Broadcast object", "StreamAttributes", "CompatibilityInfo", "VideoAccess"]
+---
+
+## Source (ingest)
+
+```json
+{
+  "id": "string (alphanumeric, also the stream key)",
+  "owner_id": 123456789, // JSON number — precision-unsafe for 19-digit IDs; do not rely on it
+  "name": "string",
+  "video_service": { "value": 0, "name": "...", "original_name": "..." },
+  "is360": false,
+  "creation_time": 1723820516510,
+  "creation_origin": { "value": 1, "name": "PublicApi", "original_name": "PUBLIC_API" },
+  "recommended_configuration": { /* StreamAttributes */ },
+  "stream_attributes": { /* StreamAttributes, present if ever streamed */ },
+  "compatibility_info": { /* CompatibilityInfo, present with stream_attributes */ },
+  "broadcast_id": "string (if currently bound to a broadcast)",
+  "rtmp_region": "eu-central-1",
+  "rtmp_url": "rtmp://de.pscp.tv:80/x",
+  "rtmps_url": "rtmps://de.pscp.tv:443/x",
+  "rtmp_stream_key": "same as id",
+  "is_stream_active": false,
+  "external_hls_url": "..." // for non-RTMP ingest types
+}
+```
+
+### StreamAttributes
+
+All optional:
+
+- `audio_codec`, `audio_sampling_rate` (Hz), `audio_bitrate` (bps), `audio_num_channels`
+- `video_codec`, `video_bitrate` (bps), `video_framerate`, `video_keyframe_interval_in_seconds`
+- `video_width`, `video_height`
+- `caption_channels` (set)
+
+### CompatibilityInfo
+
+```json
+{
+  "errors": [
+    { "param_name": "audio_bitrate", "violation": "Max allowed bitrate: 160 kbps." }
+  ],
+  "warnings": [
+    { "param_name": "video_keyframe_interval_in_seconds", "violation": "Min suggested keyframe interval: 3.0 s." }
+  ]
+}
+```
+
+**Errors** are hard violations (may break the stream). **Warnings** are suggestions for better quality/experience.
+
+## Broadcast
+
+Core fields (many optional or populated at different lifecycle stages):
+
+- `id` / `broadcast_id`: string (same value)
+- `media_key`: `28_…` (for chat + some playback)
+- `media_id`: numeric portion
+- `state`: one of `NOT_STARTED`, `PRE_PUBLISHED`, `RUNNING`, `ENDED`, `TIMED_OUT`, `CANCELED` (see [Broadcast States](/livestream-api/broadcasts/overview))
+- `status`: title (set on publish)
+- `twitter_user_id` (numeric X id, as a string), `user_id` (a separate alphanumeric platform id — **not** the X id), `user_display_name`, `username`, `twitter_username`, `profile_image_url`
+- `created_at_ms`, `updated_at_ms`, `start_ms`, `end_ms`, `ping_ms` (string millisecond timestamps)
+- `language` (defaults to `"en"` if `locale` not sent), `image_url` / `image_url_small` / `image_url_medium` (signed thumbnails, auto-refresh while live), `pre_live_slate_url`
+- `tweet_id` (string; populated asynchronously after publish — may be absent immediately)
+- `share_url`
+- `is_locked`, `private_chat`, `friend_chat`, `subscriber_chat`, `has_moderation`, `no_hearts`, `chat_option`
+- `height`, `width`, `camera_rotation`, `is_360`
+- `has_location`, `lat`, `lng`, `city`, etc.
+- `total_watching` (current live, as string), `total_watched` (total, string)
+- `available_for_replay`
+- `is_high_latency` (informational; not a reliable inverse of the `is_low_latency` you sent)
+- `broadcast_source`: lowercased source type — `producer` (RTMP ingest, the public-API case), `replay_kit`, or `live_cms`
+- `broadcast_private`, various platform and copyright fields, `view_count_graph`, etc.
+- `version`
+
+The full set of fields is visible in the example responses throughout this documentation.
+
+## VideoAccess (returned on Create Broadcast)
+
+```json
+{
+  "hls_url": "...",
+  "https_hls_url": "...",
+  "lhls_url": "...",
+  "lhlsweb_url": "...",
+  "replay_url": "..." // appears after end for replays
+}
+```

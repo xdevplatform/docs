@@ -1,0 +1,92 @@
+---
+title: Create Broadcast
+sidebarTitle: Create Broadcast
+description: "POST /2/users/:user_id/broadcasts creates a new broadcast bound to an existing stream source. Broadcasts start in the NOT_STARTED state."
+keywords: ["create broadcast", "POST broadcasts", "media_key", "share_url", "is_low_latency"]
+---
+
+Creates a new broadcast bound to an existing source. Starts in `NOT_STARTED`.
+
+**Endpoint:** `POST /2/users/:user_id/broadcasts`
+
+<Warning>
+The source must already be actively receiving an RTMP feed (`is_stream_active: true`), or this endpoint returns a 404. See the [broadcast lifecycle overview](/livestream-api/broadcasts/overview).
+</Warning>
+
+## Request body
+
+```json
+{
+  "source_id": "6ep48v6ar5q4",
+  "region": "eu-central-1",
+  "is_low_latency": true
+}
+```
+
+| Field | Type | Required | Description |
+|:------|:-----|:---------|:------------|
+| `source_id` | string | Yes | ID of an existing source owned by this user. |
+| `region` | string | Yes | Must match the source's region. |
+| `is_low_latency` | boolean | No | Requests low-latency mode (lower delay for interactive/chatty broadcasts, trading some quality/stability). If omitted, defaults to `false` (standard latency); recommended to set explicitly. Note: the returned `is_high_latency` field is not a reliable inverse of this value (it has been observed to stay `true` regardless), so treat `is_high_latency` as informational only. |
+
+## Example request
+
+```bash
+curl -X POST "https://api.x.com/2/users/172483972/broadcasts" \
+  -H "Authorization: OAuth ..." \
+  -H "Content-Type: application/json" \
+  -d '{"source_id":"6ep48v6ar5q4","region":"eu-central-1","is_low_latency":true}'
+```
+
+## Success response
+
+```json
+{
+  "broadcast": {
+    "id": "1AxRnanzLOrxl",
+    "broadcast_id": "1AxRnanzLOrxl",
+    "media_key": "28_2026675106832068613",
+    "media_id": "2026675106832068613",
+    "created_at_ms": "1772031973914",
+    "updated_at_ms": "1772031973914",
+    "broadcast_source": "producer",
+    "available_for_replay": false,
+    "user_id": "1DYEXPNqZwqEg",
+    "twitter_user_id": "172483972",
+    "user_display_name": "Example User",
+    "username": "example",
+    "twitter_username": "example",
+    "profile_image_url": "https://pbs.twimg.com/profile_images/..._reasonably_small.jpeg",
+    "state": "NOT_STARTED",
+    "is_locked": false,
+    "friend_chat": false,
+    "has_moderation": true,
+    "height": 1080,
+    "width": 1920,
+    "camera_rotation": 0,
+    "has_location": false,
+    "lat": 0.0,
+    "lng": 0.0,
+    "private_chat": false,
+    "chat_option": 0,
+    "no_hearts": false,
+    "is_high_latency": true
+  },
+  "video_access": {
+    "hls_url": "https://prod-fastly-eu-central-1.video.pscp.tv/.../ps_dynamic_hls-producer.m3u8?type=live",
+    "https_hls_url": "https://prod-fastly-eu-central-1.video.pscp.tv/.../ps_dynamic_hls-producer.m3u8?type=live"
+  },
+  "share_url": "https://x.com/i/broadcasts/1AxRnanzLOrxl"
+}
+```
+
+## Key fields returned at creation
+
+- `media_key` / `media_id`: Required later for [chat access](/livestream-api/chat/accessing-live-chat) and some playback.
+- `video_access`: Playback URLs (HLS variants). `lhls*` and `replay_url` may appear later or for certain modes.
+- `share_url`: Public viewer link (`https://x.com/i/broadcasts/{id}`).
+- `state`: Always starts `"NOT_STARTED"`.
+- `is_high_latency`: Informational; does not reliably reflect the `is_low_latency` you sent (see the note on the `is_low_latency` field above).
+- `twitter_user_id` vs `user_id` vs `owner_id`: `twitter_user_id` is your numeric X user id (returned as a string) — use this for the `:user_id` path parameter in every endpoint. `user_id` (e.g. `"1DYEXPNqZwqEg"`) is a separate alphanumeric livestream-platform id; do not use it in paths. Note also that the Source object's `owner_id` is delivered as a JSON number and will lose precision for real (19-digit) user IDs — never rely on it; use `twitter_user_id` or your authenticated id instead.
+
+After creation, start pushing your RTMP feed to the source's `rtmps_url` + `rtmp_stream_key` if you haven't already, then [publish](/livestream-api/broadcasts/publish-or-end-broadcast).

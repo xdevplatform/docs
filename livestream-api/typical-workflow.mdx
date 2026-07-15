@@ -1,0 +1,42 @@
+---
+title: Typical Workflow
+sidebarTitle: Typical Workflow
+description: "The end-to-end Livestream API workflow: get a region, create a source, start your encoder, create and publish a broadcast, consume chat, and end the session."
+keywords: ["Livestream workflow", "go live", "broadcast lifecycle", "stream source", "publish broadcast"]
+---
+
+The complete flow from nothing to a live broadcast on X:
+
+<Steps>
+  <Step title="Get the recommended region">
+    `GET /2/region` → obtain the recommended region (follow the 307 redirect). See [Get Recommended Region](/livestream-api/sources/get-recommended-region).
+  </Step>
+  <Step title="Create (or reuse) a stream source">
+    `POST /2/users/:user_id/sources` → create a source for that region. Record `rtmps_url` + `rtmp_stream_key`. See [Create Stream Source](/livestream-api/sources/create-source).
+  </Step>
+  <Step title="Start your encoder">
+    Configure and start your encoder, pushing to the RTMPS URL + key. Wait until `is_stream_active` is `true` (poll [List](/livestream-api/sources/list-sources)/[Get Source](/livestream-api/sources/get-source) if desired).
+  </Step>
+  <Step title="Create a broadcast">
+    `POST /2/users/:user_id/broadcasts` with the `source_id`, `region`, and `is_low_latency`. Note the `media_key`, `id`, `share_url`, and `video_access` URLs. The broadcast starts in `NOT_STARTED`. See [Create Broadcast](/livestream-api/broadcasts/create-broadcast).
+  </Step>
+  <Step title="(Optional) Prepare chat access">
+    Call the two [chat access endpoints](/livestream-api/chat/accessing-live-chat). A `chatToken` is only available once the broadcast is `RUNNING`, so retry after publishing.
+  </Step>
+  <Step title="Publish (go live)">
+    `PUT …/broadcasts/:id/state` with `state: "PUBLISH"` (+ `title`, `chat_option`, etc.). The broadcast becomes `RUNNING` and publicly visible. See [Publish or End a Broadcast](/livestream-api/broadcasts/publish-or-end-broadcast).
+  </Step>
+  <Step title="While live">
+    Poll `GET /broadcasts/:id` for viewer counts, thumbnails, and state; consume chat via WebSocket.
+  </Step>
+  <Step title="End the broadcast">
+    When done: stop your encoder, then `PUT …/state` with `{ "state": "END" }`. The broadcast transitions to `ENDED`.
+  </Step>
+  <Step title="(Optional) Clean up">
+    Delete the broadcast record or source if no longer needed.
+  </Step>
+</Steps>
+
+<Note>
+Sources are reusable. Create a new source only when you need a different region or want to isolate encoder configs.
+</Note>

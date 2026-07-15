@@ -1,0 +1,68 @@
+---
+title: Authentication
+sidebarTitle: Authentication
+description: "The Livestream API requires OAuth 1.0a 3-legged (user context) authentication with HMAC-SHA1 signatures. Learn the requirements and how to sign requests correctly."
+keywords: ["Livestream authentication", "OAuth 1.0a", "HMAC-SHA1", "3-legged OAuth", "user context", "request signing"]
+---
+
+All Livestream **management** endpoints require **OAuth 1.0a 3-legged (user context)** authentication:
+
+- `GET /2/region`
+- All `/2/users/:user_id/sources*` endpoints
+- All `/2/users/:user_id/broadcasts*` endpoints
+
+## Requirements
+
+- Use OAuth 1.0a with **HMAC-SHA1** signatures (3-legged user context).
+- Include a properly constructed `Authorization: OAuth ...` header on every request.
+- Your application must be allow-listed for the Livestream API (contact your X partner manager).
+- The application must have **Read + Write** (or ReadWriteDm) access level.
+- The numeric user ID from the OAuth 1.0a access token must exactly match the `:user_id` in the path. Mismatches are rejected with `400 Bad Request`.
+
+<Warning>
+These endpoints currently require OAuth 1.0a. They do **not** accept OAuth 2.0 Bearer tokens.
+</Warning>
+
+## Signing requests
+
+You sign each request yourself using your consumer key/secret and access token/secret. Every request must include an `Authorization: OAuth ...` header built from the standard OAuth 1.0a parameters:
+
+| Parameter | Value |
+|:----------|:------|
+| `oauth_consumer_key` | Your app's consumer (API) key |
+| `oauth_token` | The broadcasting user's access token |
+| `oauth_signature_method` | `HMAC-SHA1` |
+| `oauth_timestamp` | Current Unix time in seconds |
+| `oauth_nonce` | Unique random string, one per request |
+| `oauth_version` | `1.0` |
+| `oauth_signature` | Base64-encoded HMAC-SHA1 signature of the request |
+
+The signature base string is three parts joined by `&`: the uppercased HTTP method, the percent-encoded base request URL (scheme, host, and path — **no query string**), and the percent-encoded, sorted parameter string.
+
+**What goes into the parameter string:**
+
+- All the `oauth_*` parameters above (except `oauth_signature`)
+- Any URL query-string parameters (for example `pagination_token` when listing broadcasts)
+
+<Warning>
+**Do not include the JSON request body.** Every write endpoint here sends `application/json`, and under OAuth 1.0a only `application/x-www-form-urlencoded` bodies are folded into the signature — adding JSON body fields to the base string is the single most common cause of `401 Unauthorized`.
+</Warning>
+
+The signing key is `percentEncode(consumer_secret)&percentEncode(token_secret)`. Use strict RFC 3986 percent-encoding throughout: also escape `! * ' ( )`, and encode spaces as `%20` (never `+`). Many built-in helpers (e.g. JavaScript's `encodeURIComponent`) are not strict enough on their own. The [reference code sample](/livestream-api/code-sample) includes a complete, dependency-free implementation you can copy that handles base-string construction, signing, and header assembly.
+
+A finished header looks like this (sent as a single line):
+
+```
+Authorization: OAuth oauth_consumer_key="CONSUMER_KEY",
+oauth_token="ACCESS_TOKEN", oauth_signature_method="HMAC-SHA1",
+oauth_timestamp="1772031973", oauth_nonce="a1b2c3d4e5",
+oauth_version="1.0", oauth_signature="bYsf2K%2Fa9c0vR..."
+```
+
+In the cURL examples throughout this documentation, `-H "Authorization: OAuth ..."` is shorthand for a fully signed header like the one above.
+
+For more detail on OAuth 1.0a itself, see the platform-wide guide on [authorizing a request](/fundamentals/authentication/oauth-1-0a/authorizing-a-request) and [creating a signature](/fundamentals/authentication/oauth-1-0a/creating-a-signature).
+
+## Chat access endpoints
+
+The endpoints used to obtain live chat access (`/1.1/live_video_stream/status/...` and the chat access endpoint) are **unauthenticated** — they do not use OAuth signing. See [Accessing Live Chat](/livestream-api/chat/accessing-live-chat).
