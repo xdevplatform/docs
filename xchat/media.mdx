@@ -62,7 +62,8 @@ flowchart LR
     let _mime = detect_mime_type(&plaintext);
     let dims = detect_image_dimensions(&plaintext);
     let (width, height) = dims.map(|d| (d.width as i64, d.height as i64)).unwrap_or((0, 0));
-    let encrypted_blob = chat.encrypt_stream(&plaintext, &raw_conv_key)?;
+    // conv_key: &XChatConversationKey from extract_conversation_keys / decrypt_conversation_key
+    let encrypted_blob = chat.encrypt_stream(&plaintext, &conv_key)?;
     ```
   </Tab>
   <Tab title="Go">
@@ -83,8 +84,8 @@ flowchart LR
     byte[] plaintext = await File.ReadAllBytesAsync("photo.jpg");
     string? mime = ChatXdkUtilities.DetectMimeType(plaintext);
     var dims = ChatXdkUtilities.DetectImageDimensions(plaintext);
-    int width = dims?.Width ?? 0;
-    int height = dims?.Height ?? 0;
+    int width = (int)(dims?.Width ?? 0);
+    int height = (int)(dims?.Height ?? 0);
     byte[] encryptedBlob = chat.EncryptStream(plaintext, rawConvKey);
     ```
   </Tab>
@@ -96,8 +97,8 @@ flowchart LR
     byte[] plaintext = Files.readAllBytes(Path.of("photo.jpg"));
     String mime = ChatXdkUtilities.detectMimeType(plaintext);
     ImageDimensions dims = ChatXdkUtilities.detectImageDimensions(plaintext);
-    int width = dims != null ? dims.width : 0;
-    int height = dims != null ? dims.height : 0;
+    int width = dims != null ? (int) dims.width : 0;
+    int height = dims != null ? (int) dims.height : 0;
     byte[] encryptedBlob = chat.encryptStream(plaintext, rawConvKey);
     ```
   </Tab>
@@ -160,16 +161,15 @@ Encrypt with a media attachment, then POST the send-message body (same field map
   <Tab title="TypeScript">
     ```typescript
     const messageId = crypto.randomUUID();
-    const payload = chat.encryptMessage(
+    const payload = chat.encryptMessage({
       messageId,
       senderId,
       conversationId,
-      rawConvKey,
-      caption || '',
+      conversationKey: rawConvKey,
+      text: caption || '',
       conversationKeyVersion,
       signingKeyVersion,
-      null,
-      [{
+      attachments: [{
         attachmentType: 'media',
         mediaHashKey: mediaHashKey,
         width,
@@ -177,7 +177,7 @@ Encrypt with a media attachment, then POST the send-message body (same field map
         filesizeBytes: plaintext.byteLength,
         filename: 'photo.jpg',
       }],
-    );
+    });
     await client.chat.sendMessage(conversationId.replace(/:/g, '-'), {
       message_id: messageId,
       encoded_message_create_event: payload.encryptedContent,
@@ -314,7 +314,8 @@ Path: [`GET /2/chat/media/{conversation_id}/{media_hash_key}`](/x-api/chat/downl
         .header("Authorization", &auth)
         .send()?
         .bytes()?;
-    let plaintext = chat.decrypt_stream(&encrypted_blob, &raw_conv_key)?;
+    // conv_key: &XChatConversationKey from extract_conversation_keys / decrypt_conversation_key
+    let plaintext = chat.decrypt_stream(&encrypted_blob, &conv_key)?;
     ```
   </Tab>
   <Tab title="Go">

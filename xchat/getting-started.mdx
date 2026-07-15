@@ -178,7 +178,11 @@ Load private keys with **Juicebox** (PIN + `juicebox_config` from the API) or a 
     chat := chatxdk.New()
     defer chat.Close()
 
-    if err := chat.ImportKeys(os.Getenv("PRIVATE_KEYS_B64")); err != nil {
+    blob, err := chatxdk.Base64ToBytes(os.Getenv("PRIVATE_KEYS_B64"))
+    if err != nil {
+        log.Fatal(err)
+    }
+    if err := chat.ImportKeys(blob); err != nil {
         log.Fatal(err)
     }
     signingKeyVersion := os.Getenv("SIGNING_KEY_VERSION")
@@ -486,7 +490,8 @@ The response returns the canonical conversation id (`data.conversation_id`—the
         .json()?;
     // Canonical id for later requests
     let conversation_id = resp["data"]["conversation_id"].as_str().unwrap().to_string();
-    let conv_key = prepared.conversation_key;
+    // conversation_key is Option<XChatConversationKey>; encrypt_message wants owned bytes
+    let conv_key = prepared.conversation_key.expect("key present").to_bytes();
     let conv_key_version = prepared.conversation_key_version;
     ```
   </Tab>
@@ -625,7 +630,7 @@ The response returns the canonical conversation id (`data.conversation_id`—the
     HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
     JsonNode data = mapper.readTree(resp.body()).path("data");
     String conversationId = data.path("conversation_id").asText(); // canonical id
-    byte[] convKey = prepared.getConversationKey();
+    byte[] convKey = prepared.conversationKey;
     String convKeyVersion = prepared.conversationKeyVersion;
     ```
   </Tab>
@@ -676,15 +681,15 @@ Use a **hyphenated** conversation id in the URL path when the API requires it (`
     import { randomUUID } from 'crypto';
 
     const messageId = randomUUID();
-    const payload = chat.encryptMessage(
+    const payload = chat.encryptMessage({
       messageId,
-      'YOUR_USER_ID',
-      'CONVERSATION_ID',
-      convKey,
-      'Hello!',
-      convKeyVersion,
+      senderId: 'YOUR_USER_ID',
+      conversationId: 'CONVERSATION_ID',
+      conversationKey: convKey,
+      text: 'Hello!',
+      conversationKeyVersion: convKeyVersion,
       signingKeyVersion,
-    );
+    });
     await client.chat.sendMessage('RECIPIENT_USER_ID', {
       message_id: messageId,
       encoded_message_create_event: payload.encryptedContent,
@@ -701,7 +706,7 @@ Use a **hyphenated** conversation id in the URL path when the API requires it (`
         &message_id,
         &sender_id,
         &conversation_id,
-        &conv_key,
+        conv_key,
         "Hello!",
         &conv_key_version,
         &signing_key_version,
