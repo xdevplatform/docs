@@ -71,10 +71,9 @@ flowchart LR
     mime, _ := chatxdk.DetectMimeType(plaintext)
     dims, _ := chatxdk.DetectImageDimensions(plaintext)
     _ = mime
-    ptB64, _ := chatxdk.BytesToBase64(plaintext)
-    encryptedB64, err := chat.EncryptStream(ptB64, convKeyB64)
+    encrypted, err := chat.EncryptStream(plaintext, rawConvKey) // both raw []byte
     _ = dims
-    _ = encryptedB64
+    _ = encrypted
     ```
   </Tab>
   <Tab title="C#">
@@ -206,7 +205,7 @@ Encrypt with a media attachment, then POST the send-message body (same field map
     ```go
     payload, err := chat.EncryptMessage(chatxdk.EncryptMessageParams{
         MessageID: messageID, SenderID: senderID, ConversationID: conversationID,
-        ConversationKey: convKeyB64, Text: caption,
+        ConversationKey: rawConvKey, Text: caption, // rawConvKey is raw []byte
         ConversationKeyVersion: conversationKeyVersion, SigningKeyVersion: signingKeyVersion,
         Attachments: []chatxdk.AttachmentDescriptor{{
             AttachmentType: "media",
@@ -259,6 +258,25 @@ Encrypt with a media attachment, then POST the send-message body (same field map
 
 Path: [`GET /2/chat/media/{conversation_id}/{media_hash_key}`](/x-api/chat/download-chat-media). Response body is ciphertext. On inbound messages, read `media_hash_key` from decrypted attachments / `media_hashes`.
 
+**Pick the key by the event's key version.** Each decrypted message event carries the `keyVersion` (JS; `key_version` in the other bindings) its content was encrypted under. Decrypt an attachment with the conversation key for **that** version—`conversationKeys.keys[event.keyVersion]`—not the latest. After a key rotation (for example a member add), the latest key cannot decrypt media attached to older messages.
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    keys = result["conversation_keys"]["keys"]
+    key_for_media = keys[event["key_version"]]   # not the latest version
+    plaintext = chat.decrypt_stream(encrypted_blob, key_for_media)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const keys = result.conversationKeys.keys;
+    const keyForMedia = keys[event.keyVersion]; // not the latest version
+    const plaintext = chat.decryptStream(encryptedBlob, keyForMedia);
+    ```
+  </Tab>
+</Tabs>
+
 <Tabs>
   <Tab title="Python">
     ```python
@@ -306,7 +324,7 @@ Path: [`GET /2/chat/media/{conversation_id}/{media_hash_key}`](/x-api/chat/downl
     req, _ := http.NewRequest(http.MethodGet, url, nil)
     req.Header.Set("Authorization", "Bearer "+accessToken)
     resp, err := http.DefaultClient.Do(req)
-    // read body → BytesToBase64 → chat.DecryptStream(encryptedB64, convKeyB64)
+    // read body into []byte → chat.DecryptStream(encryptedBlob, rawConvKey) — both raw []byte
     _ = resp
     _ = err
     ```
