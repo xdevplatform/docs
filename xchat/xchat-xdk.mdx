@@ -129,9 +129,10 @@ Decrypt a backlog, cache keys, decrypt one event, encrypt a reply. Wire the send
     result, err := chat.DecryptEvents(rawEvents, signingKeys)
     cached := result.ConversationKeys.Keys
     event, err := chat.DecryptEvent(oneEventB64, cached, senderSigningKeys)
+    rawKey := cached[*result.ConversationKeys.LatestVersion] // raw []byte
     payload, err := chat.EncryptMessage(chatxdk.EncryptMessageParams{
         MessageID: messageID, SenderID: senderID, ConversationID: conversationID,
-        ConversationKey: convKeyB64, Text: "Hi!",
+        ConversationKey: rawKey, Text: "Hi!",
         ConversationKeyVersion: conversationKeyVersion, SigningKeyVersion: signingKeyVersion,
     })
     _ = event
@@ -183,7 +184,7 @@ Decrypt a backlog, cache keys, decrypt one event, encrypt a reply. Wire the send
 
 ## Lifecycle and keys
 
-Construct the SDK, store private keys (Juicebox PIN or a local key blob), register **public** keys with the Chat API, and set your registered **public-key version** after unlock or import. Call `generate_keypairs` once per device/app identity; post the registration payload to the public-keys endpoint. Use `export_keys` / `import_keys` for bots and servers; use `setup` / `unlock` (and related PIN helpers) for client apps with Juicebox.
+Construct the SDK, store private keys (Juicebox PIN or a local key blob), register **public** keys with the Chat API, and set your registered **public-key version** after unlock or import. Call `generate_keypairs` once per device/app identity; post the registration payload to the public-keys endpoint. Use `setup` / `unlock` (and related PIN helpers) for Juicebox PIN storage on every binding. `export_keys` / `import_keys` (raw key-blob persistence for bots and servers) are available on the **native bindings only**—Python, Go, .NET, JVM, and Rust. The JS/WASM binding does not expose raw key export or import: in a browser any script that reaches the instance could exfiltrate the identity, so JS keeps keys inside Juicebox. A JS server that wants to avoid a Juicebox round-trip per request should reuse one unlocked `Chat` instance across requests, or run a native binding where key blobs are supported.
 
 <Tabs>
   <Tab title="Python">
@@ -217,7 +218,8 @@ Construct the SDK, store private keys (Juicebox PIN or a local key blob), regist
     chat.setKeyVersion(version);
     const publics = chat.getPublicKeys();
 
-    // Key blob path: create without Juicebox, then importKeys / exportKeys
+    // JS/WASM stores keys only through Juicebox — there is no raw key
+    // export/import here. For key-blob persistence, use a native binding.
     ```
   </Tab>
   <Tab title="Rust">
@@ -270,7 +272,9 @@ Construct the SDK, store private keys (Juicebox PIN or a local key blob), regist
   </Tab>
 </Tabs>
 
-Optional: `set_reject_unverified` so decrypt fails when a signature cannot be verified; `update_config` if Juicebox realm config changes; `is_unlocked` / `has_identity_key` for UI state. Full field lists live in the [chat-xdk repo](https://github.com/xdevplatform/chat-xdk) stubs.
+The Juicebox config you pass at construction accepts three shapes: the X API `juicebox_config` object (recommended—passed verbatim), a full `sdk_config` wrapper, or a bare `token_map`.
+
+Optional: signature verification is **on by default** (`reject_unverified = true`)—call `set_reject_unverified(false)` to disable it (not recommended); `update_config` if Juicebox realm config changes; `is_unlocked` / `has_identity_key` for UI state. Full field lists live in the [chat-xdk repo](https://github.com/xdevplatform/chat-xdk) stubs.
 
 ---
 
@@ -284,7 +288,7 @@ Three **prepare** methods each make one call do everything a key change needs: g
 | Create a group (id minted by `POST /2/chat/conversations/group/initialize`) | `prepare_group_create` | 2—send both |
 | Add members to a group | `prepare_group_members_change` | 2—send both |
 
-Keep the **raw** key bytes (Go: base64 of those bytes) for `encrypt_message` and media; never pass the API’s encrypted envelope into encrypt.
+Keep the **raw** key bytes for `encrypt_message` and media; never pass the API’s encrypted envelope into encrypt.
 
 <Warning>
 **Verify fetched keys before wrapping.** The prepare methods encrypt the fresh conversation key to whatever public keys you pass. Before passing them, call `verify_key_binding(identity, signing, signature)` on each fetched record—its `public_key`, `signing_public_key`, and `identity_public_key_signature` fields from the public-keys API—so a substituted identity key cannot receive the conversation key.
@@ -315,7 +319,9 @@ Use `extract_conversation_keys` on key-change event payloads to rebuild `{ keys,
   </Tab>
   <Tab title="TypeScript">
     ```typescript
-    const prepared = chat.prepareConversationKeyChange(myUserId, signingKeyVersion, participants);
+    const prepared = chat.prepareConversationKeyChange({
+      senderId: myUserId, signingKeyVersion, publicKeys: participants,
+    });
     // prepared.conversationKey — Uint8Array for encryptMessage
     // prepared.participantKeys / prepared.actionSignatures — POST body fields
 
@@ -328,7 +334,7 @@ Use `extract_conversation_keys` on key-change event payloads to rebuild `{ keys,
   <Tab title="Rust">
     ```rust
     let prepared = chat.prepare_conversation_key_change(
-        &my_user_id, &signing_key_version, &participants, None,
+        ConversationKeyChangeParams::new(&my_user_id, &signing_key_version, participants),
     )?;
     let extracted = chat.extract_conversation_keys(&key_change_blobs);
     let latest = extracted.latest_version.as_deref().unwrap_or_default();
@@ -338,8 +344,10 @@ Use `extract_conversation_keys` on key-change event payloads to rebuild `{ keys,
   </Tab>
   <Tab title="Go">
     ```go
-    prepared, err := chat.PrepareConversationKeyChange(myUserID, signingKeyVersion, participants, "")
-    // prepared.ConversationKey is base64 of the raw key for later EncryptMessage
+    prepared, err := chat.PrepareConversationKeyChange(chatxdk.ConversationKeyChangeParams{
+        SenderID: myUserID, SigningKeyVersion: signingKeyVersion, PublicKeys: participants,
+    })
+    // prepared.ConversationKey is the raw []byte key for later EncryptMessage
     // prepared.ParticipantKeys / prepared.ActionSignatures — POST body fields
     extracted, err := chat.ExtractConversationKeys(keyChangeBlobs)
     one, err := chat.DecryptConversationKey(encryptedBlob)
@@ -351,7 +359,9 @@ Use `extract_conversation_keys` on key-change event payloads to rebuild `{ keys,
   </Tab>
   <Tab title="C#">
     ```csharp
-    var prepared = chat.PrepareConversationKeyChange(myUserId, signingKeyVersion, participants);
+    var prepared = chat.PrepareConversationKeyChange(new ConversationKeyChangeParams {
+        SenderId = myUserId, SigningKeyVersion = signingKeyVersion, PublicKeys = participants,
+    });
     var extracted = chat.ExtractConversationKeys(keyChangeBlobs);
     var raw = extracted.Keys[extracted.LatestVersion];
     var one = chat.DecryptConversationKey(encryptedBlob);
@@ -359,8 +369,11 @@ Use `extract_conversation_keys` on key-change event payloads to rebuild `{ keys,
   </Tab>
   <Tab title="Java">
     ```java
-    PreparedConversationChange prepared = chat.prepareConversationKeyChange(
-        myUserId, signingKeyVersion, participants, null);
+    ConversationKeyChangeParams keyParams = new ConversationKeyChangeParams();
+    keyParams.senderId = myUserId;
+    keyParams.signingKeyVersion = signingKeyVersion;
+    keyParams.publicKeys = participants;
+    PreparedConversationChange prepared = chat.prepareConversationKeyChange(keyParams);
     ConversationKeyBundle extracted = chat.extractConversationKeys(keyChangeBlobs);
     byte[] raw = extracted.keys.get(extracted.latestVersion);
     byte[] one = chat.decryptConversationKey(encryptedBlob);
@@ -376,7 +389,7 @@ For group create and member adds, pass the params each method needs (member/admi
 
 **`decrypt_events`** is for history and backlog: it pulls conversation keys from the stream, returns decrypted messages, and **collects** per-event errors instead of failing the whole batch. **`decrypt_event`** is for a single live event when you already have a key cache; it raises/throws on failure.
 
-Pass **signing keys** so the SDK can verify senders. Map API public-key fields into `SigningKeyEntry`: `public_key_version` → `public_key_version` (same name), `signing_public_key` → `public_key`, `public_key` → `identity_public_key`, plus `identity_public_key_signature` and `user_id`. Omit or pass an empty list to skip verification (not recommended in production).
+Pass **signing keys** so the SDK can verify senders. Map API public-key fields into `SigningKeyEntry`: `public_key_version` → `public_key_version` (same name), `signing_public_key` → `public_key`, `public_key` → `identity_public_key`, plus `identity_public_key_signature` and `user_id`. Verification is mandatory by default: omitting or passing an empty signing-key list does **not** skip it—signed events fail (collected in `errors` for `decrypt_events`, thrown for `decrypt_event`). To actually skip verification you must first call `set_reject_unverified(false)` (not recommended in production).
 
 <Tabs>
   <Tab title="Python">
@@ -390,8 +403,8 @@ Pass **signing keys** so the SDK can verify senders. Map API public-key fields i
     } for row in api_public_keys]
 
     result = chat.decrypt_events(raw_events, signing_keys)
-    for err in result.get("errors") or []:
-        log.warning("decrypt error: %s", err)
+    for idx, msg in (result.get("errors") or {}).items():
+        log.warning("event %s failed: %s", idx, msg)
     for dm in result["messages"]:
         ev = dm["event"]
         if ev.get("type") == "Message":
@@ -412,8 +425,8 @@ Pass **signing keys** so the SDK can verify senders. Map API public-key fields i
     }));
 
     const result = chat.decryptEvents(rawEvents, signingKeys);
-    for (const err of result.errors ?? []) {
-      console.warn('decrypt error', err);
+    for (const [idx, msg] of Object.entries(result.errors ?? {})) {
+      console.warn(`event ${idx} failed: ${msg}`);
     }
     const cached = result.conversationKeys.keys;
     const live = chat.decryptEvent(oneEventB64, cached, signingKeysForSender);
@@ -422,8 +435,8 @@ Pass **signing keys** so the SDK can verify senders. Map API public-key fields i
   <Tab title="Rust">
     ```rust
     let result = chat.decrypt_events(&raw_events, &signing_keys);
-    for err in &result.errors {
-        eprintln!("decrypt error: {err:?}");
+    for (idx, msg) in &result.errors {
+        eprintln!("event {idx} failed: {msg}");
     }
     let cached = &result.conversation_keys.keys;
     let live = chat.decrypt_event(one_event_b64, cached, &signing_keys_for_sender)?;
@@ -432,8 +445,8 @@ Pass **signing keys** so the SDK can verify senders. Map API public-key fields i
   <Tab title="Go">
     ```go
     result, err := chat.DecryptEvents(rawEvents, signingKeys)
-    for _, e := range result.Errors {
-        log.Printf("decrypt error: %v", e)
+    for idx, msg := range result.Errors {
+        log.Printf("event %s failed: %s", idx, msg)
     }
     cached := result.ConversationKeys.Keys
     live, err := chat.DecryptEvent(oneEventB64, cached, signingKeysForSender)
@@ -444,7 +457,7 @@ Pass **signing keys** so the SDK can verify senders. Map API public-key fields i
   <Tab title="C#">
     ```csharp
     var result = chat.DecryptEvents(rawEvents, signingKeys);
-    foreach (var e in result.Errors) { /* log */ }
+    foreach (var kv in result.Errors) { /* kv.Key = event index, kv.Value = error */ }
     var cached = result.ConversationKeys.Keys;
     var live = chat.DecryptEvent(oneEventB64, cached, signingKeysForSender);
     ```
@@ -528,12 +541,12 @@ The conversation id passed to `encrypt_message` / `encrypt_reply` can be any for
     ```go
     payload, err := chat.EncryptMessage(chatxdk.EncryptMessageParams{
         MessageID: messageID, SenderID: senderID, ConversationID: conversationID,
-        ConversationKey: convKeyB64, Text: "Hello",
+        ConversationKey: rawKey, Text: "Hello", // rawKey is raw []byte
         ConversationKeyVersion: conversationKeyVersion, SigningKeyVersion: signingKeyVersion,
     })
     // body: message_id, encoded_message_create_event, encoded_message_event_signature
-    nameCt, err := chat.Encrypt("Group title", convKeyB64)
-    title, err := chat.Decrypt(nameCt, convKeyB64)
+    nameCt, err := chat.Encrypt("Group title", rawKey)
+    title, err := chat.Decrypt(nameCt, rawKey)
     _ = payload
     _ = title
     _ = err
@@ -579,44 +592,82 @@ Encrypt file bytes with the **same** conversation key used for text, upload via 
 <Tabs>
   <Tab title="Python">
     ```python
-    enc = chat.encrypt_stream(file_bytes, raw_conversation_key)
-    # enc["ciphertext"], enc["media_hash_key"] — upload ciphertext; pass media_hash_key into encrypt_message
+    ciphertext = chat.encrypt_stream(file_bytes, raw_conversation_key)
+    # Upload `ciphertext`; the `media_hash_key` you attach on encrypt_message
+    # comes from the media-upload finalize step, not from encrypt_stream.
 
-    plain = chat.decrypt_stream(ciphertext_bytes, raw_conversation_key, media_hash_key)
+    plain = chat.decrypt_stream(ciphertext, raw_conversation_key)
     ```
   </Tab>
   <Tab title="TypeScript">
     ```typescript
-    const enc = chat.encryptStream(fileBytes, rawConversationKey);
-    // enc.ciphertext, enc.mediaHashKey
-    const plain = chat.decryptStream(ciphertextBytes, rawConversationKey, mediaHashKey);
+    const ciphertext = chat.encryptStream(fileBytes, rawConversationKey);
+    // Upload `ciphertext`; mediaHashKey comes from the upload finalize step.
+    const plain = chat.decryptStream(ciphertext, rawConversationKey);
     ```
   </Tab>
   <Tab title="Rust">
     ```rust
-    let enc = chat.encrypt_stream(&file_bytes, &raw_key)?;
-    let plain = chat.decrypt_stream(&ciphertext, &raw_key, &media_hash_key)?;
+    let ciphertext = chat.encrypt_stream(&file_bytes, &raw_key)?;
+    let plain = chat.decrypt_stream(&ciphertext, &raw_key)?;
     ```
   </Tab>
   <Tab title="Go">
     ```go
-    enc, err := chat.EncryptStream(fileBytes, convKeyB64)
-    plain, err := chat.DecryptStream(ciphertext, convKeyB64, mediaHashKey)
-    _ = enc
+    ciphertext, err := chat.EncryptStream(fileBytes, rawKey) // rawKey is raw []byte
+    plain, err := chat.DecryptStream(ciphertext, rawKey)
     _ = plain
     _ = err
     ```
   </Tab>
   <Tab title="C#">
     ```csharp
-    var enc = chat.EncryptStream(fileBytes, rawKey);
-    var plain = chat.DecryptStream(ciphertext, rawKey, mediaHashKey);
+    var ciphertext = chat.EncryptStream(fileBytes, rawKey);
+    var plain = chat.DecryptStream(ciphertext, rawKey);
     ```
   </Tab>
   <Tab title="Java">
     ```java
-    EncryptStreamResult enc = chat.encryptStream(fileBytes, rawKey);
-    byte[] plain = chat.decryptStream(ciphertext, rawKey, mediaHashKey);
+    byte[] ciphertext = chat.encryptStream(fileBytes, rawKey);
+    byte[] plain = chat.decryptStream(ciphertext, rawKey);
+    ```
+  </Tab>
+</Tabs>
+
+### Incremental streaming for large media
+
+For large files, avoid holding the whole payload in memory: `stream_encryptor()` / `stream_decryptor()` return a `StreamEncryptor` / `StreamDecryptor` you feed in chunks (about 1 MB each) with `push(chunk)`, then call `finish()` once at the end. On decrypt, `finish()` detects a truncated stream (it fails if input ended before the final frame), so don't treat pushed plaintext as complete until it succeeds.
+
+<Warning>
+**JS/WASM only:** `finish()` consumes and frees the underlying WASM object—never call `free()` after `finish()` (it throws). Call `free()` only to abandon a stream *before* finishing (e.g. on an error path).
+</Warning>
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    enc = chat.stream_encryptor(raw_conversation_key)
+    chunks = [enc.push(chunk) for chunk in read_in_chunks(file_bytes, 1 << 20)]
+    chunks.append(enc.finish())
+    ciphertext = b"".join(chunks)
+
+    dec = chat.stream_decryptor(raw_conversation_key)
+    out = [dec.push(chunk) for chunk in read_in_chunks(ciphertext, 1 << 20)]
+    out.append(dec.finish())  # raises on truncation
+    plain = b"".join(out)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const enc = chat.streamEncryptor(rawConversationKey);
+    const parts: Uint8Array[] = [];
+    try {
+      for (const chunk of readInChunks(fileBytes, 1 << 20)) parts.push(enc.push(chunk));
+      parts.push(enc.finish()); // consumes + frees enc — do not call enc.free() after this
+    } catch (e) {
+      enc.free(); // only when abandoning before finish()
+      throw e;
+    }
+    const ciphertext = concat(parts);
     ```
   </Tab>
 </Tabs>
@@ -630,20 +681,27 @@ Base64/hex helpers, MIME sniffing, and image dimensions are available as module-
 <Tabs>
   <Tab title="Python">
     ```python
-    from chat_xdk import bytes_to_base64, base64_to_bytes, detect_mime_type, detect_image_dimensions
+    from chat_xdk import (
+        bytes_to_base64, base64_to_bytes, bytes_to_hex, hex_to_bytes,
+        detect_mime_type, detect_image_dimensions,
+    )
 
     b64 = bytes_to_base64(raw)
     raw2 = base64_to_bytes(b64)
+    hexed = bytes_to_hex(raw)
+    raw3 = hex_to_bytes(hexed)
     mime = detect_mime_type(file_bytes)
     w, h = detect_image_dimensions(file_bytes)
     ```
   </Tab>
   <Tab title="TypeScript">
     ```typescript
-    import { bytesToBase64, base64ToBytes, detectMimeType, detectImageDimensions } from '@xdevplatform/chat-xdk';
+    import { bytesToBase64, base64ToBytes, bytesToHex, hexToBytes, detectMimeType, detectImageDimensions } from '@xdevplatform/chat-xdk';
 
     const b64 = bytesToBase64(raw);
     const raw2 = base64ToBytes(b64);
+    const hexed = bytesToHex(raw);
+    const raw3 = hexToBytes(hexed);
     const mime = detectMimeType(fileBytes);
     const { width, height } = detectImageDimensions(fileBytes);
     ```
@@ -652,6 +710,8 @@ Base64/hex helpers, MIME sniffing, and image dimensions are available as module-
     ```rust
     let b64 = chat_xdk_core::bytes_to_base64(&raw);
     let raw2 = chat_xdk_core::base64_to_bytes(&b64)?;
+    let hexed = chat_xdk_core::bytes_to_hex(&raw);
+    let raw3 = chat_xdk_core::hex_to_bytes(&hexed);
     let mime = chat_xdk_core::detect_mime_type(&file_bytes);
     let (w, h) = chat_xdk_core::detect_image_dimensions(&file_bytes)?;
     ```
@@ -660,9 +720,13 @@ Base64/hex helpers, MIME sniffing, and image dimensions are available as module-
     ```go
     b64 := chatxdk.BytesToBase64(raw)
     raw2, err := chatxdk.Base64ToBytes(b64)
+    hexed, err := chatxdk.BytesToHex(raw)
+    raw3, err := chatxdk.HexToBytes(hexed)
     mime := chatxdk.DetectMimeType(fileBytes)
     w, h, err := chatxdk.DetectImageDimensions(fileBytes)
     _ = raw2
+    _ = hexed
+    _ = raw3
     _ = mime
     _ = w
     _ = h
@@ -673,6 +737,8 @@ Base64/hex helpers, MIME sniffing, and image dimensions are available as module-
     ```csharp
     var b64 = ChatXdkUtilities.BytesToBase64(raw);
     var raw2 = ChatXdkUtilities.Base64ToBytes(b64);
+    var hexed = ChatXdkUtilities.BytesToHex(raw);
+    var raw3 = ChatXdkUtilities.HexToBytes(hexed);
     var mime = ChatXdkUtilities.DetectMimeType(fileBytes);
     var (w, h) = ChatXdkUtilities.DetectImageDimensions(fileBytes);
     ```
@@ -681,6 +747,8 @@ Base64/hex helpers, MIME sniffing, and image dimensions are available as module-
     ```java
     String b64 = ChatXdkUtilities.bytesToBase64(raw);
     byte[] raw2 = ChatXdkUtilities.base64ToBytes(b64);
+    String hexed = ChatXdkUtilities.bytesToHex(raw);
+    byte[] raw3 = ChatXdkUtilities.hexToBytes(hexed);
     String mime = ChatXdkUtilities.detectMimeType(fileBytes);
     int[] wh = ChatXdkUtilities.detectImageDimensions(fileBytes);
     ```
@@ -696,7 +764,7 @@ These conceptual types show up across languages (exact field names differ; JS of
 - **SendPayload** — return value of `encrypt_message` and related encrypt helpers; map into the Chat API send body.
 - **PublicKeyRegistrationPayload** — output of `generate_keypairs` / public-key getters for the add-public-key API.
 - **SigningKeyEntry** — sender public material passed into decrypt for signature verification.
-- **PreparedConversationChange** — output of the three prepare methods: the derived or passed `conversation_id`, the raw `conversation_key` (Go: base64 string), `conversation_key_version`, `participant_keys` (`user_id`, `encrypted_key`, `public_key_version`), and `action_signatures` (`message_id`, `encoded_message_event_detail`, `signature`, `signature_version`, `public_key_version`, optional `signature_payload`—omitted on key-change signatures because that payload embeds the plaintext key).
+- **PreparedConversationChange** — output of the three prepare methods: the derived or passed `conversation_id`, the raw `conversation_key` bytes, `conversation_key_version`, `participant_keys` (`user_id`, `encrypted_key`, `public_key_version`), and `action_signatures` (`message_id`, `encoded_message_event_detail`, `signature`, `signature_version`, `public_key_version`, optional `signature_payload`—omitted on key-change signatures because that payload embeds the plaintext key).
 - **DecryptEventsResult** — messages, optional errors, and extracted `conversation_keys`.
 
 For complete field lists, use language stubs in the [chat-xdk repo](https://github.com/xdevplatform/chat-xdk) (`docs/API.md`, `*.pyi`, `index.d.ts`).

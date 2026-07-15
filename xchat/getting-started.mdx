@@ -408,10 +408,14 @@ The response returns the canonical conversation id (`data.conversation_id`—the
     }
 
     // Omit conversationId for a new 1:1; pass the id to rotate later
-    const prepared = chat.prepareConversationKeyChange('YOUR_USER_ID', signingKeyVersion, [
-      await publicKeyInput('YOUR_USER_ID'),
-      await publicKeyInput('RECIPIENT_USER_ID'),
-    ]);
+    const prepared = chat.prepareConversationKeyChange({
+      senderId: 'YOUR_USER_ID',
+      signingKeyVersion,
+      publicKeys: [
+        await publicKeyInput('YOUR_USER_ID'),
+        await publicKeyInput('RECIPIENT_USER_ID'),
+      ],
+    });
     const resp = await client.chat.addConversationKeys('RECIPIENT_USER_ID', {
       conversation_key_version: prepared.conversationKeyVersion,
       conversation_participant_keys: prepared.participantKeys.map((pk) => ({
@@ -439,11 +443,9 @@ The response returns the canonical conversation id (`data.conversation_id`—the
     ```rust
     // public_key_inputs: Vec<PublicKeyInput> from GET public keys
     // (user_id, public_key, key_version ← public_key_version)
+    // new 1:1; set params.conversation_id = Some(id) to rotate later
     let prepared = chat.prepare_conversation_key_change(
-        &sender_id,
-        &signing_key_version,
-        &public_key_inputs,
-        None, // new 1:1; pass Some(id) to rotate later
+        ConversationKeyChangeParams::new(&sender_id, &signing_key_version, public_key_inputs),
     )?;
     let participant_keys: Vec<_> = prepared
         .participant_keys
@@ -491,11 +493,15 @@ The response returns the canonical conversation id (`data.conversation_id`—the
   <Tab title="Go">
     ```go
     // KeyVersion comes from the public_key_version field on each record
-    prepared, err := chat.PrepareConversationKeyChange(myUserID, signingKeyVersion,
-        []chatxdk.PublicKeyInput{
+    prepared, err := chat.PrepareConversationKeyChange(chatxdk.ConversationKeyChangeParams{
+        SenderID:          myUserID,
+        SigningKeyVersion: signingKeyVersion,
+        PublicKeys: []chatxdk.PublicKeyInput{
             {UserID: myUserID, PublicKey: myIdentityPubB64, KeyVersion: myKeyVersion},
             {UserID: recipientID, PublicKey: theirIdentityPubB64, KeyVersion: theirKeyVersion},
-        }, "") // empty id for a new 1:1; pass the id to rotate later
+        },
+        // ConversationID empty for a new 1:1; pass the id to rotate later
+    })
     var parts []map[string]string
     for _, pk := range prepared.ParticipantKeys {
         parts = append(parts, map[string]string{
@@ -528,17 +534,21 @@ The response returns the canonical conversation id (`data.conversation_id`—the
     req.Header.Set("Content-Type", "application/json")
     resp, err := httpClient.Do(req)
     // Response data.conversation_id is the canonical id for later requests
-    // prepared.ConversationKey is base64(raw key) — pass to EncryptMessage
+    // prepared.ConversationKey is the raw []byte key — pass to EncryptMessage
     _ = resp
     ```
   </Tab>
   <Tab title="C#">
     ```csharp
     // KeyVersion comes from the public_key_version field on each record
-    var prepared = chat.PrepareConversationKeyChange(myUserId, signingKeyVersion, new[] {
-        new PublicKeyInput { UserId = myUserId, PublicKey = myPk, KeyVersion = myVer },
-        new PublicKeyInput { UserId = recipientId, PublicKey = theirPk, KeyVersion = theirVer },
-    }); // conversationId: null for a new 1:1; pass the id to rotate later
+    var prepared = chat.PrepareConversationKeyChange(new ConversationKeyChangeParams {
+        SenderId = myUserId,
+        SigningKeyVersion = signingKeyVersion,
+        PublicKeys = new[] {
+            new PublicKeyInput { UserId = myUserId, PublicKey = myPk, KeyVersion = myVer },
+            new PublicKeyInput { UserId = recipientId, PublicKey = theirPk, KeyVersion = theirVer },
+        },
+    }); // ConversationId null for a new 1:1; pass the id to rotate later
     var keysBody = new {
         conversation_key_version = prepared.ConversationKeyVersion,
         conversation_participant_keys = prepared.ParticipantKeys.Select(pk => new {
@@ -577,9 +587,12 @@ The response returns the canonical conversation id (`data.conversation_id`—the
     PublicKeyInput theirs = new PublicKeyInput();
     theirs.userId = recipientId; theirs.publicKey = theirIdentityPubB64; theirs.keyVersion = theirKeyVersion;
 
-    PreparedConversationChange prepared = chat.prepareConversationKeyChange(
-        myUserId, signingKeyVersion, List.of(mine, theirs),
-        null); // null for a new 1:1; pass the id to rotate later
+    ConversationKeyChangeParams keyParams = new ConversationKeyChangeParams();
+    keyParams.senderId = myUserId;
+    keyParams.signingKeyVersion = signingKeyVersion;
+    keyParams.publicKeys = List.of(mine, theirs);
+    // keyParams.conversationId null for a new 1:1; set the id to rotate later
+    PreparedConversationChange prepared = chat.prepareConversationKeyChange(keyParams);
 
     List<Map<String, String>> parts = new ArrayList<>();
     for (var pk : prepared.participantKeys) {
@@ -622,7 +635,7 @@ The response returns the canonical conversation id (`data.conversation_id`—the
 
 ## 5. Send a message
 
-Encrypt with the **raw** conversation key (in Go, pass that key as **base64**). On the send request, map:
+Encrypt with the **raw** conversation key (raw bytes in every binding, including Go). On the send request, map:
 
 | Chat XDK field | Request body field |
 |:---------------|:-------------------|
@@ -712,7 +725,7 @@ Use a **hyphenated** conversation id in the URL path when the API requires it (`
         MessageID:              messageID,
         SenderID:               senderID,
         ConversationID:         conversationID,
-        ConversationKey:        convKeyB64,
+        ConversationKey:        convKey, // raw []byte from prepared.ConversationKey
         Text:                   "Hello!",
         ConversationKeyVersion: convKeyVersion,
         SigningKeyVersion:      signingKeyVersion,
