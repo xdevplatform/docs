@@ -1,0 +1,151 @@
+---
+title: Livestream Scheduling API
+sidebarTitle: Overview
+description: "Create, manage, and publish scheduled broadcasts on X with one-time and recurring schedules, automatic or manual publishing, and OAuth 2.0 support."
+keywords: ["Livestream Scheduling API", "scheduled broadcast", "recurring schedule", "manual publish", "broadcast.read", "broadcast.write"]
+---
+
+<Warning>
+**Closed beta.** This API is currently in closed beta. Breaking changes should be expected, including substantial refactoring of individual endpoints or entire routes. Any and all feedback is appreciated and will help shape the API before general availability.
+</Warning>
+
+Use the Livestream Scheduling API to create, manage, and publish scheduled broadcasts on X.
+
+The API supports one-time and recurring schedules. A scheduled broadcast is associated with an existing [livestream source](/livestream-api/sources/overview). It can publish automatically at its scheduled start time or wait for an explicit go-live request.
+
+## Before you begin
+
+### Authentication
+
+All requests require user-context authentication. The authenticated user owns the broadcasts accessed through these endpoints.
+
+Supported authentication methods:
+
+- **OAuth 2.0 Authorization Code Flow with PKCE.** Read routes require `broadcast.read`. Create, update, delete, and go-live routes require both `broadcast.read` and `broadcast.write`.
+- **OAuth 1.0a user context.** List and get routes accept apps with Read, Read and write, or Read, write, and Direct Messages permissions. Create, update, delete, and go-live routes require Read and write or Read, write, and Direct Messages permissions.
+
+OAuth 2.0 is recommended for new integrations.
+
+<Note>
+This differs from the Livestream [management endpoints](/livestream-api/fundamentals/authentication) (sources and broadcasts), which currently accept only OAuth 1.0a.
+</Note>
+
+### Base URL
+
+```
+https://api.x.com/2
+```
+
+### Livestream source
+
+You must [create a livestream source](/livestream-api/sources/create-source) before scheduling a broadcast. Supply the source's `rtmp_stream_key` as `source_id`.
+
+For a manual go-live request, begin sending RTMP video to the source before calling the [live endpoint](/livestream-api/scheduled-broadcasts/go-live). The source must be active for the broadcast to publish.
+
+### Timestamps and IDs
+
+- Timestamp fields use Unix epoch time in milliseconds.
+- Send timestamps and numeric IDs as decimal strings to preserve precision.
+- The `broadcast_id` is an alphanumeric ID used in endpoint paths.
+- The `scheduled_broadcast_id` is a numeric scheduler ID. Save both values returned by create, list, or get. Updates require the numeric ID in the request body.
+
+## Scheduled broadcast object
+
+```json
+{
+  "scheduled_broadcast_id": "2075599796786561024",
+  "broadcast_id": "1DxLddgepQbxm",
+  "state": "Created",
+  "title": "Product launch",
+  "description": "Live from our launch event",
+  "source_id": "c47khpz1zuq9",
+  "scheduled_start_ms": "1784000000000",
+  "scheduled_end_ms": "1784003600000",
+  "thumbnail_media_id": "2075599000000000000",
+  "chat_option": "1",
+  "locale": "en",
+  "available_for_replay": true,
+  "recurring_schedule_id": null,
+  "telecast_id": null,
+  "manual_publish": true
+}
+```
+
+Fields that do not apply may be omitted.
+
+Common `state` values include:
+
+| State | Meaning |
+|:------|:--------|
+| `Created` | Scheduled and not yet live |
+| `Running` | Currently live |
+| `Ended` | The broadcast has ended |
+| `Error` | The broadcast could not be started or completed |
+
+## Endpoints
+
+| Endpoint | Method & Path |
+|:---------|:--------------|
+| [Create a scheduled broadcast](/livestream-api/scheduled-broadcasts/create-scheduled-broadcast) | `POST /2/broadcasts/scheduled` |
+| [List scheduled broadcasts](/livestream-api/scheduled-broadcasts/list-scheduled-broadcasts) | `GET /2/broadcasts/scheduled` |
+| [Get a scheduled broadcast](/livestream-api/scheduled-broadcasts/get-scheduled-broadcast) | `GET /2/broadcasts/scheduled/:id` |
+| [Update a scheduled broadcast](/livestream-api/scheduled-broadcasts/update-scheduled-broadcast) | `PUT /2/broadcasts/scheduled/:id` |
+| [Delete a scheduled broadcast](/livestream-api/scheduled-broadcasts/delete-scheduled-broadcast) | `DELETE /2/broadcasts/scheduled/:id` |
+| [Go live on a scheduled broadcast](/livestream-api/scheduled-broadcasts/go-live) | `POST /2/broadcasts/scheduled/:id/live` |
+
+## Recommended workflow
+
+### Automatically published broadcast
+
+<Steps>
+  <Step title="Create or select a livestream source" />
+  <Step title="Create a scheduled broadcast">
+    Leave `manual_publish` omitted or set to `false`.
+  </Step>
+  <Step title="Begin sending RTMP video">
+    Start pushing video before `scheduled_start_ms`.
+  </Step>
+  <Step title="The scheduler publishes the broadcast">
+    Publishing happens automatically at the scheduled start time.
+  </Step>
+  <Step title="Poll the get endpoint">
+    Observe state changes via [Get a scheduled broadcast](/livestream-api/scheduled-broadcasts/get-scheduled-broadcast).
+  </Step>
+</Steps>
+
+### Manually published broadcast
+
+<Steps>
+  <Step title="Create or select a livestream source" />
+  <Step title="Create a scheduled broadcast">
+    Set `manual_publish: true`.
+  </Step>
+  <Step title="Begin sending RTMP video" />
+  <Step title="Go live when ready">
+    Call [`POST /2/broadcasts/scheduled/:id/live`](/livestream-api/scheduled-broadcasts/go-live).
+  </Step>
+  <Step title="Poll the get endpoint">
+    Poll until the state is `Running`.
+  </Step>
+</Steps>
+
+## Errors and troubleshooting
+
+Common HTTP responses:
+
+| Status | Meaning |
+|:-------|:--------|
+| `400 Bad Request` | Missing or invalid input, invalid schedule, unknown broadcast, incomplete full-replacement update, or a go-live request for a schedule that is not configured for manual publishing. |
+| `401 Unauthorized` | Missing, expired, or invalid user access token. |
+| `403 Forbidden` | The token lacks the required scope or the authenticated user is not permitted to access the resource. |
+| `429 Too Many Requests` | Rate limit exceeded. |
+| `503 Service Unavailable` | A dependent livestream or scheduling service could not complete the request. |
+
+If a go-live request fails:
+
+- Confirm `manual_publish` is `true`.
+- Confirm the source ID is correct.
+- Confirm RTMP video is actively reaching the source.
+- Confirm the broadcast has not already ended or been deleted.
+
+If an update reports incomplete broadcast data, retrieve the current broadcast and resend all fields that should remain set.

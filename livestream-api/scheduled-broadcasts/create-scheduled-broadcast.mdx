@@ -1,0 +1,95 @@
+---
+title: Create a Scheduled Broadcast
+sidebarTitle: Create Scheduled Broadcast
+description: "POST /2/broadcasts/scheduled creates a one-time or recurring scheduled broadcast, with automatic or manual publishing."
+keywords: ["create scheduled broadcast", "POST broadcasts scheduled", "recurrence", "manual_publish", "recurring schedule"]
+---
+
+<Note>
+The Livestream Scheduling API is in **closed beta** — breaking changes should be expected. See the [overview](/livestream-api/scheduled-broadcasts/overview).
+</Note>
+
+Creates a one-time or recurring scheduled broadcast.
+
+**Endpoint:** `POST /2/broadcasts/scheduled`
+
+**OAuth 2.0 scopes:** `broadcast.read`, `broadcast.write`
+
+## Request fields
+
+**Required:**
+
+| Field | Description |
+|:------|:------------|
+| `source_id` | Existing source ID, equal to the source's `rtmp_stream_key`. |
+| `scheduled_start_ms` | Scheduled start as a Unix timestamp in milliseconds. |
+| `scheduled_end_ms` | Scheduled end as a Unix timestamp in milliseconds. |
+
+**Optional:** `title`, `description`, `thumbnail_media_id`, `chat_option`, `locale`, `available_for_replay`, `is_locked`, `manual_publish`, `telecast_id`, `recurrence`
+
+Set `manual_publish` to `true` when you want to publish explicitly with [`POST /2/broadcasts/scheduled/:id/live`](/livestream-api/scheduled-broadcasts/go-live). Otherwise, the scheduler publishes automatically at the scheduled start time.
+
+## One-time example
+
+```bash
+curl --request POST \
+  --url 'https://api.x.com/2/broadcasts/scheduled' \
+  --header 'Authorization: Bearer YOUR_ACCESS_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "source_id": "c47khpz1zuq9",
+    "scheduled_start_ms": "1784000000000",
+    "scheduled_end_ms": "1784003600000",
+    "title": "Product launch",
+    "description": "Live from our launch event",
+    "available_for_replay": true,
+    "manual_publish": true
+  }'
+```
+
+**Response:** `201 Created`
+
+```json
+{
+  "data": {
+    "scheduled_broadcast_id": "2075599796786561024",
+    "broadcast_id": "1DxLddgepQbxm",
+    "state": "Created",
+    "title": "Product launch",
+    "description": "Live from our launch event",
+    "source_id": "c47khpz1zuq9",
+    "scheduled_start_ms": "1784000000000",
+    "scheduled_end_ms": "1784003600000",
+    "available_for_replay": true,
+    "manual_publish": true
+  }
+}
+```
+
+<Tip>
+Save both `broadcast_id` (alphanumeric, used in endpoint paths) and `scheduled_broadcast_id` (numeric, required in the body of [update requests](/livestream-api/scheduled-broadcasts/update-scheduled-broadcast)).
+</Tip>
+
+## Create a recurring schedule
+
+Add `recurrence` with:
+
+| Field | Description |
+|:------|:------------|
+| `frequency` | `Daily` or `Weekly` |
+| `repeats` | Number of occurrences as a decimal string |
+
+```json
+{
+  "source_id": "c47khpz1zuq9",
+  "scheduled_start_ms": "1784000000000",
+  "scheduled_end_ms": "1784003600000",
+  "title": "Weekly livestream",
+  "recurrence": {
+    "frequency": "Weekly",
+    "repeats": "4"
+  }
+}
+```
+
+The response returns the first scheduled occurrence. Use the [list endpoint](/livestream-api/scheduled-broadcasts/list-scheduled-broadcasts) to retrieve all generated occurrences.
