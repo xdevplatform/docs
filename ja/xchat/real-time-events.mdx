@@ -1,0 +1,261 @@
+---
+title: リアルタイム X Chat イベント
+sidebarTitle: リアルタイムイベント
+description: Webhook またはアクティビティストリーム経由で暗号化されたチャットイベントを受信する
+---
+
+X は **`chat.received`**、**`chat.sent`**、および関連する X Chat アクティビティを、ペイロード内の**暗号文**とともに配信します。[Chat XDK](/xchat/xchat-xdk) で復号します。
+
+| レイヤー | 役割 |
+|:------|:-----|
+| **Activity API** | `GET /2/activity/stream`；`POST` / `GET` / `PUT` / `DELETE` `/2/activity/subscriptions`（オペレーションごとの OpenAPI security を参照） |
+| **Account Activity webhooks** | 独自の HTTPS URL で終端する場合のオプションの `/2/account_activity/webhooks/{webhook_id}` サブスクリプションルート |
+| **Chat XDK** | `extract_conversation_keys`、`decrypt_event` / `decrypt_events` |
+
+プライベート X Chat イベントタイプは、監視するユーザーに対する認可が必要です。暗号化された X Chat ファイル添付は、Post API の `expansions=attachments.media_keys` / `media.fields=variants` ではなく、**`media_hash_key`** と X Chat メディアダウンロードを使用します。
+
+---
+
+## イベントタイプ
+
+| イベント | いつ |
+|:------|:-----|
+| `chat.received` | サブスクライブされたユーザーが暗号化された DM を受信 |
+| `chat.sent` | サブスクライブされたユーザーが暗号化された DM を送信 |
+| `chat.conversation_join` | サブスクライブされたユーザーがグループに参加（提供時） |
+
+---
+
+## 1. 配信方法を選択する
+
+**アクティビティストリーム（ボットには多くの場合最もシンプル）:** アプリの Bearer トークンで `GET /2/activity/stream`（オプションの `backfill_minutes`、`start_time`、`end_time` は OpenAPI ごと）。クライアント側で `chat.received` / `chat.sent` をフィルタリングします。
+
+**アクティビティサブスクリプション:** 以下で永続的なサブスクリプションを管理します:
+
+- `POST /2/activity/subscriptions` — 作成
+- `GET /2/activity/subscriptions` — 一覧（ページネーション）
+- `PUT /2/activity/subscriptions/{subscription_id}` — 更新
+- `DELETE /2/activity/subscriptions/{subscription_id}` または `DELETE /2/activity/subscriptions?ids=` — 削除
+
+リクエストボディと必要なスコープは、各ルートの OpenAPI オペレーションで定義されています（通常はアプリレベルの XAA 管理には Bearer）。
+
+**Webhook（Account Activity 方式）:** HTTPS エンドポイントでイベントを終端する場合、Webhook を登録し、CRC チャレンジをパスし、その後 `/2/account_activity/webhooks/{webhook_id}/subscriptions/all` の下にサブスクリプションを作成します（OpenAPI の Account Activity オペレーションを参照）。Python/TypeScript XDK は、SDK のバージョンに含まれる場合、Webhook とアクティビティのヘルパーを公開することがあります。
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from xdk import Client
+
+    # Stream (app token) — exact helper names depend on your XDK version
+    stream_client = Client(bearer_token="YOUR_BEARER_TOKEN")
+    # for event in stream_client.activity.stream():
+    #     handle_payload(event)  # see "Decrypt with the Chat XDK" below
+
+    # Or create a subscription (check XDK for create_subscription vs activity API)
+    client = Client(bearer_token="YOUR_BEARER_TOKEN")
+    client.activity.create_subscription({
+        "event_type": "chat.received",
+        "filter": {"user_id": "USER_ID_TO_MONITOR"},
+    })
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    import { Client } from '@xdevplatform/xdk';
+
+    const client = new Client({ bearerToken: 'YOUR_BEARER_TOKEN' });
+    await client.activity.createSubscription({
+      event_type: 'chat.received',
+      filter: { user_id: 'USER_ID_TO_MONITOR' },
+    });
+    // Stream: client.activity.stream() when available in your SDK version
+    ```
+  </Tab>
+</Tabs>
+
+送信コピーが必要な場合は `chat.sent` にもサブスクライブしてください。他の言語: 同じ `/2/activity/*` HTTPS ルートを Bearer トークンで呼び出します。
+
+---
+
+## 2. CRC（Webhook のみ）
+
+Account Activity Webhook を使用する場合、コンシューマシークレットを使ったトークンの HMAC-SHA256 を、Webhook 製品が期待する JSON 形式（通常は `sha256=<base64>`）で Challenge-Response Checks（GET `crc_token`）に応答してください。
+
+---
+
+## 3. Chat XDK で復号する
+
+ライブフィールド: **`payload.encoded_event`**、オプションの **`payload.conversation_key_change_event`**。**`event_uuid`** で重複を排除します。
+
+JavaScript は camelCase のイベントタイプ（`message`）を使用します；他のバインディングは `"Message"` と snake_case フィールドを使用します。
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    from chat_xdk import Chat
+
+    chat = Chat(JUICEBOX_CONFIG_JSON)
+    chat.unlock("YOUR_PIN")
+    chat.set_key_version(SIGNING_KEY_VERSION)
+    conversation_keys = {}
+
+    def signing_keys(user_id: str):
+        resp = api_client.chat.get_user_public_keys(
+            user_id,
+            public_key_fields=[
+                "public_key_version", "public_key", "signing_public_key", "identity_public_key_signature",
+            ],
+        )
+        return [
+            {
+                "user_id": user_id,
+                "public_key_version": r["public_key_version"],
+                "public_key": r["signing_public_key"],
+                "identity_public_key": r["public_key"],
+                "identity_public_key_signature": r["identity_public_key_signature"],
+            }
+            for r in resp.data
+        ]
+
+    data = body.get("data") or {}
+    if data.get("event_type") in ("chat.received", "chat.sent"):
+        p = data.get("payload") or {}
+        cid = p.get("conversation_id")
+        if p.get("conversation_key_change_event"):
+            conversation_keys[cid] = chat.extract_conversation_keys(
+                [p["conversation_key_change_event"]]
+            )["keys"]
+        ev = chat.decrypt_event(
+            p["encoded_event"],
+            conversation_keys.get(cid, {}),
+            signing_keys(p["sender_id"]),
+        )
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    import { createChat } from '@xdevplatform/chat-xdk';
+
+    const chat = await createChat({
+      juiceboxConfig: JUICEBOX_CONFIG_JSON,
+      getAuthToken: async (realmId) => getRealmToken(realmId),
+    });
+    await chat.unlock('YOUR_PIN');
+    chat.setKeyVersion(SIGNING_KEY_VERSION);
+    const conversationKeys = new Map<string, Record<string, Uint8Array>>();
+
+    async function signingKeys(userId: string) {
+      const resp = await apiClient.chat.getUserPublicKeys(userId, {
+        publicKeyFields: [
+          'public_key_version', 'public_key', 'signing_public_key', 'identity_public_key_signature',
+        ],
+      });
+      return resp.data.map((r: any) => ({
+        userId,
+        publicKeyVersion: r.public_key_version,
+        publicKey: r.signing_public_key,
+        identityPublicKey: r.public_key,
+        identityPublicKeySignature: r.identity_public_key_signature,
+      }));
+    }
+
+    const data = body?.data ?? {};
+    if (data.event_type === 'chat.received' || data.event_type === 'chat.sent') {
+      const p = data.payload ?? {};
+      const cid = p.conversation_id as string;
+      if (p.conversation_key_change_event) {
+        conversationKeys.set(
+          cid,
+          chat.extractConversationKeys([p.conversation_key_change_event]).keys,
+        );
+      }
+      const ev = chat.decryptEvent(
+        p.encoded_event,
+        conversationKeys.get(cid) ?? {},
+        await signingKeys(p.sender_id),
+      );
+    }
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    // chat: ChatCore or Chat, already unlocked / keys imported
+    if let Some(kc) = key_change.as_deref() {
+        let extracted = chat.extract_conversation_keys(&[kc]);
+        conv_keys.extend(extracted.keys);
+    }
+    // sender_signing_keys from GET /2/users/{sender_id}/public_keys
+    let event = chat.decrypt_event(&encoded_event, &conv_keys, &sender_signing_keys)?;
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    if keyChange != "" {
+        extracted, _ := chat.ExtractConversationKeys([]string{keyChange})
+        for v, k := range extracted.Keys {
+            convKeys[v] = k
+        }
+    }
+    event, err := chat.DecryptEvent(encodedEvent, convKeys, senderSigningKeys)
+    if err == nil && event.Type == "Message" {
+        fmt.Println(event.AsMessage().Text())
+    }
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    if (!string.IsNullOrEmpty(keyChangeB64))
+    {
+        var extracted = chat.ExtractConversationKeys(new[] { keyChangeB64 });
+        foreach (var kv in extracted.Keys)
+            convKeys[kv.Key] = kv.Value;
+    }
+    var evt = chat.DecryptEvent(encodedEvent, convKeys, senderSigningKeys);
+    if (evt.GetProperty("type").GetString() == "Message")
+        Console.WriteLine(evt.GetProperty("content").GetProperty("text").GetString());
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    if (keyChangeB64 != null && !keyChangeB64.isEmpty()) {
+        var extracted = chat.extractConversationKeys(List.of(keyChangeB64));
+        convKeys.putAll(extracted.keys);
+    }
+    JsonNode evt = chat.decryptEvent(encodedEvent, convKeys, senderSigningKeys);
+    if ("Message".equals(evt.path("type").asText())) {
+        System.out.println(evt.path("content").path("text").asText());
+    }
+    ```
+  </Tab>
+</Tabs>
+
+履歴: [`GET /2/chat/conversations/{id}/events`](/x-api/chat/get-chat-conversation-events) + **`decrypt_events`** — [Getting Started](/xchat/getting-started#6-receive-and-decrypt) を参照。
+
+---
+
+## ペイロードの形（ライブ）
+
+```json
+{
+  "data": {
+    "event_type": "chat.received",
+    "event_uuid": "0f52b591-4b7e-4f13-92cd-30e6b2a3f18a",
+    "payload": {
+      "conversation_id": "1215441834412953600-1843439638876491776",
+      "sender_id": "1843439638876491776",
+      "encoded_event": "BASE64_ENCODED_MESSAGE_EVENT",
+      "conversation_key_version": "1782945126642",
+      "conversation_key_change_event": "BASE64_ENCODED_KEY_CHANGE_EVENT"
+    }
+  }
+}
+```
+
+---
+
+## プラクティス
+
+- プラットフォームの要件に従って Webhook 署名を検証する
+- 会話鍵と送信者の公開鍵をキャッシュする
+- 依存メッセージを復号する前に鍵変更 blob を適用する
+- `event_uuid` で重複を排除する

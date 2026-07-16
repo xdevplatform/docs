@@ -1,0 +1,214 @@
+---
+title: 문제 해결
+sidebarTitle: 문제 해결
+description: X Chat 암호화 및 Chat XDK 이슈
+keywords: ["X Chat errors", "Chat XDK", "decryption", "Juicebox", "encryption"]
+---
+
+이 페이지는 **X Chat 암호화와 Chat XDK에 특화된** 문제—키, Juicebox, 복호화/검증, 그리고 암호화된 전송 페이로드 구축—를 다룹니다.
+
+웹훅, OAuth, HTTP 상태 코드 및 속도 제한은 일반 [X API](/x-api/introduction) 및 [인증](/fundamentals/authentication/overview) 문서를 사용하세요.
+
+---
+
+## 키 및 Juicebox
+
+### 잠금 해제 실패 (잘못된 PIN)
+
+- PIN이 `setup`에서 사용한 것과 일치하는지 확인하세요
+- 시도 사이에 기다리세요; realm은 잘못된 추측에 대해 속도 제한을 두고 너무 많은 실패 후에는 복구를 잠글 수 있습니다
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    try:
+        chat.unlock(pin)
+    except ValueError as e:
+        print(e)  # may mention InvalidPin or guesses remaining
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    try {
+      await chat.unlock(pin);
+    } catch (e) {
+      console.error((e as Error).message);
+    }
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    chat.unlock(pin_bytes).await?;
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    if err := chat.Unlock(pin, juiceboxConfigJSON); err != nil {
+        log.Println(err)
+    }
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    try { chat.Unlock(pin, juiceboxConfigJson); }
+    catch (Exception e) { Console.WriteLine(e.Message); }
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    try { chat.unlock(pin, juiceboxConfigJson); }
+    catch (Exception e) { System.out.println(e.getMessage()); }
+    ```
+  </Tab>
+</Tabs>
+
+### 키가 로드되지 않아 암호화 또는 복호화 실패
+
+먼저 개인 키를 로드한 다음, X의 레코드에서 공개 키 **버전**을 설정하세요.
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    chat.unlock(pin)  # or: chat.import_keys(blob)
+    chat.set_key_version(signing_key_version)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    await chat.unlock(pin);
+    chat.setKeyVersion(signingKeyVersion);
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    chat.import_keys(&blob)?;
+    chat.set_key_version(&signing_key_version);
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    blob, _ := chatxdk.Base64ToBytes(privateKeysB64)
+    _ = chat.ImportKeys(blob)
+    chat.SetKeyVersion(signingKeyVersion)
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    chat.ImportKeys(blobBytes);
+    chat.SetKeyVersion(signingKeyVersion);
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    chat.importKeys(blobBytes);
+    chat.setKeyVersion(signingKeyVersion);
+    ```
+  </Tab>
+</Tabs>
+
+### 메시지에 대한 대화 키 누락
+
+해당 메시지의 `conversation_key_version`에 대한 **원시** 키가 없습니다.
+
+1. `extract_conversation_keys`로 `conversation_key_change_event`(실시간 이벤트) 또는 `meta.conversation_key_events`(이력)의 키 자료를 복호화하거나, **또는** `decrypt_events`에 그 blob을 포함하세요
+2. 해당 버전에 대해 대화 키가 추가되었고 여전히 참가자인지 확인하세요 ([시작하기](/xchat/getting-started#4-set-up-conversation-keys) 참조)
+
+### 상대방에게 공개 키가 없음
+
+아직 온보딩을 마치지 않았을 수 있습니다. 그들이 등록한 후, **API 참조 → 암호화 키**에서 `public_key`, `signing_public_key`, `identity_public_key_signature`, `public_key_version`을 로드하세요.
+
+---
+
+## 복호화 및 서명
+
+### 복호화 실패
+
+- 오래되었거나 잘못된 **원시** 대화 키, 또는 잘못된 키 버전
+- 불완전한 `encoded_event` 문자열
+- 이벤트 유형이 복호화 가능한 콘텐츠로 처리할 수 있는 암호화된 메시지가 아님
+
+### 서명 검증 실패
+
+검증은 **기본적으로 실패-폐쇄**입니다(`reject_unverified = true`): SDK는 이미 검증되지 않은 서명 이벤트를 거부하므로, 여기서 실패가 발생한다면 검사를 켜야 한다는 뜻이 아니라 검증 입력이 잘못되었다는 뜻입니다. 일반적인 원인:
+
+- **발신자**에 대한 서명 키 항목이 누락되었거나 불완전함 (Chat XDK가 요구하는 모든 필드—[Chat XDK](/xchat/xchat-xdk) 참조 참조)
+- 발신자가 버전을 교체함—공개 키를 다시 가져오세요
+- 허용된 최소값보다 낮은 키 버전은 절대 검증되지 않습니다
+
+`set_reject_unverified` 세터는 이 기본값을 **비활성화**(`false`, 권장하지 않음)하기 위해 존재합니다. 이전에 비활성화했다면 실패-폐쇄 기본값으로 복원하세요:
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    chat.set_reject_unverified(True)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    chat.setRejectUnverified(true);
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    chat.set_reject_unverified(true);
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    chat.SetRejectUnverified(true)
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    chat.SetRejectUnverified(true);
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    chat.setRejectUnverified(true);
+    ```
+  </Tab>
+</Tabs>
+
+### 오래된 이벤트가 영구적으로 검증에 실패함
+
+**오래된** 이벤트에서 `signature missing or no matching signing key`나 ECDSA 불일치 같은 오류는 영구적입니다. 서명은 불변이며 이벤트 자체에서 서명된 페이로드를 재구축하여 검증되므로, 다른 바이트로 서명된 (또는 서명되지 않은) 이벤트는 이후 로드 시마다 실패합니다—재시도, 키 갱신, 또는 API 호출로도 치유할 수 없습니다. 이러한 이벤트를 재시도 가능한 오류가 아닌 툼스톤으로 취급하세요. 대화 키를 교체하면 그 시점 이후부터 깨끗하고 검증 가능한 이력이 시작됩니다; 새 메시지는 영향을 받지 않습니다.
+
+---
+
+## 전송 페이로드 구축
+
+이 실수들은 X Chat 암호화에 특화된 것입니다 (일반 HTTP 오류가 아님):
+
+| 이슈 | 해결 |
+|:------|:----|
+| 잘못된 키 바이트 | API의 암호화된 키 문자열이 아니라 **원시** 대화 키 바이트를 Chat XDK에 전달하세요 |
+| 잘못된 JSON 필드 이름 | `encrypted_content` → `encoded_message_create_event` 및 `encoded_event_signature` → `encoded_message_event_signature`로 매핑하세요 |
+| 메시지 ID 누락 | `message_id`를 직접 생성하고 요청 본문에 같은 값을 보내세요 |
+| 버전 불일치 | `conversation_key_version`을 사용하는 키에 맞추고; 서명 키 버전을 `set_key_version` / 공개 키 레코드에 맞추세요 |
+| 경로 ID 형식 | URL 경로에는 여전히 하이픈으로 연결된 대화 ID가 필요합니다(`:` → `-`), 하지만 서명 시 SDK는 어떤 형태든 허용합니다: `A:B`, `A-B`(둘 중 어떤 순서든), 또는 그저 수신자 사용자 ID—모두 동일한 서명된 바이트로 정규화됩니다 |
+
+### 상태 변경 호출에서 API가 400을 반환함
+
+모든 상태 변경 채팅 호출—대화 키 추가 또는 교체, 그룹 생성, 멤버 추가—에는 API 경계에서 검증되는 요청 본문의 **`action_signatures`**가 필요합니다. 누락되거나 잘못된 형식의 항목(각각 `message_id`, `encoded_message_event_detail`, 그리고 `signature`, `public_key_version`, `signature_version`이 있는 `message_event_signature`가 필요함)은 즉시 HTTP 400 problem-details 응답을 반환합니다. SDK prepare 메서드(`prepare_conversation_key_change`, `prepare_group_create`, `prepare_group_members_change`)를 사용하고 반환된 **모든** 서명을 보내세요—그룹 생성과 멤버 추가는 두 개를 반환합니다.
+
+---
+
+## 미디어 암호화 및 복호화
+
+- 첨부 파일을 참조하는 메시지와 **동일한** 대화 키(및 버전)를 사용하세요
+- `decrypt_stream`을 실행하기 전까지 다운로드 응답을 **암호문**으로 취급하세요
+- MIME 유형은 복호화 **후**에 추론하세요; 다운로드 `Content-Type`은 종종 실제 이미지 유형이 아닙니다
+
+세부 사항: [미디어](/xchat/media).
+
+---
+
+## 안전한 디버깅
+
+암호화 실패를 조사할 때:
+
+- 대화 ID, 이벤트 ID, 키 **버전**만 로그에 남기세요
+- 평문, PIN, 개인 키, 또는 전체 키 blob을 로그에 **남기지 마세요**
+- `set_key_version`이 공개 키 레코드의 `public_key_version`과 일치하는지 확인하세요
+- 불완전한 이력의 경우, 복호화하기 전에 키 변경 메타데이터를 건너뛰지 않도록 **모든** 이벤트 페이지를 페이지 처리하세요

@@ -1,0 +1,214 @@
+---
+title: Solução de problemas
+sidebarTitle: Solução de problemas
+description: Problemas de criptografia do X Chat e do Chat XDK
+keywords: ["X Chat errors", "Chat XDK", "decryption", "Juicebox", "encryption"]
+---
+
+Esta página cobre problemas que são **específicos da criptografia do X Chat e do Chat XDK** — chaves, Juicebox, descriptografia/verificação e construção de payloads criptografados de envio.
+
+Para webhooks, OAuth, códigos de status HTTP e limites de taxa, use a documentação geral da [X API](/x-api/introduction) e de [autenticação](/fundamentals/authentication/overview).
+
+---
+
+## Chaves e Juicebox
+
+### O desbloqueio falha (PIN inválido)
+
+- Confirme que o PIN corresponde ao usado com `setup`
+- Aguarde entre tentativas; realms limitam tentativas incorretas e podem travar a recuperação após muitas falhas
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    try:
+        chat.unlock(pin)
+    except ValueError as e:
+        print(e)  # may mention InvalidPin or guesses remaining
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    try {
+      await chat.unlock(pin);
+    } catch (e) {
+      console.error((e as Error).message);
+    }
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    chat.unlock(pin_bytes).await?;
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    if err := chat.Unlock(pin, juiceboxConfigJSON); err != nil {
+        log.Println(err)
+    }
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    try { chat.Unlock(pin, juiceboxConfigJson); }
+    catch (Exception e) { Console.WriteLine(e.Message); }
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    try { chat.unlock(pin, juiceboxConfigJson); }
+    catch (Exception e) { System.out.println(e.getMessage()); }
+    ```
+  </Tab>
+</Tabs>
+
+### Criptografar ou descriptografar falha porque as chaves não foram carregadas
+
+Carregue as chaves privadas primeiro e depois defina a **versão** de chave pública do seu registro no X.
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    chat.unlock(pin)  # or: chat.import_keys(blob)
+    chat.set_key_version(signing_key_version)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    await chat.unlock(pin);
+    chat.setKeyVersion(signingKeyVersion);
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    chat.import_keys(&blob)?;
+    chat.set_key_version(&signing_key_version);
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    blob, _ := chatxdk.Base64ToBytes(privateKeysB64)
+    _ = chat.ImportKeys(blob)
+    chat.SetKeyVersion(signingKeyVersion)
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    chat.ImportKeys(blobBytes);
+    chat.SetKeyVersion(signingKeyVersion);
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    chat.importKeys(blobBytes);
+    chat.setKeyVersion(signingKeyVersion);
+    ```
+  </Tab>
+</Tabs>
+
+### Chave de conversa ausente para uma mensagem
+
+Você não tem a chave **em bruto** para o `conversation_key_version` daquela mensagem.
+
+1. Descriptografe o material de chave a partir de `conversation_key_change_event` (eventos ao vivo) ou `meta.conversation_key_events` (histórico) com `extract_conversation_keys`, **ou** inclua esses blobs em `decrypt_events`
+2. Confirme que as chaves de conversa foram adicionadas para essa versão e que você ainda é um participante (veja [Guia de introdução](/xchat/getting-started#4-set-up-conversation-keys))
+
+### O par não tem chaves públicas
+
+Pode ser que ele não tenha concluído o onboarding. Depois que ele se registrar, carregue `public_key`, `signing_public_key`, `identity_public_key_signature` e `public_key_version` a partir de **Referência da API → Chaves de criptografia**.
+
+---
+
+## Descriptografia e assinaturas
+
+### A descriptografia falha
+
+- Chave de conversa **em bruto** obsoleta ou errada, ou versão de chave errada
+- String `encoded_event` incompleta
+- O tipo de evento não é uma mensagem criptografada que você pode tratar como conteúdo descriptografável
+
+### A assinatura não verifica
+
+A verificação é **fail-closed por padrão** (`reject_unverified = true`): o SDK já rejeita eventos assinados não verificados, então uma falha aqui significa que as entradas de verificação estão erradas, e não que você precisa ativar a verificação. Causas comuns:
+
+- Entrada de chave de assinatura ausente ou incompleta para o **remetente** (todos os campos exigidos pelo Chat XDK — veja a referência do [Chat XDK](/xchat/xchat-xdk))
+- O remetente rotacionou versões — busque as chaves públicas dele novamente
+- Uma versão de chave abaixo do piso aceito nunca é verificada
+
+O setter `set_reject_unverified` existe para você **desabilitar** esse padrão (`false`, não recomendado). Se você o desativou antes, restaure o padrão fail-closed:
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    chat.set_reject_unverified(True)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    chat.setRejectUnverified(true);
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    chat.set_reject_unverified(true);
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    chat.SetRejectUnverified(true)
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    chat.SetRejectUnverified(true);
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    chat.setRejectUnverified(true);
+    ```
+  </Tab>
+</Tabs>
+
+### Eventos antigos falham permanentemente na verificação
+
+Erros como `signature missing or no matching signing key` ou uma incompatibilidade ECDSA em eventos **antigos** são permanentes. Assinaturas são imutáveis e verificadas reconstruindo o payload assinado a partir do próprio evento, então um evento que foi assinado sobre bytes diferentes (ou nunca foi assinado) falha em cada carregamento futuro — nenhuma nova tentativa, atualização de chave ou chamada de API pode curá-lo. Trate esses eventos como lápides, não como erros repetíveis. Rotacionar a chave de conversa inicia um histórico limpo e verificável a partir daquele ponto; novas mensagens não são afetadas.
+
+---
+
+## Construindo o payload de envio
+
+Estes erros são específicos da criptografia do X Chat (não são erros HTTP gerais):
+
+| Problema | Correção |
+|:---------|:---------|
+| Bytes de chave errados | Passe os bytes da chave de conversa **em bruto** para o Chat XDK, não a string de chave criptografada da API |
+| Nomes de campos JSON errados | Mapeie `encrypted_content` → `encoded_message_create_event` e `encoded_event_signature` → `encoded_message_event_signature` |
+| ID de mensagem ausente | Gere `message_id` você mesmo e envie o mesmo valor no corpo da requisição |
+| Versão incompatível | Alinhe `conversation_key_version` com a chave usada; alinhe a versão da chave de assinatura com `set_key_version` / seu registro de chave pública |
+| Forma do ID no path | Paths de URL ainda precisam do ID de conversa com hífen (`:` → `-`), mas para assinar o SDK aceita qualquer forma: `A:B`, `A-B` (em qualquer ordem), ou apenas o ID de usuário do destinatário — todos são canonicalizados para os mesmos bytes assinados |
+
+### A API retorna 400 para uma chamada que altera estado
+
+Toda chamada de chat que altera estado — adicionar ou rotacionar chaves de conversa, criar um grupo, adicionar membros — requer **`action_signatures`** no corpo da requisição, validado na fronteira da API. Uma entrada ausente ou malformada (cada uma precisa de `message_id`, `encoded_message_event_detail` e um `message_event_signature` com `signature`, `public_key_version` e `signature_version`) retorna imediatamente uma resposta HTTP 400 problem-details. Use os métodos prepare do SDK (`prepare_conversation_key_change`, `prepare_group_create`, `prepare_group_members_change`) e envie **todas** as assinaturas retornadas — criar grupo e adicionar membros retornam duas.
+
+---
+
+## Criptografar e descriptografar mídia
+
+- Use a **mesma** chave de conversa (e versão) da mensagem que referencia o anexo
+- Trate respostas de download como **texto cifrado** até executar `decrypt_stream`
+- Deduza o tipo MIME **após** descriptografar; o `Content-Type` do download frequentemente não é o tipo real da imagem
+
+Detalhes: [Mídia](/xchat/media).
+
+---
+
+## Depuração segura
+
+Ao investigar falhas de criptografia:
+
+- Registre apenas IDs de conversa, IDs de evento e **versões** de chave
+- **Não** registre texto simples, PINs, chaves privadas ou blobs de chave completos
+- Confirme que `set_key_version` corresponde ao `public_key_version` no seu registro de chave pública
+- Para histórico incompleto, pagine **todas** as páginas de eventos para que os metadados de mudança de chave não sejam pulados antes de descriptografar
