@@ -87,7 +87,8 @@ Load private keys first, then set the public-key **version** from your record on
   </Tab>
   <Tab title="Go">
     ```go
-    _ = chat.ImportKeys(privateKeysB64)
+    blob, _ := chatxdk.Base64ToBytes(privateKeysB64)
+    _ = chat.ImportKeys(blob)
     chat.SetKeyVersion(signingKeyVersion)
     ```
   </Tab>
@@ -128,9 +129,13 @@ They may not have finished onboarding. After they register, load `public_key`, `
 
 ### Signature does not verify
 
-- Supply a full signing-key entry for the **sender** (all fields required by the Chat XDK—see the [Chat XDK](/xchat/xchat-xdk) reference)
-- Re-fetch their public keys if they rotated versions
-- To fail closed when verification fails:
+Verification is **fail-closed by default** (`reject_unverified = true`): the SDK already rejects unverified signed events, so a failure here means the verification inputs are wrong, not that you need to turn checking on. Common causes:
+
+- Missing or incomplete signing-key entry for the **sender** (all fields required by the Chat XDK—see the [Chat XDK](/xchat/xchat-xdk) reference)
+- The sender rotated versions—re-fetch their public keys
+- A key version below the accepted floor never verifies
+
+The `set_reject_unverified` setter exists to opt **out** of this default (`false`, not recommended). If you disabled it earlier, restore the fail-closed default:
 
 <Tabs>
   <Tab title="Python">
@@ -177,7 +182,7 @@ These mistakes are specific to X Chat encryption (not general HTTP errors):
 
 | Issue | Fix |
 |:------|:----|
-| Wrong key bytes | Pass the **raw** conversation key into the Chat XDK (Go: base64 encoding of those bytes), not the encrypted key string from the API |
+| Wrong key bytes | Pass the **raw** conversation key bytes into the Chat XDK, not the encrypted key string from the API |
 | Wrong JSON field names | Map `encrypted_content` → `encoded_message_create_event` and `encoded_event_signature` → `encoded_message_event_signature` |
 | Missing message id | Generate `message_id` yourself and send the same value in the request body |
 | Version mismatch | Align `conversation_key_version` with the key you use; align signing key version with `set_key_version` / your public-key record |

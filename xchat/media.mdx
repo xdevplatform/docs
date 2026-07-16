@@ -62,7 +62,8 @@ flowchart LR
     let _mime = detect_mime_type(&plaintext);
     let dims = detect_image_dimensions(&plaintext);
     let (width, height) = dims.map(|d| (d.width as i64, d.height as i64)).unwrap_or((0, 0));
-    let encrypted_blob = chat.encrypt_stream(&plaintext, &raw_conv_key)?;
+    // conv_key: &XChatConversationKey from extract_conversation_keys / decrypt_conversation_key
+    let encrypted_blob = chat.encrypt_stream(&plaintext, &conv_key)?;
     ```
   </Tab>
   <Tab title="Go">
@@ -71,10 +72,9 @@ flowchart LR
     mime, _ := chatxdk.DetectMimeType(plaintext)
     dims, _ := chatxdk.DetectImageDimensions(plaintext)
     _ = mime
-    ptB64, _ := chatxdk.BytesToBase64(plaintext)
-    encryptedB64, err := chat.EncryptStream(ptB64, convKeyB64)
+    encrypted, err := chat.EncryptStream(plaintext, rawConvKey)
     _ = dims
-    _ = encryptedB64
+    _ = encrypted
     ```
   </Tab>
   <Tab title="C#">
@@ -84,8 +84,8 @@ flowchart LR
     byte[] plaintext = await File.ReadAllBytesAsync("photo.jpg");
     string? mime = ChatXdkUtilities.DetectMimeType(plaintext);
     var dims = ChatXdkUtilities.DetectImageDimensions(plaintext);
-    int width = dims?.Width ?? 0;
-    int height = dims?.Height ?? 0;
+    int width = (int)(dims?.Width ?? 0);
+    int height = (int)(dims?.Height ?? 0);
     byte[] encryptedBlob = chat.EncryptStream(plaintext, rawConvKey);
     ```
   </Tab>
@@ -97,8 +97,8 @@ flowchart LR
     byte[] plaintext = Files.readAllBytes(Path.of("photo.jpg"));
     String mime = ChatXdkUtilities.detectMimeType(plaintext);
     ImageDimensions dims = ChatXdkUtilities.detectImageDimensions(plaintext);
-    int width = dims != null ? dims.width : 0;
-    int height = dims != null ? dims.height : 0;
+    int width = dims != null ? (int) dims.width : 0;
+    int height = dims != null ? (int) dims.height : 0;
     byte[] encryptedBlob = chat.encryptStream(plaintext, rawConvKey);
     ```
   </Tab>
@@ -161,16 +161,15 @@ Encrypt with a media attachment, then POST the send-message body (same field map
   <Tab title="TypeScript">
     ```typescript
     const messageId = crypto.randomUUID();
-    const payload = chat.encryptMessage(
+    const payload = chat.encryptMessage({
       messageId,
       senderId,
       conversationId,
-      rawConvKey,
-      caption || '',
+      conversationKey: rawConvKey,
+      text: caption || '',
       conversationKeyVersion,
       signingKeyVersion,
-      null,
-      [{
+      attachments: [{
         attachmentType: 'media',
         mediaHashKey: mediaHashKey,
         width,
@@ -178,7 +177,7 @@ Encrypt with a media attachment, then POST the send-message body (same field map
         filesizeBytes: plaintext.byteLength,
         filename: 'photo.jpg',
       }],
-    );
+    });
     await client.chat.sendMessage(conversationId.replace(/:/g, '-'), {
       message_id: messageId,
       encoded_message_create_event: payload.encryptedContent,
@@ -206,7 +205,7 @@ Encrypt with a media attachment, then POST the send-message body (same field map
     ```go
     payload, err := chat.EncryptMessage(chatxdk.EncryptMessageParams{
         MessageID: messageID, SenderID: senderID, ConversationID: conversationID,
-        ConversationKey: convKeyB64, Text: caption,
+        ConversationKey: rawConvKey, Text: caption,
         ConversationKeyVersion: conversationKeyVersion, SigningKeyVersion: signingKeyVersion,
         Attachments: []chatxdk.AttachmentDescriptor{{
             AttachmentType: "media",
@@ -259,6 +258,25 @@ Encrypt with a media attachment, then POST the send-message body (same field map
 
 Path: [`GET /2/chat/media/{conversation_id}/{media_hash_key}`](/x-api/chat/download-chat-media). Response body is ciphertext. On inbound messages, read `media_hash_key` from decrypted attachments / `media_hashes`.
 
+**Pick the key by the event's key version.** Each decrypted message event carries the `keyVersion` (JS; `key_version` in the other bindings) its content was encrypted under. Decrypt an attachment with the conversation key for **that** version—`conversationKeys.keys[event.keyVersion]`—not the latest. After a key rotation (for example a member add), the latest key cannot decrypt media attached to older messages.
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    keys = result["conversation_keys"]["keys"]
+    key_for_media = keys[event["key_version"]]   # not the latest version
+    plaintext = chat.decrypt_stream(encrypted_blob, key_for_media)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const keys = result.conversationKeys.keys;
+    const keyForMedia = keys[event.keyVersion]; // not the latest version
+    const plaintext = chat.decryptStream(encryptedBlob, keyForMedia);
+    ```
+  </Tab>
+</Tabs>
+
 <Tabs>
   <Tab title="Python">
     ```python
@@ -296,7 +314,8 @@ Path: [`GET /2/chat/media/{conversation_id}/{media_hash_key}`](/x-api/chat/downl
         .header("Authorization", &auth)
         .send()?
         .bytes()?;
-    let plaintext = chat.decrypt_stream(&encrypted_blob, &raw_conv_key)?;
+    // conv_key: &XChatConversationKey from extract_conversation_keys / decrypt_conversation_key
+    let plaintext = chat.decrypt_stream(&encrypted_blob, &conv_key)?;
     ```
   </Tab>
   <Tab title="Go">
@@ -306,7 +325,7 @@ Path: [`GET /2/chat/media/{conversation_id}/{media_hash_key}`](/x-api/chat/downl
     req, _ := http.NewRequest(http.MethodGet, url, nil)
     req.Header.Set("Authorization", "Bearer "+accessToken)
     resp, err := http.DefaultClient.Do(req)
-    // read body → BytesToBase64 → chat.DecryptStream(encryptedB64, convKeyB64)
+    // read body into []byte → chat.DecryptStream(encryptedBlob, rawConvKey)
     _ = resp
     _ = err
     ```
