@@ -14,37 +14,55 @@ Passo a passo do app: [Guia de introdução](/xchat/getting-started). Bots de ex
 <Tabs>
   <Tab title="Python">
     ```bash
-    pip install chat-xdk
+    pip install chatxdk
     ```
+
+    O pacote no PyPI é `chatxdk`; importe-o como `chat_xdk`. Requer Python 3.10+.
   </Tab>
   <Tab title="TypeScript">
     ```bash
     npm install @xdevplatform/chat-xdk
+    npm install juicebox-sdk   # optional peer dependency — required for setup()/unlock() secure key backup
     ```
+
+    O motor WASM compilado vem dentro do pacote — sem etapa de build. Requer Node.js 18+.
   </Tab>
   <Tab title="Rust">
     ```toml
     [dependencies]
-    chat-xdk-core = "0.2"
-    # or: chat_xdk for the async secure-key-backup-oriented crate
+    # chat-xdk-core is not yet on crates.io — use the git dependency.
+    # It exports both ChatCore and the async secure-key-backup Chat type.
+    chat-xdk-core = { git = "https://github.com/xdevplatform/chat-xdk", tag = "v0.2.1" }
+
+    # Required until thrift 0.24 is released on crates.io
+    [patch.crates-io]
+    thrift = { git = "https://github.com/apache/thrift.git", rev = "deb36fa409849de45973b04ffc3ce49d277ca90a" }
     ```
   </Tab>
   <Tab title="Go">
     ```bash
     go get github.com/xdevplatform/chat-xdk/go/chatxdk
     ```
+
+    Bibliotecas estáticas pré-compiladas estão incluídas (macOS arm64/amd64, Linux amd64 glibc/musl) — você precisa de um compilador C, mas não de Rust. Requer Go 1.21+.
   </Tab>
   <Tab title="C#">
     ```bash
-    # From the chat-xdk repo: cargo build -p chat-xdk-dotnet --release
-    # Reference the ChatXdk package; place the native library on the loader path (.NET 8+)
+    dotnet add package XDevPlatform.ChatXdk
     ```
+
+    O pacote é autossuficiente: inclui as bibliotecas nativas para macOS (arm64, x64), Linux (x64) e Windows (x64). Requer .NET 8+.
   </Tab>
   <Tab title="Java">
-    ```bash
-    # Use com.xdevplatform.chatxdk (JNA) and the same native library as .NET (JDK 17+)
-    # Set jna.library.path to the built chat_xdk_dotnet library
+    ```xml
+    <dependency>
+      <groupId>com.x</groupId>
+      <artifactId>chatxdk</artifactId>
+      <version>0.2.1</version>
+    </dependency>
     ```
+
+    Disponível no Maven Central. O jar inclui a biblioteca nativa para macOS (arm64, x64), Linux (x64) e Windows (x64) — não é preciso configurar `jna.library.path`. Importe de `com.x.chatxdk`. Requer JDK 17+.
   </Tab>
 </Tabs>
 
@@ -109,7 +127,7 @@ Descriptografe um backlog, faça cache das chaves, descriptografe um evento, cri
   </Tab>
   <Tab title="Rust">
     ```rust
-    // ChatCore + import_keys, or chat_xdk::Chat + unlock().await
+    // ChatCore + import_keys, or chat_xdk_core::Chat + unlock().await
     let result = chat.decrypt_events(&raw_events, &signing_keys);
     let cached = &result.conversation_keys.keys;
     let event = chat.decrypt_event(one_event_b64, cached, &sender_signing_keys)?;
@@ -228,7 +246,7 @@ Construa o SDK, armazene chaves privadas (backup seguro de chaves protegido por 
   </Tab>
   <Tab title="Rust">
     ```rust
-    // chat_xdk::Chat — async secure key backup unlock, or ChatCore + import_keys
+    // chat_xdk_core::Chat — async secure key backup unlock, or ChatCore + import_keys
     chat.setup("YOUR_PASSCODE").await?;
     // chat.unlock("YOUR_PASSCODE").await?;
     chat.set_key_version(&version);
