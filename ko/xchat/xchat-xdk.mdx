@@ -26,7 +26,7 @@ keywords: ["Chat XDK", "chat-xdk", "encryption SDK", "E2EE SDK"]
     ```toml
     [dependencies]
     chat-xdk-core = "0.2"
-    # or: chat_xdk for the async Juicebox-oriented crate
+    # or: chat_xdk for the async secure-key-backup-oriented crate
     ```
   </Tab>
   <Tab title="Go">
@@ -60,7 +60,7 @@ keywords: ["Chat XDK", "chat-xdk", "encryption SDK", "E2EE SDK"]
     from chat_xdk import Chat
 
     chat = Chat(juicebox_config_json)  # or Chat() + import_keys(blob)
-    chat.unlock("YOUR_PIN")
+    chat.unlock("YOUR_PASSCODE")
     chat.set_key_version(signing_key_version)
 
     result = chat.decrypt_events(raw_events, signing_keys)
@@ -87,7 +87,7 @@ keywords: ["Chat XDK", "chat-xdk", "encryption SDK", "E2EE SDK"]
       juiceboxConfig: juiceboxConfigJson,
       getAuthToken: async (realmId) => getRealmToken(realmId),
     });
-    await chat.unlock('YOUR_PIN');
+    await chat.unlock('YOUR_PASSCODE');
     chat.setKeyVersion(signingKeyVersion);
 
     const result = chat.decryptEvents(rawEvents, signingKeys);
@@ -188,17 +188,17 @@ keywords: ["Chat XDK", "chat-xdk", "encryption SDK", "E2EE SDK"]
 
 ## 라이프사이클 및 키
 
-SDK를 구성하고, 개인 키를 저장하며(Juicebox PIN 또는 로컬 키 blob), Chat API에 **공개** 키를 등록하고, 잠금 해제 또는 가져오기 후 등록된 **공개 키 버전**을 설정하세요. 기기/앱 신원당 한 번 `generate_keypairs`를 호출하고, 등록 페이로드를 공개 키 엔드포인트에 POST하세요. 모든 바인딩에서 Juicebox PIN 저장을 위해 `setup` / `unlock`(및 관련 PIN 헬퍼)을 사용하세요. `export_keys` / `import_keys`(봇 및 서버용 원시 키 blob 지속)는 **네이티브 바인딩에서만** 사용 가능합니다—Python, Go, .NET, JVM, Rust. JS/WASM 바인딩은 원시 키 내보내기 또는 가져오기를 노출하지 않습니다: 브라우저에서 인스턴스에 접근하는 모든 스크립트가 신원을 유출할 수 있으므로, JS는 키를 Juicebox 내부에 유지합니다. 요청당 Juicebox 왕복을 피하고자 하는 JS 서버는 요청 전반에 걸쳐 잠금 해제된 하나의 `Chat` 인스턴스를 재사용하거나, 키 blob이 지원되는 네이티브 바인딩을 실행해야 합니다.
+SDK를 구성하고, 개인 키를 저장하며(패스코드로 보호되는 보안 키 백업 또는 로컬 키 blob), Chat API에 **공개** 키를 등록하고, 잠금 해제 또는 가져오기 후 등록된 **공개 키 버전**을 설정하세요. 보안 키 백업은 **Juicebox**로 구현되어 있으며, 관련 구성 필드가 그 이름을 갖는 것도 그 때문입니다. 기기/앱 신원당 한 번 `generate_keypairs`를 호출하고, 등록 페이로드를 공개 키 엔드포인트에 POST하세요. 모든 바인딩에서 보안 키 백업을 위해 `setup` / `unlock`(및 관련 패스코드 헬퍼)을 사용하세요. `export_keys` / `import_keys`(봇 및 서버용 원시 키 blob 지속)는 **네이티브 바인딩에서만** 사용 가능합니다—Python, Go, .NET, JVM, Rust. JS/WASM 바인딩은 원시 키 내보내기 또는 가져오기를 노출하지 않습니다: 브라우저에서 인스턴스에 접근하는 모든 스크립트가 신원을 유출할 수 있으므로, JS는 키를 보안 키 백업 내부에 유지합니다. 요청당 백업 realm 왕복을 피하고자 하는 JS 서버는 요청 전반에 걸쳐 잠금 해제된 하나의 `Chat` 인스턴스를 재사용하거나, 키 blob이 지원되는 네이티브 바인딩을 실행해야 합니다.
 
 <Tabs>
   <Tab title="Python">
     ```python
     from chat_xdk import Chat
 
-    # Juicebox (client)
+    # Secure key backup (client)
     chat = Chat(juicebox_config_json)
-    chat.setup("YOUR_PIN")          # first time — generates keypairs
-    # chat.unlock("YOUR_PIN")        # later sessions
+    chat.setup("YOUR_PASSCODE")          # first time — generates keypairs
+    # chat.unlock("YOUR_PASSCODE")        # later sessions
     chat.set_key_version(version)    # from add-public-key / get-public-keys response
     reg = chat.get_public_keys()     # or registration fields from generate_keypairs
 
@@ -217,20 +217,20 @@ SDK를 구성하고, 개인 키를 저장하며(Juicebox PIN 또는 로컬 키 b
       juiceboxConfig: juiceboxConfigJson,
       getAuthToken: async (realmId) => getRealmToken(realmId),
     });
-    await chat.setup('YOUR_PIN');
-    // await chat.unlock('YOUR_PIN');
+    await chat.setup('YOUR_PASSCODE');
+    // await chat.unlock('YOUR_PASSCODE');
     chat.setKeyVersion(version);
     const publics = chat.getPublicKeys();
 
-    // JS/WASM stores keys only through Juicebox — there is no raw key
+    // JS/WASM stores keys only through secure key backup — there is no raw key
     // export/import here. For key-blob persistence, use a native binding.
     ```
   </Tab>
   <Tab title="Rust">
     ```rust
-    // chat_xdk::Chat — async Juicebox unlock, or ChatCore + import_keys
-    chat.setup("YOUR_PIN").await?;
-    // chat.unlock("YOUR_PIN").await?;
+    // chat_xdk::Chat — async secure key backup unlock, or ChatCore + import_keys
+    chat.setup("YOUR_PASSCODE").await?;
+    // chat.unlock("YOUR_PASSCODE").await?;
     chat.set_key_version(&version);
     let publics = chat.get_public_keys()?;
     let blob = chat.export_keys()?;
@@ -242,7 +242,7 @@ SDK를 구성하고, 개인 키를 저장하며(Juicebox PIN 또는 로컬 키 b
     chat := chatxdk.New()
     defer chat.Close()
 
-    // Prefer ImportKeys for servers; Juicebox unlock where supported
+    // Prefer ImportKeys for servers; secure key backup unlock where supported
     keyBlob, _ := chatxdk.Base64ToBytes(privateKeysB64)
     if err := chat.ImportKeys(keyBlob); err != nil {
         log.Fatal(err)
@@ -259,7 +259,7 @@ SDK를 구성하고, 개인 키를 저장하며(Juicebox PIN 또는 로컬 키 b
     ```csharp
     using var chat = new Chat();
     chat.ImportKeys(privateKeyBytes);
-    // or Juicebox setup / unlock when config is available
+    // or secure key backup setup / unlock when config is available
     chat.SetKeyVersion(version);
     var publics = chat.GetPublicKeys();
     var blob = chat.ExportKeys();
@@ -277,9 +277,9 @@ SDK를 구성하고, 개인 키를 저장하며(Juicebox PIN 또는 로컬 키 b
   </Tab>
 </Tabs>
 
-Juicebox 구성은 세 가지 형태를 허용합니다: X API의 `juicebox_config` 객체(권장—그대로 전달), 전체 `sdk_config` 래퍼, 또는 순수한 `token_map`.
+보안 키 백업 구성은 세 가지 형태를 허용합니다: X API의 `juicebox_config` 객체(권장—그대로 전달), 전체 `sdk_config` 래퍼, 또는 순수한 `token_map`.
 
-선택 사항: 서명 검증은 **기본적으로 켜져 있습니다**(`reject_unverified = true`)—비활성화하려면 `set_reject_unverified(false)`를 호출하세요(권장하지 않음); Juicebox realm 구성이 변경되면 `update_config`; UI 상태를 위해 `is_unlocked` / `has_identity_key`. 전체 필드 목록은 [chat-xdk 저장소](https://github.com/xdevplatform/chat-xdk)의 스텁에 있습니다.
+선택 사항: 서명 검증은 **기본적으로 켜져 있습니다**(`reject_unverified = true`)—비활성화하려면 `set_reject_unverified(false)`를 호출하세요(권장하지 않음); 백업 realm 구성이 변경되면 `update_config`; UI 상태를 위해 `is_unlocked` / `has_identity_key`. 전체 필드 목록은 [chat-xdk 저장소](https://github.com/xdevplatform/chat-xdk)의 스텁에 있습니다.
 
 ---
 
@@ -788,7 +788,7 @@ Base64/hex 헬퍼, MIME 감지, 이미지 치수는 모듈 수준 함수(Python/
 
 ## 오류
 
-Python은 일반적으로 설명적인 메시지와 함께 **`ValueError`**를 발생시킵니다(예: 잘못된 PIN). TypeScript/JavaScript는 **`Error`**를 던집니다. Go는 `(value, error)`를 반환합니다. 이력의 경우 하나의 잘못된 이벤트가 배치를 중단시키지 않도록 **`decrypt_events`**를 선호하세요; 부분적 실패에 대해서는 errors 컬렉션을 검사하세요.
+Python은 일반적으로 설명적인 메시지와 함께 **`ValueError`**를 발생시킵니다(예: 잘못된 패스코드). TypeScript/JavaScript는 **`Error`**를 던집니다. Go는 `(value, error)`를 반환합니다. 이력의 경우 하나의 잘못된 이벤트가 배치를 중단시키지 않도록 **`decrypt_events`**를 선호하세요; 부분적 실패에 대해서는 errors 컬렉션을 검사하세요.
 
 일부 검증 오류는 **영구적**입니다. 서명은 불변이며 이벤트 자체에서 서명된 페이로드를 재구축하여 검증되므로, `signature missing or no matching signing key` 또는 ECDSA 불일치로 실패하는 오래된 이벤트는 이후 로드 시마다 실패합니다—재시도, 키 갱신, 또는 API 호출로도 치유할 수 없습니다. 이러한 것을 일시적 오류가 아닌 툼스톤으로 취급하세요. 대화 키를 교체하면 그 시점 이후부터 깨끗하고 검증 가능한 이력이 시작됩니다.
 

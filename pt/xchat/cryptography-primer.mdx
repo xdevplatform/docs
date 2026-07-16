@@ -23,7 +23,7 @@ O X Chat usa um sistema de criptografia em camadas onde:
 
 1. **Mensagens** são criptografadas com uma **chave de conversa** (criptografia simétrica rápida)
 2. **Chaves de conversa** são criptografadas para cada participante usando sua **chave pública de identidade** (troca de chaves assimétrica)
-3. **Mensagens são assinadas** para que os destinatários possam verificar quem as enviou e que nada foi alterado
+3. **Mensagens são assinadas** com a **chave de assinatura** para que os destinatários possam verificar quem as enviou e que nada foi alterado
 
 A criptografia simétrica é eficiente para muito tráfego de mensagens; a assimétrica é usada principalmente para **distribuir** chaves de conversa com segurança.
 
@@ -64,7 +64,7 @@ O X Chat usa três tipos de material de chave, cada um com um propósito especí
 
 Quando alguém adiciona você a uma conversa, essa pessoa criptografa a chave de conversa usando sua chave pública de identidade. Somente sua chave privada de identidade pode descriptografá-la.
 
-As metades públicas são registradas e descobertas por meio das APIs de **chaves públicas** da plataforma (veja Chaves de criptografia na Referência da API). As metades privadas ficam no Chat XDK (por exemplo via [Juicebox](#juicebox-armazenamento-distribuido-de-chaves) ou um blob de chave cuidadosamente protegido).
+As metades públicas são registradas e descobertas por meio das APIs de **chaves públicas** da plataforma (veja Chaves de criptografia na Referência da API). As metades privadas ficam no Chat XDK (por exemplo via [backup seguro de chaves](#backup-seguro-de-chaves-armazenamento-distribuido-de-chaves) ou um blob de chave cuidadosamente protegido).
 
 ### 2. Par de chaves de assinatura
 
@@ -85,7 +85,7 @@ Quando você envia uma mensagem, ela é assinada com sua chave privada de assina
 |:------------|:----------|
 | **Simétrica** | A mesma chave criptografa e descriptografa |
 | **Por conversa** | Cada conversa tem sua própria chave |
-| **Compartilhada entre participantes** | Todos os participantes que devem ler a thread têm uma cópia |
+| **Compartilhada entre participantes** | Todos os participantes que devem ler a conversa têm uma cópia |
 | **Versionada** | As chaves podem ser rotacionadas; apps devem acompanhar versões ao longo do tempo |
 
 As chaves de conversa são geradas quando uma conversa é configurada ou quando as chaves são rotacionadas. Cada participante recebe uma **cópia criptografada** da chave, produzida com sua chave pública de identidade. Depois de descriptografar sua cópia uma vez, você mantém a chave de conversa **em bruto** e a usa para criptografia rápida de mensagens (e [mídia](/xchat/media)). Configurar essas cópias para uma conversa é feito por meio do Chat XDK junto com os endpoints de **chaves** de conversa — passo a passo em [Guia de introdução](/xchat/getting-started#4-set-up-conversation-keys).
@@ -164,9 +164,9 @@ Seu app deve:
 
 ---
 
-## Juicebox: armazenamento distribuído de chaves
+## Backup seguro de chaves: armazenamento distribuído de chaves
 
-Suas chaves **privadas** de identidade e de assinatura precisam ser armazenadas com cuidado. O X Chat integra o **Juicebox** para que as chaves possam ser recuperadas com um PIN entre dispositivos sem dar a nenhum servidor o segredo completo.
+Suas chaves **privadas** de identidade e de assinatura precisam ser armazenadas com cuidado. O X Chat inclui um sistema de **backup seguro de chaves** (implementado com Juicebox) para que as chaves possam ser recuperadas com um código de acesso entre dispositivos sem dar a nenhum servidor o segredo completo.
 
 ### O problema com o armazenamento tradicional de chaves
 
@@ -176,15 +176,15 @@ Suas chaves **privadas** de identidade e de assinatura precisam ser armazenadas 
 | Armazenar em um backup em nuvem comum | O provedor pode acessar o material da chave |
 | Memorizar uma chave longa | As pessoas não conseguem memorizar chaves de alta entropia de forma confiável |
 
-### Como o Juicebox resolve isso
+### Como o backup seguro de chaves resolve isso
 
-O Juicebox combina **compartilhamento de segredos** com **proteção por PIN**:
+O backup seguro de chaves combina **compartilhamento de segredos** com **proteção por código de acesso**:
 
 1. As chaves privadas são **divididas em partes**
 2. As partes são mantidas por **realms independentes** (servidores separados)
 3. **Nenhum realm sozinho** tem informações suficientes para reconstruir as chaves
-4. A recuperação requer seu **PIN** e cooperação de **realms suficientes**
-5. PINs incorretos têm **limite de taxa** para retardar tentativas
+4. A recuperação requer seu **código de acesso** e cooperação de **realms suficientes**
+5. Códigos de acesso incorretos têm **limite de taxa** para retardar tentativas
 
 ```mermaid
 flowchart LR
@@ -194,14 +194,14 @@ flowchart LR
     B --> E[Realm 3<br/>Share C]
     
     subgraph Recovery
-        F[Your PIN + Multiple Realms] --> G[Reconstruct Keys]
+        F[Your Passcode + Multiple Realms] --> G[Reconstruct Keys]
     end
 ```
 
-Você obtém recuperabilidade (novo dispositivo + PIN) sem que um único agente detenha o segredo inteiro.
+Você obtém recuperabilidade (novo dispositivo + código de acesso) sem que um único agente detenha o segredo inteiro.
 
 <Note>
-Você não configura os servidores Juicebox à mão no fluxo normal. O Chat XDK inclui o cliente Juicebox; a configuração do realm vem da X API como **`juicebox_config`** no seu registro de chave pública. O armazenamento inicial de PIN e o desbloqueio posterior são chamadas do Chat XDK — veja [Guia de introdução](/xchat/getting-started#2-initialize-the-chat-xdk) e [registrar chaves públicas](/xchat/getting-started#3-register-public-keys-one-time). Alguns apps (especialmente servidores e bots) usam um blob de chave exportado em vez do Juicebox; proteja esse material como uma senha.
+Você não configura os servidores de backup de chaves à mão no fluxo normal. O Chat XDK inclui o cliente de backup; a configuração do realm vem da X API como **`juicebox_config`** no seu registro de chave pública (o campo tem esse nome por causa do Juicebox, a implementação subjacente). O armazenamento inicial do código de acesso e o desbloqueio posterior são chamadas do Chat XDK — veja [inicializar com chaves existentes](/xchat/getting-started#2-initialize-the-chat-xdk-with-existing-keys) e [criar e registrar chaves](/xchat/getting-started#3-create-and-register-keys-first-time-setup) no Guia de introdução. Alguns apps (especialmente servidores e bots) usam um blob de chave exportado em vez do backup seguro de chaves; proteja esse material como uma senha.
 </Note>
 
 ---
@@ -246,7 +246,7 @@ Assinaturas são vinculadas ao conteúdo do evento e são imutáveis: um evento 
 | **Escutas na rede** | Segurança de transporte mais conteúdo criptografado de ponta a ponta |
 | **Adulteração de mensagens** | Assinaturas detectam modificações |
 | **Personificação trivial de remetente** | Assinaturas válidas requerem a chave privada de assinatura do remetente |
-| **Roubo de chave em servidor único (com Juicebox)** | As partes são divididas entre realms e protegidas por PIN |
+| **Roubo de chave em servidor único (com backup seguro de chaves)** | As partes são divididas entre realms e protegidas por código de acesso |
 
 ### Contra o que o X Chat **não** protege
 
@@ -273,7 +273,7 @@ Assinaturas são vinculadas ao conteúdo do evento e são imutáveis: um evento 
 | **P-256** | Curva elíptica usada no X Chat (secp256r1) |
 | **Chave de conversa** | Chave simétrica compartilhada pelos participantes de uma conversa (versionada ao longo do tempo) |
 | **Compartilhamento de segredos** | Dividir um segredo de forma que várias partes sejam necessárias para reconstruí-lo |
-| **Realm** | Um servidor Juicebox independente que detém uma parte do seu material de chave |
+| **Realm** | Um servidor independente de backup seguro de chaves que detém uma parte do seu material de chave |
 
 ---
 

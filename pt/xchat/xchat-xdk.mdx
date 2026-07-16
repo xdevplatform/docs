@@ -26,7 +26,7 @@ Passo a passo do app: [Guia de introdução](/xchat/getting-started). Bots de ex
     ```toml
     [dependencies]
     chat-xdk-core = "0.2"
-    # or: chat_xdk for the async Juicebox-oriented crate
+    # or: chat_xdk for the async secure-key-backup-oriented crate
     ```
   </Tab>
   <Tab title="Go">
@@ -60,7 +60,7 @@ Descriptografe um backlog, faça cache das chaves, descriptografe um evento, cri
     from chat_xdk import Chat
 
     chat = Chat(juicebox_config_json)  # or Chat() + import_keys(blob)
-    chat.unlock("YOUR_PIN")
+    chat.unlock("YOUR_PASSCODE")
     chat.set_key_version(signing_key_version)
 
     result = chat.decrypt_events(raw_events, signing_keys)
@@ -87,7 +87,7 @@ Descriptografe um backlog, faça cache das chaves, descriptografe um evento, cri
       juiceboxConfig: juiceboxConfigJson,
       getAuthToken: async (realmId) => getRealmToken(realmId),
     });
-    await chat.unlock('YOUR_PIN');
+    await chat.unlock('YOUR_PASSCODE');
     chat.setKeyVersion(signingKeyVersion);
 
     const result = chat.decryptEvents(rawEvents, signingKeys);
@@ -188,17 +188,17 @@ Descriptografe um backlog, faça cache das chaves, descriptografe um evento, cri
 
 ## Ciclo de vida e chaves
 
-Construa o SDK, armazene chaves privadas (PIN Juicebox ou blob de chave local), registre as chaves **públicas** com a Chat API e defina sua **versão de chave pública** registrada após unlock ou import. Chame `generate_keypairs` uma vez por identidade de dispositivo/app; faça POST do payload de registro para o endpoint de chaves públicas. Use `setup` / `unlock` (e helpers de PIN relacionados) para armazenamento de PIN Juicebox em todos os bindings. `export_keys` / `import_keys` (persistência de blob de chave em bruto para bots e servidores) estão disponíveis **apenas nos bindings nativos** — Python, Go, .NET, JVM e Rust. O binding JS/WASM não expõe exportação nem importação de chave em bruto: em um navegador, qualquer script que alcance a instância poderia exfiltrar a identidade, então o JS mantém as chaves dentro do Juicebox. Um servidor JS que queira evitar um round-trip Juicebox por requisição deve reutilizar uma instância `Chat` desbloqueada entre requisições, ou rodar um binding nativo em que blobs de chave são suportados.
+Construa o SDK, armazene chaves privadas (backup seguro de chaves protegido por código de acesso ou blob de chave local), registre as chaves **públicas** com a Chat API e defina sua **versão de chave pública** registrada após unlock ou import. O backup seguro de chaves é implementado com o **Juicebox**, e é por isso que os campos de configuração relacionados carregam esse nome. Chame `generate_keypairs` uma vez por identidade de dispositivo/app; faça POST do payload de registro para o endpoint de chaves públicas. Use `setup` / `unlock` (e helpers de código de acesso relacionados) para o backup seguro de chaves em todos os bindings. `export_keys` / `import_keys` (persistência de blob de chave em bruto para bots e servidores) estão disponíveis **apenas nos bindings nativos** — Python, Go, .NET, JVM e Rust. O binding JS/WASM não expõe exportação nem importação de chave em bruto: em um navegador, qualquer script que alcance a instância poderia exfiltrar a identidade, então o JS mantém as chaves dentro do backup seguro de chaves. Um servidor JS que queira evitar um round-trip ao realm de backup por requisição deve reutilizar uma instância `Chat` desbloqueada entre requisições, ou rodar um binding nativo em que blobs de chave são suportados.
 
 <Tabs>
   <Tab title="Python">
     ```python
     from chat_xdk import Chat
 
-    # Juicebox (client)
+    # Secure key backup (client)
     chat = Chat(juicebox_config_json)
-    chat.setup("YOUR_PIN")          # first time — generates keypairs
-    # chat.unlock("YOUR_PIN")        # later sessions
+    chat.setup("YOUR_PASSCODE")          # first time — generates keypairs
+    # chat.unlock("YOUR_PASSCODE")        # later sessions
     chat.set_key_version(version)    # from add-public-key / get-public-keys response
     reg = chat.get_public_keys()     # or registration fields from generate_keypairs
 
@@ -217,20 +217,20 @@ Construa o SDK, armazene chaves privadas (PIN Juicebox ou blob de chave local), 
       juiceboxConfig: juiceboxConfigJson,
       getAuthToken: async (realmId) => getRealmToken(realmId),
     });
-    await chat.setup('YOUR_PIN');
-    // await chat.unlock('YOUR_PIN');
+    await chat.setup('YOUR_PASSCODE');
+    // await chat.unlock('YOUR_PASSCODE');
     chat.setKeyVersion(version);
     const publics = chat.getPublicKeys();
 
-    // JS/WASM stores keys only through Juicebox — there is no raw key
+    // JS/WASM stores keys only through secure key backup — there is no raw key
     // export/import here. For key-blob persistence, use a native binding.
     ```
   </Tab>
   <Tab title="Rust">
     ```rust
-    // chat_xdk::Chat — async Juicebox unlock, or ChatCore + import_keys
-    chat.setup("YOUR_PIN").await?;
-    // chat.unlock("YOUR_PIN").await?;
+    // chat_xdk::Chat — async secure key backup unlock, or ChatCore + import_keys
+    chat.setup("YOUR_PASSCODE").await?;
+    // chat.unlock("YOUR_PASSCODE").await?;
     chat.set_key_version(&version);
     let publics = chat.get_public_keys()?;
     let blob = chat.export_keys()?;
@@ -242,7 +242,7 @@ Construa o SDK, armazene chaves privadas (PIN Juicebox ou blob de chave local), 
     chat := chatxdk.New()
     defer chat.Close()
 
-    // Prefer ImportKeys for servers; Juicebox unlock where supported
+    // Prefer ImportKeys for servers; secure key backup unlock where supported
     keyBlob, _ := chatxdk.Base64ToBytes(privateKeysB64)
     if err := chat.ImportKeys(keyBlob); err != nil {
         log.Fatal(err)
@@ -259,7 +259,7 @@ Construa o SDK, armazene chaves privadas (PIN Juicebox ou blob de chave local), 
     ```csharp
     using var chat = new Chat();
     chat.ImportKeys(privateKeyBytes);
-    // or Juicebox setup / unlock when config is available
+    // or secure key backup setup / unlock when config is available
     chat.SetKeyVersion(version);
     var publics = chat.GetPublicKeys();
     var blob = chat.ExportKeys();
@@ -277,9 +277,9 @@ Construa o SDK, armazene chaves privadas (PIN Juicebox ou blob de chave local), 
   </Tab>
 </Tabs>
 
-A configuração do Juicebox aceita três formatos: o objeto `juicebox_config` da X API (recomendado — passado verbatim), um wrapper `sdk_config` completo, ou um `token_map` puro.
+A configuração do backup seguro de chaves aceita três formatos: o objeto `juicebox_config` da X API (recomendado — passado verbatim), um wrapper `sdk_config` completo, ou um `token_map` puro.
 
-Opcional: a verificação de assinatura está **ativa por padrão** (`reject_unverified = true`) — chame `set_reject_unverified(false)` para desativá-la (não recomendado); `update_config` se a configuração do realm Juicebox mudar; `is_unlocked` / `has_identity_key` para o estado da UI. As listas completas de campos ficam nos stubs do [repositório chat-xdk](https://github.com/xdevplatform/chat-xdk).
+Opcional: a verificação de assinatura está **ativa por padrão** (`reject_unverified = true`) — chame `set_reject_unverified(false)` para desativá-la (não recomendado); `update_config` se a configuração do realm de backup mudar; `is_unlocked` / `has_identity_key` para o estado da UI. As listas completas de campos ficam nos stubs do [repositório chat-xdk](https://github.com/xdevplatform/chat-xdk).
 
 ---
 
@@ -788,7 +788,7 @@ Para listas de campos completas, use stubs de linguagem no [repositório chat-xd
 
 ## Erros
 
-Python normalmente lança **`ValueError`** com uma mensagem descritiva (por exemplo, um PIN inválido). TypeScript/JavaScript lança **`Error`**. Go retorna `(value, error)`. Prefira **`decrypt_events`** para histórico para que um evento ruim não aborte o batch; inspecione a coleção de erros para falhas parciais.
+Python normalmente lança **`ValueError`** com uma mensagem descritiva (por exemplo, um código de acesso inválido). TypeScript/JavaScript lança **`Error`**. Go retorna `(value, error)`. Prefira **`decrypt_events`** para histórico para que um evento ruim não aborte o batch; inspecione a coleção de erros para falhas parciais.
 
 Alguns erros de verificação são **permanentes**. Assinaturas são imutáveis e verificadas reconstruindo o payload assinado a partir do próprio evento, então um evento antigo que falha com `signature missing or no matching signing key` ou uma incompatibilidade ECDSA falhará em cada carregamento futuro — nenhuma nova tentativa, atualização de chave ou chamada de API pode curá-lo. Trate esses como lápides, não como erros transitórios. Rotacionar a chave de conversa inicia um histórico limpo e verificável a partir daquele ponto.
 

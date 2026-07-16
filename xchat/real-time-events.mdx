@@ -8,8 +8,8 @@ X delivers **`chat.received`**, **`chat.sent`**, and related X Chat activity wit
 
 | Layer | Role |
 |:------|:-----|
-| **Activity API** | `GET /2/activity/stream`; `POST` / `GET` / `PUT` / `DELETE` `/2/activity/subscriptions` (see OpenAPI security per operation) |
-| **Account Activity webhooks** | Optional `/2/account_activity/webhooks/{webhook_id}` subscription routes if you terminate on your own HTTPS URL |
+| **X Activity API** | `GET /2/activity/stream`; `POST` / `GET` / `PUT` / `DELETE` `/2/activity/subscriptions` (see OpenAPI security per operation) |
+| **Webhooks** | Optional `POST` / `GET` `/2/webhooks` and `PUT` / `DELETE` `/2/webhooks/{webhook_id}` routes if you terminate on your own HTTPS URL |
 | **Chat XDK** | `extract_conversation_keys`, `decrypt_event` / `decrypt_events` |
 
 Private X Chat event types need authorization for the user you monitor. Encrypted X Chat file attachments use **`media_hash_key`** and X Chat media download—not Post API `expansions=attachments.media_keys` / `media.fields=variants`.
@@ -37,9 +37,9 @@ Private X Chat event types need authorization for the user you monitor. Encrypte
 - `PUT /2/activity/subscriptions/{subscription_id}` — update  
 - `DELETE /2/activity/subscriptions/{subscription_id}` or `DELETE /2/activity/subscriptions?ids=` — delete  
 
-Request bodies and required scopes are defined in the OpenAPI operation for each route (typically Bearer for app-level XAA management).
+Request bodies and required scopes are defined in the OpenAPI operation for each route. Creating an X Activity API (XAA) subscription requires **user-context authorization** (OAuth 2.0 user context with the relevant scopes, such as `dm.read` for chat events) for the user whose activity you monitor.
 
-**Webhooks (Account Activity-style):** if you terminate events on your HTTPS endpoint, register a webhook, pass CRC challenges, then create subscriptions under `/2/account_activity/webhooks/{webhook_id}/subscriptions/all` (see Account Activity operations in OpenAPI). Python/TypeScript XDK may expose helpers for webhooks and activity when your SDK version includes them.
+**Webhooks:** if you terminate events on your HTTPS endpoint, register a webhook with `POST /2/webhooks`, pass CRC challenges, then create your activity subscriptions with `POST /2/activity/subscriptions`, referencing your `webhook_id` (see Webhooks and Activity operations in OpenAPI). Python/TypeScript XDK may expose helpers for webhooks and activity when your SDK version includes them.
 
 <Tabs>
   <Tab title="Python">
@@ -51,8 +51,8 @@ Request bodies and required scopes are defined in the OpenAPI operation for each
     # for event in stream_client.activity.stream():
     #     handle_payload(event)  # see "Decrypt with the Chat XDK" below
 
-    # Or create a subscription (check XDK for create_subscription vs activity API)
-    client = Client(bearer_token="YOUR_BEARER_TOKEN")
+    # Or create a subscription — requires user-context auth for the monitored user
+    client = Client(access_token="YOUR_OAUTH2_USER_TOKEN")
     client.activity.create_subscription({
         "event_type": "chat.received",
         "filter": {"user_id": "USER_ID_TO_MONITOR"},
@@ -63,7 +63,8 @@ Request bodies and required scopes are defined in the OpenAPI operation for each
     ```typescript
     import { Client } from '@xdevplatform/xdk';
 
-    const client = new Client({ bearerToken: 'YOUR_BEARER_TOKEN' });
+    // Creating a subscription requires user-context auth for the monitored user
+    const client = new Client({ accessToken: 'YOUR_OAUTH2_USER_TOKEN' });
     await client.activity.createSubscription({
       event_type: 'chat.received',
       filter: { user_id: 'USER_ID_TO_MONITOR' },
@@ -73,13 +74,13 @@ Request bodies and required scopes are defined in the OpenAPI operation for each
   </Tab>
 </Tabs>
 
-Subscribe to `chat.sent` as well if you need outbound copies. Other languages: call the same `/2/activity/*` HTTPS routes with a Bearer token.
+Subscribe to `chat.sent` as well if you need outbound copies. Other languages: call the same `/2/activity/*` HTTPS routes directly (user-context token to create subscriptions, app Bearer token for the stream).
 
 ---
 
 ## 2. CRC (webhooks only)
 
-If you use Account Activity webhooks, respond to Challenge-Response Checks (GET `crc_token`) with HMAC-SHA256 of the token using your consumer secret, in the JSON shape your webhook product expects (typically `sha256=<base64>`).
+If you use webhooks, respond to Challenge-Response Checks (GET `crc_token`) with HMAC-SHA256 of the token using your consumer secret, in the JSON shape your webhook product expects (typically `sha256=<base64>`).
 
 ---
 
@@ -95,7 +96,7 @@ JavaScript uses camelCase event types (`message`); other bindings use `"Message"
     from chat_xdk import Chat
 
     chat = Chat(JUICEBOX_CONFIG_JSON)
-    chat.unlock("YOUR_PIN")
+    chat.unlock("YOUR_PASSCODE")
     chat.set_key_version(SIGNING_KEY_VERSION)
     conversation_keys = {}
 
@@ -140,7 +141,7 @@ JavaScript uses camelCase event types (`message`); other bindings use `"Message"
       juiceboxConfig: JUICEBOX_CONFIG_JSON,
       getAuthToken: async (realmId) => getRealmToken(realmId),
     });
-    await chat.unlock('YOUR_PIN');
+    await chat.unlock('YOUR_PASSCODE');
     chat.setKeyVersion(SIGNING_KEY_VERSION);
     const conversationKeys = new Map<string, Record<string, Uint8Array>>();
 

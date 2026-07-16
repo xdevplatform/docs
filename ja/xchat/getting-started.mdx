@@ -11,7 +11,7 @@ X Chat アプリは、2 つの要素を組み合わせて使用します:
 
 | コンポーネント | 役割 |
 |:----------|:-----|
-| **[Chat XDK](/xchat/xchat-xdk)** | 暗号化、復号、署名、および秘密鍵の保存（Juicebox または鍵 blob） |
+| **[Chat XDK](/xchat/xchat-xdk)** | 暗号化、復号、署名、および秘密鍵の保存（安全な鍵バックアップまたは鍵 blob） |
 | **X API** | 公開鍵、会話鍵、メッセージ、イベント — [Python](/xdks/python/overview) または [TypeScript](/xdks/typescript/overview) XDK 経由、または HTTPS とユーザーアクセストークン経由 |
 
 <Note>
@@ -113,9 +113,16 @@ X Chat アプリは、2 つの要素を組み合わせて使用します:
 
 ---
 
-## 2. Chat XDK を初期化する
+## 2. 既存の鍵で Chat XDK を初期化する
 
-**Juicebox**（PIN + API からの `juicebox_config`）または**鍵 blob**（`import_keys`）を使って秘密鍵をロードします。次に、登録済みの公開鍵バージョン（レコード上の `public_key_version`）を設定します。
+このステップでは、**すでに持っている鍵をロード**します — この identity が過去に初回セットアップを完了している場合に使用してください:
+
+- **安全な鍵バックアップ:** 公開鍵レコードの `juicebox_config` で SDK を構築し、パスコードで `unlock` して秘密鍵を復元します（たとえば新しいデバイスで）。
+- **鍵 blob:** 以前に `export_keys` でエクスポートした blob を `import_keys` に渡します。
+
+次に、登録済みの公開鍵バージョン（レコード上の `public_key_version`）を設定します。
+
+**初めてセットアップする場合は？** 同じ方法で SDK を構築しますが、`unlock` / `import_keys` はスキップし、[ステップ 3](#3-鍵を作成して登録する初回セットアップ) に進んで鍵の作成、バックアップ、登録を行ってください。
 
 <Tabs>
   <Tab title="Python">
@@ -134,7 +141,7 @@ X Chat アプリは、2 つの要素を組み合わせて使用します:
     signing_key_version = str(record["public_key_version"])
 
     chat = Chat(json.dumps(record["juicebox_config"]))
-    chat.unlock("YOUR_PIN")  # after first-time setup() — see next section
+    chat.unlock("YOUR_PASSCODE")  # recovers keys stored by setup() during first-time setup (step 3)
     chat.set_key_version(signing_key_version)
     ```
   </Tab>
@@ -155,7 +162,7 @@ X Chat アプリは、2 つの要素を組み合わせて使用します:
       juiceboxConfig: JSON.stringify(record.juicebox_config),
       getAuthToken: async (realmId) => getRealmTokenFromYourBackend(realmId),
     });
-    await chat.unlock('YOUR_PIN');
+    await chat.unlock('YOUR_PASSCODE');
     chat.setKeyVersion(signingKeyVersion);
     ```
   </Tab>
@@ -216,13 +223,21 @@ X Chat アプリは、2 つの要素を組み合わせて使用します:
   </Tab>
 </Tabs>
 
-サーバーおよびボットのサンプルでは、通常**鍵 blob**（`export_keys` / `import_keys`）を使用します。クライアントアプリでは通常 **Juicebox**（PIN を使った `setup` / `unlock`）を使用します。両方のパスについては [Chat XDK](/xchat/xchat-xdk) リファレンスを参照してください。
+サーバーおよびボットのサンプルでは、通常**鍵 blob**（`export_keys` / `import_keys`）を使用します。クライアントアプリでは通常**安全な鍵バックアップ**（パスコードを使った `setup` / `unlock`）を使用します。両方のパスについては [Chat XDK](/xchat/xchat-xdk) リファレンスを参照してください。
+
+<Note>
+**独自の鍵を持ち込みますか？** `import_keys` は、Chat XDK の `export_keys` が生成する不透明な blob のみを受け付けます — これは鍵の完全な状態をバージョン付きで非公開にシリアライズしたものであり、未加工または PEM エンコードされた P-256 鍵ではありません。この blob を自分で構築することはできません: `generate_keypairs`（[ステップ 3](#3-鍵を作成して登録する初回セットアップ)）で鍵を生成し、blob を一度エクスポートして、base64 エンコードで保存してください。手作りまたは改変された blob はインポートに失敗します。
+</Note>
 
 ---
 
-## 3. 公開鍵を登録する（1 回のみ）
+## 3. 鍵を作成して登録する（初回セットアップ）
 
-キーペアを生成し、**公開**鍵を X に登録し、**秘密**鍵を保存します（PIN で `setup`、または `export_keys`）。
+[ステップ 2](#2-既存の鍵で-chat-xdk-を初期化する) で既存の鍵をロードした場合は、このステップをスキップしてください。それ以外の場合、新しい identity の 1 回限りのセットアップでは **3 つのこと**を行います:
+
+1. **キーペアを作成する** — `generate_keypairs` が identity と署名のキーペアを生成します。
+2. **公開鍵を登録する** — 他のユーザーがあなた宛てに暗号化し、あなたの署名を検証できるよう、登録ペイロードを add-public-key エンドポイントに POST します。
+3. **秘密鍵を保存する** — パスコードで `setup` すると安全な鍵バックアップに書き込まれます（クライアント）。または `export_keys` が返す鍵 blob を安全に保存します（サーバーとボット）。
 
 <Tabs>
   <Tab title="Python">
@@ -246,7 +261,7 @@ X Chat アプリは、2 つの要素を組み合わせて使用します:
             generate_version=registration.generate_version,
         ),
     )
-    chat.setup("YOUR_PIN")
+    chat.setup("YOUR_PASSCODE")
     chat.set_key_version(str(registration.version or signing_key_version))
     ```
   </Tab>
@@ -266,7 +281,7 @@ X Chat アプリは、2 つの要素を組み合わせて使用します:
       version: registration.version,
       generate_version: registration.generateVersion,
     });
-    await chat.setup('YOUR_PIN');
+    await chat.setup('YOUR_PASSCODE');
     chat.setKeyVersion(String(registration.version ?? signingKeyVersion));
     ```
   </Tab>
@@ -340,7 +355,7 @@ X Chat アプリは、2 つの要素を組み合わせて使用します:
 </Tabs>
 
 <Warning>
-Juicebox には強力な PIN を使用してください。PIN を紛失したり、保護されていない鍵 blob を失うと、過去のメッセージの復号ができなくなる可能性があります。
+安全な鍵バックアップには強力なパスコードを使用してください。パスコードを紛失したり、保護されていない鍵 blob を失うと、過去のメッセージの復号ができなくなる可能性があります。
 </Warning>
 
 ---
@@ -962,8 +977,8 @@ API で要求される場合、URL パスでは**ハイフン付きの**会話 I
 - 未加工の会話鍵と送信者の公開鍵をキャッシュし、署名検証が失敗した場合は更新する
 - `event_uuid` でライブ配信の重複を排除する
 - ページネーションが完了するまでイベント履歴をページングし、鍵変更のメタデータを見逃さないようにする
-- 本番環境で PIN、秘密鍵、メッセージ平文をログに残さない
-- Web アプリでは、OAuth トークン（および Juicebox realm トークン発行）をサーバー側で保持し、秘密鍵はクライアントの Chat XDK 内でのみ保持することが望ましい
+- 本番環境でパスコード、秘密鍵、メッセージ平文をログに残さない
+- Web アプリでは、OAuth トークン（および鍵バックアップ realm トークン発行）をサーバー側で保持し、秘密鍵はクライアントの Chat XDK 内でのみ保持することが望ましい
 
 ---
 

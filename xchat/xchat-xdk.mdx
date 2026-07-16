@@ -26,7 +26,7 @@ App walkthrough: [Getting Started](/xchat/getting-started). Sample bots: [chat-x
     ```toml
     [dependencies]
     chat-xdk-core = "0.2"
-    # or: chat_xdk for the async Juicebox-oriented crate
+    # or: chat_xdk for the async secure-key-backup-oriented crate
     ```
   </Tab>
   <Tab title="Go">
@@ -60,7 +60,7 @@ Decrypt a backlog, cache keys, decrypt one event, encrypt a reply. Wire the send
     from chat_xdk import Chat
 
     chat = Chat(juicebox_config_json)  # or Chat() + import_keys(blob)
-    chat.unlock("YOUR_PIN")
+    chat.unlock("YOUR_PASSCODE")
     chat.set_key_version(signing_key_version)
 
     result = chat.decrypt_events(raw_events, signing_keys)
@@ -87,7 +87,7 @@ Decrypt a backlog, cache keys, decrypt one event, encrypt a reply. Wire the send
       juiceboxConfig: juiceboxConfigJson,
       getAuthToken: async (realmId) => getRealmToken(realmId),
     });
-    await chat.unlock('YOUR_PIN');
+    await chat.unlock('YOUR_PASSCODE');
     chat.setKeyVersion(signingKeyVersion);
 
     const result = chat.decryptEvents(rawEvents, signingKeys);
@@ -188,17 +188,17 @@ Decrypt a backlog, cache keys, decrypt one event, encrypt a reply. Wire the send
 
 ## Lifecycle and keys
 
-Construct the SDK, store private keys (Juicebox PIN or a local key blob), register **public** keys with the Chat API, and set your registered **public-key version** after unlock or import. Call `generate_keypairs` once per device/app identity; post the registration payload to the public-keys endpoint. Use `setup` / `unlock` (and related PIN helpers) for Juicebox PIN storage on every binding. `export_keys` / `import_keys` (raw key-blob persistence for bots and servers) are available on the **native bindings only**—Python, Go, .NET, JVM, and Rust. The JS/WASM binding does not expose raw key export or import: in a browser any script that reaches the instance could exfiltrate the identity, so JS keeps keys inside Juicebox. A JS server that wants to avoid a Juicebox round-trip per request should reuse one unlocked `Chat` instance across requests, or run a native binding where key blobs are supported.
+Construct the SDK, store private keys (passcode-protected secure key backup or a local key blob), register **public** keys with the Chat API, and set your registered **public-key version** after unlock or import. Secure key backup is implemented with **Juicebox**, which is why the related config fields carry that name. Call `generate_keypairs` once per device/app identity; post the registration payload to the public-keys endpoint. Use `setup` / `unlock` (and related passcode helpers) for secure key backup on every binding. `export_keys` / `import_keys` (raw key-blob persistence for bots and servers) are available on the **native bindings only**—Python, Go, .NET, JVM, and Rust. The JS/WASM binding does not expose raw key export or import: in a browser any script that reaches the instance could exfiltrate the identity, so JS keeps keys inside secure key backup. A JS server that wants to avoid a backup-realm round-trip per request should reuse one unlocked `Chat` instance across requests, or run a native binding where key blobs are supported.
 
 <Tabs>
   <Tab title="Python">
     ```python
     from chat_xdk import Chat
 
-    # Juicebox (client)
+    # Secure key backup (client)
     chat = Chat(juicebox_config_json)
-    chat.setup("YOUR_PIN")          # first time — generates keypairs
-    # chat.unlock("YOUR_PIN")        # later sessions
+    chat.setup("YOUR_PASSCODE")          # first time — generates keypairs
+    # chat.unlock("YOUR_PASSCODE")        # later sessions
     chat.set_key_version(version)    # from add-public-key / get-public-keys response
     reg = chat.get_public_keys()     # or registration fields from generate_keypairs
 
@@ -217,20 +217,20 @@ Construct the SDK, store private keys (Juicebox PIN or a local key blob), regist
       juiceboxConfig: juiceboxConfigJson,
       getAuthToken: async (realmId) => getRealmToken(realmId),
     });
-    await chat.setup('YOUR_PIN');
-    // await chat.unlock('YOUR_PIN');
+    await chat.setup('YOUR_PASSCODE');
+    // await chat.unlock('YOUR_PASSCODE');
     chat.setKeyVersion(version);
     const publics = chat.getPublicKeys();
 
-    // JS/WASM stores keys only through Juicebox — there is no raw key
+    // JS/WASM stores keys only through secure key backup — there is no raw key
     // export/import here. For key-blob persistence, use a native binding.
     ```
   </Tab>
   <Tab title="Rust">
     ```rust
-    // chat_xdk::Chat — async Juicebox unlock, or ChatCore + import_keys
-    chat.setup("YOUR_PIN").await?;
-    // chat.unlock("YOUR_PIN").await?;
+    // chat_xdk::Chat — async secure key backup unlock, or ChatCore + import_keys
+    chat.setup("YOUR_PASSCODE").await?;
+    // chat.unlock("YOUR_PASSCODE").await?;
     chat.set_key_version(&version);
     let publics = chat.get_public_keys()?;
     let blob = chat.export_keys()?;
@@ -242,7 +242,7 @@ Construct the SDK, store private keys (Juicebox PIN or a local key blob), regist
     chat := chatxdk.New()
     defer chat.Close()
 
-    // Prefer ImportKeys for servers; Juicebox unlock where supported
+    // Prefer ImportKeys for servers; secure key backup unlock where supported
     keyBlob, _ := chatxdk.Base64ToBytes(privateKeysB64)
     if err := chat.ImportKeys(keyBlob); err != nil {
         log.Fatal(err)
@@ -259,7 +259,7 @@ Construct the SDK, store private keys (Juicebox PIN or a local key blob), regist
     ```csharp
     using var chat = new Chat();
     chat.ImportKeys(privateKeyBytes);
-    // or Juicebox setup / unlock when config is available
+    // or secure key backup setup / unlock when config is available
     chat.SetKeyVersion(version);
     var publics = chat.GetPublicKeys();
     var blob = chat.ExportKeys();
@@ -277,9 +277,9 @@ Construct the SDK, store private keys (Juicebox PIN or a local key blob), regist
   </Tab>
 </Tabs>
 
-The Juicebox config accepts three shapes: the X API `juicebox_config` object (recommended—passed verbatim), a full `sdk_config` wrapper, or a bare `token_map`.
+The secure key backup config accepts three shapes: the X API `juicebox_config` object (recommended—passed verbatim), a full `sdk_config` wrapper, or a bare `token_map`.
 
-Optional: signature verification is **on by default** (`reject_unverified = true`)—call `set_reject_unverified(false)` to disable it (not recommended); `update_config` if Juicebox realm config changes; `is_unlocked` / `has_identity_key` for UI state. Full field lists live in the [chat-xdk repo](https://github.com/xdevplatform/chat-xdk) stubs.
+Optional: signature verification is **on by default** (`reject_unverified = true`)—call `set_reject_unverified(false)` to disable it (not recommended); `update_config` if backup realm config changes; `is_unlocked` / `has_identity_key` for UI state. Full field lists live in the [chat-xdk repo](https://github.com/xdevplatform/chat-xdk) stubs.
 
 ---
 
@@ -788,7 +788,7 @@ For complete field lists, use language stubs in the [chat-xdk repo](https://gith
 
 ## Errors
 
-Python typically raises **`ValueError`** with a descriptive message (for example an invalid PIN). TypeScript/JavaScript throws **`Error`**. Go returns `(value, error)`. Prefer **`decrypt_events`** for history so one bad event does not abort the batch; inspect the errors collection for partial failures.
+Python typically raises **`ValueError`** with a descriptive message (for example an invalid passcode). TypeScript/JavaScript throws **`Error`**. Go returns `(value, error)`. Prefer **`decrypt_events`** for history so one bad event does not abort the batch; inspect the errors collection for partial failures.
 
 Some verification errors are **permanent**. Signatures are immutable and verified by rebuilding the signed payload from the event itself, so an old event that fails with `signature missing or no matching signing key` or an ECDSA mismatch will fail on every future load—no retry, key refresh, or API call can heal it. Treat these as tombstones, not transient errors. Rotating the conversation key starts a clean, verifiable history from that point forward.
 

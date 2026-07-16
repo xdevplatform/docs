@@ -11,7 +11,7 @@ Las apps de X Chat usan dos piezas juntas:
 
 | Componente | Función |
 |:-----------|:--------|
-| **[Chat XDK](/xchat/xchat-xdk)** | Cifrado, descifrado, firma y almacenamiento de claves privadas (Juicebox o un blob de claves) |
+| **[Chat XDK](/xchat/xchat-xdk)** | Cifrado, descifrado, firma y almacenamiento de claves privadas (copia de seguridad segura de claves o un blob de claves) |
 | **X API** | Claves públicas, claves de conversación, mensajes y eventos—vía el XDK de [Python](/xdks/python/overview) o [TypeScript](/xdks/typescript/overview), o HTTPS con un token de acceso de usuario |
 
 <Note>
@@ -113,9 +113,16 @@ Crea un cliente de API con tu token de acceso OAuth 2.0 de **usuario**:
 
 ---
 
-## 2. Inicializa el Chat XDK
+## 2. Inicializa el Chat XDK con claves existentes
 
-Carga las claves privadas con **Juicebox** (PIN + `juicebox_config` de la API) o con un **blob de claves** (`import_keys`). Después establece la versión de tu clave pública registrada (`public_key_version` en tu registro).
+Este paso **carga claves que ya tienes**—úsalo cuando esta identidad ya completó la configuración inicial:
+
+- **Copia de seguridad segura de claves:** construye el SDK con el `juicebox_config` de tu registro de clave pública y luego usa `unlock` con tu código de acceso para recuperar las claves privadas (por ejemplo, en un dispositivo nuevo).
+- **Blob de claves:** `import_keys` con un blob que exportaste previamente mediante `export_keys`.
+
+Después establece la versión de tu clave pública registrada (`public_key_version` en tu registro).
+
+**¿Configuras por primera vez?** Construye el SDK de la misma forma pero omite `unlock`/`import_keys` y continúa en el [paso 3](#3-crea-y-registra-las-claves-configuracion-inicial) para crear, respaldar y registrar tus claves.
 
 <Tabs>
   <Tab title="Python">
@@ -134,7 +141,7 @@ Carga las claves privadas con **Juicebox** (PIN + `juicebox_config` de la API) o
     signing_key_version = str(record["public_key_version"])
 
     chat = Chat(json.dumps(record["juicebox_config"]))
-    chat.unlock("YOUR_PIN")  # after first-time setup() — see next section
+    chat.unlock("YOUR_PASSCODE")  # recovers keys stored by setup() during first-time setup (step 3)
     chat.set_key_version(signing_key_version)
     ```
   </Tab>
@@ -155,7 +162,7 @@ Carga las claves privadas con **Juicebox** (PIN + `juicebox_config` de la API) o
       juiceboxConfig: JSON.stringify(record.juicebox_config),
       getAuthToken: async (realmId) => getRealmTokenFromYourBackend(realmId),
     });
-    await chat.unlock('YOUR_PIN');
+    await chat.unlock('YOUR_PASSCODE');
     chat.setKeyVersion(signingKeyVersion);
     ```
   </Tab>
@@ -216,13 +223,21 @@ Carga las claves privadas con **Juicebox** (PIN + `juicebox_config` de la API) o
   </Tab>
 </Tabs>
 
-Los ejemplos para servidor y bot suelen usar un **blob de claves** (`export_keys` / `import_keys`). Las apps cliente suelen usar **Juicebox** (`setup` / `unlock` con un PIN). Consulta la referencia del [Chat XDK](/xchat/xchat-xdk) para ambos caminos.
+Los ejemplos para servidor y bot suelen usar un **blob de claves** (`export_keys` / `import_keys`). Las apps cliente suelen usar la **copia de seguridad segura de claves** (`setup` / `unlock` con un código de acceso). Consulta la referencia del [Chat XDK](/xchat/xchat-xdk) para ambos caminos.
+
+<Note>
+**¿Traes tus propias claves?** `import_keys` solo acepta el blob opaco que produce `export_keys` del Chat XDK—es una serialización privada y versionada del estado completo de las claves, no claves P-256 en bruto ni codificadas en PEM. No puedes construir este blob por tu cuenta: genera las claves con `generate_keypairs` ([paso 3](#3-crea-y-registra-las-claves-configuracion-inicial)), exporta el blob una vez y guárdalo codificado en base64. Los blobs hechos a mano o modificados fallan al importarse.
+</Note>
 
 ---
 
-## 3. Registra las claves públicas (una sola vez)
+## 3. Crea y registra las claves (configuración inicial)
 
-Genera pares de claves, registra las claves **públicas** con X y luego guarda las claves **privadas** (`setup` con un PIN, o `export_keys`).
+Omite este paso si cargaste claves existentes en el [paso 2](#2-inicializa-el-chat-xdk-con-claves-existentes). De lo contrario, la configuración inicial de una identidad nueva hace **tres cosas**:
+
+1. **Crear los pares de claves** — `generate_keypairs` produce los pares de claves de identidad y de firma.
+2. **Registrar las claves públicas** — envía el payload de registro con POST al endpoint add-public-key para que otros puedan cifrar hacia ti y verificar tus firmas.
+3. **Guardar las claves privadas** — `setup` con un código de acceso las escribe en la copia de seguridad segura de claves (clientes), o `export_keys` devuelve un blob de claves para que lo guardes de forma segura (servidores y bots).
 
 <Tabs>
   <Tab title="Python">
@@ -246,7 +261,7 @@ Genera pares de claves, registra las claves **públicas** con X y luego guarda l
             generate_version=registration.generate_version,
         ),
     )
-    chat.setup("YOUR_PIN")
+    chat.setup("YOUR_PASSCODE")
     chat.set_key_version(str(registration.version or signing_key_version))
     ```
   </Tab>
@@ -266,7 +281,7 @@ Genera pares de claves, registra las claves **públicas** con X y luego guarda l
       version: registration.version,
       generate_version: registration.generateVersion,
     });
-    await chat.setup('YOUR_PIN');
+    await chat.setup('YOUR_PASSCODE');
     chat.setKeyVersion(String(registration.version ?? signingKeyVersion));
     ```
   </Tab>
@@ -340,7 +355,7 @@ Genera pares de claves, registra las claves **públicas** con X y luego guarda l
 </Tabs>
 
 <Warning>
-Usa un PIN fuerte para Juicebox. Perder el PIN o un blob de claves desprotegido puede impedir el descifrado de mensajes anteriores.
+Usa un código de acceso fuerte para la copia de seguridad segura de claves. Perder el código de acceso o un blob de claves desprotegido puede impedir el descifrado de mensajes anteriores.
 </Warning>
 
 ---
@@ -962,8 +977,8 @@ Bots completos de poll-and-reply para todos los lenguajes: [chat-xdk/examples](h
 - Cachea las claves de conversación en bruto y las claves públicas de los remitentes; refréscalas ante fallos de verificación de firma
 - Deduplica las entregas en vivo con `event_uuid`
 - Pagina el historial de eventos hasta completar la paginación para no perder metadatos de cambio de clave
-- No registres PINs, claves privadas ni el texto plano de mensajes en producción
-- En apps web, mantén los tokens de OAuth (y la emisión de tokens de realm de Juicebox) en un servidor; procura mantener las claves privadas solo en el Chat XDK del cliente
+- No registres códigos de acceso, claves privadas ni el texto plano de mensajes en producción
+- En apps web, mantén los tokens de OAuth (y la emisión de tokens de realm de la copia de seguridad de claves) en un servidor; procura mantener las claves privadas solo en el Chat XDK del cliente
 
 ---
 

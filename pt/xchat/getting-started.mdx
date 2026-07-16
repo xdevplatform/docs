@@ -11,7 +11,7 @@ Os apps do X Chat usam duas peças em conjunto:
 
 | Componente | Papel |
 |:-----------|:------|
-| **[Chat XDK](/xchat/xchat-xdk)** | Criptografia, descriptografia, assinatura e armazenamento de chave privada (Juicebox ou blob de chave) |
+| **[Chat XDK](/xchat/xchat-xdk)** | Criptografia, descriptografia, assinatura e armazenamento de chave privada (backup seguro de chaves ou blob de chave) |
 | **X API** | Chaves públicas, chaves de conversa, mensagens e eventos — via o XDK [Python](/xdks/python/overview) ou [TypeScript](/xdks/typescript/overview), ou HTTPS com um token de acesso do usuário |
 
 <Note>
@@ -113,9 +113,16 @@ Crie um cliente de API com seu token de acesso OAuth 2.0 de **usuário**:
 
 ---
 
-## 2. Inicializar o Chat XDK
+## 2. Inicializar o Chat XDK com chaves existentes
 
-Carregue as chaves privadas com **Juicebox** (PIN + `juicebox_config` da API) ou um **blob de chave** (`import_keys`). Em seguida, defina sua versão de chave pública registrada (`public_key_version` no seu registro).
+Este passo **carrega chaves que você já tem** — use-o quando esta identidade já concluiu a configuração inicial antes:
+
+- **Backup seguro de chaves:** construa o SDK com o `juicebox_config` do seu registro de chave pública e depois faça `unlock` com seu código de acesso para recuperar as chaves privadas (por exemplo, em um novo dispositivo).
+- **Blob de chave:** `import_keys` com um blob que você exportou anteriormente via `export_keys`.
+
+Em seguida, defina sua versão de chave pública registrada (`public_key_version` no seu registro).
+
+**Configurando pela primeira vez?** Construa o SDK da mesma forma, mas pule `unlock`/`import_keys` e continue para o [passo 3](#3-criar-e-registrar-chaves-configuracao-inicial) para criar, fazer backup e registrar suas chaves.
 
 <Tabs>
   <Tab title="Python">
@@ -134,7 +141,7 @@ Carregue as chaves privadas com **Juicebox** (PIN + `juicebox_config` da API) ou
     signing_key_version = str(record["public_key_version"])
 
     chat = Chat(json.dumps(record["juicebox_config"]))
-    chat.unlock("YOUR_PIN")  # after first-time setup() — see next section
+    chat.unlock("YOUR_PASSCODE")  # recovers keys stored by setup() during first-time setup (step 3)
     chat.set_key_version(signing_key_version)
     ```
   </Tab>
@@ -155,7 +162,7 @@ Carregue as chaves privadas com **Juicebox** (PIN + `juicebox_config` da API) ou
       juiceboxConfig: JSON.stringify(record.juicebox_config),
       getAuthToken: async (realmId) => getRealmTokenFromYourBackend(realmId),
     });
-    await chat.unlock('YOUR_PIN');
+    await chat.unlock('YOUR_PASSCODE');
     chat.setKeyVersion(signingKeyVersion);
     ```
   </Tab>
@@ -216,13 +223,21 @@ Carregue as chaves privadas com **Juicebox** (PIN + `juicebox_config` da API) ou
   </Tab>
 </Tabs>
 
-Amostras de servidor e bots normalmente usam um **blob de chave** (`export_keys` / `import_keys`). Apps cliente frequentemente usam **Juicebox** (`setup` / `unlock` com um PIN). Veja a referência do [Chat XDK](/xchat/xchat-xdk) para ambos os caminhos.
+Amostras de servidor e bots normalmente usam um **blob de chave** (`export_keys` / `import_keys`). Apps cliente frequentemente usam **backup seguro de chaves** (`setup` / `unlock` com um código de acesso). Veja a referência do [Chat XDK](/xchat/xchat-xdk) para ambos os caminhos.
+
+<Note>
+**Trazendo suas próprias chaves?** `import_keys` só aceita o blob opaco produzido por `export_keys` do Chat XDK — é uma serialização privada e versionada do estado completo das chaves, não chaves P-256 em bruto ou codificadas em PEM. Você não pode construir esse blob por conta própria: gere as chaves com `generate_keypairs` ([passo 3](#3-criar-e-registrar-chaves-configuracao-inicial)), exporte o blob uma vez e armazene-o codificado em base64. Blobs criados à mão ou modificados falham na importação.
+</Note>
 
 ---
 
-## 3. Registrar chaves públicas (uma vez)
+## 3. Criar e registrar chaves (configuração inicial)
 
-Gere pares de chaves, registre as chaves **públicas** com o X, então armazene as chaves **privadas** (`setup` com um PIN, ou `export_keys`).
+Pule este passo se você carregou chaves existentes no [passo 2](#2-inicializar-o-chat-xdk-com-chaves-existentes). Caso contrário, a configuração única de uma nova identidade faz **três coisas**:
+
+1. **Criar os pares de chaves** — `generate_keypairs` produz os pares de chaves de identidade e de assinatura.
+2. **Registrar as chaves públicas** — faça POST do payload de registro para o endpoint add-public-key para que outros possam criptografar para você e verificar suas assinaturas.
+3. **Armazenar as chaves privadas** — `setup` com um código de acesso as grava no backup seguro de chaves (clientes), ou `export_keys` retorna um blob de chave para você armazenar com segurança (servidores e bots).
 
 <Tabs>
   <Tab title="Python">
@@ -246,7 +261,7 @@ Gere pares de chaves, registre as chaves **públicas** com o X, então armazene 
             generate_version=registration.generate_version,
         ),
     )
-    chat.setup("YOUR_PIN")
+    chat.setup("YOUR_PASSCODE")
     chat.set_key_version(str(registration.version or signing_key_version))
     ```
   </Tab>
@@ -266,7 +281,7 @@ Gere pares de chaves, registre as chaves **públicas** com o X, então armazene 
       version: registration.version,
       generate_version: registration.generateVersion,
     });
-    await chat.setup('YOUR_PIN');
+    await chat.setup('YOUR_PASSCODE');
     chat.setKeyVersion(String(registration.version ?? signingKeyVersion));
     ```
   </Tab>
@@ -340,7 +355,7 @@ Gere pares de chaves, registre as chaves **públicas** com o X, então armazene 
 </Tabs>
 
 <Warning>
-Use um PIN forte para o Juicebox. Perder o PIN ou um blob de chave desprotegido pode impedir a descriptografia de mensagens antigas.
+Use um código de acesso forte para o backup seguro de chaves. Perder o código de acesso ou um blob de chave desprotegido pode impedir a descriptografia de mensagens antigas.
 </Warning>
 
 ---
@@ -962,8 +977,8 @@ Bots completos de poll-and-reply para cada linguagem: [chat-xdk/examples](https:
 - Faça cache das chaves de conversa em bruto e das chaves públicas do remetente; atualize em falhas de verificação de assinatura
 - Deduplique entregas ao vivo com `event_uuid`
 - Pagine o histórico de eventos até que a paginação esteja completa para não perder metadados de mudança de chave
-- Não registre PINs, chaves privadas ou texto simples de mensagens em produção
-- Em apps web, mantenha tokens OAuth (e a emissão do token do realm Juicebox) em um servidor; prefira manter chaves privadas apenas no Chat XDK do cliente
+- Não registre códigos de acesso, chaves privadas ou texto simples de mensagens em produção
+- Em apps web, mantenha tokens OAuth (e a emissão do token do realm de backup de chaves) em um servidor; prefira manter chaves privadas apenas no Chat XDK do cliente
 
 ---
 

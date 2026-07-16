@@ -23,7 +23,7 @@ X Chat uses a layered encryption system where:
 
 1. **Messages** are encrypted with a **conversation key** (fast symmetric encryption)
 2. **Conversation keys** are encrypted to each participant using their **identity public key** (asymmetric key exchange)
-3. **Messages are signed** so recipients can verify who sent them and that nothing was altered
+3. **Messages are signed** with the **signing key** so recipients can verify who sent them and that nothing was altered
 
 Symmetric encryption is efficient for lots of message traffic; asymmetric encryption is used mainly to **distribute** conversation keys safely.
 
@@ -64,7 +64,7 @@ X Chat uses three kinds of key material, each with a specific purpose.
 
 When someone adds you to a conversation, they encrypt the conversation key using your identity public key. Only your identity private key can decrypt it.
 
-Public halves are registered and discovered through the platform’s **public-key** APIs (see Encryption keys under API reference). Private halves stay in the Chat XDK (for example via [Juicebox](#juicebox-distributed-key-storage) or a carefully protected key blob).
+Public halves are registered and discovered through the platform’s **public-key** APIs (see Encryption keys under API reference). Private halves stay in the Chat XDK (for example via [secure key backup](#secure-key-backup-distributed-key-storage) or a carefully protected key blob).
 
 ### 2. Signing keypair
 
@@ -85,7 +85,7 @@ When you send a message, it is signed with your signing private key. Recipients 
 |:---------|:------------|
 | **Symmetric** | Same key encrypts and decrypts |
 | **Per-conversation** | Each conversation has its own key |
-| **Shared among participants** | All participants who should read the thread have a copy |
+| **Shared among participants** | All participants who should read the conversation have a copy |
 | **Versioned** | Keys can rotate; apps should track versions over time |
 
 Conversation keys are generated when a conversation is set up or when keys rotate. Each participant gets an **encrypted copy** of the key, produced with their identity public key. After you decrypt your copy once, you keep the **raw** conversation key and use it for fast message (and [media](/xchat/media)) encryption. Setting up those copies for a conversation is done through the Chat XDK together with conversation **key** endpoints—walked through in [Getting Started](/xchat/getting-started#4-set-up-conversation-keys).
@@ -164,9 +164,9 @@ Your app should:
 
 ---
 
-## Juicebox: distributed key storage
+## Secure key backup: distributed key storage
 
-Your **private** identity and signing keys must be stored carefully. X Chat integrates **Juicebox** so keys can be recovered with a PIN across devices without giving any single server the full secret.
+Your **private** identity and signing keys must be stored carefully. X Chat includes a **secure key backup** system (implemented with Juicebox) so keys can be recovered with a passcode across devices without giving any single server the full secret.
 
 ### The problem with traditional key storage
 
@@ -176,15 +176,15 @@ Your **private** identity and signing keys must be stored carefully. X Chat inte
 | Store in an ordinary cloud backup | The provider might access key material |
 | Remember a long key | People cannot reliably memorize high-entropy keys |
 
-### How Juicebox solves it
+### How secure key backup solves it
 
-Juicebox combines **secret sharing** with **PIN protection**:
+Secure key backup combines **secret sharing** with **passcode protection**:
 
 1. Private keys are **split into shares**
 2. Shares are held by **independent realms** (separate servers)
 3. **No single realm** has enough information to reconstruct the keys alone
-4. Recovery requires your **PIN** and cooperation from **enough realms**
-5. Wrong PINs are **rate-limited** to slow guessing
+4. Recovery requires your **passcode** and cooperation from **enough realms**
+5. Wrong passcodes are **rate-limited** to slow guessing
 
 ```mermaid
 flowchart LR
@@ -194,14 +194,14 @@ flowchart LR
     B --> E[Realm 3<br/>Share C]
     
     subgraph Recovery
-        F[Your PIN + Multiple Realms] --> G[Reconstruct Keys]
+        F[Your Passcode + Multiple Realms] --> G[Reconstruct Keys]
     end
 ```
 
-You get recoverability (new device + PIN) without a single party holding the whole secret.
+You get recoverability (new device + passcode) without a single party holding the whole secret.
 
 <Note>
-You do not configure Juicebox servers by hand for the normal path. The Chat XDK includes the Juicebox client; realm configuration comes from the X API as **`juicebox_config`** on your public-key record. First-time PIN storage and later unlock are Chat XDK calls—see [Getting Started](/xchat/getting-started#2-initialize-the-chat-xdk) and [register public keys](/xchat/getting-started#3-register-public-keys-one-time). Some apps (especially servers and bots) use an exported key blob instead of Juicebox; protect that material like a password.
+You do not configure key backup servers by hand for the normal path. The Chat XDK includes the backup client; realm configuration comes from the X API as **`juicebox_config`** on your public-key record (the field is named for Juicebox, the underlying implementation). First-time passcode storage and later unlock are Chat XDK calls—see [initialize with existing keys](/xchat/getting-started#2-initialize-the-chat-xdk-with-existing-keys) and [create and register keys](/xchat/getting-started#3-create-and-register-keys-first-time-setup) in Getting Started. Some apps (especially servers and bots) use an exported key blob instead of secure key backup; protect that material like a password.
 </Note>
 
 ---
@@ -246,7 +246,7 @@ Signatures are bound to the event contents and are immutable: an event whose sig
 | **Network eavesdroppers** | Transport security plus end-to-end encrypted content |
 | **Message tampering** | Signatures detect modification |
 | **Trivial sender impersonation** | Valid signatures require the sender’s signing private key |
-| **Single-server key theft (with Juicebox)** | Shares are split across realms and PIN-gated |
+| **Single-server key theft (with secure key backup)** | Shares are split across realms and passcode-gated |
 
 ### What X Chat does **not** protect against
 
@@ -273,7 +273,7 @@ Signatures are bound to the event contents and are immutable: an event whose sig
 | **P-256** | Elliptic curve used in X Chat (secp256r1) |
 | **Conversation key** | Symmetric key shared by participants in one conversation (versioned over time) |
 | **Secret sharing** | Splitting a secret so multiple pieces are needed to reconstruct it |
-| **Realm** | An independent Juicebox server holding one share of your key material |
+| **Realm** | An independent secure key backup server holding one share of your key material |
 
 ---
 

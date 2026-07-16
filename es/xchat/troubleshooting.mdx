@@ -2,27 +2,27 @@
 title: Solución de problemas
 sidebarTitle: Solución de problemas
 description: Problemas de cifrado de X Chat y del Chat XDK
-keywords: ["X Chat errors", "Chat XDK", "decryption", "Juicebox", "encryption"]
+keywords: ["X Chat errors", "Chat XDK", "decryption", "secure key backup", "encryption"]
 ---
 
-Esta página cubre problemas **específicos del cifrado de X Chat y del Chat XDK**—claves, Juicebox, descifrar/verificar y construcción de payloads cifrados de envío.
+Esta página cubre problemas **específicos del cifrado de X Chat y del Chat XDK**—claves, copia de seguridad segura de claves, descifrar/verificar y construcción de payloads cifrados de envío.
 
 Para webhooks, OAuth, códigos de estado HTTP y límites de tasa, usa la documentación general de la [X API](/x-api/introduction) y de [autenticación](/fundamentals/authentication/overview).
 
 ---
 
-## Claves y Juicebox
+## Claves y copia de seguridad segura de claves
 
-### El desbloqueo falla (PIN inválido)
+### El desbloqueo falla (código de acceso inválido)
 
-- Confirma que el PIN coincide con el usado en `setup`
+- Confirma que el código de acceso coincide con el usado en `setup`
 - Espera entre intentos; los realms limitan por tasa los intentos incorrectos y pueden bloquear la recuperación tras demasiados fallos
 
 <Tabs>
   <Tab title="Python">
     ```python
     try:
-        chat.unlock(pin)
+        chat.unlock(passcode)
     except ValueError as e:
         print(e)  # may mention InvalidPin or guesses remaining
     ```
@@ -30,7 +30,7 @@ Para webhooks, OAuth, códigos de estado HTTP y límites de tasa, usa la documen
   <Tab title="TypeScript">
     ```typescript
     try {
-      await chat.unlock(pin);
+      await chat.unlock(passcode);
     } catch (e) {
       console.error((e as Error).message);
     }
@@ -38,25 +38,25 @@ Para webhooks, OAuth, códigos de estado HTTP y límites de tasa, usa la documen
   </Tab>
   <Tab title="Rust">
     ```rust
-    chat.unlock(pin_bytes).await?;
+    chat.unlock(passcode_bytes).await?;
     ```
   </Tab>
   <Tab title="Go">
     ```go
-    if err := chat.Unlock(pin, juiceboxConfigJSON); err != nil {
+    if err := chat.Unlock(passcode, juiceboxConfigJSON); err != nil {
         log.Println(err)
     }
     ```
   </Tab>
   <Tab title="C#">
     ```csharp
-    try { chat.Unlock(pin, juiceboxConfigJson); }
+    try { chat.Unlock(passcode, juiceboxConfigJson); }
     catch (Exception e) { Console.WriteLine(e.Message); }
     ```
   </Tab>
   <Tab title="Java">
     ```java
-    try { chat.unlock(pin, juiceboxConfigJson); }
+    try { chat.unlock(passcode, juiceboxConfigJson); }
     catch (Exception e) { System.out.println(e.getMessage()); }
     ```
   </Tab>
@@ -69,13 +69,13 @@ Carga primero las claves privadas y después establece la **versión** de clave 
 <Tabs>
   <Tab title="Python">
     ```python
-    chat.unlock(pin)  # or: chat.import_keys(blob)
+    chat.unlock(passcode)  # or: chat.import_keys(blob)
     chat.set_key_version(signing_key_version)
     ```
   </Tab>
   <Tab title="TypeScript">
     ```typescript
-    await chat.unlock(pin);
+    await chat.unlock(passcode);
     chat.setKeyVersion(signingKeyVersion);
     ```
   </Tab>
@@ -209,6 +209,6 @@ Detalles: [Multimedia](/xchat/media).
 Al investigar fallos criptográficos:
 
 - Registra solo los ids de conversación, ids de evento y **versiones** de clave
-- **No** registres texto plano, PINs, claves privadas ni blobs de clave completos
+- **No** registres texto plano, códigos de acceso, claves privadas ni blobs de clave completos
 - Confirma que `set_key_version` coincide con `public_key_version` en tu registro de clave pública
 - Para historial incompleto, pagina **todas** las páginas de eventos para no saltarte metadatos de cambio de clave antes de descifrar

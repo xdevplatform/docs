@@ -23,7 +23,7 @@ X Chat usa un sistema de cifrado por capas donde:
 
 1. Los **mensajes** se cifran con una **clave de conversación** (cifrado simétrico rápido)
 2. Las **claves de conversación** se cifran para cada participante usando su **clave pública de identidad** (intercambio asimétrico de claves)
-3. Los **mensajes se firman** para que los destinatarios puedan verificar quién los envió y que nada fue alterado
+3. Los **mensajes se firman** con la **clave de firma** para que los destinatarios puedan verificar quién los envió y que nada fue alterado
 
 El cifrado simétrico es eficiente para mucho tráfico de mensajes; el cifrado asimétrico se usa principalmente para **distribuir** las claves de conversación de forma segura.
 
@@ -64,7 +64,7 @@ X Chat usa tres tipos de material de claves, cada uno con un propósito específ
 
 Cuando alguien te agrega a una conversación, cifra la clave de conversación usando tu clave pública de identidad. Solo tu clave privada de identidad puede descifrarla.
 
-Las mitades públicas se registran y descubren a través de las APIs de **claves públicas** de la plataforma (consulta Encryption keys en la referencia de la API). Las mitades privadas permanecen dentro del Chat XDK (por ejemplo, mediante [Juicebox](#juicebox-almacenamiento-distribuido-de-claves) o un blob de claves cuidadosamente protegido).
+Las mitades públicas se registran y descubren a través de las APIs de **claves públicas** de la plataforma (consulta Encryption keys en la referencia de la API). Las mitades privadas permanecen dentro del Chat XDK (por ejemplo, mediante la [copia de seguridad segura de claves](#copia-de-seguridad-segura-de-claves-almacenamiento-distribuido-de-claves) o un blob de claves cuidadosamente protegido).
 
 ### 2. Par de claves de firma
 
@@ -85,7 +85,7 @@ Cuando envías un mensaje, se firma con tu clave privada de firma. Los destinata
 |:----------|:------------|
 | **Simétrica** | La misma clave cifra y descifra |
 | **Por conversación** | Cada conversación tiene su propia clave |
-| **Compartida entre participantes** | Todos los participantes que deberían leer el hilo tienen una copia |
+| **Compartida entre participantes** | Todos los participantes que deberían leer la conversación tienen una copia |
 | **Versionada** | Las claves pueden rotarse; las apps deberían llevar registro de las versiones a lo largo del tiempo |
 
 Las claves de conversación se generan cuando se configura una conversación o cuando las claves rotan. Cada participante recibe una **copia cifrada** de la clave, producida con su clave pública de identidad. Después de descifrar tu copia una vez, conservas la clave de conversación **en bruto** y la usas para cifrar mensajes (y [multimedia](/xchat/media)) de forma rápida. La configuración de esas copias para una conversación se hace mediante el Chat XDK junto con los endpoints de **claves** de conversación—se recorre en [Primeros pasos](/xchat/getting-started#4-set-up-conversation-keys).
@@ -164,9 +164,9 @@ Tu app debería:
 
 ---
 
-## Juicebox: almacenamiento distribuido de claves
+## Copia de seguridad segura de claves: almacenamiento distribuido de claves
 
-Tus claves **privadas** de identidad y firma deben almacenarse con cuidado. X Chat integra **Juicebox** para que las claves puedan recuperarse con un PIN entre dispositivos sin darle a ningún servidor el secreto completo.
+Tus claves **privadas** de identidad y firma deben almacenarse con cuidado. X Chat incluye un sistema de **copia de seguridad segura de claves** (implementado con Juicebox) para que las claves puedan recuperarse con un código de acceso entre dispositivos sin darle a ningún servidor el secreto completo.
 
 ### El problema con el almacenamiento tradicional de claves
 
@@ -176,15 +176,15 @@ Tus claves **privadas** de identidad y firma deben almacenarse con cuidado. X Ch
 | Almacenar en un respaldo ordinario en la nube | El proveedor podría acceder al material de la clave |
 | Recordar una clave larga | Las personas no pueden memorizar de forma confiable claves de alta entropía |
 
-### Cómo lo resuelve Juicebox
+### Cómo lo resuelve la copia de seguridad segura de claves
 
-Juicebox combina **secret sharing** con **protección por PIN**:
+La copia de seguridad segura de claves combina **secret sharing** con **protección por código de acceso**:
 
 1. Las claves privadas se **dividen en partes (shares)**
 2. Los shares están en poder de **realms independientes** (servidores separados)
 3. **Ningún realm individual** tiene suficiente información para reconstruir las claves por sí solo
-4. La recuperación requiere tu **PIN** y la cooperación de **suficientes realms**
-5. Los PINs incorrectos están **limitados por tasa** para ralentizar los intentos
+4. La recuperación requiere tu **código de acceso** y la cooperación de **suficientes realms**
+5. Los códigos de acceso incorrectos están **limitados por tasa** para ralentizar los intentos
 
 ```mermaid
 flowchart LR
@@ -194,14 +194,14 @@ flowchart LR
     B --> E[Realm 3<br/>Share C]
     
     subgraph Recovery
-        F[Your PIN + Multiple Realms] --> G[Reconstruct Keys]
+        F[Your Passcode + Multiple Realms] --> G[Reconstruct Keys]
     end
 ```
 
-Obtienes recuperabilidad (nuevo dispositivo + PIN) sin que una sola parte tenga el secreto completo.
+Obtienes recuperabilidad (nuevo dispositivo + código de acceso) sin que una sola parte tenga el secreto completo.
 
 <Note>
-No configuras servidores Juicebox a mano para el flujo normal. El Chat XDK incluye el cliente Juicebox; la configuración de realms proviene de la X API como **`juicebox_config`** en tu registro de clave pública. La configuración por primera vez del PIN y el desbloqueo posterior son llamadas del Chat XDK—consulta [Primeros pasos](/xchat/getting-started#2-initialize-the-chat-xdk) y [registrar claves públicas](/xchat/getting-started#3-register-public-keys-one-time). Algunas apps (especialmente servidores y bots) usan un blob de claves exportado en lugar de Juicebox; protege ese material como una contraseña.
+No configuras servidores de copia de seguridad de claves a mano para el flujo normal. El Chat XDK incluye el cliente de copia de seguridad; la configuración de realms proviene de la X API como **`juicebox_config`** en tu registro de clave pública (el campo lleva el nombre de Juicebox, la implementación subyacente). El almacenamiento del código de acceso por primera vez y el desbloqueo posterior son llamadas del Chat XDK—consulta [inicializar con claves existentes](/xchat/getting-started#2-initialize-the-chat-xdk-with-existing-keys) y [crear y registrar las claves](/xchat/getting-started#3-create-and-register-keys-first-time-setup) en Primeros pasos. Algunas apps (especialmente servidores y bots) usan un blob de claves exportado en lugar de la copia de seguridad segura de claves; protege ese material como una contraseña.
 </Note>
 
 ---
@@ -246,7 +246,7 @@ Las firmas están vinculadas al contenido del evento y son inmutables: un evento
 | **Espionaje de red** | Seguridad de transporte más contenido cifrado de extremo a extremo |
 | **Manipulación de mensajes** | Las firmas detectan la modificación |
 | **Suplantación trivial del remitente** | Las firmas válidas requieren la clave privada de firma del remitente |
-| **Robo de claves en un único servidor (con Juicebox)** | Los shares se dividen entre realms y se protegen con PIN |
+| **Robo de claves en un único servidor (con copia de seguridad segura de claves)** | Los shares se dividen entre realms y se protegen con código de acceso |
 
 ### Contra qué **no** protege X Chat
 
@@ -273,7 +273,7 @@ Las firmas están vinculadas al contenido del evento y son inmutables: un evento
 | **P-256** | Curva elíptica usada en X Chat (secp256r1) |
 | **Clave de conversación** | Clave simétrica compartida por los participantes en una conversación (versionada a lo largo del tiempo) |
 | **Secret sharing** | División de un secreto para que se necesiten varias piezas para reconstruirlo |
-| **Realm** | Un servidor Juicebox independiente que mantiene un share de tu material de claves |
+| **Realm** | Un servidor independiente de copia de seguridad segura de claves que mantiene un share de tu material de claves |
 
 ---
 

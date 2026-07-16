@@ -11,7 +11,7 @@ X Chat apps use two pieces together:
 
 | Component | Role |
 |:----------|:-----|
-| **[Chat XDK](/xchat/xchat-xdk)** | Encryption, decryption, signing, and private key storage (Juicebox or a key blob) |
+| **[Chat XDK](/xchat/xchat-xdk)** | Encryption, decryption, signing, and private key storage (secure key backup or a key blob) |
 | **X API** | Public keys, conversation keys, messages, and events—via the [Python](/xdks/python/overview) or [TypeScript](/xdks/typescript/overview) XDK, or HTTPS with a user access token |
 
 <Note>
@@ -113,9 +113,16 @@ Create an API client with your **user** OAuth 2.0 access token:
 
 ---
 
-## 2. Initialize the Chat XDK
+## 2. Initialize the Chat XDK with existing keys
 
-Load private keys with **Juicebox** (PIN + `juicebox_config` from the API) or a **key blob** (`import_keys`). Then set your registered public-key version (`public_key_version` on your record).
+This step **loads keys you already have**—use it when this identity completed first-time setup before:
+
+- **Secure key backup:** construct the SDK with the `juicebox_config` from your public-key record, then `unlock` with your passcode to recover the private keys (for example, on a new device).
+- **Key blob:** `import_keys` with a blob you previously exported via `export_keys`.
+
+Then set your registered public-key version (`public_key_version` on your record).
+
+**Setting up for the first time?** Construct the SDK the same way but skip `unlock`/`import_keys`, and continue to [step 3](#3-create-and-register-keys-first-time-setup) to create, back up, and register your keys.
 
 <Tabs>
   <Tab title="Python">
@@ -134,7 +141,7 @@ Load private keys with **Juicebox** (PIN + `juicebox_config` from the API) or a 
     signing_key_version = str(record["public_key_version"])
 
     chat = Chat(json.dumps(record["juicebox_config"]))
-    chat.unlock("YOUR_PIN")  # after first-time setup() — see next section
+    chat.unlock("YOUR_PASSCODE")  # recovers keys stored by setup() during first-time setup (step 3)
     chat.set_key_version(signing_key_version)
     ```
   </Tab>
@@ -155,7 +162,7 @@ Load private keys with **Juicebox** (PIN + `juicebox_config` from the API) or a 
       juiceboxConfig: JSON.stringify(record.juicebox_config),
       getAuthToken: async (realmId) => getRealmTokenFromYourBackend(realmId),
     });
-    await chat.unlock('YOUR_PIN');
+    await chat.unlock('YOUR_PASSCODE');
     chat.setKeyVersion(signingKeyVersion);
     ```
   </Tab>
@@ -216,13 +223,21 @@ Load private keys with **Juicebox** (PIN + `juicebox_config` from the API) or a 
   </Tab>
 </Tabs>
 
-Server and bot samples often use a **key blob** (`export_keys` / `import_keys`). Client apps often use **Juicebox** (`setup` / `unlock` with a PIN). See the [Chat XDK](/xchat/xchat-xdk) reference for both paths.
+Server and bot samples often use a **key blob** (`export_keys` / `import_keys`). Client apps often use **secure key backup** (`setup` / `unlock` with a passcode). See the [Chat XDK](/xchat/xchat-xdk) reference for both paths.
+
+<Note>
+**Bringing your own keys?** `import_keys` only accepts the opaque blob produced by `export_keys` from the Chat XDK—it is a versioned, private serialization of the full key state, not raw or PEM-encoded P-256 keys. You cannot construct this blob yourself: generate keys through `generate_keypairs` ([step 3](#3-create-and-register-keys-first-time-setup)), export the blob once, and store it base64-encoded. Hand-crafted or modified blobs fail to import.
+</Note>
 
 ---
 
-## 3. Register public keys (one-time)
+## 3. Create and register keys (first-time setup)
 
-Generate keypairs, register **public** keys with X, then store **private** keys (`setup` with a PIN, or `export_keys`).
+Skip this step if you loaded existing keys in [step 2](#2-initialize-the-chat-xdk-with-existing-keys). Otherwise, one-time setup for a new identity does **three things**:
+
+1. **Create the keypairs** — `generate_keypairs` produces the identity and signing keypairs.
+2. **Register the public keys** — POST the registration payload to the add-public-key endpoint so others can encrypt to you and verify your signatures.
+3. **Store the private keys** — `setup` with a passcode writes them to secure key backup (clients), or `export_keys` returns a key blob for you to store securely (servers and bots).
 
 <Tabs>
   <Tab title="Python">
@@ -246,7 +261,7 @@ Generate keypairs, register **public** keys with X, then store **private** keys 
             generate_version=registration.generate_version,
         ),
     )
-    chat.setup("YOUR_PIN")
+    chat.setup("YOUR_PASSCODE")
     chat.set_key_version(str(registration.version or signing_key_version))
     ```
   </Tab>
@@ -266,7 +281,7 @@ Generate keypairs, register **public** keys with X, then store **private** keys 
       version: registration.version,
       generate_version: registration.generateVersion,
     });
-    await chat.setup('YOUR_PIN');
+    await chat.setup('YOUR_PASSCODE');
     chat.setKeyVersion(String(registration.version ?? signingKeyVersion));
     ```
   </Tab>
@@ -340,7 +355,7 @@ Generate keypairs, register **public** keys with X, then store **private** keys 
 </Tabs>
 
 <Warning>
-Use a strong PIN for Juicebox. Losing the PIN or an unprotected key blob can prevent decrypting past messages.
+Use a strong passcode for secure key backup. Losing the passcode or an unprotected key blob can prevent decrypting past messages.
 </Warning>
 
 ---
@@ -962,8 +977,8 @@ Complete poll-and-reply bots for every language: [chat-xdk/examples](https://git
 - Cache raw conversation keys and sender public keys; refresh on signature verification failures
 - Deduplicate live deliveries with `event_uuid`
 - Page event history until pagination is complete so key-change metadata is not missed
-- Do not log PINs, private keys, or message plaintext in production
-- In web apps, keep OAuth tokens (and Juicebox realm token minting) on a server; prefer holding private keys only in the client Chat XDK
+- Do not log passcodes, private keys, or message plaintext in production
+- In web apps, keep OAuth tokens (and key backup realm token minting) on a server; prefer holding private keys only in the client Chat XDK
 
 ---
 

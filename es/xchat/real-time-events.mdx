@@ -8,8 +8,8 @@ X entrega **`chat.received`**, **`chat.sent`** y actividad relacionada de X Chat
 
 | Capa | Función |
 |:-----|:--------|
-| **Activity API** | `GET /2/activity/stream`; `POST` / `GET` / `PUT` / `DELETE` `/2/activity/subscriptions` (consulta la seguridad de OpenAPI por operación) |
-| **Webhooks de Account Activity** | Rutas opcionales de suscripción `/2/account_activity/webhooks/{webhook_id}` si terminas en tu propia URL HTTPS |
+| **X Activity API** | `GET /2/activity/stream`; `POST` / `GET` / `PUT` / `DELETE` `/2/activity/subscriptions` (consulta la seguridad de OpenAPI por operación) |
+| **Webhooks** | Rutas opcionales `POST` / `GET` `/2/webhooks` y `PUT` / `DELETE` `/2/webhooks/{webhook_id}` si terminas en tu propia URL HTTPS |
 | **Chat XDK** | `extract_conversation_keys`, `decrypt_event` / `decrypt_events` |
 
 Los tipos de evento privados de X Chat requieren autorización del usuario que monitoreas. Los adjuntos de archivos cifrados de X Chat usan **`media_hash_key`** y la descarga de multimedia de X Chat—no `expansions=attachments.media_keys` / `media.fields=variants` de la Post API.
@@ -37,9 +37,9 @@ Los tipos de evento privados de X Chat requieren autorización del usuario que m
 - `PUT /2/activity/subscriptions/{subscription_id}` — actualizar
 - `DELETE /2/activity/subscriptions/{subscription_id}` o `DELETE /2/activity/subscriptions?ids=` — eliminar
 
-Los cuerpos de solicitud y los scopes requeridos se definen en la operación OpenAPI de cada ruta (normalmente Bearer para la gestión XAA a nivel de app).
+Los cuerpos de solicitud y los scopes requeridos se definen en la operación OpenAPI de cada ruta. Crear una suscripción de la X Activity API (XAA) requiere **autorización de contexto de usuario** (OAuth 2.0 de contexto de usuario con los scopes correspondientes, como `dm.read` para eventos de chat) para el usuario cuya actividad monitoreas.
 
-**Webhooks (estilo Account Activity):** si terminas los eventos en tu endpoint HTTPS, registra un webhook, pasa los challenges CRC y luego crea suscripciones bajo `/2/account_activity/webhooks/{webhook_id}/subscriptions/all` (consulta las operaciones Account Activity en OpenAPI). El XDK de Python/TypeScript puede exponer helpers para webhooks y actividad cuando tu versión del SDK los incluya.
+**Webhooks:** si terminas los eventos en tu endpoint HTTPS, registra un webhook con `POST /2/webhooks`, pasa los challenges CRC y luego crea tus suscripciones de actividad con `POST /2/activity/subscriptions`, haciendo referencia a tu `webhook_id` (consulta las operaciones Webhooks y Activity en OpenAPI). El XDK de Python/TypeScript puede exponer helpers para webhooks y actividad cuando tu versión del SDK los incluya.
 
 <Tabs>
   <Tab title="Python">
@@ -51,8 +51,8 @@ Los cuerpos de solicitud y los scopes requeridos se definen en la operación Ope
     # for event in stream_client.activity.stream():
     #     handle_payload(event)  # see "Decrypt with the Chat XDK" below
 
-    # Or create a subscription (check XDK for create_subscription vs activity API)
-    client = Client(bearer_token="YOUR_BEARER_TOKEN")
+    # Or create a subscription — requires user-context auth for the monitored user
+    client = Client(access_token="YOUR_OAUTH2_USER_TOKEN")
     client.activity.create_subscription({
         "event_type": "chat.received",
         "filter": {"user_id": "USER_ID_TO_MONITOR"},
@@ -63,7 +63,8 @@ Los cuerpos de solicitud y los scopes requeridos se definen en la operación Ope
     ```typescript
     import { Client } from '@xdevplatform/xdk';
 
-    const client = new Client({ bearerToken: 'YOUR_BEARER_TOKEN' });
+    // Creating a subscription requires user-context auth for the monitored user
+    const client = new Client({ accessToken: 'YOUR_OAUTH2_USER_TOKEN' });
     await client.activity.createSubscription({
       event_type: 'chat.received',
       filter: { user_id: 'USER_ID_TO_MONITOR' },
@@ -73,13 +74,13 @@ Los cuerpos de solicitud y los scopes requeridos se definen en la operación Ope
   </Tab>
 </Tabs>
 
-Suscríbete también a `chat.sent` si necesitas copias salientes. Otros lenguajes: llama a las mismas rutas HTTPS `/2/activity/*` con un Bearer token.
+Suscríbete también a `chat.sent` si necesitas copias salientes. Otros lenguajes: llama directamente a las mismas rutas HTTPS `/2/activity/*` (token de contexto de usuario para crear suscripciones, Bearer token de app para el stream).
 
 ---
 
 ## 2. CRC (solo webhooks)
 
-Si usas webhooks de Account Activity, responde a los Challenge-Response Checks (GET `crc_token`) con HMAC-SHA256 del token usando tu consumer secret, en la forma JSON que espera tu producto de webhooks (normalmente `sha256=<base64>`).
+Si usas webhooks, responde a los Challenge-Response Checks (GET `crc_token`) con HMAC-SHA256 del token usando tu consumer secret, en la forma JSON que espera tu producto de webhooks (normalmente `sha256=<base64>`).
 
 ---
 
@@ -95,7 +96,7 @@ JavaScript usa tipos de evento en camelCase (`message`); los demás bindings usa
     from chat_xdk import Chat
 
     chat = Chat(JUICEBOX_CONFIG_JSON)
-    chat.unlock("YOUR_PIN")
+    chat.unlock("YOUR_PASSCODE")
     chat.set_key_version(SIGNING_KEY_VERSION)
     conversation_keys = {}
 
@@ -140,7 +141,7 @@ JavaScript usa tipos de evento en camelCase (`message`); los demás bindings usa
       juiceboxConfig: JUICEBOX_CONFIG_JSON,
       getAuthToken: async (realmId) => getRealmToken(realmId),
     });
-    await chat.unlock('YOUR_PIN');
+    await chat.unlock('YOUR_PASSCODE');
     chat.setKeyVersion(SIGNING_KEY_VERSION);
     const conversationKeys = new Map<string, Record<string, Uint8Array>>();
 
