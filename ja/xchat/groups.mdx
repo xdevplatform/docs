@@ -1,0 +1,192 @@
+---
+title: グループ会話
+sidebarTitle: Groups
+description: 複数参加者の X Chat 会話、鍵、および暗号化されたメタデータ
+keywords: ["X Chat groups", "group DM", "conversation keys", "group name encryption"]
+---
+
+グループチャットは、1:1 の X Chat と**同じ暗号化モデル**を使用します: メンバーで共有する 1 つの**会話鍵**を、各メンバーの **identity 公開鍵**にラップし、メッセージは Chat XDK によって暗号化・署名されます。変わるのは、**メンバーシップ**、**スレッドの作成方法**、そしてしばしば会話上の**暗号化されたタイトル/アバター**フィールドです。
+
+1:1 のフローは [Getting Started](/xchat/getting-started) にあります。エンドポイントの詳細は **API リファレンス → Conversations and messages** の下にあります。
+
+---
+
+## グループと 1:1 の違い
+
+| トピック | 1:1 | グループ |
+|:------|:----|:------|
+| 識別 | 多くの場合、パス内でピアユーザー ID によって指定される | 会話 ID は通常 `g` で始まる |
+| 作成 | 鍵 + ユーザーへのメッセージ送信 | グループ作成/初期化 API、その後鍵 |
+| 参加者 | あなた + 1 人のピア | 多数のユーザー；メンバーシップは変更可能 |
+| メタデータ | 最小限 | 名前、アバターなどが**暗号文**の可能性あり（会話鍵で復号） |
+| 鍵ローテーション | 頻度は少ない | メンバーの参加や離脱時によく発生 |
+
+暗号処理は依然として: 鍵とペイロードには **Chat XDK**、グループの作成、参加者鍵ラップの公開、メッセージの送信、イベントのロードには **X API** です。
+
+---
+
+## グループの作成と鍵の確立
+
+1. `POST /2/chat/conversations/group/initialize` でグループ ID を発行します — レスポンスの `data.conversation_id` は、以下のすべての箇所で使用する g プレフィックス付きの ID です。
+2. 各メンバーの identity 公開鍵と `public_key_version` をロードします（**Encryption keys** の下にある `GET` 公開鍵ルート；[`GET /2/users/public_keys`](/x-api/users/get-public-keys-for-multiple-users) は複数のユーザーを 1 回のリクエストで取得します）。使用前に各レコードを `verify_key_binding` で検証してください（[Getting Started](/xchat/getting-started#4-set-up-conversation-keys) の警告を参照）。
+3. **`prepare_group_create`** を、**すべての**メンバー（自分自身を含む）、g プレフィックス付き ID、メンバー/管理者 ID リストとともに一度実行します。1 回の呼び出しで会話鍵を生成し、すべてのメンバー用にラップし、作成に署名します — **2 つ**のアクション署名（会話鍵の変更とグループ作成）を返します。
+4. `POST /2/chat/conversations/group` に、グループのメンバー/管理者、`conversation_key_version`、`conversation_participant_keys`（SDK **`encrypted_key`** → API **`encrypted_conversation_key`**）、および**両方**の `action_signatures` を送信します。検証失敗は、安定した人間が読めるメッセージとして返されます。たとえば `"Too many members: adding these members would exceed the allowed group size."` や `"Cannot add all members: one or more of the requested members cannot be added to this conversation."` です。
+5. 暗号化/復号のために、**未加工の**会話鍵と**バージョン**を保持します。
+
+`prepare_group_create` に渡す `title` と `avatar_url` は署名され、グループ作成イベントにそのまま埋め込まれます。サーバーはリクエストに対してそれらを照合します — したがって、POST ボディの `group_name` / `group_avatar_url` の値は SDK に渡したものと**バイト単位で同一**でなければなりません。そうでなければ、呼び出しは署名検証に失敗します。
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    prepared = chat.prepare_group_create(
+        "YOUR_USER_ID", signing_key_version, member_public_keys,
+        group_id,  # g-prefixed id from POST /2/chat/conversations/group/initialize
+        member_ids, admin_ids, title="Project team",
+    )
+    # POST /2/chat/conversations/group with group_members, group_admins,
+    # conversation_key_version, conversation_participant_keys, and BOTH
+    # entries of prepared["action_signatures"]
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const prepared = chat.prepareGroupCreate({
+      senderId: myUserId, signingKeyVersion, publicKeys: memberPublicKeys,
+      conversationId: groupId, // g-prefixed id from POST /2/chat/conversations/group/initialize
+      memberIds, adminIds, title: 'Project team',
+    });
+    // prepared.actionSignatures has two entries — send both
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    let mut params = GroupCreateParams::new(
+        &sender_id, &signing_key_version, member_public_keys,
+        &group_id, member_ids, admin_ids,
+    );
+    params.title = Some("Project team".into());
+    let prepared = chat.prepare_group_create(params)?;
+    // prepared.action_signatures has two entries — send both
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    prepared, err := chat.PrepareGroupCreate(chatxdk.GroupCreateParams{
+        SenderID: myUserID, SigningKeyVersion: signingKeyVersion,
+        PublicKeys: memberPublicKeys, ConversationID: groupID,
+        MemberIDs: memberIDs, AdminIDs: adminIDs, Title: "Project team",
+    })
+    // prepared.ActionSignatures has two entries — send both
+    _ = prepared
+    _ = err
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    var prepared = chat.PrepareGroupCreate(new GroupCreateParams {
+        SenderId = myUserId, SigningKeyVersion = signingKeyVersion,
+        PublicKeys = memberPublicKeys, ConversationId = groupId,
+        MemberIds = memberIds, AdminIds = adminIds, Title = "Project team",
+    });
+    // prepared.ActionSignatures has two entries — send both
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    GroupCreateParams params = new GroupCreateParams();
+    params.senderId = myUserId;
+    params.signingKeyVersion = signingKeyVersion;
+    params.publicKeys = memberPublicKeys;
+    params.conversationId = groupId;
+    params.memberIds = memberIds;
+    params.adminIds = adminIds;
+    params.title = "Project team";
+    PreparedConversationChange prepared = chat.prepareGroupCreate(params);
+    // prepared.actionSignatures has two entries — send both
+    ```
+  </Tab>
+</Tabs>
+
+参加者鍵とアクション署名のボディマッピング（`message_id`、`encoded_message_event_detail`、ネストされた `message_event_signature`）は、[Getting Started — conversation keys](/xchat/getting-started#4-set-up-conversation-keys) の鍵 POST と同じです。
+
+メンバーシップが変更されたときは、**`prepare_group_members_change`** を新しいメンバー ID と現在のロスター（メンバー、管理者、保留中のメンバー、および設定されている場合は現在のタイトル/アバター/TTL）とともに呼び出します。会話鍵をローテーションし、グループ作成と同様に**2 つ**のアクション署名を返します — すべてを **add members**（`POST /2/chat/conversations/{id}/members`）に POST します。その後、**鍵変更**トラフィックが期待されます: [Getting Started の鍵ローテーション](/xchat/getting-started#6-receive-and-decrypt) のように扱います（`extract_conversation_keys` / `decrypt_events`、その後最新バージョンで暗号化）。
+
+`prepare_group_members_change` は、渡したロスターにのみラップされた**新しい**会話鍵を生成するため、新しいメンバーは新しい鍵バージョンを受け取り、以前のバージョンで送信されたメッセージを復号できません。その逆は真ではありません: ローテーションは**以前の**バージョンへのアクセスを取り消しません — 古い鍵をすでに持っている人は、その下で暗号化されたメッセージを読み続けることができます。会話鍵が漏洩したと疑われる場合は、`prepare_conversation_key_change` でローテーションしてください；これは将来のメッセージのみを保護します。
+
+---
+
+## 暗号化されたグループメタデータ
+
+一部の会話フィールド（たとえば表示**名**や**アバター URL**）は、会話鍵で**暗号化された**状態で到着することがあります。これは `encrypt_message` ではありません。汎用の Chat XDK **`encrypt` / `decrypt`** のペア（UTF-8 文字列入力、base64 暗号文出力、**未加工の**会話鍵を使用）です。
+
+特定のフィールドが暗号化されて保存されるかどうかは、それを書き込むクライアントによって決定されます: `prepare_group_create` は、提供されたとおりにタイトルに署名して送信します（会話鍵はその呼び出しが生成するまで存在しないため、作成時のタイトルはその下で暗号化できません）。フィールドが暗号文である会話を読むときは、フィールドが書き込まれたときにアクティブだった鍵バージョンで `decrypt` して復号します。
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    # Decrypt a field from the conversation object (name may vary by API shape)
+    group_name = chat.decrypt(conversation["group_name"], raw_conv_key)
+
+    # Encrypt before update if your API accepts ciphertext metadata
+    encrypted_name = chat.encrypt("Project team", raw_conv_key)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const groupName = chat.decrypt(conversation.groupName, rawConvKey);
+    const encryptedName = chat.encrypt('Project team', rawConvKey);
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    // conv_key: &XChatConversationKey from extract_conversation_keys / decrypt_conversation_key
+    let group_name = chat.decrypt(&conversation_group_name_b64, &conv_key)?;
+    let encrypted_name = chat.encrypt("Project team", &conv_key)?;
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    groupName, err := chat.Decrypt(conversationGroupNameB64, rawConvKey)
+    encryptedName, err := chat.Encrypt("Project team", rawConvKey)
+    _ = groupName
+    _ = encryptedName
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    string groupName = chat.Decrypt(conversationGroupNameB64, rawConvKey);
+    string encryptedName = chat.Encrypt("Project team", rawConvKey);
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    String groupName = chat.decrypt(conversationGroupNameB64, rawConvKey);
+    String encryptedName = chat.encrypt("Project team", rawConvKey);
+    ```
+  </Tab>
+</Tabs>
+
+そのメタデータに適用される**現在の**会話鍵バージョンを使用してください。鍵がローテーションされている場合は、フィールドが書き込まれたときにアクティブだったバージョンで復号してください（または、メタデータがローテーション時に常に書き換えられる場合は製品のルールに従ってください）。
+
+---
+
+## メッセージとイベント
+
+グループでの送受信は、未加工の会話鍵を持てば 1:1 と同じです:
+
+- **送信:** `encrypt_message` → メッセージ送信 API（[Getting Started](/xchat/getting-started#5-send-a-message)）
+- **受信:** イベント API または[リアルタイム配信](/xchat/real-time-events) → `decrypt_event` / `decrypt_events`
+- **メディア:** グループの会話 ID を使った [Media](/xchat/media)
+
+メンバーシップに起因するローテーション後は、常に**最新の**鍵バージョンで暗号化してください。
+
+---
+
+## チェックリスト
+
+1. `POST /2/chat/conversations/group/initialize` で g プレフィックス付き ID を発行する
+2. **すべての**メンバーで `prepare_group_create`；参加者鍵ラップと**両方**のアクション署名を `POST /2/chat/conversations/group` に POST する
+3. 未加工の鍵 + バージョンをキャッシュ；鍵変更イベントで更新する
+4. メンバーシップ変更時は `prepare_group_members_change`（2 つの署名）→ `POST /2/chat/conversations/{id}/members`
+5. フィールドが暗号文の場合は `decrypt` でグループメタデータを復号する
+6. 1:1 と同じパターンで送受信する

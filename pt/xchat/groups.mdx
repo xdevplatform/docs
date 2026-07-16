@@ -1,0 +1,192 @@
+---
+title: Conversas em grupo
+sidebarTitle: Grupos
+description: Conversas do X Chat com múltiplos participantes, chaves e metadados criptografados
+keywords: ["X Chat groups", "group DM", "conversation keys", "group name encryption"]
+---
+
+Os chats em grupo usam o **mesmo modelo de criptografia** do X Chat 1:1: uma **chave de conversa** compartilhada pelos membros, envelopada para a **chave pública de identidade** de cada membro, com mensagens criptografadas e assinadas pelo Chat XDK. O que muda é a **composição**, a **forma como você cria a thread** e frequentemente os campos de **título/avatar criptografados** na conversa.
+
+Os fluxos 1:1 estão em [Guia de introdução](/xchat/getting-started). Detalhes de endpoints estão em **Referência da API → Conversas e mensagens**.
+
+---
+
+## Como grupos diferem de 1:1
+
+| Tópico | 1:1 | Grupo |
+|:-------|:----|:------|
+| Identidade | Frequentemente endereçado pelo ID de usuário do par nos paths | ID da conversa normalmente começa com `g` |
+| Criar | Chaves + envio de mensagem a um usuário | APIs de criar / inicializar grupo, depois chaves |
+| Participantes | Você + um par | Muitos usuários; a composição pode mudar |
+| Metadados | Mínimos | Nome, avatar, etc. podem ser **texto cifrado** (descriptografe com a chave de conversa) |
+| Rotação de chave | Menos frequente | Comum quando pessoas entram ou saem |
+
+A criptografia ainda é: **Chat XDK** para chaves e payloads; **X API** para criar o grupo, publicar envelopes de chave para participantes, enviar mensagens e carregar eventos.
+
+---
+
+## Crie o grupo e estabeleça as chaves
+
+1. Emita o ID do grupo com `POST /2/chat/conversations/group/initialize` — o `data.conversation_id` da resposta é o ID prefixado com g que você usa em todos os passos a seguir.
+2. Carregue a chave pública de identidade e o `public_key_version` de cada membro (rotas `GET` de chave pública em **Chaves de criptografia**; [`GET /2/users/public_keys`](/x-api/users/get-public-keys-for-multiple-users) busca vários usuários em uma única requisição). Verifique cada registro com `verify_key_binding` antes de usá-lo (veja o aviso em [Guia de introdução](/xchat/getting-started#4-set-up-conversation-keys)).
+3. Execute **`prepare_group_create`** uma vez, com **todos** os membros (incluindo você mesmo), o ID prefixado com g e as listas de IDs de membros/admins. Uma chamada gera a chave de conversa, envelopa-a para cada membro e assina a criação — ela retorna **duas** assinaturas de ação (a mudança de chave de conversa e a criação do grupo).
+4. `POST /2/chat/conversations/group` com os members/admins do grupo, `conversation_key_version`, `conversation_participant_keys` (SDK **`encrypted_key`** → API **`encrypted_conversation_key`**) e **ambas** as `action_signatures`. Falhas de validação retornam mensagens estáveis e legíveis por humanos, por exemplo `"Too many members: adding these members would exceed the allowed group size."` ou `"Cannot add all members: one or more of the requested members cannot be added to this conversation."`.
+5. Mantenha a chave de conversa **em bruto** e a **versão** para criptografar/descriptografar.
+
+O `title` e o `avatar_url` que você passa para `prepare_group_create` são assinados e embutidos literalmente no evento de criação do grupo, e o servidor os compara com a requisição — portanto os valores `group_name` / `group_avatar_url` no corpo do POST precisam ser **byte a byte idênticos** ao que você passou para o SDK, ou a chamada falha na validação de assinatura.
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    prepared = chat.prepare_group_create(
+        "YOUR_USER_ID", signing_key_version, member_public_keys,
+        group_id,  # g-prefixed id from POST /2/chat/conversations/group/initialize
+        member_ids, admin_ids, title="Project team",
+    )
+    # POST /2/chat/conversations/group with group_members, group_admins,
+    # conversation_key_version, conversation_participant_keys, and BOTH
+    # entries of prepared["action_signatures"]
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const prepared = chat.prepareGroupCreate({
+      senderId: myUserId, signingKeyVersion, publicKeys: memberPublicKeys,
+      conversationId: groupId, // g-prefixed id from POST /2/chat/conversations/group/initialize
+      memberIds, adminIds, title: 'Project team',
+    });
+    // prepared.actionSignatures has two entries — send both
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    let mut params = GroupCreateParams::new(
+        &sender_id, &signing_key_version, member_public_keys,
+        &group_id, member_ids, admin_ids,
+    );
+    params.title = Some("Project team".into());
+    let prepared = chat.prepare_group_create(params)?;
+    // prepared.action_signatures has two entries — send both
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    prepared, err := chat.PrepareGroupCreate(chatxdk.GroupCreateParams{
+        SenderID: myUserID, SigningKeyVersion: signingKeyVersion,
+        PublicKeys: memberPublicKeys, ConversationID: groupID,
+        MemberIDs: memberIDs, AdminIDs: adminIDs, Title: "Project team",
+    })
+    // prepared.ActionSignatures has two entries — send both
+    _ = prepared
+    _ = err
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    var prepared = chat.PrepareGroupCreate(new GroupCreateParams {
+        SenderId = myUserId, SigningKeyVersion = signingKeyVersion,
+        PublicKeys = memberPublicKeys, ConversationId = groupId,
+        MemberIds = memberIds, AdminIds = adminIds, Title = "Project team",
+    });
+    // prepared.ActionSignatures has two entries — send both
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    GroupCreateParams params = new GroupCreateParams();
+    params.senderId = myUserId;
+    params.signingKeyVersion = signingKeyVersion;
+    params.publicKeys = memberPublicKeys;
+    params.conversationId = groupId;
+    params.memberIds = memberIds;
+    params.adminIds = adminIds;
+    params.title = "Project team";
+    PreparedConversationChange prepared = chat.prepareGroupCreate(params);
+    // prepared.actionSignatures has two entries — send both
+    ```
+  </Tab>
+</Tabs>
+
+O mapeamento do corpo para chaves de participantes e assinaturas de ação (`message_id`, `encoded_message_event_detail`, `message_event_signature` aninhado) é o mesmo do POST de chaves em [Guia de introdução — chaves de conversa](/xchat/getting-started#4-set-up-conversation-keys).
+
+Quando a composição muda, chame **`prepare_group_members_change`** com os novos IDs de membros mais a lista atual (membros, admins, membros pendentes e o título/avatar/TTL atuais, se definidos). Ela rotaciona a chave de conversa e, como a criação de grupo, retorna **duas** assinaturas de ação — faça POST de tudo em **add members** (`POST /2/chat/conversations/{id}/members`). Depois, espere tráfego de **mudança de chave**: trate-o como a [rotação de chave no Guia de introdução](/xchat/getting-started#6-receive-and-decrypt) (`extract_conversation_keys` / `decrypt_events`, depois criptografe com a versão mais recente).
+
+Como `prepare_group_members_change` gera uma **nova** chave de conversa envelopada apenas para a lista que você passa, novos membros recebem a nova versão da chave e não podem descriptografar mensagens enviadas sob versões anteriores. O inverso não é verdadeiro: a rotação nunca revoga o acesso a versões **anteriores** — quem já possui uma chave antiga ainda pode ler as mensagens criptografadas sob ela. Se você suspeitar que uma chave de conversa foi exposta, rotacione com `prepare_conversation_key_change`; isso protege apenas mensagens futuras.
+
+---
+
+## Metadados de grupo criptografados
+
+Alguns campos de conversa (por exemplo, **nome** de exibição ou **URL do avatar**) podem chegar **criptografados** sob a chave de conversa. Isso **não** é `encrypt_message`; é o par genérico **`encrypt` / `decrypt`** do Chat XDK (string UTF-8 na entrada, texto cifrado base64 na saída, com a chave de conversa **em bruto**).
+
+Se um dado campo é armazenado criptografado é decidido pelo cliente que o escreve: `prepare_group_create` assina e envia o título exatamente como você o fornece (a chave de conversa não existe até que essa chamada a gere, então um título no momento da criação não pode ser criptografado sob ela). Quando você lê uma conversa cujos campos são texto cifrado, descriptografe-os com `decrypt` e a versão de chave que estava ativa quando o campo foi escrito.
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    # Decrypt a field from the conversation object (name may vary by API shape)
+    group_name = chat.decrypt(conversation["group_name"], raw_conv_key)
+
+    # Encrypt before update if your API accepts ciphertext metadata
+    encrypted_name = chat.encrypt("Project team", raw_conv_key)
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const groupName = chat.decrypt(conversation.groupName, rawConvKey);
+    const encryptedName = chat.encrypt('Project team', rawConvKey);
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    // conv_key: &XChatConversationKey from extract_conversation_keys / decrypt_conversation_key
+    let group_name = chat.decrypt(&conversation_group_name_b64, &conv_key)?;
+    let encrypted_name = chat.encrypt("Project team", &conv_key)?;
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    groupName, err := chat.Decrypt(conversationGroupNameB64, rawConvKey)
+    encryptedName, err := chat.Encrypt("Project team", rawConvKey)
+    _ = groupName
+    _ = encryptedName
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    string groupName = chat.Decrypt(conversationGroupNameB64, rawConvKey);
+    string encryptedName = chat.Encrypt("Project team", rawConvKey);
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    String groupName = chat.decrypt(conversationGroupNameB64, rawConvKey);
+    String encryptedName = chat.encrypt("Project team", rawConvKey);
+    ```
+  </Tab>
+</Tabs>
+
+Use a versão **atual** da chave de conversa que se aplica a esse metadado. Se as chaves foram rotacionadas, descriptografe com a versão que estava ativa quando o campo foi escrito (ou siga as regras do produto se os metadados são sempre reescritos na rotação).
+
+---
+
+## Mensagens e eventos
+
+Enviar e receber em um grupo é igual ao 1:1 uma vez que você tem a chave de conversa em bruto:
+
+- **Enviar:** `encrypt_message` → API de enviar mensagem ([Guia de introdução](/xchat/getting-started#5-send-a-message))
+- **Receber:** API de eventos ou [entrega em tempo real](/xchat/real-time-events) → `decrypt_event` / `decrypt_events`
+- **Mídia:** [Mídia](/xchat/media) com o ID de conversa do grupo
+
+Sempre criptografe com a versão de chave **mais recente** após uma rotação motivada por mudança de composição.
+
+---
+
+## Checklist
+
+1. Emita o ID prefixado com g com `POST /2/chat/conversations/group/initialize`  
+2. `prepare_group_create` com **cada** membro; POST dos envelopes de chave dos participantes e **ambas** as assinaturas de ação para `POST /2/chat/conversations/group`  
+3. Faça cache da chave em bruto + versão; atualize em eventos de mudança de chave  
+4. Em mudanças de composição, `prepare_group_members_change` (duas assinaturas) → `POST /2/chat/conversations/{id}/members`  
+5. Descriptografe metadados de grupo com `decrypt` quando os campos são texto cifrado  
+6. Envie/receba com os mesmos padrões do 1:1  
