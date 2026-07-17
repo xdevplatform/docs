@@ -10,7 +10,7 @@ X delivers **`chat.received`**, **`chat.sent`**, and related X Chat activity wit
 |:------|:-----|
 | **X Activity API** | `GET /2/activity/stream`; `POST` / `GET` / `PUT` / `DELETE` `/2/activity/subscriptions` (see OpenAPI security per operation) |
 | **Webhooks** | Optional `POST` / `GET` `/2/webhooks` and `PUT` / `DELETE` `/2/webhooks/{webhook_id}` routes if you terminate on your own HTTPS URL |
-| **Chat XDK** | `extract_conversation_keys`, `decrypt_event` / `decrypt_events` |
+| **Chat XDK** | `decrypt_event` / `decrypt_events`, with the `set_signing_keys` / `set_cache_keys` session stores |
 
 Private X Chat event types need authorization for the user you monitor. Encrypted X Chat file attachments use **`media_hash_key`** and X Chat media download—not Post API `expansions=attachments.media_keys` / `media.fields=variants`.
 
@@ -86,118 +86,76 @@ If you use webhooks, respond to Challenge-Response Checks (GET `crc_token`) with
 
 ## 3. Decrypt with the Chat XDK
 
-Live fields: **`payload.encoded_event`**, optional **`payload.conversation_key_change_event`**. Deduplicate on **`event_uuid`**.
+Live fields: **`payload.encoded_event`**, optional **`payload.conversation_key_change_event`**. Deduplicate deliveries on **`event_uuid`**; deduplicate messages on the **`message_id`** carried in the decrypted event—it is part of the signed content, while sequence ids are backend-assigned, unsigned metadata.
+
+Set the session stores once—signing keys for all participants (`set_signing_keys`) and the opt-in conversation-key cache (`set_cache_keys`)—then decrypt each live event with `decrypt_event`; the omitted key arguments resolve from the stores. When a payload carries `conversation_key_change_event`, run it through `decrypt_events` first: that verifies the key change and, with caching on, retains its key for the `decrypt_event` call.
 
 JavaScript uses camelCase event types (`message`); other bindings use `"Message"` and snake_case fields.
 
 <Tabs>
   <Tab title="Python">
     ```python
-    from chat_xdk import Chat
-
-    chat = Chat(JUICEBOX_CONFIG_JSON)
-    chat.unlock("YOUR_PASSCODE")
-    chat.set_key_version(SIGNING_KEY_VERSION)
-    conversation_keys = {}
-
-    def signing_keys(user_id: str):
-        resp = api_client.chat.get_user_public_keys(
-            user_id,
-            public_key_fields=[
-                "public_key_version", "public_key", "signing_public_key", "identity_public_key_signature",
-            ],
-        )
-        return [
-            {
-                "user_id": user_id,
-                "public_key_version": r["public_key_version"],
-                "public_key": r["signing_public_key"],
-                "identity_public_key": r["public_key"],
-                "identity_public_key_signature": r["identity_public_key_signature"],
-            }
-            for r in resp.data
-        ]
+    # chat has keys loaded and set_identity called (see Getting Started)
+    chat.set_cache_keys(True)
+    chat.set_signing_keys(participant_signing_keys)  # all participants, from the public-key routes
 
     data = body.get("data") or {}
     if data.get("event_type") in ("chat.received", "chat.sent"):
         p = data.get("payload") or {}
-        cid = p.get("conversation_id")
         if p.get("conversation_key_change_event"):
-            conversation_keys[cid] = chat.extract_conversation_keys(
-                [p["conversation_key_change_event"]]
-            )["keys"]
-        ev = chat.decrypt_event(
-            p["encoded_event"],
-            conversation_keys.get(cid, {}),
-            signing_keys(p["sender_id"]),
-        )
+            # Verify the key change and retain its key in the cache
+            chat.decrypt_events([p["conversation_key_change_event"]])
+        ev = chat.decrypt_event(p["encoded_event"])
+        if ev["type"] == "Message":
+            print(ev["sender_id"], ev["content"]["text"])
     ```
   </Tab>
   <Tab title="TypeScript">
     ```typescript
-    import { createChat } from '@xdevplatform/chat-xdk';
-
-    const chat = await createChat({
-      juiceboxConfig: JUICEBOX_CONFIG_JSON,
-      getAuthToken: async (realmId) => getRealmToken(realmId),
-    });
-    await chat.unlock('YOUR_PASSCODE');
-    chat.setKeyVersion(SIGNING_KEY_VERSION);
-    const conversationKeys = new Map<string, Record<string, Uint8Array>>();
-
-    async function signingKeys(userId: string) {
-      const resp = await apiClient.chat.getUserPublicKeys(userId, {
-        publicKeyFields: [
-          'public_key_version', 'public_key', 'signing_public_key', 'identity_public_key_signature',
-        ],
-      });
-      return resp.data.map((r: any) => ({
-        userId,
-        publicKeyVersion: r.public_key_version,
-        publicKey: r.signing_public_key,
-        identityPublicKey: r.public_key,
-        identityPublicKeySignature: r.identity_public_key_signature,
-      }));
-    }
+    // chat has keys loaded and setIdentity called (see Getting Started)
+    chat.setCacheKeys(true);
+    chat.setSigningKeys(participantSigningKeys); // all participants, from the public-key routes
 
     const data = body?.data ?? {};
     if (data.event_type === 'chat.received' || data.event_type === 'chat.sent') {
       const p = data.payload ?? {};
-      const cid = p.conversation_id as string;
       if (p.conversation_key_change_event) {
-        conversationKeys.set(
-          cid,
-          chat.extractConversationKeys([p.conversation_key_change_event]).keys,
-        );
+        // Verify the key change and retain its key in the cache
+        chat.decryptEvents([p.conversation_key_change_event]);
       }
-      const ev = chat.decryptEvent(
-        p.encoded_event,
-        conversationKeys.get(cid) ?? {},
-        await signingKeys(p.sender_id),
-      );
+      const ev = chat.decryptEvent(p.encoded_event);
+      if (ev.type === 'message') {
+        console.log(ev.senderId, ev.content.text);
+      }
     }
     ```
   </Tab>
   <Tab title="Rust">
     ```rust
-    // chat: ChatCore or Chat, already unlocked / keys imported
+    // chat has keys loaded and set_identity called (see Getting Started)
+    chat.set_cache_keys(true);
+    chat.set_signing_keys(participant_signing_keys); // all participants
+
     if let Some(kc) = key_change.as_deref() {
-        let extracted = chat.extract_conversation_keys(&[kc]);
-        conv_keys.extend(extracted.keys);
+        // Verify the key change and retain its key in the cache
+        let _ = chat.decrypt_events(&[kc], &[]);
     }
-    // sender_signing_keys from GET /2/users/{sender_id}/public_keys
-    let event = chat.decrypt_event(&encoded_event, &conv_keys, &sender_signing_keys)?;
+    // Empty arguments resolve from the key cache and signing-key store
+    let event = chat.decrypt_event(&encoded_event, &Default::default(), &[])?;
     ```
   </Tab>
   <Tab title="Go">
     ```go
+    // chat has keys loaded and SetIdentity called (see Getting Started)
+    chat.SetCacheKeys(true)
+    _ = chat.SetSigningKeys(participantSigningKeys) // all participants
+
     if keyChange != "" {
-        extracted, _ := chat.ExtractConversationKeys([]string{keyChange})
-        for v, k := range extracted.Keys {
-            convKeys[v] = k
-        }
+        // Verify the key change and retain its key in the cache
+        _, _ = chat.DecryptEvents([]string{keyChange}, nil)
     }
-    event, err := chat.DecryptEvent(encodedEvent, convKeys, senderSigningKeys)
+    // nil arguments resolve from the key cache and signing-key store
+    event, err := chat.DecryptEvent(encodedEvent, nil, nil)
     if err == nil && event.Type == "Message" {
         fmt.Println(event.AsMessage().Text())
     }
@@ -205,30 +163,41 @@ JavaScript uses camelCase event types (`message`); other bindings use `"Message"
   </Tab>
   <Tab title="C#">
     ```csharp
+    // chat has keys loaded and SetIdentity called (see Getting Started)
+    chat.SetCacheKeys(true);
+    chat.SetSigningKeys(participantSigningKeys); // all participants
+
     if (!string.IsNullOrEmpty(keyChangeB64))
     {
-        var extracted = chat.ExtractConversationKeys(new[] { keyChangeB64 });
-        foreach (var kv in extracted.Keys)
-            convKeys[kv.Key] = kv.Value;
+        // Verify the key change and retain its key in the cache
+        chat.DecryptEvents(new[] { keyChangeB64 });
     }
-    var evt = chat.DecryptEvent(encodedEvent, convKeys, senderSigningKeys);
+    // Omitted arguments resolve from the key cache and signing-key store
+    var evt = chat.DecryptEvent(encodedEvent);
     if (evt.GetProperty("type").GetString() == "Message")
         Console.WriteLine(evt.GetProperty("content").GetProperty("text").GetString());
     ```
   </Tab>
   <Tab title="Java">
     ```java
+    // chat has keys loaded and setIdentity called (see Getting Started)
+    chat.setCacheKeys(true);
+    chat.setSigningKeys(participantSigningKeys); // all participants
+
     if (keyChangeB64 != null && !keyChangeB64.isEmpty()) {
-        var extracted = chat.extractConversationKeys(List.of(keyChangeB64));
-        convKeys.putAll(extracted.keys);
+        // Verify the key change and retain its key in the cache
+        chat.decryptEvents(List.of(keyChangeB64), null);
     }
-    JsonNode evt = chat.decryptEvent(encodedEvent, convKeys, senderSigningKeys);
+    // null arguments resolve from the key cache and signing-key store
+    JsonNode evt = chat.decryptEvent(encodedEvent, (Map<String, byte[]>) null, null);
     if ("Message".equals(evt.path("type").asText())) {
         System.out.println(evt.path("content").path("text").asText());
     }
     ```
   </Tab>
 </Tabs>
+
+To keep the key maps in your own hands instead, `extract_conversation_keys` decrypts the keys from `conversation_key_change_event` and `decrypt_event` accepts them (and the sender's signing keys) as explicit arguments—an explicit non-empty argument always wins over the stores.
 
 History: [`GET /2/chat/conversations/{id}/events`](/x-api/chat/get-chat-conversation-events) + **`decrypt_events`** — see [Getting Started](/xchat/getting-started#6-receive-and-decrypt).
 
@@ -257,6 +226,6 @@ History: [`GET /2/chat/conversations/{id}/events`](/x-api/chat/get-chat-conversa
 ## Practices
 
 - Verify webhook signatures per platform requirements
-- Cache conversation keys and sender public keys
-- Apply key-change blobs before decrypting dependent messages
-- Deduplicate on `event_uuid`
+- Set the session stores once: `set_signing_keys` for all participants, `set_cache_keys(true)` for conversation keys
+- Apply key-change blobs (via `decrypt_events`) before decrypting dependent messages
+- Deduplicate deliveries on `event_uuid` and messages on the signed `message_id`

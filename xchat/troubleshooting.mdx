@@ -62,55 +62,55 @@ For webhooks, OAuth, HTTP status codes, and rate limits, use the general [X API]
   </Tab>
 </Tabs>
 
-### Encrypt or decrypt fails because keys are not loaded
+### Encrypt or decrypt fails because keys or identity are not set
 
-Load private keys first, then set the public-key **version** from your record on X.
+Load private keys first, then set the **session identity**—your user id plus the `public_key_version` from your record on X. The `encrypt_*` and `prepare_*` methods sign with it; calling them with no session identity (and no explicit per-call override) is an error.
 
 <Tabs>
   <Tab title="Python">
     ```python
     chat.unlock(passcode)  # or: chat.import_keys(blob)
-    chat.set_key_version(signing_key_version)
+    chat.set_identity(my_user_id, signing_key_version)
     ```
   </Tab>
   <Tab title="TypeScript">
     ```typescript
     await chat.unlock(passcode);
-    chat.setKeyVersion(signingKeyVersion);
+    chat.setIdentity(myUserId, signingKeyVersion);
     ```
   </Tab>
   <Tab title="Rust">
     ```rust
     chat.import_keys(&blob)?;
-    chat.set_key_version(&signing_key_version);
+    chat.set_identity(&my_user_id, &signing_key_version);
     ```
   </Tab>
   <Tab title="Go">
     ```go
     blob, _ := chatxdk.Base64ToBytes(privateKeysB64)
     _ = chat.ImportKeys(blob)
-    chat.SetKeyVersion(signingKeyVersion)
+    _ = chat.SetIdentity(myUserID, signingKeyVersion)
     ```
   </Tab>
   <Tab title="C#">
     ```csharp
     chat.ImportKeys(blobBytes);
-    chat.SetKeyVersion(signingKeyVersion);
+    chat.SetIdentity(myUserId, signingKeyVersion);
     ```
   </Tab>
   <Tab title="Java">
     ```java
     chat.importKeys(blobBytes);
-    chat.setKeyVersion(signingKeyVersion);
+    chat.setIdentity(myUserId, signingKeyVersion);
     ```
   </Tab>
 </Tabs>
 
 ### Missing conversation key for a message
 
-You do not have the **raw** key for that message’s `conversation_key_version`.
+An error like `Message encrypted with key version '…' but no matching key found` means you do not have the **raw** key for that message’s `conversation_key_version`.
 
-1. Decrypt key material from `conversation_key_change_event` (live events) or `meta.conversation_key_events` (history) with `extract_conversation_keys`, **or** include those blobs in `decrypt_events`
+1. Decrypt key material from `conversation_key_change_event` (live events) or `meta.conversation_key_events` (history) with `extract_conversation_keys`, **or** include those blobs in `decrypt_events`—with `set_cache_keys(true)` enabled, `decrypt_events` also retains each conversation’s latest verified key so later `decrypt_event` and `encrypt_*` calls can omit it
 2. Confirm conversation keys were added for that version and you are still a participant (see [Getting Started](/xchat/getting-started#4-set-up-conversation-keys))
 
 ### Peer has no public keys
@@ -132,6 +132,7 @@ They may not have finished onboarding. After they register, load `public_key`, `
 Verification is **fail-closed by default** (`reject_unverified = true`): the SDK already rejects unverified signed events, so a failure here means the verification inputs are wrong, not that you need to turn checking on. Common causes:
 
 - Missing or incomplete signing-key entry for the **sender** (all fields required by the Chat XDK—see the [Chat XDK](/xchat/xchat-xdk) reference)
+- No signing keys passed on the call and none stored via `set_signing_keys`
 - The sender rotated versions—re-fetch their public keys
 - A key version below the accepted floor never verifies
 
@@ -170,6 +171,10 @@ The `set_reject_unverified` setter exists to opt **out** of this default (`false
   </Tab>
 </Tabs>
 
+### A reply carries `reply_preview_validation: "Invalid"`
+
+Decrypted replies may carry `reply_preview_validation` (`"Valid"` / `"Invalid"`; JavaScript uses `'valid'` / `'invalid'`). `Invalid` means the quoted preview inside the message does not match the signed original event it embeds—treat the quote as untrusted and render the quoted content only from the validated original. The message itself is verified separately and is still authentic; nothing throws for an invalid preview.
+
 ### Old events permanently fail verification
 
 Errors like `signature missing or no matching signing key` or an ECDSA mismatch on **old** events are permanent. Signatures are immutable and verified by rebuilding the signed payload from the event itself, so an event that was signed over different bytes (or never signed) fails on every future load—no retry, key refresh, or API call can heal it. Treat these events as tombstones, not retryable errors. Rotating the conversation key starts a clean, verifiable history from that point forward; new messages are unaffected.
@@ -184,8 +189,8 @@ These mistakes are specific to X Chat encryption (not general HTTP errors):
 |:------|:----|
 | Wrong key bytes | Pass the **raw** conversation key bytes into the Chat XDK, not the encrypted key string from the API |
 | Wrong JSON field names | Map `encrypted_content` → `encoded_message_create_event` and `encoded_event_signature` → `encoded_message_event_signature` |
-| Missing message id | Generate `message_id` yourself and send the same value in the request body |
-| Version mismatch | Align `conversation_key_version` with the key you use; align signing key version with `set_key_version` / your public-key record |
+| Wrong message id | Send the `message_id` from the returned payload—the SDK generates it and embeds it in the signed event, so any other value fails. On retries, reuse the same encrypted payload so the id is never minted twice |
+| Version mismatch | Align `conversation_key_version` with the key you use; align the signing key version passed to `set_identity` with your public-key record |
 | Path id form | URL paths still need the hyphenated conversation id (`:` → `-`), but for signing the SDK accepts any form: `A:B`, `A-B` (either order), or the bare recipient user id—all canonicalize to the same signed bytes |
 
 ### API returns 400 for a state-changing call
@@ -210,5 +215,5 @@ When investigating crypto failures:
 
 - Log conversation ids, event ids, and key **versions** only
 - Do **not** log plaintext, passcodes, private keys, or full key blobs
-- Confirm `set_key_version` matches the `public_key_version` on your public-key record
+- Confirm the signing-key version passed to `set_identity` matches the `public_key_version` on your public-key record
 - For incomplete history, page **all** event pages so key-change metadata is not skipped before decrypting

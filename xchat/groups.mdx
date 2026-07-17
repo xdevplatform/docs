@@ -29,7 +29,7 @@ Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the gro
 
 1. Mint the group id with `POST /2/chat/conversations/group/initialize` — the response's `data.conversation_id` is the g-prefixed id you use everywhere below.
 2. Load each member's identity public key and `public_key_version` (`GET` public-key routes under **Encryption keys**; [`GET /2/users/public_keys`](/x-api/users/get-public-keys-for-multiple-users) fetches several users in one request). Verify each record with `verify_key_binding` before using it (see the warning in [Getting Started](/xchat/getting-started#4-set-up-conversation-keys)).
-3. Run **`prepare_group_create`** once, with **all** members (including yourself), the g-prefixed id, and the member/admin id lists. One call generates the conversation key, wraps it for every member, and signs the create — it returns **two** action signatures (the conversation-key change and the group create).
+3. Run **`prepare_group_create`** once, with **all** members (including yourself), the g-prefixed id, and the member/admin id lists. One call generates the conversation key, wraps it for every member, and signs the create with the session identity from `set_identity` — it returns **two** action signatures (the conversation-key change and the group create).
 4. `POST /2/chat/conversations/group` with the group members/admins, `conversation_key_version`, `conversation_participant_keys` (SDK **`encrypted_key`** → API **`encrypted_conversation_key`**), and **both** `action_signatures`. Validation failures come back as stable, human-readable messages, for example `"Too many members: adding these members would exceed the allowed group size."` or `"Cannot add all members: one or more of the requested members cannot be added to this conversation."`.
 5. Keep the **raw** conversation key and **version** for encrypt/decrypt.
 
@@ -38,8 +38,9 @@ Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the gro
 <Tabs>
   <Tab title="Python">
     ```python
+    # chat has keys loaded and set_identity called (see Getting Started)
     prepared = chat.prepare_group_create(
-        "YOUR_USER_ID", signing_key_version, member_public_keys,
+        member_public_keys,
         group_id,  # g-prefixed id from POST /2/chat/conversations/group/initialize
         member_ids, admin_ids, title="Project team",
     )
@@ -50,8 +51,9 @@ Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the gro
   </Tab>
   <Tab title="TypeScript">
     ```typescript
+    // chat has keys loaded and setIdentity called (see Getting Started)
     const prepared = chat.prepareGroupCreate({
-      senderId: myUserId, signingKeyVersion, publicKeys: memberPublicKeys,
+      publicKeys: memberPublicKeys,
       conversationId: groupId, // g-prefixed id from POST /2/chat/conversations/group/initialize
       memberIds, adminIds, title: 'Project team',
     });
@@ -60,9 +62,9 @@ Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the gro
   </Tab>
   <Tab title="Rust">
     ```rust
+    // chat has keys loaded and set_identity called (see Getting Started)
     let mut params = GroupCreateParams::new(
-        &sender_id, &signing_key_version, member_public_keys,
-        &group_id, member_ids, admin_ids,
+        member_public_keys, &group_id, member_ids, admin_ids,
     );
     params.title = Some("Project team".into());
     let prepared = chat.prepare_group_create(params)?;
@@ -71,8 +73,8 @@ Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the gro
   </Tab>
   <Tab title="Go">
     ```go
+    // chat has keys loaded and SetIdentity called (see Getting Started)
     prepared, err := chat.PrepareGroupCreate(chatxdk.GroupCreateParams{
-        SenderID: myUserID, SigningKeyVersion: signingKeyVersion,
         PublicKeys: memberPublicKeys, ConversationID: groupID,
         MemberIDs: memberIDs, AdminIDs: adminIDs, Title: "Project team",
     })
@@ -83,23 +85,20 @@ Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the gro
   </Tab>
   <Tab title="C#">
     ```csharp
-    var prepared = chat.PrepareGroupCreate(new GroupCreateParams {
-        SenderId = myUserId, SigningKeyVersion = signingKeyVersion,
-        PublicKeys = memberPublicKeys, ConversationId = groupId,
-        MemberIds = memberIds, AdminIds = adminIds, Title = "Project team",
-    });
+    // chat has keys loaded and SetIdentity called (see Getting Started)
+    var prepared = chat.PrepareGroupCreate(
+        new GroupCreateParams(memberPublicKeys, groupId, memberIds, adminIds)
+        {
+            Title = "Project team",
+        });
     // prepared.ActionSignatures has two entries — send both
     ```
   </Tab>
   <Tab title="Java">
     ```java
-    GroupCreateParams params = new GroupCreateParams();
-    params.senderId = myUserId;
-    params.signingKeyVersion = signingKeyVersion;
-    params.publicKeys = memberPublicKeys;
-    params.conversationId = groupId;
-    params.memberIds = memberIds;
-    params.adminIds = adminIds;
+    // chat has keys loaded and setIdentity called (see Getting Started)
+    GroupCreateParams params =
+        new GroupCreateParams(memberPublicKeys, groupId, memberIds, adminIds);
     params.title = "Project team";
     PreparedConversationChange prepared = chat.prepareGroupCreate(params);
     // prepared.actionSignatures has two entries — send both
