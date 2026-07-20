@@ -1,7 +1,7 @@
 ---
 title: トラブルシューティング
 sidebarTitle: トラブルシューティング
-description: Chat XDK のエラー、セキュアな鍵バックアップからの復元、復号の失敗など、X Chat の暗号化に関するよくある問題を診断します。
+description: Chat XDK のエラー、安全な鍵バックアップからの復元、復号の失敗、署名付き送信ペイロードの構築など、X Chat の暗号化に関するよくある問題を診断します。
 keywords: ["X Chat errors", "Chat XDK", "decryption", "secure key backup", "encryption"]
 ---
 
@@ -62,55 +62,55 @@ Webhook、OAuth、HTTP ステータスコード、レート制限については
   </Tab>
 </Tabs>
 
-### 鍵がロードされていないため暗号化または復号に失敗する
+### 鍵や identity が未設定のために暗号化または復号に失敗する
 
-まず秘密鍵をロードし、次に X のレコードから公開鍵**バージョン**を設定します。
+まず秘密鍵をロードし、次に**セッション ID**を設定します — あなたのユーザー ID と X 上のレコードの `public_key_version` です。`encrypt_*` および `prepare_*` メソッドはこの ID で署名します；セッション ID が未設定（かつ呼び出しごとの明示的な上書きもない状態）でそれらを呼び出すとエラーになります。
 
 <Tabs>
   <Tab title="Python">
     ```python
     chat.unlock(passcode)  # or: chat.import_keys(blob)
-    chat.set_key_version(signing_key_version)
+    chat.set_identity(my_user_id, signing_key_version)
     ```
   </Tab>
   <Tab title="TypeScript">
     ```typescript
     await chat.unlock(passcode);
-    chat.setKeyVersion(signingKeyVersion);
+    chat.setIdentity(myUserId, signingKeyVersion);
     ```
   </Tab>
   <Tab title="Rust">
     ```rust
     chat.import_keys(&blob)?;
-    chat.set_key_version(&signing_key_version);
+    chat.set_identity(&my_user_id, &signing_key_version);
     ```
   </Tab>
   <Tab title="Go">
     ```go
     blob, _ := chatxdk.Base64ToBytes(privateKeysB64)
     _ = chat.ImportKeys(blob)
-    chat.SetKeyVersion(signingKeyVersion)
+    _ = chat.SetIdentity(myUserID, signingKeyVersion)
     ```
   </Tab>
   <Tab title="C#">
     ```csharp
     chat.ImportKeys(blobBytes);
-    chat.SetKeyVersion(signingKeyVersion);
+    chat.SetIdentity(myUserId, signingKeyVersion);
     ```
   </Tab>
   <Tab title="Java">
     ```java
     chat.importKeys(blobBytes);
-    chat.setKeyVersion(signingKeyVersion);
+    chat.setIdentity(myUserId, signingKeyVersion);
     ```
   </Tab>
 </Tabs>
 
 ### メッセージに対する会話鍵が欠落している
 
-そのメッセージの `conversation_key_version` に対応する**未加工の**鍵を持っていません。
+`Message encrypted with key version '…' but no matching key found` のようなエラーは、そのメッセージの `conversation_key_version` に対応する**未加工の**鍵を持っていないことを意味します。
 
-1. `extract_conversation_keys` で `conversation_key_change_event`（ライブイベント）または `meta.conversation_key_events`（履歴）から鍵素材を復号する、**または**これらの blob を `decrypt_events` に含める
+1. `extract_conversation_keys` で `conversation_key_change_event`（ライブイベント）または `meta.conversation_key_events`（履歴）から鍵素材を復号する、**または**これらの blob を `decrypt_events` に含める — `set_cache_keys(true)` が有効な場合、`decrypt_events` は各会話の最新の検証済み鍵も保持し、後続の `decrypt_event` と `encrypt_*` の呼び出しでは省略できます
 2. そのバージョンの会話鍵が追加されていること、およびあなたがまだ参加者であることを確認する（[Getting Started](/xchat/getting-started#4-set-up-conversation-keys) を参照）
 
 ### ピアが公開鍵を持っていない
@@ -132,8 +132,9 @@ Webhook、OAuth、HTTP ステータスコード、レート制限については
 検証は**デフォルトで fail-closed**（`reject_unverified = true`）です: SDK はすでに検証されていない署名付きイベントを拒否しているため、ここでの失敗はチェックをオンにする必要があるという意味ではなく、検証入力が間違っていることを意味します。一般的な原因:
 
 - **送信者**の署名鍵エントリが欠落または不完全（Chat XDK に必要なすべてのフィールド — [Chat XDK](/xchat/xchat-xdk) リファレンスを参照）
+- 呼び出しに署名鍵が渡されておらず、`set_signing_keys` 経由で保存もされていない
 - 送信者がバージョンをローテーションした — 公開鍵を再取得する
-- 受け入れフロアより下の鍵バージョンは検証されない
+- 受け入れフロアより下の鍵バージョンは決して検証されない
 
 `set_reject_unverified` セッターは、このデフォルトから**オプトアウト**する（`false`、推奨されません）ために存在します。以前に無効化した場合は、fail-closed のデフォルトを復元してください:
 
@@ -170,6 +171,10 @@ Webhook、OAuth、HTTP ステータスコード、レート制限については
   </Tab>
 </Tabs>
 
+### 返信の `reply_preview_validation` が `"Invalid"` になる
+
+復号された返信には `reply_preview_validation`（`"Valid"` / `"Invalid"`；JavaScript は `'valid'` / `'invalid'` を使用）が付与される場合があります。`Invalid` は、メッセージ内の引用プレビューが埋め込まれた署名済みオリジナルイベントと一致しないことを意味します — 引用は信頼できないものとして扱い、引用コンテンツは検証済みのオリジナルからのみレンダリングしてください。メッセージ自体は別に検証されており依然として真正です；無効なプレビューによって例外がスローされることはありません。
+
 ### 古いイベントが恒久的に検証に失敗する
 
 **古い**イベントでの `signature missing or no matching signing key` や ECDSA の不一致のようなエラーは恒久的です。署名は不変であり、イベント自体から署名済みペイロードを再構築することで検証されるため、異なるバイトに対して署名された（またはそもそも署名されていない）イベントは、将来のすべてのロードで失敗します — 再試行、鍵の更新、または API 呼び出しでは治せません。これらのイベントは、再試行可能なエラーではなくトゥームストーンとして扱ってください。会話鍵をローテーションすると、その時点からクリーンで検証可能な履歴が始まります；新しいメッセージには影響しません。
@@ -184,8 +189,8 @@ Webhook、OAuth、HTTP ステータスコード、レート制限については
 |:------|:----|
 | 間違った鍵バイト | API からの暗号化された鍵文字列ではなく、**未加工の**会話鍵バイトを Chat XDK に渡す |
 | 間違った JSON フィールド名 | `encrypted_content` → `encoded_message_create_event`、`encoded_event_signature` → `encoded_message_event_signature` にマップする |
-| メッセージ ID の欠落 | `message_id` を自分で生成し、同じ値をリクエストボディで送信する |
-| バージョンの不一致 | `conversation_key_version` を使用する鍵と揃える；署名鍵バージョンを `set_key_version` / 公開鍵レコードと揃える |
+| 間違ったメッセージ ID | 返却されたペイロードの `message_id` を送信する — SDK が生成し、署名付きイベントに埋め込むため、他の値はすべて失敗します。再試行時には同じ暗号化ペイロードを再利用して、ID が二度と生成されないようにする |
+| バージョンの不一致 | `conversation_key_version` を使用する鍵と揃える；`set_identity` に渡す署名鍵バージョンを公開鍵レコードと揃える |
 | パス ID の形式 | URL パスには依然としてハイフン付きの会話 ID が必要（`:` → `-`）ですが、署名の場合、SDK は任意の形式を受け付けます: `A:B`、`A-B`（どちらの順序でも）、または受信者のユーザー ID だけ — すべては同じ署名バイトに正規化される |
 
 ### 状態を変更する呼び出しに対して API が 400 を返す
@@ -210,5 +215,5 @@ Webhook、OAuth、HTTP ステータスコード、レート制限については
 
 - 会話 ID、イベント ID、鍵の**バージョン**のみをログに記録する
 - 平文、パスコード、秘密鍵、または完全な鍵 blob は**ログに記録しない**
-- `set_key_version` が公開鍵レコードの `public_key_version` と一致することを確認する
+- `set_identity` に渡した署名鍵バージョンが、公開鍵レコードの `public_key_version` と一致することを確認する
 - 履歴が不完全な場合、復号する前に鍵変更のメタデータがスキップされないよう、**すべての**イベントページをページングする

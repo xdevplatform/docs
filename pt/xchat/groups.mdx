@@ -1,7 +1,7 @@
 ---
 title: Conversas em grupo
 sidebarTitle: Grupos
-description: Crie conversas em grupo no X Chat com vários participantes, chaves de conversa compartilhadas, títulos criptografados e mensagens assinadas.
+description: Crie conversas em grupo no X Chat com vários participantes, chaves de conversa compartilhadas, títulos criptografados, gestão de membros e mensagens assinadas.
 keywords: ["X Chat groups", "group DM", "conversation keys", "group name encryption"]
 ---
 
@@ -29,17 +29,18 @@ A criptografia ainda é: **Chat XDK** para chaves e payloads; **X API** para cri
 
 1. Emita o ID do grupo com `POST /2/chat/conversations/group/initialize` — o `data.conversation_id` da resposta é o ID prefixado com g que você usa em todos os passos a seguir.
 2. Carregue a chave pública de identidade e o `public_key_version` de cada membro (rotas `GET` de chave pública em **Chaves de criptografia**; [`GET /2/users/public_keys`](/x-api/users/get-public-keys-for-multiple-users) busca vários usuários em uma única requisição). Verifique cada registro com `verify_key_binding` antes de usá-lo (veja o aviso em [Guia de introdução](/xchat/getting-started#4-set-up-conversation-keys)).
-3. Execute **`prepare_group_create`** uma vez, com **todos** os membros (incluindo você mesmo), o ID prefixado com g e as listas de IDs de membros/admins. Uma chamada gera a chave de conversa, envelopa-a para cada membro e assina a criação — ela retorna **duas** assinaturas de ação (a mudança de chave de conversa e a criação do grupo).
+3. Execute **`prepare_group_create`** uma vez, com **todos** os membros (incluindo você mesmo), o ID prefixado com g e as listas de IDs de membros/admins. Uma chamada gera a chave de conversa, envelopa-a para cada membro e assina a criação com a identidade da sessão de `set_identity` — ela retorna **duas** assinaturas de ação (a mudança de chave de conversa e a criação do grupo).
 4. `POST /2/chat/conversations/group` com os members/admins do grupo, `conversation_key_version`, `conversation_participant_keys` (SDK **`encrypted_key`** → API **`encrypted_conversation_key`**) e **ambas** as `action_signatures`. Falhas de validação retornam mensagens estáveis e legíveis por humanos, por exemplo `"Too many members: adding these members would exceed the allowed group size."` ou `"Cannot add all members: one or more of the requested members cannot be added to this conversation."`.
 5. Mantenha a chave de conversa **em bruto** e a **versão** para criptografar/descriptografar.
 
-O `title` e o `avatar_url` que você passa para `prepare_group_create` são assinados e embutidos literalmente no evento de criação do grupo, e o servidor os compara com a requisição — portanto os valores `group_name` / `group_avatar_url` no corpo do POST precisam ser **byte a byte idênticos** ao que você passou para o SDK, ou a chamada falha na validação de assinatura.
+`prepare_group_create` assina o `title` e o `avatar_url` que você passa e os embute literalmente no evento de criação do grupo. O servidor os compara com sua requisição, portanto os valores `group_name` / `group_avatar_url` no corpo do POST precisam ser **byte a byte idênticos** ao que você passou para o SDK — caso contrário, a chamada falha na validação de assinatura.
 
 <Tabs>
   <Tab title="Python">
     ```python
+    # chat has keys loaded and set_identity called (see Getting Started)
     prepared = chat.prepare_group_create(
-        "YOUR_USER_ID", signing_key_version, member_public_keys,
+        member_public_keys,
         group_id,  # g-prefixed id from POST /2/chat/conversations/group/initialize
         member_ids, admin_ids, title="Project team",
     )
@@ -50,8 +51,9 @@ O `title` e o `avatar_url` que você passa para `prepare_group_create` são assi
   </Tab>
   <Tab title="TypeScript">
     ```typescript
+    // chat has keys loaded and setIdentity called (see Getting Started)
     const prepared = chat.prepareGroupCreate({
-      senderId: myUserId, signingKeyVersion, publicKeys: memberPublicKeys,
+      publicKeys: memberPublicKeys,
       conversationId: groupId, // g-prefixed id from POST /2/chat/conversations/group/initialize
       memberIds, adminIds, title: 'Project team',
     });
@@ -60,9 +62,9 @@ O `title` e o `avatar_url` que você passa para `prepare_group_create` são assi
   </Tab>
   <Tab title="Rust">
     ```rust
+    // chat has keys loaded and set_identity called (see Getting Started)
     let mut params = GroupCreateParams::new(
-        &sender_id, &signing_key_version, member_public_keys,
-        &group_id, member_ids, admin_ids,
+        member_public_keys, &group_id, member_ids, admin_ids,
     );
     params.title = Some("Project team".into());
     let prepared = chat.prepare_group_create(params)?;
@@ -71,8 +73,8 @@ O `title` e o `avatar_url` que você passa para `prepare_group_create` são assi
   </Tab>
   <Tab title="Go">
     ```go
+    // chat has keys loaded and SetIdentity called (see Getting Started)
     prepared, err := chat.PrepareGroupCreate(chatxdk.GroupCreateParams{
-        SenderID: myUserID, SigningKeyVersion: signingKeyVersion,
         PublicKeys: memberPublicKeys, ConversationID: groupID,
         MemberIDs: memberIDs, AdminIDs: adminIDs, Title: "Project team",
     })
@@ -83,23 +85,20 @@ O `title` e o `avatar_url` que você passa para `prepare_group_create` são assi
   </Tab>
   <Tab title="C#">
     ```csharp
-    var prepared = chat.PrepareGroupCreate(new GroupCreateParams {
-        SenderId = myUserId, SigningKeyVersion = signingKeyVersion,
-        PublicKeys = memberPublicKeys, ConversationId = groupId,
-        MemberIds = memberIds, AdminIds = adminIds, Title = "Project team",
-    });
+    // chat has keys loaded and SetIdentity called (see Getting Started)
+    var prepared = chat.PrepareGroupCreate(
+        new GroupCreateParams(memberPublicKeys, groupId, memberIds, adminIds)
+        {
+            Title = "Project team",
+        });
     // prepared.ActionSignatures has two entries — send both
     ```
   </Tab>
   <Tab title="Java">
     ```java
-    GroupCreateParams params = new GroupCreateParams();
-    params.senderId = myUserId;
-    params.signingKeyVersion = signingKeyVersion;
-    params.publicKeys = memberPublicKeys;
-    params.conversationId = groupId;
-    params.memberIds = memberIds;
-    params.adminIds = adminIds;
+    // chat has keys loaded and setIdentity called (see Getting Started)
+    GroupCreateParams params =
+        new GroupCreateParams(memberPublicKeys, groupId, memberIds, adminIds);
     params.title = "Project team";
     PreparedConversationChange prepared = chat.prepareGroupCreate(params);
     // prepared.actionSignatures has two entries — send both

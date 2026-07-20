@@ -1,7 +1,7 @@
 ---
 title: Primer de criptografia
 sidebarTitle: Primer de criptografia
-description: Aprenda os conceitos de ECDH, criptografia de chave pública e assinaturas digitais por trás da criptografia de ponta a ponta do X Chat.
+description: Aprenda os conceitos de ECDH, criptografia de chave pública e assinaturas digitais por trás da criptografia de ponta a ponta do X Chat sem detalhes de implementação.
 keywords: ["X Chat cryptography", "E2EE primer", "encryption basics", "public key encryption", "ECDH", "digital signatures", "conversation keys"]
 ---
 
@@ -143,9 +143,9 @@ Um desafio central na criptografia de ponta a ponta é a **distribuição de cha
 
 Quando uma conversa é preparada para mensagens:
 
-1. Uma chave de conversa aleatória é gerada (no Chat XDK)
-2. Para **cada participante**, essa chave é criptografada para sua **chave pública de identidade**
-3. Essas cópias criptografadas são armazenadas e entregues por meio das APIs de Chat do X
+1. O Chat XDK gera uma chave de conversa aleatória
+2. O Chat XDK criptografa essa chave para a **chave pública de identidade de cada participante**
+3. Seu app publica essas cópias criptografadas por meio das APIs de Chat do X
 4. Cada participante descriptografa **sua** cópia com sua chave privada de identidade (no Chat XDK)
 
 O X só lida com as cópias **envelopadas**, nunca com a chave de conversa em bruto.
@@ -166,7 +166,7 @@ Seu app deve:
 
 ## Backup seguro de chaves: armazenamento distribuído de chaves
 
-Suas chaves **privadas** de identidade e de assinatura precisam ser armazenadas com cuidado. O X Chat inclui um sistema de **backup seguro de chaves** (implementado com Juicebox) para que as chaves possam ser recuperadas com um código de acesso entre dispositivos sem dar a nenhum servidor o segredo completo.
+Suas chaves **privadas** de identidade e de assinatura precisam ser armazenadas com cuidado. O X Chat inclui um sistema de **backup seguro de chaves** para que as chaves possam ser recuperadas com um código de acesso entre dispositivos sem dar a nenhum servidor o segredo completo.
 
 ### O problema com o armazenamento tradicional de chaves
 
@@ -201,7 +201,7 @@ flowchart LR
 Você obtém recuperabilidade (novo dispositivo + código de acesso) sem que um único agente detenha o segredo inteiro.
 
 <Note>
-Você não configura os servidores de backup de chaves à mão no fluxo normal. O Chat XDK inclui o cliente de backup; a configuração do realm vem da X API como **`juicebox_config`** no seu registro de chave pública (o campo tem esse nome por causa do Juicebox, a implementação subjacente). O armazenamento inicial do código de acesso e o desbloqueio posterior são chamadas do Chat XDK — veja [inicializar com chaves existentes](/xchat/getting-started#2-initialize-the-chat-xdk-with-existing-keys) e [criar e registrar chaves](/xchat/getting-started#3-create-and-register-keys-first-time-setup) no Guia de introdução. Alguns apps (especialmente servidores e bots) usam um blob de chave exportado em vez do backup seguro de chaves; proteja esse material como uma senha.
+Você não configura os servidores de backup de chaves à mão no fluxo normal. O Chat XDK inclui o cliente de backup; a configuração do realm vem da X API como o campo **`juicebox_config`** no seu registro de chave pública. O armazenamento inicial do código de acesso e o desbloqueio posterior são chamadas do Chat XDK — veja [inicializar com chaves existentes](/xchat/getting-started#2-initialize-the-chat-xdk-with-existing-keys) e [criar e registrar chaves](/xchat/getting-started#3-create-and-register-keys-first-time-setup) no Guia de introdução. Alguns apps (especialmente servidores e bots) usam um blob de chave exportado em vez do backup seguro de chaves; proteja esse material como uma senha.
 </Note>
 
 ---
@@ -224,7 +224,9 @@ Se algo no material assinado muda, a verificação falha. Somente alguém com a 
 
 ### No seu app
 
-O Chat XDK assina quando você criptografa mensagens de saída e verifica quando você descriptografa as de entrada, contra o material de chave pública do remetente (das APIs de chaves públicas). A verificação é **obrigatória por padrão**: o SDK rejeita eventos assinados não verificados a menos que você desative explicitamente a checagem (não recomendado). Detalhes na referência do [Chat XDK](/xchat/xchat-xdk).
+O Chat XDK assina quando você criptografa mensagens de saída e verifica quando você descriptografa as de entrada contra o material de chave pública do remetente (das APIs de chaves públicas). A verificação é **obrigatória por padrão**: o SDK rejeita eventos assinados não verificados a menos que você desative explicitamente a checagem (não recomendado). Detalhes na referência do [Chat XDK](/xchat/xchat-xdk).
+
+As assinaturas também cobrem conteúdo citado. Uma resposta embute a mensagem original **assinada** em bruto que ela cita; quando o Chat XDK descriptografa a resposta, ele verifica essa original embutida e compara a citação contra ela, reportando o resultado como `reply_preview_validation` (`Valid` / `Invalid`). Um resultado `Invalid` significa que a citação não corresponde à original assinada — trate o material citado como não confiável, ainda que a resposta em si seja verificada separadamente — para que nenhum participante possa atribuir palavras fabricadas a outro.
 
 ### Mudanças de estado assinadas (assinaturas de ação)
 
@@ -243,7 +245,7 @@ Assinaturas são vinculadas ao conteúdo do evento e são imutáveis: um evento 
 | Ameaça | Proteção |
 |:-------|:---------|
 | **X lendo corpos de mensagens** | O conteúdo é criptografado antes de ser enviado ao X |
-| **Escutas na rede** | Segurança de transporte mais conteúdo criptografado de ponta a ponta |
+| **Escutas na rede** | Segurança de transporte mais conteúdo com criptografia de ponta a ponta |
 | **Adulteração de mensagens** | Assinaturas detectam modificações |
 | **Personificação trivial de remetente** | Assinaturas válidas requerem a chave privada de assinatura do remetente |
 | **Roubo de chave em servidor único (com backup seguro de chaves)** | As partes são divididas entre realms e protegidas por código de acesso |
@@ -264,11 +266,11 @@ Assinaturas são vinculadas ao conteúdo do evento e são imutáveis: um evento 
 | Termo | Definição |
 |:------|:----------|
 | **Criptografia simétrica** | Mesma chave criptografa e descriptografa (usada para mensagens e streams de mídia) |
-| **Criptografia assimétrica** | Chaves diferentes para criptografar vs. descriptografar (usada para envelopar chaves de conversa) |
+| **Criptografia assimétrica** | Chaves diferentes para criptografar vs. descriptografar (usada para trocar chaves de conversa) |
 | **Chave pública** | Segura para compartilhar; usada para criptografar *para* alguém ou verificar suas assinaturas |
 | **Chave privada** | Deve permanecer secreta; usada para descriptografar ou assinar |
 | **Par de chaves** | Uma chave pública e uma chave privada vinculadas |
-| **ECDH / ECIES** | Algoritmos usados ao envelopar chaves de conversa para chaves de identidade |
+| **ECDH / ECIES** | Algoritmos usados ao trocar chaves de conversa via chaves de identidade |
 | **ECDSA** | Algoritmo de assinatura usado para autoria de mensagens |
 | **P-256** | Curva elíptica usada no X Chat (secp256r1) |
 | **Chave de conversa** | Chave simétrica compartilhada pelos participantes de uma conversa (versionada ao longo do tempo) |
