@@ -106,6 +106,73 @@ keywords: ["X Chat errors", "Chat XDK", "decryption", "secure key backup", "encr
   </Tab>
 </Tabs>
 
+### 로컬 공개 키가 계정에 등록된 키와 일치하지 않음
+
+클라이언트는 종종 *"이 기기의 키가 이 계정에 등록된 키 중 하나인가?"*라는 질문에 답해야 합니다—복원이나 가져오기 이후에 올바른 `public_key_version`을 채택하거나, 온보딩이 이미 이루어졌는지 판단하기 위해서입니다. Chat XDK의 `get_public_keys` 출력을 API의 `public_key` 필드와 **문자열로 비교하면 항상 실패합니다**—같은 키라도 마찬가지인데, 두 값이 서로 다른 인코딩을 사용하기 때문입니다:
+
+- **API**는 등록 시 업로드된 그대로 키를 저장하고 반환합니다: DER(SPKI) 인코딩—고정된 알고리즘 식별자 접두사 뒤에 원시 키가 붙어 있습니다
+- **Chat XDK**의 `get_public_keys`는 해당 접두사 없이 원시 키만 반환합니다
+
+같은 키의 두 가지 표기입니다. 비교하려면 양쪽을 base64로 디코딩한 뒤 API 바이트가 SDK 바이트로 **끝나는지** 확인하세요(양쪽이 동일한 인코딩을 가진 경우를 대비해 완전히 동일한 바이트도 일치로 간주합니다):
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import base64
+
+    def same_key(local_b64: str, server_b64: str) -> bool:
+        local = base64.b64decode(local_b64)    # chat.get_public_keys()["identity"]
+        server = base64.b64decode(server_b64)  # API row's "public_key"
+        return local == server or (len(server) > len(local) and server.endswith(local))
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const sameKey = (localB64: string, serverB64: string): boolean => {
+      const local = Buffer.from(localB64, 'base64');   // chat.getPublicKeys().identity
+      const server = Buffer.from(serverB64, 'base64'); // API row's public_key
+      return local.equals(server) ||
+        (server.length > local.length && server.subarray(server.length - local.length).equals(local));
+    };
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    fn same_key(local: &[u8], server: &[u8]) -> bool {
+        local == server || (server.len() > local.len() && server.ends_with(local))
+    }
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    func sameKey(local, server []byte) bool {
+        return bytes.Equal(local, server) ||
+            (len(server) > len(local) && bytes.HasSuffix(server, local))
+    }
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    static bool SameKey(byte[] local, byte[] server) =>
+        local.SequenceEqual(server) ||
+        (server.Length > local.Length &&
+         server.AsSpan(server.Length - local.Length).SequenceEqual(local));
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    static boolean sameKey(byte[] local, byte[] server) {
+        if (Arrays.equals(local, server)) return true;
+        if (server.length <= local.length) return false;
+        byte[] tail = Arrays.copyOfRange(server, server.length - local.length, server.length);
+        return Arrays.equals(tail, local);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+일치하면 해당 행의 `public_key_version`을 `set_identity`에 사용하세요. 버전을 비교할 때(예: 가장 최신 키 선택) **숫자로** 비교하세요—버전은 문자열 길이가 다양한 밀리초 타임스탬프이므로 사전식 비교는 잘못된 값을 고릅니다.
+
 ### 메시지에 대한 대화 키 누락
 
 `Message encrypted with key version '…' but no matching key found`와 같은 오류는 해당 메시지의 `conversation_key_version`에 대한 **원시** 키가 없다는 뜻입니다.
@@ -135,6 +202,7 @@ keywords: ["X Chat errors", "Chat XDK", "decryption", "secure key backup", "encr
 - 호출에 서명 키가 전달되지 않았고 `set_signing_keys`로 저장된 것도 없음
 - 발신자가 버전을 순환함—공개 키를 다시 가져오세요
 - 허용 최소값 아래의 키 버전은 결코 검증되지 않습니다
+- **그룹 키 변경 이벤트**의 경우, 서명자가 이미 그룹을 떠났다면 해당 키는 더 이상 제공되지 않습니다—[떠난 멤버로부터의 키 변경](/ko/xchat/groups#떠난-멤버로부터의-키-변경) 참고
 
 `set_reject_unverified` setter는 이 기본값에서 **옵트 아웃**하기 위해 존재합니다(`false`, 권장하지 않음). 이전에 비활성화했다면, 실패 시 거부 기본값을 복원하세요:
 

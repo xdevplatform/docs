@@ -106,6 +106,73 @@ Carga primero las claves privadas, luego configura la **identidad de sesión**�
   </Tab>
 </Tabs>
 
+### Tu clave pública local nunca coincide con las claves registradas de la cuenta
+
+A menudo los clientes necesitan responder *"¿es la clave de este dispositivo una de las claves registradas en esta cuenta?"*—tras una restauración o importación, para adoptar el `public_key_version` correcto, o para decidir si el onboarding ya ocurrió. Comparar la salida de `get_public_keys` del Chat XDK contra el campo `public_key` de la API **como cadenas siempre falla**, incluso para la misma clave, porque ambos usan codificaciones distintas:
+
+- La **API** almacena y devuelve la clave exactamente como el registro la subió: la codificación DER (SPKI) — la clave en bruto detrás de un prefijo fijo de identificador de algoritmo
+- El `get_public_keys` del **Chat XDK** devuelve solo la clave en bruto, sin ese prefijo
+
+Misma clave, dos representaciones. Para comparar, decodifica ambas en base64 y verifica que los bytes de la API **terminen con** los bytes del SDK (los bytes idénticos también coinciden, en caso de que ambos lados lleguen a tener la misma codificación):
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import base64
+
+    def same_key(local_b64: str, server_b64: str) -> bool:
+        local = base64.b64decode(local_b64)    # chat.get_public_keys()["identity"]
+        server = base64.b64decode(server_b64)  # API row's "public_key"
+        return local == server or (len(server) > len(local) and server.endswith(local))
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const sameKey = (localB64: string, serverB64: string): boolean => {
+      const local = Buffer.from(localB64, 'base64');   // chat.getPublicKeys().identity
+      const server = Buffer.from(serverB64, 'base64'); // API row's public_key
+      return local.equals(server) ||
+        (server.length > local.length && server.subarray(server.length - local.length).equals(local));
+    };
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    fn same_key(local: &[u8], server: &[u8]) -> bool {
+        local == server || (server.len() > local.len() && server.ends_with(local))
+    }
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    func sameKey(local, server []byte) bool {
+        return bytes.Equal(local, server) ||
+            (len(server) > len(local) && bytes.HasSuffix(server, local))
+    }
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    static bool SameKey(byte[] local, byte[] server) =>
+        local.SequenceEqual(server) ||
+        (server.Length > local.Length &&
+         server.AsSpan(server.Length - local.Length).SequenceEqual(local));
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    static boolean sameKey(byte[] local, byte[] server) {
+        if (Arrays.equals(local, server)) return true;
+        if (server.length <= local.length) return false;
+        byte[] tail = Arrays.copyOfRange(server, server.length - local.length, server.length);
+        return Arrays.equals(tail, local);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Una vez que coincidan, adopta el `public_key_version` de esa fila para `set_identity`. Al comparar versiones (por ejemplo, para elegir la clave más nueva), compara **numéricamente**—las versiones son marcas de tiempo en milisegundos con longitud de cadena variable, por lo que la comparación lexicográfica elige la incorrecta.
+
 ### Falta la clave de conversación para un mensaje
 
 Un error como `Message encrypted with key version '…' but no matching key found` significa que no tienes la clave en **bruto** para el `conversation_key_version` de ese mensaje.
@@ -135,6 +202,7 @@ La verificación es **fail-closed por defecto** (`reject_unverified = true`): el
 - No se pasaron claves de firma en la llamada y no hay ninguna almacenada mediante `set_signing_keys`
 - El remitente rotó versiones—vuelve a obtener sus claves públicas
 - Una versión de clave por debajo del mínimo aceptado nunca se verifica
+- En un **evento de cambio de clave de grupo**, el firmante ha abandonado el grupo desde entonces, por lo que sus claves ya no se sirven—consulta [Cambios de clave por parte de miembros que han abandonado el grupo](/es/xchat/groups#cambios-de-clave-por-parte-de-miembros-que-han-abandonado-el-grupo)
 
 El setter `set_reject_unverified` existe para **desactivar** este comportamiento predeterminado (`false`, no recomendado). Si lo desactivaste antes, restaura el predeterminado fail-closed:
 
