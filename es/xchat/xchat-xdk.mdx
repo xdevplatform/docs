@@ -1,13 +1,13 @@
 ---
 title: Referencia del Chat XDK
 sidebarTitle: Chat XDK
-description: Referencia del Chat XDK, el SDK de cifrado que gestiona claves, cifrado, descifrado y firmas para X Chat en los lenguajes compatibles.
+description: Referencia del Chat XDK, el SDK de cifrado que gestiona la administración de claves, cifrado, descifrado y firma para X Chat en los lenguajes compatibles.
 keywords: ["Chat XDK", "chat-xdk", "encryption SDK", "E2EE SDK"]
 ---
 
-El **Chat XDK** se encarga de la gestión de claves, cifrado, descifrado y firma para X Chat. **No** llama a la HTTP API de X—combínalo con el **XDK** de [Python](/xdks/python/overview) o [TypeScript](/xdks/typescript/overview), o con HTTPS y un token de acceso de usuario.
+El **Chat XDK** gestiona la administración de claves, cifrado, descifrado y firma para X Chat. **No** llama a la API HTTP de X—combínalo con el **XDK** de [Python](/xdks/python/overview) o [TypeScript](/xdks/typescript/overview), o con HTTPS y un token de acceso de usuario.
 
-Recorrido de la app: [Primeros pasos](/xchat/getting-started). Bots de ejemplo: [chat-xdk/examples](https://github.com/xdevplatform/chat-xdk/tree/main/examples).
+Recorrido de la app: [Primeros pasos](/es/xchat/getting-started). Bots de ejemplo: [chat-xdk/examples](https://github.com/xdevplatform/chat-xdk/tree/main/examples).
 
 ### Instalar
 
@@ -25,14 +25,14 @@ Recorrido de la app: [Primeros pasos](/xchat/getting-started). Bots de ejemplo: 
     npm install juicebox-sdk   # optional peer dependency — required for setup()/unlock() secure key backup
     ```
 
-    El motor WASM compilado viene dentro del paquete: no hay paso de build. Requiere Node.js 18+.
+    El motor WASM compilado se distribuye dentro del paquete—sin paso de build. Requiere Node.js 18+.
   </Tab>
   <Tab title="Rust">
     ```toml
     [dependencies]
     # chat-xdk-core is not yet on crates.io — use the git dependency.
     # It exports both ChatCore and the async secure-key-backup Chat type.
-    chat-xdk-core = { git = "https://github.com/xdevplatform/chat-xdk", tag = "v0.2.1" }
+    chat-xdk-core = { git = "https://github.com/xdevplatform/chat-xdk", tag = "v0.4.0" }
 
     # Required until thrift 0.24 is released on crates.io
     [patch.crates-io]
@@ -44,25 +44,25 @@ Recorrido de la app: [Primeros pasos](/xchat/getting-started). Bots de ejemplo: 
     go get github.com/xdevplatform/chat-xdk/go/chatxdk
     ```
 
-    Se incluyen bibliotecas estáticas precompiladas (macOS arm64/amd64, Linux amd64 glibc/musl): necesitas un compilador de C, pero no Rust. Requiere Go 1.21+.
+    Se incluyen bibliotecas estáticas precompiladas (macOS arm64/amd64, Linux amd64 glibc/musl)—necesitas un compilador de C pero no Rust. Requiere Go 1.21+.
   </Tab>
   <Tab title="C#">
     ```bash
     dotnet add package XDevPlatform.ChatXdk
     ```
 
-    El paquete es autónomo: incluye las bibliotecas nativas para macOS (arm64, x64), Linux (x64) y Windows (x64). Requiere .NET 8+.
+    El paquete es autónomo: las bibliotecas nativas para macOS (arm64, x64), Linux (x64) y Windows (x64) se distribuyen dentro. Requiere .NET 8+.
   </Tab>
   <Tab title="Java">
     ```xml
     <dependency>
       <groupId>com.x</groupId>
       <artifactId>chatxdk</artifactId>
-      <version>0.2.1</version>
+      <version>0.4.0</version>
     </dependency>
     ```
 
-    Disponible en Maven Central. El jar incluye la biblioteca nativa para macOS (arm64, x64), Linux (x64) y Windows (x64): no necesitas configurar `jna.library.path`. Importa desde `com.x.chatxdk`. Requiere JDK 17+.
+    Disponible en Maven Central. El jar incluye la biblioteca nativa para macOS (arm64, x64), Linux (x64) y Windows (x64)—no se necesita configurar `jna.library.path`. Importa desde `com.x.chatxdk`. Requiere JDK 17+.
   </Tab>
 </Tabs>
 
@@ -70,31 +70,37 @@ Recorrido de la app: [Primeros pasos](/xchat/getting-started). Bots de ejemplo: 
 
 ## Inicio rápido
 
-Descifra un backlog, cachea claves, descifra un evento y cifra una respuesta. Conecta el cuerpo de envío a [`POST /2/chat/conversations/{id}/messages`](/x-api/chat/send-chat-message) como se explica en [Primeros pasos](/xchat/getting-started).
+Carga las claves, configura tu identidad una vez, descifra un backlog, descifra un evento en vivo y cifra un mensaje. Conecta el cuerpo del envío a [`POST /2/chat/conversations/{id}/messages`](/x-api/chat/send-chat-message) como en [Primeros pasos](/es/xchat/getting-started).
+
+Los snippets usan los dos almacenes de sesión **opcionales** para las formas de llamada más cortas: `set_signing_keys` guarda las claves públicas de los demás participantes (obtenidas del [endpoint public-keys](/x-api/chat/get-user-public-keys)) para que las llamadas de descifrado puedan verificar a los remitentes sin un argumento por llamada, y `set_cache_keys(true)` permite al SDK recordar la clave verificada de cada conversación para que las llamadas de cifrado solo necesiten el ID de conversación y el texto. Omite cualquiera y pasa los mismos valores por llamada en su lugar—ambos estilos verifican de forma idéntica; consulta [Descifrar](#decrypt).
 
 <Tabs>
   <Tab title="Python">
     ```python
     from chat_xdk import Chat
 
-    chat = Chat(juicebox_config_json)  # or Chat() + import_keys(blob)
+    chat = Chat(juicebox_config_json)  # or Chat() + import_keys(blob, version)
     chat.unlock("YOUR_PASSCODE")
-    chat.set_key_version(signing_key_version)
 
-    result = chat.decrypt_events(raw_events, signing_keys)
+    # Session defaults: identity for signing, stored signing keys for
+    # verification, opt-in cache for conversation keys
+    chat.set_identity(my_user_id, signing_key_version)
+    chat.set_signing_keys(signing_keys)  # all participants
+    chat.set_cache_keys(True)
+
+    # Batch-decrypt the backlog; senders verify against the stored keys
+    result = chat.decrypt_events(raw_events)
     for dm in result["messages"]:
         ev = dm["event"]
-        if ev.get("type") == "Message":
-            print(ev.get("sender_id"), ev.get("content", {}).get("text"))
+        if ev["type"] == "Message":
+            print(ev["sender_id"], ev["content"]["text"])
 
-    cached = result["conversation_keys"]["keys"]
-    event = chat.decrypt_event(one_event_b64, cached, sender_signing_keys)
+    # Decrypt one live event with the cached conversation key
+    event = chat.decrypt_event(one_event_b64)
 
-    raw_key = cached[result["conversation_keys"]["latest_version"]]
-    payload = chat.encrypt_message(
-        message_id, sender_id, conversation_id, raw_key, "Hi!",
-        conversation_key_version, signing_key_version,
-    )
+    # Encrypt and sign as the session identity, under the cached key
+    payload = chat.encrypt_message(event["conversation_id"], "Hi!")
+    message_id = payload.message_id  # SDK-generated — send as message_id
     ```
   </Tab>
   <Tab title="TypeScript">
@@ -106,38 +112,53 @@ Descifra un backlog, cachea claves, descifra un evento y cifra una respuesta. Co
       getAuthToken: async (realmId) => getRealmToken(realmId),
     });
     await chat.unlock('YOUR_PASSCODE');
-    chat.setKeyVersion(signingKeyVersion);
 
-    const result = chat.decryptEvents(rawEvents, signingKeys);
+    // Session defaults: identity for signing, stored signing keys for
+    // verification, opt-in cache for conversation keys
+    chat.setIdentity(myUserId, signingKeyVersion);
+    chat.setSigningKeys(signingKeys); // all participants
+    chat.setCacheKeys(true);
+
+    // Batch-decrypt the backlog; senders verify against the stored keys
+    const result = chat.decryptEvents(rawEvents);
     for (const dm of result.messages) {
       if (dm.event.type === 'message') {
         console.log(dm.event.senderId, dm.event.content?.text);
       }
     }
 
-    const cached = result.conversationKeys.keys;
-    const event = chat.decryptEvent(oneEventB64, cached, senderSigningKeys);
+    // Decrypt one live event with the cached conversation key
+    const event = chat.decryptEvent(oneEventB64);
 
-    const rawKey = cached[result.conversationKeys.latestVersion!];
-    const payload = chat.encryptMessage({
-      messageId, senderId, conversationId, conversationKey: rawKey, text: 'Hi!',
-      conversationKeyVersion, signingKeyVersion,
-    });
+    // Encrypt and sign as the session identity, under the cached key
+    const payload = chat.encryptMessage({ conversationId: event.conversationId!, text: 'Hi!' });
+    const messageId = payload.messageId; // SDK-generated — send as message_id
     ```
   </Tab>
   <Tab title="Rust">
     ```rust
-    // ChatCore + import_keys, or chat_xdk_core::Chat + unlock().await
-    let result = chat.decrypt_events(&raw_events, &signing_keys);
-    let cached = &result.conversation_keys.keys;
-    let event = chat.decrypt_event(one_event_b64, cached, &sender_signing_keys)?;
-    // cached values are XChatConversationKey; encrypt_message wants owned bytes
-    let latest = result.conversation_keys.latest_version.as_deref().unwrap_or_default();
-    let conv_key = cached[latest].to_bytes();
-    let payload = chat.encrypt_message(EncryptMessageParams::new(
-        &message_id, &sender_id, &conversation_id, conv_key, "Hi!",
-        &conversation_key_version, &signing_key_version,
-    ))?;
+    // chat_xdk_core::Chat + unlock(b"…").await, or ChatCore + import_keys_with_version
+
+    // Session defaults: identity for signing, stored signing keys for
+    // verification, opt-in cache for conversation keys
+    chat.set_identity(my_user_id, signing_key_version);
+    chat.set_signing_keys(signing_keys); // all participants
+    chat.set_cache_keys(true);
+
+    // Batch-decrypt the backlog; senders verify against the stored keys
+    let result = chat.decrypt_events(&raw_events, &[]);
+    for dm in &result.messages {
+        if let Event::Message(msg) = &dm.event {
+            println!("{}: {}", msg.meta.sender_id.as_deref().unwrap_or("?"), msg.text().unwrap_or(""));
+        }
+    }
+
+    // Decrypt one live event with the cached conversation key
+    let event = chat.decrypt_event(one_event_b64, &Default::default(), &[])?;
+
+    // Encrypt and sign as the session identity, under the cached key
+    let payload = chat.encrypt_message(EncryptMessageParams::new(conversation_id, "Hi!"))?;
+    let message_id = payload.message_id; // SDK-generated — send as message_id
     ```
   </Tab>
   <Tab title="Go">
@@ -145,58 +166,90 @@ Descifra un backlog, cachea claves, descifra un evento y cifra una respuesta. Co
     chat := chatxdk.New()
     defer chat.Close()
     blob, _ := chatxdk.Base64ToBytes(privateKeysB64)
-    _ = chat.ImportKeys(blob)
-    chat.SetKeyVersion(signingKeyVersion)
+    _ = chat.ImportKeysWithVersion(blob, signingKeyVersion)
 
-    result, err := chat.DecryptEvents(rawEvents, signingKeys)
-    cached := result.ConversationKeys.Keys
-    event, err := chat.DecryptEvent(oneEventB64, cached, senderSigningKeys)
-    rawKey := cached[*result.ConversationKeys.LatestVersion]
+    // Session defaults: identity for signing, stored signing keys for
+    // verification, opt-in cache for conversation keys
+    chat.SetIdentity(myUserID, signingKeyVersion)
+    _ = chat.SetSigningKeys(signingKeys) // all participants
+    chat.SetCacheKeys(true)
+
+    // Batch-decrypt the backlog; senders verify against the stored keys
+    result, err := chat.DecryptEvents(rawEvents, nil)
+    for _, dm := range result.Messages {
+        if dm.Event.Type == "Message" {
+            fmt.Println(dm.Event.AsMessage().Text())
+        }
+    }
+
+    // Decrypt one live event with the cached conversation key
+    event, err := chat.DecryptEvent(oneEventB64, nil, nil)
+    msg := event.AsMessage() // nil unless event.Type == "Message"
+
+    // Encrypt and sign as the session identity, under the cached key
     payload, err := chat.EncryptMessage(chatxdk.EncryptMessageParams{
-        MessageID: messageID, SenderID: senderID, ConversationID: conversationID,
-        ConversationKey: rawKey, Text: "Hi!",
-        ConversationKeyVersion: conversationKeyVersion, SigningKeyVersion: signingKeyVersion,
+        ConversationID: *msg.ConversationID,
+        Text:           "Hi!",
     })
-    _ = event
-    _ = payload
+    messageID := payload.MessageID // SDK-generated — send as message_id
+    _ = messageID
     _ = err
     ```
   </Tab>
   <Tab title="C#">
     ```csharp
     using var chat = new Chat();
-    chat.ImportKeys(privateKeyBytes);
-    chat.SetKeyVersion(signingKeyVersion);
+    chat.ImportKeys(privateKeyBytes, signingKeyVersion);
 
-    var result = chat.DecryptEvents(rawEvents, signingKeys);
-    var cached = result.ConversationKeys.Keys;
-    var evt = chat.DecryptEvent(oneEventB64, cached, senderSigningKeys);
-    var payload = chat.EncryptMessage(new EncryptMessageParams {
-        MessageId = messageId, SenderId = senderId, ConversationId = conversationId,
-        ConversationKey = rawKey, Text = "Hi!",
-        ConversationKeyVersion = conversationKeyVersion, SigningKeyVersion = signingKeyVersion,
-    });
+    // Session defaults: identity for signing, stored signing keys for
+    // verification, opt-in cache for conversation keys
+    chat.SetIdentity(myUserId, signingKeyVersion);
+    chat.SetSigningKeys(signingKeys); // all participants
+    chat.SetCacheKeys(true);
+
+    // Batch-decrypt the backlog; senders verify against the stored keys
+    var result = chat.DecryptEvents(rawEvents);
+    foreach (var dm in result.Messages)
+    {
+        if (dm.Event.GetProperty("type").GetString() == "Message")
+            Console.WriteLine(dm.Event.GetProperty("content").GetProperty("text").GetString());
+    }
+
+    // Decrypt one live event with the cached conversation key
+    var evt = chat.DecryptEvent(oneEventB64);
+    var conversationId = evt.GetProperty("conversation_id").GetString()!;
+
+    // Encrypt and sign as the session identity, under the cached key
+    var payload = chat.EncryptMessage(new EncryptMessageParams(conversationId, "Hi!"));
+    var messageId = payload.MessageId; // SDK-generated — send as message_id
     ```
   </Tab>
   <Tab title="Java">
     ```java
     try (Chat chat = new Chat()) {
-        chat.importKeys(privateKeyBytes);
-        chat.setKeyVersion(signingKeyVersion);
+        chat.importKeys(privateKeyBytes, signingKeyVersion);
 
-        DecryptEventsResult result = chat.decryptEvents(rawEvents, signingKeys);
-        Map<String, byte[]> cached = result.conversationKeys.keys;
-        JsonNode event = chat.decryptEvent(oneEventB64, cached, senderSigningKeys);
+        // Session defaults: identity for signing, stored signing keys for
+        // verification, opt-in cache for conversation keys
+        chat.setIdentity(myUserId, signingKeyVersion);
+        chat.setSigningKeys(signingKeys); // all participants
+        chat.setCacheKeys(true);
 
-        EncryptMessageParams params = new EncryptMessageParams();
-        params.messageId = messageId;
-        params.senderId = senderId;
-        params.conversationId = conversationId;
-        params.conversationKey = rawKey;
-        params.text = "Hi!";
-        params.conversationKeyVersion = conversationKeyVersion;
-        params.signingKeyVersion = signingKeyVersion;
-        SendPayload payload = chat.encryptMessage(params);
+        // Batch-decrypt the backlog; senders verify against the stored keys
+        DecryptEventsResult result = chat.decryptEvents(rawEvents, null);
+        for (DecryptedMessage dm : result.messages) {
+            if ("Message".equals(dm.event.path("type").asText())) {
+                System.out.println(dm.event.path("content").path("text").asText());
+            }
+        }
+
+        // Decrypt one live event with the cached conversation key
+        JsonNode event = chat.decryptEvent(oneEventB64, (Map<String, byte[]>) null, null);
+        String conversationId = event.path("conversation_id").asText();
+
+        // Encrypt and sign as the session identity, under the cached key
+        SendPayload payload = chat.encryptMessage(new EncryptMessageParams(conversationId, "Hi!"));
+        String messageId = payload.messageId; // SDK-generated — send as message_id
     }
     ```
   </Tab>
@@ -206,7 +259,9 @@ Descifra un backlog, cachea claves, descifra un evento y cifra una respuesta. Co
 
 ## Ciclo de vida y claves
 
-Construye el SDK, guarda las claves privadas (copia de seguridad segura de claves protegida con código de acceso o un blob de claves local), registra las claves **públicas** con la Chat API y establece tu **versión de clave pública** registrada después de unlock o import. La copia de seguridad segura de claves está implementada con **Juicebox**, y por eso los campos de configuración relacionados llevan ese nombre. Llama a `generate_keypairs` una vez por identidad de dispositivo/app; envía el payload de registro con POST al endpoint de claves públicas. Usa `setup` / `unlock` (y helpers de código de acceso relacionados) para la copia de seguridad segura de claves en cada binding. `export_keys` / `import_keys` (persistencia de blob de clave en bruto para bots y servidores) están disponibles solo en los **bindings nativos**—Python, Go, .NET, JVM y Rust. El binding JS/WASM no expone la exportación ni importación de claves en bruto: en un navegador cualquier script que acceda a la instancia podría exfiltrar la identidad, así que JS mantiene las claves dentro de la copia de seguridad segura de claves. Un servidor JS que quiera evitar un round-trip al realm de copia de seguridad por solicitud debería reutilizar una única instancia `Chat` desbloqueada entre solicitudes, o ejecutar un binding nativo donde se admitan blobs de clave.
+Construye el SDK, almacena las claves privadas (copia de seguridad segura de claves protegida por código de acceso, o un blob de claves local), registra las claves **públicas** con la Chat API, y llama a **`set_identity(user_id, signing_key_version)`** después de unlock o import—establece el remitente y la versión de la clave de firma que cada acción firmada usa por defecto, así los métodos encrypt y prepare funcionan sin argumentos de identidad por llamada. Llama a `generate_keypairs` una vez por identidad de dispositivo/app; publica el payload de registro en el endpoint public-keys. Usa `setup` / `unlock` (y helpers de código de acceso relacionados) para la copia de seguridad segura de claves en cada binding. `export_keys` / `import_keys` (persistencia de blobs de claves en bruto para bots y servidores) están disponibles **solo en los bindings nativos**—Python, Go, .NET, JVM y Rust. El binding JS/WASM no expone exportación ni importación de claves en bruto: en un navegador cualquier script que acceda a la instancia podría exfiltrar la identidad, así que JS mantiene las claves dentro de la copia de seguridad segura de claves. Un servidor JS que quiera evitar un round-trip a un realm de backup por solicitud debería reutilizar una única instancia `Chat` desbloqueada entre solicitudes, o ejecutar un binding nativo donde se admitan blobs de claves.
+
+El SDK también necesita la versión que la X API reporta para tu clave pública registrada, así que las entradas de key-change dirigidas a otras versiones se omiten. `set_identity` la registra junto con el user id; `import_keys` la acepta directamente como argumento opcional (Rust y Go usan `import_keys_with_version` / `ImportKeysWithVersion`).
 
 <Tabs>
   <Tab title="Python">
@@ -217,13 +272,13 @@ Construye el SDK, guarda las claves privadas (copia de seguridad segura de clave
     chat = Chat(juicebox_config_json)
     chat.setup("YOUR_PASSCODE")          # first time — generates keypairs
     # chat.unlock("YOUR_PASSCODE")        # later sessions
-    chat.set_key_version(version)    # from add-public-key / get-public-keys response
+    chat.set_identity(user_id, version)  # version from add-public-key / get-public-keys response
     reg = chat.get_public_keys()     # or registration fields from generate_keypairs
 
     # Key blob (server / bot)
     chat2 = Chat()
-    chat2.import_keys(secret_blob)
-    chat2.set_key_version(version)
+    chat2.import_keys(secret_blob, version)
+    chat2.set_identity(user_id, version)
     blob = chat2.export_keys()       # treat as a password
     ```
   </Tab>
@@ -237,7 +292,7 @@ Construye el SDK, guarda las claves privadas (copia de seguridad segura de clave
     });
     await chat.setup('YOUR_PASSCODE');
     // await chat.unlock('YOUR_PASSCODE');
-    chat.setKeyVersion(version);
+    chat.setIdentity(userId, version);
     const publics = chat.getPublicKeys();
 
     // JS/WASM stores keys only through secure key backup — there is no raw key
@@ -247,12 +302,12 @@ Construye el SDK, guarda las claves privadas (copia de seguridad segura de clave
   <Tab title="Rust">
     ```rust
     // chat_xdk_core::Chat — async secure key backup unlock, or ChatCore + import_keys
-    chat.setup("YOUR_PASSCODE").await?;
-    // chat.unlock("YOUR_PASSCODE").await?;
-    chat.set_key_version(&version);
+    chat.setup(b"YOUR_PASSCODE").await?;
+    // chat.unlock(b"YOUR_PASSCODE").await?;
+    chat.set_identity(user_id, version);
     let publics = chat.get_public_keys()?;
     let blob = chat.export_keys()?;
-    chat.import_keys(&blob)?;
+    chat.import_keys_with_version(&blob, version)?;
     ```
   </Tab>
   <Tab title="Go">
@@ -262,10 +317,10 @@ Construye el SDK, guarda las claves privadas (copia de seguridad segura de clave
 
     // Prefer ImportKeys for servers; secure key backup unlock where supported
     keyBlob, _ := chatxdk.Base64ToBytes(privateKeysB64)
-    if err := chat.ImportKeys(keyBlob); err != nil {
+    if err := chat.ImportKeysWithVersion(keyBlob, version); err != nil {
         log.Fatal(err)
     }
-    chat.SetKeyVersion(version)
+    chat.SetIdentity(userID, version)
     publics, err := chat.GetPublicKeys()
     blob, err := chat.ExportKeys()
     _ = publics
@@ -276,9 +331,9 @@ Construye el SDK, guarda las claves privadas (copia de seguridad segura de clave
   <Tab title="C#">
     ```csharp
     using var chat = new Chat();
-    chat.ImportKeys(privateKeyBytes);
+    chat.ImportKeys(privateKeyBytes, version);
     // or secure key backup setup / unlock when config is available
-    chat.SetKeyVersion(version);
+    chat.SetIdentity(userId, version);
     var publics = chat.GetPublicKeys();
     var blob = chat.ExportKeys();
     ```
@@ -286,8 +341,8 @@ Construye el SDK, guarda las claves privadas (copia de seguridad segura de clave
   <Tab title="Java">
     ```java
     try (Chat chat = new Chat()) {
-        chat.importKeys(privateKeyBytes);
-        chat.setKeyVersion(version);
+        chat.importKeys(privateKeyBytes, version);
+        chat.setIdentity(userId, version);
         var publics = chat.getPublicKeys();
         byte[] blob = chat.exportKeys();
     }
@@ -295,26 +350,26 @@ Construye el SDK, guarda las claves privadas (copia de seguridad segura de clave
   </Tab>
 </Tabs>
 
-La configuración de la copia de seguridad segura de claves acepta tres formas: el objeto `juicebox_config` de la X API (recomendado—pasado verbatim), un wrapper completo `sdk_config` o un `token_map` desnudo.
+La configuración de copia de seguridad segura de claves acepta tres formas: el objeto `juicebox_config` de la X API (recomendado—se pasa literalmente), un wrapper completo `sdk_config`, o un `token_map` desnudo.
 
-Opcional: la verificación de firma está **activada por defecto** (`reject_unverified = true`)—llama a `set_reject_unverified(false)` para desactivarla (no recomendado); `update_config` si cambia la configuración de realms de copia de seguridad; `is_unlocked` / `has_identity_key` para el estado de la UI. Las listas completas de campos están en los stubs del [repo chat-xdk](https://github.com/xdevplatform/chat-xdk).
+Opcional: la verificación de firmas está **activada por defecto** (`reject_unverified = true`)—llama a `set_reject_unverified(false)` para desactivarla (no recomendado); `update_config` si cambia la configuración del realm de backup; `is_unlocked` / `has_identity_key` para el estado de la UI. Las listas completas de campos están en los stubs del [repo chat-xdk](https://github.com/xdevplatform/chat-xdk).
 
 ---
 
 ## Claves de conversación
 
-Tres métodos **prepare** hacen que una sola llamada haga todo lo que un cambio de clave necesita: generar una nueva clave de conversación, cifrarla para cada participante (a partir de las claves públicas que pases) y firmar el cambio. Todos devuelven la misma forma **`PreparedConversationChange`**, lista para POST—renombra el campo del SDK `encrypted_key` a **`encrypted_conversation_key`** en `conversation_participant_keys` y mapea las firmas de acción al campo de cuerpo requerido **`action_signatures`**.
+Los tres métodos **prepare** hacen que una llamada haga todo lo que necesita un cambio de clave: generar una nueva clave de conversación, cifrarla para cada participante (a partir de las claves públicas que pases) y firmar el cambio. La identidad del remitente y la versión de la clave de firma provienen de la sesión (`set_identity`); establece `sender_id` / `signing_key_version` en los params para anularlas. Todos devuelven la misma forma **`PreparedConversationChange`**, lista para POST—renombra el campo del SDK `encrypted_key` a **`encrypted_conversation_key`** en `conversation_participant_keys`, y mapea las firmas de acción al campo requerido **`action_signatures`** del cuerpo.
 
 | Escenario | Método | Firmas de acción devueltas |
-|:----------|:-------|:---------------------------|
-| Iniciar un 1:1 (omite el id de conversación—el SDK lo deriva) o rotar la clave de cualquier conversación (pasa el id) | `prepare_conversation_key_change` | 1 |
-| Crear un grupo (id acuñado por `POST /2/chat/conversations/group/initialize`) | `prepare_group_create` | 2—envía ambas |
-| Agregar miembros a un grupo | `prepare_group_members_change` | 2—envía ambas |
+|:---------|:-------|:---------------------------|
+| Iniciar un 1:1 (omite el ID de conversación—el SDK lo deriva) o rotar la clave de cualquier conversación (pasa el ID) | `prepare_conversation_key_change` | 1 |
+| Crear un grupo (ID generado por `POST /2/chat/conversations/group/initialize`) | `prepare_group_create` | 2—envía ambas |
+| Añadir miembros a un grupo | `prepare_group_members_change` | 2—envía ambas |
 
-Conserva los bytes de la clave **en bruto** para `encrypt_message` y multimedia; nunca pases el sobre cifrado de la API a encrypt.
+Conserva los bytes de la clave en **bruto** para `encrypt_message` y multimedia; nunca pases el sobre cifrado de la API al cifrar.
 
 <Warning>
-**Verifica las claves obtenidas antes de envolverlas.** Los métodos prepare cifran la nueva clave de conversación hacia cualesquiera claves públicas que pases. Antes de pasarlas, llama a `verify_key_binding(identity, signing, signature)` en cada registro obtenido—sus campos `public_key`, `signing_public_key` e `identity_public_key_signature` de la API de claves públicas—para que una clave de identidad sustituida no pueda recibir la clave de conversación.
+**Verifica las claves obtenidas antes de envolverlas.** Los métodos prepare cifran la nueva clave de conversación con cualquier clave pública que pases. Antes de pasarlas, llama a `verify_key_binding(identity, signing, signature)` en cada registro obtenido—sus campos `public_key`, `signing_public_key` e `identity_public_key_signature` de la API de public-keys—para que una clave de identidad sustituida no pueda recibir la clave de conversación.
 </Warning>
 
 Usa `extract_conversation_keys` en los payloads de eventos de cambio de clave para reconstruir `{ keys, latest_version }`. `decrypt_conversation_key` desenvuelve un solo blob ECIES.
@@ -327,7 +382,7 @@ Usa `extract_conversation_keys` en los payloads de eventos de cambio de clave pa
     #     {"user_id": "1215441834412953600", "public_key": "BASE64_IDENTITY_PUBLIC_KEY", "key_version": "1733889755256"},
     #     {"user_id": "1843439638876491776", "public_key": "BASE64_IDENTITY_PUBLIC_KEY", "key_version": "1766181805686"},
     # ]
-    prepared = chat.prepare_conversation_key_change(my_user_id, signing_key_version, participants)
+    prepared = chat.prepare_conversation_key_change(participants)
     # prepared["conversation_key"]   — raw bytes for encrypt_message
     # prepared["participant_keys"]   — per-user wraps; rename encrypted_key → encrypted_conversation_key on POST
     # prepared["action_signatures"]  — required on the POST body
@@ -342,9 +397,7 @@ Usa `extract_conversation_keys` en los payloads de eventos de cambio de clave pa
   </Tab>
   <Tab title="TypeScript">
     ```typescript
-    const prepared = chat.prepareConversationKeyChange({
-      senderId: myUserId, signingKeyVersion, publicKeys: participants,
-    });
+    const prepared = chat.prepareConversationKeyChange({ publicKeys: participants });
     // prepared.conversationKey — Uint8Array for encryptMessage
     // prepared.participantKeys / prepared.actionSignatures — POST body fields
 
@@ -357,7 +410,7 @@ Usa `extract_conversation_keys` en los payloads de eventos de cambio de clave pa
   <Tab title="Rust">
     ```rust
     let prepared = chat.prepare_conversation_key_change(
-        ConversationKeyChangeParams::new(&my_user_id, &signing_key_version, participants),
+        ConversationKeyChangeParams::new(participants),
     )?;
     let extracted = chat.extract_conversation_keys(&key_change_blobs);
     let latest = extracted.latest_version.as_deref().unwrap_or_default();
@@ -368,7 +421,7 @@ Usa `extract_conversation_keys` en los payloads de eventos de cambio de clave pa
   <Tab title="Go">
     ```go
     prepared, err := chat.PrepareConversationKeyChange(chatxdk.ConversationKeyChangeParams{
-        SenderID: myUserID, SigningKeyVersion: signingKeyVersion, PublicKeys: participants,
+        PublicKeys: participants,
     })
     // prepared.ConversationKey feeds EncryptMessage
     // prepared.ParticipantKeys / prepared.ActionSignatures — POST body fields
@@ -382,9 +435,7 @@ Usa `extract_conversation_keys` en los payloads de eventos de cambio de clave pa
   </Tab>
   <Tab title="C#">
     ```csharp
-    var prepared = chat.PrepareConversationKeyChange(new ConversationKeyChangeParams {
-        SenderId = myUserId, SigningKeyVersion = signingKeyVersion, PublicKeys = participants,
-    });
+    var prepared = chat.PrepareConversationKeyChange(new ConversationKeyChangeParams(participants));
     var extracted = chat.ExtractConversationKeys(keyChangeBlobs);
     var raw = extracted.Keys[extracted.LatestVersion];
     var one = chat.DecryptConversationKey(encryptedBlob);
@@ -392,11 +443,8 @@ Usa `extract_conversation_keys` en los payloads de eventos de cambio de clave pa
   </Tab>
   <Tab title="Java">
     ```java
-    ConversationKeyChangeParams keyParams = new ConversationKeyChangeParams();
-    keyParams.senderId = myUserId;
-    keyParams.signingKeyVersion = signingKeyVersion;
-    keyParams.publicKeys = participants;
-    PreparedConversationChange prepared = chat.prepareConversationKeyChange(keyParams);
+    PreparedConversationChange prepared =
+            chat.prepareConversationKeyChange(new ConversationKeyChangeParams(participants));
     ConversationKeyBundle extracted = chat.extractConversationKeys(keyChangeBlobs);
     byte[] raw = extracted.keys.get(extracted.latestVersion);
     byte[] one = chat.decryptConversationKey(encryptedBlob);
@@ -404,15 +452,24 @@ Usa `extract_conversation_keys` en los payloads de eventos de cambio de clave pa
   </Tab>
 </Tabs>
 
-Para crear grupo y agregar miembros, pasa los params que cada método necesita (listas de ids de miembros/admins para `prepare_group_create`; nuevos más el roster actual para `prepare_group_members_change`)—consulta [Grupos](/xchat/groups#create-the-group-and-establish-keys) para ejemplos. Ambos devuelven **dos** firmas de acción; el POST debe incluir ambas.
+Para group create y member adds, pasa los params que cada método necesita (listas de IDs de miembros/administradores para `prepare_group_create`; nuevos más la lista actual para `prepare_group_members_change`)—consulta [Grupos](/es/xchat/groups#create-the-group-and-establish-keys) para ejemplos. Ambos devuelven **dos** firmas de acción; el POST debe incluir ambas.
 
 ---
 
 ## Descifrar
 
-**`decrypt_events`** es para el historial y el backlog: extrae las claves de conversación del stream, devuelve los mensajes descifrados y **recolecta** errores por evento en lugar de fallar el lote completo. **`decrypt_event`** es para un solo evento en vivo cuando ya tienes un caché de claves; lanza excepción/throw ante un fallo.
+**`decrypt_events`** es para historial y backlog: extrae las claves de conversación del stream, devuelve mensajes descifrados y **recopila** errores por evento en lugar de fallar todo el batch. **`decrypt_event`** es para un solo evento en vivo; lanza/tira en caso de fallo.
 
-Pasa **claves de firma** para que el SDK pueda verificar a los remitentes. Mapea los campos de clave pública de la API a `SigningKeyEntry`: `public_key_version` → `public_key_version` (mismo nombre), `signing_public_key` → `public_key`, `public_key` → `identity_public_key`, más `identity_public_key_signature` y `user_id`. La verificación es obligatoria por defecto: omitir o pasar una lista vacía de claves de firma **no** la salta—los eventos firmados fallan (recolectados en `errors` para `decrypt_events`, lanzados para `decrypt_event`). Para realmente saltar la verificación primero debes llamar a `set_reject_unverified(false)` (no recomendado en producción).
+Pasa las **claves de firma** para que el SDK pueda verificar a los remitentes. Mapea los campos de public-key de la API a `SigningKeyEntry`: `public_key_version` → `public_key_version` (mismo nombre), `signing_public_key` → `public_key`, `public_key` → `identity_public_key`, más `identity_public_key_signature` y `user_id`.
+
+Dos almacenes de sesión opt-in te permiten omitir los argumentos de clave por llamada:
+
+- **`set_signing_keys(entries)`** almacena las claves de firma de los participantes; una llamada de descifrado que omita (o pase un argumento vacío de) las claves de firma usa el almacén en su lugar. La verificación en sí no cambia—las claves entran al almacén solo a través de esta llamada, nunca desde los eventos que se descifran. Cada llamada reemplaza el conjunto anterior.
+- **`set_cache_keys(true)`** habilita la caché de claves de conversación (desactivada por defecto). Mientras está activada, `decrypt_events` guarda en caché, por conversación, la última clave cuyo cambio de clave llevaba una firma válida; `decrypt_event` recurre a ella cuando se omite su argumento de claves de conversación, y los helpers de cifrado resuelven una clave de conversación omitida a partir de ella. Desactivarla limpia la caché.
+
+Un argumento explícito no vacío siempre gana sobre los almacenes. Los argumentos explícitos por llamada siguen siendo de primera clase—y son la elección correcta para despliegues serverless o multi-instancia, donde una solicitud puede caer en una instancia recién creada cuyos almacenes están vacíos.
+
+La verificación es obligatoria por defecto: omitir las claves de firma nunca la salta. Sin pasar nada y sin nada almacenado, los eventos firmados fallan (recopilados en `errors` para `decrypt_events`, lanzados para `decrypt_event`). Para saltarte la verificación realmente, primero debes llamar a `set_reject_unverified(false)` (no recomendado en producción).
 
 <Tabs>
   <Tab title="Python">
@@ -430,11 +487,11 @@ Pasa **claves de firma** para que el SDK pueda verificar a los remitentes. Mapea
         log.warning("event %s failed: %s", idx, msg)
     for dm in result["messages"]:
         ev = dm["event"]
-        if ev.get("type") == "Message":
-            text = ev.get("content", {}).get("text")
+        if ev["type"] == "Message":
+            text = ev["content"].get("text")
 
     cached = result["conversation_keys"]["keys"]
-    live = chat.decrypt_event(one_event_b64, cached, signing_keys_for_sender)
+    live = chat.decrypt_event(one_event_b64, cached, signing_keys)
     ```
   </Tab>
   <Tab title="TypeScript">
@@ -452,7 +509,7 @@ Pasa **claves de firma** para que el SDK pueda verificar a los remitentes. Mapea
       console.warn(`event ${idx} failed: ${msg}`);
     }
     const cached = result.conversationKeys.keys;
-    const live = chat.decryptEvent(oneEventB64, cached, signingKeysForSender);
+    const live = chat.decryptEvent(oneEventB64, cached, signingKeys);
     ```
   </Tab>
   <Tab title="Rust">
@@ -462,7 +519,7 @@ Pasa **claves de firma** para que el SDK pueda verificar a los remitentes. Mapea
         eprintln!("event {idx} failed: {msg}");
     }
     let cached = &result.conversation_keys.keys;
-    let live = chat.decrypt_event(one_event_b64, cached, &signing_keys_for_sender)?;
+    let live = chat.decrypt_event(one_event_b64, cached, &signing_keys)?;
     ```
   </Tab>
   <Tab title="Go">
@@ -472,7 +529,7 @@ Pasa **claves de firma** para que el SDK pueda verificar a los remitentes. Mapea
         log.Printf("event %s failed: %s", idx, msg)
     }
     cached := result.ConversationKeys.Keys
-    live, err := chat.DecryptEvent(oneEventB64, cached, signingKeysForSender)
+    live, err := chat.DecryptEvent(oneEventB64, cached, signingKeys)
     _ = live
     _ = err
     ```
@@ -482,14 +539,14 @@ Pasa **claves de firma** para que el SDK pueda verificar a los remitentes. Mapea
     var result = chat.DecryptEvents(rawEvents, signingKeys);
     foreach (var kv in result.Errors) { /* kv.Key = event index, kv.Value = error */ }
     var cached = result.ConversationKeys.Keys;
-    var live = chat.DecryptEvent(oneEventB64, cached, signingKeysForSender);
+    var live = chat.DecryptEvent(oneEventB64, cached, signingKeys);
     ```
   </Tab>
   <Tab title="Java">
     ```java
     DecryptEventsResult result = chat.decryptEvents(rawEvents, signingKeys);
     Map<String, byte[]> cached = result.conversationKeys.keys;
-    JsonNode live = chat.decryptEvent(oneEventB64, cached, signingKeysForSender);
+    JsonNode live = chat.decryptEvent(oneEventB64, cached, signingKeys);
     ```
   </Tab>
 </Tabs>
@@ -498,32 +555,40 @@ Pasa **claves de firma** para que el SDK pueda verificar a los remitentes. Mapea
 
 ## Helpers de cifrado y envío
 
-**`encrypt_message`** construye el texto cifrado firmado para un mensaje de texto (entidades opcionales, adjuntos vía `media_hash_key`, TTL, flags de notificación). Mapea el payload devuelto al cuerpo send-message: `encrypted_content` → **`encoded_message_create_event`**, `encoded_event_signature` → **`encoded_message_event_signature`**, más tu **`message_id`**.
+**`encrypt_message(conversation_id, text)`** construye el texto cifrado firmado para un mensaje de texto; opcionales `entities`, `attachments` (vía `media_hash_key`), `should_notify` y `ttl_msec`. La identidad del remitente se resuelve desde la sesión (`set_identity`) y la clave de conversación desde la caché de claves opt-in (`set_cache_keys`)—o pasa `sender_id` / `signing_key_version` y `conversation_key` + `conversation_key_version` explícitamente. El SDK genera el **`message_id`** (un UUID incrustado en el evento firmado) y lo devuelve en el payload—nunca generes el tuyo; reutiliza el mismo payload en los reintentos para que el ID nunca se genere dos veces. Mapea el payload al cuerpo de send-message: `message_id` → **`message_id`**, `encrypted_content` → **`encoded_message_create_event`**, `encoded_event_signature` → **`encoded_message_event_signature`**.
 
-Usa **`encrypt_reply`**, **`encrypt_add_reaction`** y **`encrypt_remove_reaction`** para respuestas y reacciones (`sequence_id` apunta al padre). **`encrypt` / `decrypt`** son para metadatos UTF-8 bajo la clave de conversación (por ejemplo, un nombre de grupo cifrado)—no sobres de mensajes. **`encrypt_stream` / `decrypt_stream`** cifran los bytes de los adjuntos; consulta [Multimedia](/xchat/media). Los métodos de bajo nivel **`sign` / `verify` / `verify_key_binding`** admiten flujos avanzados; los cambios de clave de conversación, creaciones de grupo y adiciones de miembros son firmados por los [métodos prepare](#claves-de-conversaci-n).
+**Las respuestas se basan en eventos.** `encrypt_reply(conversation_id, text, reply_to_event)` toma el evento en bruto codificado en base64 al que se responde. El SDK deriva la vista previa citada (sequence id, remitente, texto, entidades, adjuntos) a partir de él e incrusta el original firmado en el mensaje saliente para que los destinatarios puedan validar la cita. Pasa `reply_to_ckces`—los eventos de cambio de clave en bruto—cuando el original se cifró con una versión de clave más antigua que la respuesta. Cuando el original fue **editado**, pasa el evento de edición en bruto como `reply_to_edit_event`: la vista previa entonces cita lo que dice el mensaje ahora (su texto y entidades vienen de la edición), y la edición viaja junto al original para que el receptor la compruebe. Los campos explícitos `reply_to_*` permanecen como anulaciones para los que ya no tienen el evento en bruto.
 
-El id de conversación pasado a `encrypt_message` / `encrypt_reply` puede ser cualquier forma que tengas—`A:B` de eventos, `A-B` de listados o rutas URL (en cualquier orden) o solo el id de usuario del destinatario—el SDK lo canonicaliza antes de firmar. Los ids de grupo (con prefijo `g`) pasan sin cambios.
+**Las reacciones también se basan en eventos.** `encrypt_add_reaction(target_event, emoji)` y `encrypt_remove_reaction(...)` derivan el ID de conversación y el sequence id del objetivo a partir del evento en bruto al que se reacciona; los mismos params pueden añadir y más tarde eliminar una reacción. Establece `conversation_id` y `target_message_sequence_id` explícitamente solo cuando ya no tengas el evento en bruto.
+
+En el lado receptor, un mensaje descifrado que cita una respuesta lleva **`reply_preview_validation`** (`"Valid"` / `"Invalid"`; el binding JS usa `'valid'` / `'invalid'`): el SDK verificó la firma del original incrustado contra tus claves de firma—nunca una clave llevada en el evento—lo descifró y comparó el contenido citado y el autor contra él. Cuando la vista previa incrusta un evento de edición, el SDK verifica la edición de la misma forma (misma conversación, mismo autor que el original) y comprueba el texto citado contra el contenido editado en lugar del texto previo a la edición. El campo está ausente cuando el mensaje no lleva vista previa o la vista previa no incrusta un original. Trata las vistas previas `Invalid` como no confiables: el mensaje en sí es auténtico, pero el material citado no lo es—renderiza las citas solo desde el original validado.
+
+**`encrypt` / `decrypt`** son para metadatos UTF-8 bajo la clave de conversación (por ejemplo un nombre de grupo cifrado)—no sobres de mensajes. **`encrypt_stream` / `decrypt_stream`** cifran bytes de adjuntos; consulta [Multimedia](/es/xchat/media). Los **`sign` / `verify` / `verify_key_binding`** de bajo nivel soportan flujos avanzados; los cambios de clave de conversación, creaciones de grupo y adiciones de miembros son firmados por los [métodos prepare](#conversation-keys).
+
+El ID de conversación pasado a `encrypt_message` / `encrypt_reply` puede ser cualquier forma que tengas—`A:B` de eventos, `A-B` de listados o rutas URL (en cualquier orden), o el user id del destinatario a secas—el SDK lo canonicaliza antes de firmar. Los IDs de grupo (con prefijo `g`) pasan sin cambios.
 
 <Tabs>
   <Tab title="Python">
     ```python
     payload = chat.encrypt_message(
-        message_id, sender_id, conversation_id, raw_conversation_key, "Hello",
-        conversation_key_version, signing_key_version,
+        conversation_id, "Hello",
         # Optional keyword args: entities, attachments, should_notify, ttl_msec
     )
     body = {
-        "message_id": message_id,
-        "encoded_message_create_event": payload["encrypted_content"],
-        "encoded_message_event_signature": payload["encoded_event_signature"],
+        "message_id": payload.message_id,
+        "encoded_message_create_event": payload.encrypted_content,
+        "encoded_message_event_signature": payload.encoded_event_signature,
     }
     # POST body to /2/chat/conversations/{id}/messages
 
-    reply = chat.encrypt_reply(
-        reply_message_id, sender_id, conversation_id, raw_conversation_key,
-        "Sounds good", conversation_key_version, signing_key_version,
-        parent_sequence_id,  # reply_to_sequence_id — the message being replied to
-    )
+    # Preview derived from + embedded raw event so recipients can validate;
+    # add reply_to_ckces=[...] when the original used an older key version
+    reply = chat.encrypt_reply(conversation_id, "Sounds good", original_event_b64)
+
+    # Conversation and target derived from the raw event
+    add = chat.encrypt_add_reaction(original_event_b64, "👍")
+    remove = chat.encrypt_remove_reaction(original_event_b64, "👍")
+
     name_ct = chat.encrypt("Group title", raw_conversation_key)
     title = chat.decrypt(name_ct, raw_conversation_key)
     ```
@@ -531,32 +596,52 @@ El id de conversación pasado a `encrypt_message` / `encrypt_reply` puede ser cu
   <Tab title="TypeScript">
     ```typescript
     const payload = chat.encryptMessage({
-      messageId, senderId, conversationId, conversationKey: rawConversationKey, text: 'Hello',
-      conversationKeyVersion, signingKeyVersion,
+      conversationId,
+      text: 'Hello',
+      // Optional: entities, attachments, shouldNotify, ttlMsec
     });
     const body = {
-      message_id: messageId,
+      message_id: payload.messageId,
       encoded_message_create_event: payload.encryptedContent,
       encoded_message_event_signature: payload.encodedEventSignature,
     };
+    // POST body to /2/chat/conversations/{id}/messages
 
+    // Preview derived from + embedded raw event so recipients can validate;
+    // add replyToCkces: [...] when the original used an older key version
     const reply = chat.encryptReply({
-      messageId: replyMessageId, senderId, conversationId, conversationKey: rawConversationKey,
-      text: 'Sounds good', conversationKeyVersion, signingKeyVersion,
-      replyToSequenceId: parentSequenceId, // the message being replied to
+      conversationId,
+      text: 'Sounds good',
+      replyToEvent: originalEventB64,
     });
+
+    // Conversation and target derived from the raw event
+    const add = chat.encryptAddReaction({ emoji: '👍', targetEvent: originalEventB64 });
+    const remove = chat.encryptRemoveReaction({ emoji: '👍', targetEvent: originalEventB64 });
+
     const nameCt = chat.encrypt('Group title', rawConversationKey);
     const title = chat.decrypt(nameCt, rawConversationKey);
     ```
   </Tab>
   <Tab title="Rust">
     ```rust
-    // conv_key: XChatConversationKey from extract_conversation_keys / decrypt_conversation_key
-    let payload = chat.encrypt_message(EncryptMessageParams::new(
-        &message_id, &sender_id, &conversation_id, conv_key.to_bytes(), "Hello",
-        &conversation_key_version, &signing_key_version,
+    let payload = chat.encrypt_message(EncryptMessageParams::new(conversation_id, "Hello"))?;
+    // Send body: payload.message_id → message_id,
+    // payload.encrypted_content → encoded_message_create_event,
+    // payload.encoded_event_signature → encoded_message_event_signature
+
+    // Preview derived from + embedded raw event so recipients can validate;
+    // set params.reply_to_ckces when the original used an older key version
+    let reply = chat.encrypt_reply(EncryptReplyParams::new(
+        conversation_id, "Sounds good", original_event_b64,
     ))?;
-    // Map payload fields into the send-message JSON body as above
+
+    // Conversation and target derived from the raw event
+    let reaction = EncryptReactionParams::new(original_event_b64, "👍");
+    let add = chat.encrypt_add_reaction(&reaction)?;
+    let remove = chat.encrypt_remove_reaction(&reaction)?;
+
+    // conv_key: XChatConversationKey from extract_conversation_keys / decrypt_conversation_key
     let name_ct = chat.encrypt("Group title", &conv_key)?;
     let title = chat.decrypt(&name_ct, &conv_key)?;
     ```
@@ -564,42 +649,72 @@ El id de conversación pasado a `encrypt_message` / `encrypt_reply` puede ser cu
   <Tab title="Go">
     ```go
     payload, err := chat.EncryptMessage(chatxdk.EncryptMessageParams{
-        MessageID: messageID, SenderID: senderID, ConversationID: conversationID,
-        ConversationKey: rawKey, Text: "Hello",
-        ConversationKeyVersion: conversationKeyVersion, SigningKeyVersion: signingKeyVersion,
+        ConversationID: conversationID,
+        Text:           "Hello",
     })
-    // body: message_id, encoded_message_create_event, encoded_message_event_signature
+    // Send body: payload.MessageID → message_id,
+    // payload.EncryptedContent → encoded_message_create_event,
+    // payload.EncodedEventSignature → encoded_message_event_signature
+
+    // Preview derived from + embedded raw event so recipients can validate;
+    // set ReplyToCkces when the original used an older key version
+    reply, err := chat.EncryptReply(chatxdk.EncryptReplyParams{
+        ConversationID: conversationID,
+        Text:           "Sounds good",
+        ReplyToEvent:   originalEventB64,
+    })
+
+    // Conversation and target derived from the raw event
+    reaction := chatxdk.EncryptReactionParams{Emoji: "👍", TargetEvent: originalEventB64}
+    add, err := chat.EncryptAddReaction(reaction)
+    remove, err := chat.EncryptRemoveReaction(reaction)
+
     nameCt, err := chat.Encrypt("Group title", rawKey)
     title, err := chat.Decrypt(nameCt, rawKey)
     _ = payload
+    _ = reply
+    _ = add
+    _ = remove
     _ = title
     _ = err
     ```
   </Tab>
   <Tab title="C#">
     ```csharp
-    var payload = chat.EncryptMessage(new EncryptMessageParams {
-        MessageId = messageId, SenderId = senderId, ConversationId = conversationId,
-        ConversationKey = rawKey, Text = "Hello",
-        ConversationKeyVersion = conversationKeyVersion, SigningKeyVersion = signingKeyVersion,
-    });
-    // Map EncryptedContent / EncodedEventSignature into the send-message body
+    var payload = chat.EncryptMessage(new EncryptMessageParams(conversationId, "Hello"));
+    // Send body: payload.MessageId → message_id,
+    // payload.EncryptedContent → encoded_message_create_event,
+    // payload.EncodedEventSignature → encoded_message_event_signature
+
+    // Preview derived from + embedded raw event so recipients can validate;
+    // set ReplyToCkces when the original used an older key version
+    var reply = chat.EncryptReply(new EncryptReplyParams(conversationId, "Sounds good", originalEventB64));
+
+    // Conversation and target derived from the raw event
+    var reaction = new EncryptReactionParams(originalEventB64, "👍");
+    var add = chat.EncryptAddReaction(reaction);
+    var remove = chat.EncryptRemoveReaction(reaction);
+
     var nameCt = chat.Encrypt("Group title", rawKey);
     var title = chat.Decrypt(nameCt, rawKey);
     ```
   </Tab>
   <Tab title="Java">
     ```java
-    EncryptMessageParams params = new EncryptMessageParams();
-    params.messageId = messageId;
-    params.senderId = senderId;
-    params.conversationId = conversationId;
-    params.conversationKey = rawKey;
-    params.text = "Hello";
-    params.conversationKeyVersion = conversationKeyVersion;
-    params.signingKeyVersion = signingKeyVersion;
-    SendPayload payload = chat.encryptMessage(params);
-    // Map to encoded_message_create_event / encoded_message_event_signature on POST
+    SendPayload payload = chat.encryptMessage(new EncryptMessageParams(conversationId, "Hello"));
+    // Send body: payload.messageId → message_id,
+    // payload.encryptedContent → encoded_message_create_event,
+    // payload.encodedEventSignature → encoded_message_event_signature
+
+    // Preview derived from + embedded raw event so recipients can validate;
+    // set replyToCkces when the original used an older key version
+    SendPayload reply =
+            chat.encryptReply(new EncryptReplyParams(conversationId, "Sounds good", originalEventB64));
+
+    // Conversation and target derived from the raw event
+    EncryptReactionParams reaction = new EncryptReactionParams(originalEventB64, "👍");
+    SendPayload add = chat.encryptAddReaction(reaction);
+    SendPayload remove = chat.encryptRemoveReaction(reaction);
 
     String nameCt = chat.encrypt("Group title", rawKey);
     String title = chat.decrypt(nameCt, rawKey);
@@ -611,7 +726,7 @@ El id de conversación pasado a `encrypt_message` / `encrypt_reply` puede ser cu
 
 ## Streams de multimedia
 
-Cifra los bytes del archivo con la **misma** clave de conversación usada para el texto, sube mediante las APIs de multimedia de Chat y adjunta **`media_hash_key`** en `encrypt_message`. Este no es el modelo de multimedia de Posts (`expansions=attachments.media_keys`). Flujo completo de subida/descarga: [Multimedia](/xchat/media).
+Cifra los bytes del archivo con la **misma** clave de conversación usada para texto, sube mediante las APIs de multimedia del Chat y adjunta **`media_hash_key`** en `encrypt_message`. Este no es el modelo de multimedia de Posts (`expansions=attachments.media_keys`). Flujo completo de subida/descarga: [Multimedia](/es/xchat/media).
 
 <Tabs>
   <Tab title="Python">
@@ -661,10 +776,10 @@ Cifra los bytes del archivo con la **misma** clave de conversación usada para e
 
 ### Streaming incremental para multimedia grande
 
-Para archivos grandes, evita mantener el payload completo en memoria: `stream_encryptor()` / `stream_decryptor()` devuelven un `StreamEncryptor` / `StreamDecryptor` al que alimentas por chunks (unos 1 MB cada uno) con `push(chunk)`, y luego llamas a `finish()` una vez al final. Al descifrar, `finish()` detecta un stream truncado (falla si la entrada terminó antes del frame final), así que no trates el texto plano acumulado como completo hasta que tenga éxito.
+Para archivos grandes, evita mantener todo el payload en memoria: `stream_encryptor()` / `stream_decryptor()` devuelven un `StreamEncryptor` / `StreamDecryptor` al que le pasas trozos (de aproximadamente 1 MB cada uno) con `push(chunk)`, y luego llamas a `finish()` una vez al final. Al descifrar, `finish()` detecta un stream truncado (falla si la entrada terminó antes del frame final), así que no trates el texto plano acumulado como completo hasta que tenga éxito.
 
 <Warning>
-**Solo JS/WASM:** `finish()` consume y libera el objeto WASM subyacente—nunca llames a `free()` después de `finish()` (lanza error). Llama a `free()` solo para abandonar un stream *antes* de finalizar (por ejemplo, en una ruta de error).
+**Solo JS/WASM:** `finish()` consume y libera el objeto WASM subyacente—nunca llames a `free()` después de `finish()` (lanza excepción). Llama a `free()` solo para abandonar un stream *antes* de finalizar (por ejemplo, en una ruta de error).
 </Warning>
 
 <Tabs>
@@ -701,7 +816,7 @@ Para archivos grandes, evita mantener el payload completo en memoria: `stream_en
 
 ## Utilidades
 
-Los helpers de Base64/hex, sniffing de MIME y dimensiones de imagen están disponibles como funciones a nivel de módulo (Python/JS/Rust/Go) o `ChatXdkUtilities` (C#/Java)—útiles al construir metadatos de adjuntos sin traer librerías adicionales.
+Los helpers de Base64/hex, detección de MIME y dimensiones de imagen están disponibles como funciones a nivel de módulo (Python/JS/Rust/Go) o `ChatXdkUtilities` (C#/Java)—útiles al construir metadatos de adjuntos sin traer bibliotecas adicionales.
 
 <Tabs>
   <Tab title="Python">
@@ -792,13 +907,13 @@ Los helpers de Base64/hex, sniffing de MIME y dimensiones de imagen están dispo
 
 ## Tipos importantes
 
-Estos tipos conceptuales aparecen en varios lenguajes (los nombres exactos de los campos difieren; JS suele usar discriminadores de evento en camelCase como `message`):
+Estos tipos conceptuales aparecen en todos los lenguajes (los nombres exactos de los campos varían; JS suele usar discriminadores de eventos en camelCase como `message`):
 
-- **SendPayload** — valor de retorno de `encrypt_message` y helpers de cifrado relacionados; mapea al cuerpo de envío de la Chat API.
-- **PublicKeyRegistrationPayload** — salida de `generate_keypairs` / getters de claves públicas para la API add-public-key.
-- **SigningKeyEntry** — material público del remitente pasado a decrypt para la verificación de firma.
-- **PreparedConversationChange** — salida de los tres métodos prepare: el `conversation_id` derivado o pasado, los bytes de `conversation_key` en bruto, `conversation_key_version`, `participant_keys` (`user_id`, `encrypted_key`, `public_key_version`) y `action_signatures` (`message_id`, `encoded_message_event_detail`, `signature`, `signature_version`, `public_key_version`, `signature_payload` opcional—omitido en firmas de cambio de clave porque ese payload incrusta la clave en texto plano).
-- **DecryptEventsResult** — mensajes, errores opcionales y `conversation_keys` extraídas.
+- **SendPayload** — valor de retorno de `encrypt_message` y de los demás helpers de cifrado: el **`message_id`** generado por el SDK (un UUID incrustado en el evento firmado—envíalo como el `message_id` del mensaje y consérvalo para deduplicar), `encrypted_content`, `encoded_event_signature`, metadatos de firma, `conversation_key_version` y `should_notify`. Mapea al cuerpo de send de la Chat API.
+- **PublicKeyRegistrationPayload** — salida de `generate_keypairs` / getters de public-key para la API add-public-key.
+- **SigningKeyEntry** — material público del remitente pasado al descifrar para verificación de firma, o almacenado mediante `set_signing_keys`.
+- **PreparedConversationChange** — salida de los tres métodos prepare: el `conversation_id` derivado o pasado, los bytes en bruto de `conversation_key`, `conversation_key_version`, `participant_keys` (`user_id`, `encrypted_key`, `public_key_version`) y `action_signatures` (`message_id`, `encoded_message_event_detail`, `signature`, `signature_version`, `public_key_version`, opcional `signature_payload`—omitido en firmas de key-change porque ese payload incrusta la clave en texto plano).
+- **DecryptEventsResult** — mensajes, errores opcionales y `conversation_keys` extraídas. Los mensajes descifrados que citan una respuesta llevan `reply_preview_validation` (consulta [Helpers de cifrado y envío](#encrypt-and-send-helpers)).
 
 Para listas completas de campos, usa los stubs de lenguaje en el [repo chat-xdk](https://github.com/xdevplatform/chat-xdk) (`docs/API.md`, `*.pyi`, `index.d.ts`).
 
@@ -806,25 +921,25 @@ Para listas completas de campos, usa los stubs de lenguaje en el [repo chat-xdk]
 
 ## Errores
 
-Python normalmente lanza **`ValueError`** con un mensaje descriptivo (por ejemplo, un código de acceso inválido). TypeScript/JavaScript lanza **`Error`**. Go devuelve `(value, error)`. Prefiere **`decrypt_events`** para el historial de modo que un evento defectuoso no aborte el lote; inspecciona la colección de errores para ver fallos parciales.
+Python normalmente lanza **`ValueError`** con un mensaje descriptivo (por ejemplo, un código de acceso inválido). TypeScript/JavaScript lanza **`Error`**. Go devuelve `(value, error)`. Prefiere **`decrypt_events`** para el historial para que un evento defectuoso no aborte el batch; inspecciona la colección de errores para ver fallos parciales.
 
-Algunos errores de verificación son **permanentes**. Las firmas son inmutables y se verifican reconstruyendo el payload firmado desde el evento en sí, así que un evento antiguo que falla con `signature missing or no matching signing key` o un desajuste ECDSA fallará en cada carga futura—ninguna reintentación, actualización de claves o llamada a la API puede sanarlo. Trátalos como tombstones, no como errores transitorios. Rotar la clave de conversación inicia un historial limpio y verificable desde ese punto en adelante.
+Algunos errores de verificación son **permanentes**. Las firmas son inmutables y se verifican reconstruyendo el payload firmado a partir del propio evento, así que un evento antiguo que falla con `signature missing or no matching signing key` o una discrepancia ECDSA fallará en cada carga futura—ningún reintento, refresco de claves ni llamada a la API puede sanarlo. Trátalos como tombstones, no como errores transitorios. Rotar la clave de conversación inicia un historial limpio y verificable a partir de ese punto hacia adelante.
 
 ---
 
 ## Próximos pasos
 
 <CardGroup cols={2}>
-  <Card title="Primeros pasos" icon="rocket" href="/xchat/getting-started">
-    Conecta el Chat XDK a la Chat API
+  <Card title="Primeros pasos" icon="rocket" href="/es/xchat/getting-started">
+    Conecta el Chat XDK con la Chat API
   </Card>
-  <Card title="Multimedia" icon="image" href="/xchat/media">
-    Cifrado por stream y REST de multimedia
+  <Card title="Multimedia" icon="image" href="/es/xchat/media">
+    Cifrado de streams y REST de multimedia
   </Card>
-  <Card title="Eventos en tiempo real" icon="bolt" href="/xchat/real-time-events">
+  <Card title="Eventos en tiempo real" icon="bolt" href="/es/xchat/real-time-events">
     Webhooks y entrega de actividad
   </Card>
-  <Card title="Solución de problemas" icon="wrench" href="/xchat/troubleshooting">
+  <Card title="Solución de problemas" icon="wrench" href="/es/xchat/troubleshooting">
     Fallos comunes
   </Card>
 </CardGroup>

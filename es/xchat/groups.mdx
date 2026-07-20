@@ -1,45 +1,46 @@
 ---
 title: Conversaciones de grupo
 sidebarTitle: Grupos
-description: Crea conversaciones de grupo de X Chat con varios participantes, claves de conversación compartidas, títulos cifrados y mensajes firmados.
+description: Crea conversaciones de grupo multiparticipante en X Chat con claves de conversación compartidas, títulos cifrados, gestión de miembros y mensajes firmados.
 keywords: ["X Chat groups", "group DM", "conversation keys", "group name encryption"]
 ---
 
-Los chats de grupo usan el **mismo modelo de cifrado** que un X Chat 1:1: una **clave de conversación** compartida por los miembros, envuelta hacia la **clave pública de identidad** de cada miembro, con mensajes cifrados y firmados por el Chat XDK. Lo que cambia es la **membresía**, **cómo creas la conversación** y, a menudo, los campos de **título/avatar cifrados** en la conversación.
+Los chats de grupo usan el **mismo modelo de cifrado** que X Chat 1:1: una **clave de conversación** compartida por los miembros, envuelta con la **clave pública de identidad** de cada miembro, con mensajes cifrados y firmados por el Chat XDK. Lo que cambia es la **membresía**, **cómo creas la conversación** y, a menudo, los campos **cifrados de título/avatar** de la conversación.
 
-Los flujos 1:1 están en [Primeros pasos](/xchat/getting-started). Los detalles de los endpoints están bajo **API reference → Conversations and messages**.
+Los flujos 1:1 están en [Primeros pasos](/es/xchat/getting-started). Los detalles de los endpoints están en **API reference → Conversations and messages**.
 
 ---
 
-## En qué se diferencian los grupos de los 1:1
+## Cómo difieren los grupos de 1:1
 
 | Tema | 1:1 | Grupo |
-|:-----|:----|:------|
-| Identidad | Frecuentemente direccionado por el id de usuario del par en las rutas | El id de conversación normalmente comienza con `g` |
-| Crear | Claves + mensajería a un usuario | APIs de crear / inicializar grupo, luego claves |
+|:------|:----|:------|
+| Identidad | A menudo direccionado por user id del par en las rutas | El ID de conversación normalmente comienza con `g` |
+| Crear | Claves + mensajería a un usuario | APIs de crear/inicializar grupo, luego claves |
 | Participantes | Tú + un par | Muchos usuarios; la membresía puede cambiar |
-| Metadatos | Mínimos | Nombre, avatar, etc. pueden ser **texto cifrado** (descifra con la clave de conversación) |
-| Rotación de claves | Menos frecuente | Común cuando entra o sale gente |
+| Metadatos | Mínimos | Nombre, avatar, etc. pueden ser **texto cifrado** (descifrar con la clave de conversación) |
+| Rotación de claves | Menos frecuente | Común cuando entran o salen personas |
 
-La criptografía sigue siendo: **Chat XDK** para claves y cargas útiles; **X API** para crear el grupo, publicar los envoltorios de clave para los participantes, enviar mensajes y cargar eventos.
+La criptografía sigue siendo: **Chat XDK** para claves y payloads; **X API** para crear el grupo, publicar los envoltorios de clave de los participantes, enviar mensajes y cargar eventos.
 
 ---
 
-## Crea el grupo y establece las claves
+## Crear el grupo y establecer claves
 
-1. Genera el id de grupo con `POST /2/chat/conversations/group/initialize` — el `data.conversation_id` de la respuesta es el id con prefijo `g` que usas en todo lo que sigue.
-2. Carga la clave pública de identidad y el `public_key_version` de cada miembro (rutas `GET` de claves públicas bajo **Encryption keys**; [`GET /2/users/public_keys`](/x-api/users/get-public-keys-for-multiple-users) obtiene varios usuarios en una sola solicitud). Verifica cada registro con `verify_key_binding` antes de usarlo (consulta la advertencia en [Primeros pasos](/xchat/getting-started#4-set-up-conversation-keys)).
-3. Ejecuta **`prepare_group_create`** una vez, con **todos** los miembros (incluyéndote a ti mismo), el id con prefijo `g` y las listas de ids de miembros/administradores. Una sola llamada genera la clave de conversación, la envuelve para cada miembro y firma la creación — devuelve **dos** firmas de acción (el cambio de clave de conversación y la creación del grupo).
-4. `POST /2/chat/conversations/group` con los miembros/administradores del grupo, `conversation_key_version`, `conversation_participant_keys` (SDK **`encrypted_key`** → API **`encrypted_conversation_key`**) y **ambas** `action_signatures`. Los fallos de validación regresan como mensajes estables y legibles, por ejemplo `"Too many members: adding these members would exceed the allowed group size."` o `"Cannot add all members: one or more of the requested members cannot be added to this conversation."`.
-5. Conserva la clave de conversación **en bruto** y la **versión** para cifrar/descifrar.
+1. Genera el ID de grupo con `POST /2/chat/conversations/group/initialize` — el `data.conversation_id` de la respuesta es el ID con prefijo `g` que usas en todo lo siguiente.
+2. Carga la clave pública de identidad y el `public_key_version` de cada miembro (rutas `GET` de public-key bajo **Encryption keys**; [`GET /2/users/public_keys`](/x-api/users/get-public-keys-for-multiple-users) obtiene varios usuarios en una sola solicitud). Verifica cada registro con `verify_key_binding` antes de usarlo (consulta la advertencia en [Primeros pasos](/es/xchat/getting-started#4-set-up-conversation-keys)).
+3. Ejecuta **`prepare_group_create`** una vez, con **todos** los miembros (incluido tú), el ID con prefijo `g`, y las listas de IDs de miembros/administradores. Una llamada genera la clave de conversación, la envuelve para cada miembro y firma la creación con la identidad de sesión de `set_identity` — devuelve **dos** firmas de acción (el cambio de clave de conversación y la creación del grupo).
+4. `POST /2/chat/conversations/group` con los miembros/administradores del grupo, `conversation_key_version`, `conversation_participant_keys` (SDK **`encrypted_key`** → API **`encrypted_conversation_key`**) y **ambas** `action_signatures`. Los fallos de validación regresan como mensajes estables y legibles por humanos, por ejemplo `"Too many members: adding these members would exceed the allowed group size."` o `"Cannot add all members: one or more of the requested members cannot be added to this conversation."`.
+5. Guarda la clave de conversación en **bruto** y la **versión** para cifrar/descifrar.
 
-El `title` y el `avatar_url` que pasas a `prepare_group_create` se firman y se incrustan textualmente en el evento de creación del grupo, y el servidor los compara con la solicitud — así que los valores `group_name` / `group_avatar_url` en el cuerpo del POST deben ser **byte a byte idénticos** a lo que pasaste al SDK, o la llamada falla la validación de firma.
+`prepare_group_create` firma el `title` y `avatar_url` que pasas y los incrusta literalmente en el evento group-create. El servidor los verifica contra tu solicitud, así que los valores `group_name` / `group_avatar_url` en el cuerpo del POST deben ser **idénticos byte a byte** a lo que pasaste al SDK — de lo contrario, la llamada falla la validación de firma.
 
 <Tabs>
   <Tab title="Python">
     ```python
+    # chat has keys loaded and set_identity called (see Getting Started)
     prepared = chat.prepare_group_create(
-        "YOUR_USER_ID", signing_key_version, member_public_keys,
+        member_public_keys,
         group_id,  # g-prefixed id from POST /2/chat/conversations/group/initialize
         member_ids, admin_ids, title="Project team",
     )
@@ -50,8 +51,9 @@ El `title` y el `avatar_url` que pasas a `prepare_group_create` se firman y se i
   </Tab>
   <Tab title="TypeScript">
     ```typescript
+    // chat has keys loaded and setIdentity called (see Getting Started)
     const prepared = chat.prepareGroupCreate({
-      senderId: myUserId, signingKeyVersion, publicKeys: memberPublicKeys,
+      publicKeys: memberPublicKeys,
       conversationId: groupId, // g-prefixed id from POST /2/chat/conversations/group/initialize
       memberIds, adminIds, title: 'Project team',
     });
@@ -60,9 +62,9 @@ El `title` y el `avatar_url` que pasas a `prepare_group_create` se firman y se i
   </Tab>
   <Tab title="Rust">
     ```rust
+    // chat has keys loaded and set_identity called (see Getting Started)
     let mut params = GroupCreateParams::new(
-        &sender_id, &signing_key_version, member_public_keys,
-        &group_id, member_ids, admin_ids,
+        member_public_keys, &group_id, member_ids, admin_ids,
     );
     params.title = Some("Project team".into());
     let prepared = chat.prepare_group_create(params)?;
@@ -71,8 +73,8 @@ El `title` y el `avatar_url` que pasas a `prepare_group_create` se firman y se i
   </Tab>
   <Tab title="Go">
     ```go
+    // chat has keys loaded and SetIdentity called (see Getting Started)
     prepared, err := chat.PrepareGroupCreate(chatxdk.GroupCreateParams{
-        SenderID: myUserID, SigningKeyVersion: signingKeyVersion,
         PublicKeys: memberPublicKeys, ConversationID: groupID,
         MemberIDs: memberIDs, AdminIDs: adminIDs, Title: "Project team",
     })
@@ -83,23 +85,20 @@ El `title` y el `avatar_url` que pasas a `prepare_group_create` se firman y se i
   </Tab>
   <Tab title="C#">
     ```csharp
-    var prepared = chat.PrepareGroupCreate(new GroupCreateParams {
-        SenderId = myUserId, SigningKeyVersion = signingKeyVersion,
-        PublicKeys = memberPublicKeys, ConversationId = groupId,
-        MemberIds = memberIds, AdminIds = adminIds, Title = "Project team",
-    });
+    // chat has keys loaded and SetIdentity called (see Getting Started)
+    var prepared = chat.PrepareGroupCreate(
+        new GroupCreateParams(memberPublicKeys, groupId, memberIds, adminIds)
+        {
+            Title = "Project team",
+        });
     // prepared.ActionSignatures has two entries — send both
     ```
   </Tab>
   <Tab title="Java">
     ```java
-    GroupCreateParams params = new GroupCreateParams();
-    params.senderId = myUserId;
-    params.signingKeyVersion = signingKeyVersion;
-    params.publicKeys = memberPublicKeys;
-    params.conversationId = groupId;
-    params.memberIds = memberIds;
-    params.adminIds = adminIds;
+    // chat has keys loaded and setIdentity called (see Getting Started)
+    GroupCreateParams params =
+        new GroupCreateParams(memberPublicKeys, groupId, memberIds, adminIds);
     params.title = "Project team";
     PreparedConversationChange prepared = chat.prepareGroupCreate(params);
     // prepared.actionSignatures has two entries — send both
@@ -107,19 +106,19 @@ El `title` y el `avatar_url` que pasas a `prepare_group_create` se firman y se i
   </Tab>
 </Tabs>
 
-El mapeo del cuerpo para las claves de participantes y las firmas de acción (`message_id`, `encoded_message_event_detail`, `message_event_signature` anidado) es el mismo que el POST de claves en [Primeros pasos — claves de conversación](/xchat/getting-started#4-set-up-conversation-keys).
+El mapeo del cuerpo para las claves de los participantes y las firmas de acción (`message_id`, `encoded_message_event_detail`, `message_event_signature` anidado) es el mismo que el POST de claves en [Primeros pasos — claves de conversación](/es/xchat/getting-started#4-set-up-conversation-keys).
 
-Cuando cambia la membresía, llama a **`prepare_group_members_change`** con los nuevos ids de miembros más el roster actual (miembros, administradores, miembros pendientes y el título/avatar/TTL actual si está configurado). Rota la clave de conversación y, al igual que la creación de grupo, devuelve **dos** firmas de acción — envía todo con POST a **add members** (`POST /2/chat/conversations/{id}/members`). Después espera tráfico de **cambio de clave**: trátalo como la [rotación de claves en Primeros pasos](/xchat/getting-started#6-receive-and-decrypt) (`extract_conversation_keys` / `decrypt_events`, luego cifra con la versión más reciente).
+Cuando cambia la membresía, llama a **`prepare_group_members_change`** con los nuevos IDs de miembros más la lista actual (miembros, administradores, miembros pendientes y el título/avatar/TTL actuales si están definidos). Rota la clave de conversación y, como group create, devuelve **dos** firmas de acción — envía todo con POST a **add members** (`POST /2/chat/conversations/{id}/members`). Luego espera tráfico de **key-change**: trátalo como [rotación de clave en Primeros pasos](/es/xchat/getting-started#6-receive-and-decrypt) (`extract_conversation_keys` / `decrypt_events`, luego cifra con la última versión).
 
-Como `prepare_group_members_change` genera una clave de conversación **nueva** envuelta solo para el roster que pasas, los nuevos miembros reciben la nueva versión de la clave y no pueden descifrar los mensajes enviados bajo versiones anteriores. Lo inverso no es cierto: la rotación nunca revoca el acceso a **versiones anteriores** — cualquiera que ya tenga una clave vieja puede seguir leyendo los mensajes cifrados con ella. Si sospechas que una clave de conversación fue expuesta, rota con `prepare_conversation_key_change`; esto protege únicamente los mensajes futuros.
+Como `prepare_group_members_change` genera una clave de conversación **nueva** envuelta solo para la lista que pasas, los nuevos miembros reciben la nueva versión de clave y no pueden descifrar mensajes enviados con versiones anteriores. Lo contrario no es cierto: la rotación nunca revoca el acceso a versiones **anteriores** — cualquiera que ya tenga una clave vieja aún puede leer los mensajes cifrados con ella. Si sospechas que una clave de conversación fue expuesta, rota con `prepare_conversation_key_change`; esto protege solo los mensajes futuros.
 
 ---
 
-## Metadatos de grupo cifrados
+## Metadatos cifrados del grupo
 
-Algunos campos de conversación (por ejemplo el **nombre** para mostrar o la **URL del avatar**) pueden llegar **cifrados** con la clave de conversación. Eso **no** es `encrypt_message`; es el par genérico **`encrypt` / `decrypt`** del Chat XDK (cadena UTF-8 de entrada, texto cifrado base64 de salida, con la clave de conversación **en bruto**).
+Algunos campos de la conversación (por ejemplo el **name** o **avatar URL** de visualización) pueden llegar **cifrados** con la clave de conversación. Eso **no** es `encrypt_message`; es el par genérico **`encrypt` / `decrypt`** del Chat XDK (string UTF-8 dentro, texto cifrado en base64 fuera, con la clave de conversación en **bruto**).
 
-Si un campo dado se almacena cifrado lo decide el cliente que lo escribe: `prepare_group_create` firma y envía el título exactamente como se lo proporcionas (la clave de conversación no existe hasta que esa llamada la genera, así que un título en el momento de la creación no puede cifrarse con ella). Cuando lees una conversación cuyos campos son texto cifrado, descífralos con `decrypt` y la versión de clave que estaba activa cuando el campo se escribió.
+Si un campo dado se almacena cifrado lo decide el cliente que lo escribe: `prepare_group_create` firma y envía el título exactamente como lo proporcionas (la clave de conversación no existe hasta que esa llamada la genera, por lo que un título en el momento de creación no se puede cifrar con ella). Cuando lees una conversación cuyos campos son texto cifrado, descífralos con `decrypt` y la versión de clave que estaba activa cuando se escribió el campo.
 
 <Tabs>
   <Tab title="Python">
@@ -166,27 +165,27 @@ Si un campo dado se almacena cifrado lo decide el cliente que lo escribe: `prepa
   </Tab>
 </Tabs>
 
-Usa la versión **actual** de la clave de conversación que aplica a esos metadatos. Si las claves rotaron, descifra con la versión que estaba activa cuando el campo se escribió (o sigue las reglas del producto si los metadatos siempre se reescriben en la rotación).
+Usa la versión **actual** de la clave de conversación que corresponde a esos metadatos. Si las claves rotaron, descifra con la versión que estaba activa cuando se escribió el campo (o sigue las reglas del producto si los metadatos siempre se reescriben en la rotación).
 
 ---
 
 ## Mensajes y eventos
 
-Enviar y recibir en un grupo es lo mismo que en un 1:1 una vez que tienes la clave de conversación en bruto:
+Enviar y recibir en un grupo es lo mismo que 1:1 una vez que tienes la clave de conversación en bruto:
 
-- **Enviar:** `encrypt_message` → API send-message ([Primeros pasos](/xchat/getting-started#5-send-a-message))
-- **Recibir:** API de events o [entrega en tiempo real](/xchat/real-time-events) → `decrypt_event` / `decrypt_events`
-- **Multimedia:** [Multimedia](/xchat/media) con el id de conversación del grupo
+- **Enviar:** `encrypt_message` → API send-message ([Primeros pasos](/es/xchat/getting-started#5-send-a-message))
+- **Recibir:** API de eventos o [entrega en tiempo real](/es/xchat/real-time-events) → `decrypt_event` / `decrypt_events`
+- **Contenido multimedia:** [Multimedia](/es/xchat/media) con el ID de conversación de grupo
 
-Siempre cifra con la versión **más reciente** de la clave después de una rotación impulsada por cambios de membresía.
+Siempre cifra con la **última** versión de clave tras una rotación por cambio de membresía.
 
 ---
 
 ## Lista de verificación
 
-1. Genera el id con prefijo `g` con `POST /2/chat/conversations/group/initialize`
-2. `prepare_group_create` con **cada** miembro; envía con POST los envoltorios de clave de participantes y **ambas** firmas de acción a `POST /2/chat/conversations/group`
-3. Cachea la clave en bruto + versión; actualiza en eventos de cambio de clave
-4. En cambios de membresía, `prepare_group_members_change` (dos firmas) → `POST /2/chat/conversations/{id}/members`
-5. Descifra los metadatos del grupo con `decrypt` cuando los campos sean texto cifrado
-6. Envía/recibe con los mismos patrones que en 1:1
+1. Genera el ID con prefijo `g` con `POST /2/chat/conversations/group/initialize`  
+2. `prepare_group_create` con **todos** los miembros; POST los envoltorios de clave de los participantes y **ambas** firmas de acción a `POST /2/chat/conversations/group`  
+3. Guarda en caché la clave en bruto + versión; actualiza en eventos de cambio de clave  
+4. En cambios de membresía, `prepare_group_members_change` (dos firmas) → `POST /2/chat/conversations/{id}/members`  
+5. Descifra los metadatos del grupo con `decrypt` cuando los campos sean texto cifrado  
+6. Envía/recibe con los mismos patrones que 1:1  

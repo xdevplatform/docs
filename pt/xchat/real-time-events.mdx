@@ -1,45 +1,45 @@
 ---
-title: Eventos do X Chat em tempo real
+title: Eventos em tempo real do X Chat
 sidebarTitle: Eventos em tempo real
-description: Receba eventos chat.received, chat.sent e outras atividades criptografadas do X Chat via webhooks ou activity stream e descriptografe com o Chat XDK.
+description: Receba chat.received, chat.sent e outras atividades criptografadas do X Chat via webhooks ou activity stream, depois descriptografe os payloads com o Chat XDK.
 ---
 
-O X entrega **`chat.received`**, **`chat.sent`** e atividades relacionadas do X Chat com **texto cifrado** no payload. Descriptografe com o [Chat XDK](/xchat/xchat-xdk).
+O X entrega **`chat.received`**, **`chat.sent`** e atividades relacionadas do X Chat com **texto cifrado** no payload. Descriptografe com o [Chat XDK](/pt/xchat/xchat-xdk).
 
 | Camada | Papel |
 |:-------|:------|
-| **X Activity API** | `GET /2/activity/stream`; `POST` / `GET` / `PUT` / `DELETE` `/2/activity/subscriptions` (veja segurança OpenAPI por operação) |
+| **API de Activity do X** | `GET /2/activity/stream`; `POST` / `GET` / `PUT` / `DELETE` `/2/activity/subscriptions` (veja a segurança OpenAPI por operação) |
 | **Webhooks** | Rotas opcionais `POST` / `GET` `/2/webhooks` e `PUT` / `DELETE` `/2/webhooks/{webhook_id}` se você terminar em sua própria URL HTTPS |
-| **Chat XDK** | `extract_conversation_keys`, `decrypt_event` / `decrypt_events` |
+| **Chat XDK** | `decrypt_event` / `decrypt_events`, com os armazenamentos de sessão `set_signing_keys` / `set_cache_keys` |
 
-Tipos de eventos privados do X Chat requerem autorização para o usuário que você monitora. Anexos de arquivos criptografados do X Chat usam **`media_hash_key`** e o download de mídia do X Chat — não `expansions=attachments.media_keys` / `media.fields=variants` da Post API.
+Tipos privados de evento do X Chat requerem autorização do usuário monitorado. Anexos de arquivos criptografados do X Chat usam **`media_hash_key`** e o download de mídia do X Chat — não os parâmetros da API de Posts `expansions=attachments.media_keys` / `media.fields=variants`.
 
 ---
 
-## Tipos de eventos
+## Tipos de evento
 
 | Evento | Quando |
 |:-------|:-------|
-| `chat.received` | O usuário inscrito recebe um DM criptografado |
-| `chat.sent` | O usuário inscrito envia um DM criptografado |
-| `chat.conversation_join` | O usuário inscrito entra em um grupo (quando oferecido) |
+| `chat.received` | Usuário inscrito recebe um DM criptografado |
+| `chat.sent` | Usuário inscrito envia um DM criptografado |
+| `chat.conversation_join` | Usuário inscrito entra em um grupo (quando oferecido) |
 
 ---
 
 ## 1. Escolha a entrega
 
-**Stream de atividades (geralmente o mais simples para bots):** `GET /2/activity/stream` com um Bearer token de app (opcional `backfill_minutes`, `start_time`, `end_time` por OpenAPI). Filtre no lado do cliente para `chat.received` / `chat.sent`.
+**Activity stream (geralmente mais simples para bots):** `GET /2/activity/stream` com um Bearer token de app (opcional `backfill_minutes`, `start_time`, `end_time` conforme OpenAPI). Filtre no cliente por `chat.received` / `chat.sent`.
 
 **Assinaturas de atividade:** gerencie assinaturas duráveis com:
 
 - `POST /2/activity/subscriptions` — criar  
 - `GET /2/activity/subscriptions` — listar (paginado)  
 - `PUT /2/activity/subscriptions/{subscription_id}` — atualizar  
-- `DELETE /2/activity/subscriptions/{subscription_id}` ou `DELETE /2/activity/subscriptions?ids=` — excluir  
+- `DELETE /2/activity/subscriptions/{subscription_id}` ou `DELETE /2/activity/subscriptions?ids=` — deletar  
 
-Corpos de requisição e escopos requeridos estão definidos na operação OpenAPI para cada rota. Criar uma assinatura da X Activity API (XAA) requer **autorização de contexto de usuário** (OAuth 2.0 de contexto de usuário com os escopos relevantes, como `dm.read` para eventos de chat) para o usuário cuja atividade você monitora.
+Os corpos de requisição e os escopos necessários são definidos na operação OpenAPI de cada rota. Criar uma assinatura X Activity API (XAA) requer **autorização em contexto de usuário** (OAuth 2.0 em contexto de usuário com os escopos relevantes, como `dm.read` para eventos de chat) para o usuário cuja atividade você monitora.
 
-**Webhooks:** se você terminar eventos em seu endpoint HTTPS, registre um webhook com `POST /2/webhooks`, responda aos desafios CRC e depois crie suas assinaturas de atividade com `POST /2/activity/subscriptions`, referenciando seu `webhook_id` (veja operações de Webhooks e Activity no OpenAPI). O XDK Python/TypeScript pode expor helpers para webhooks e atividade quando sua versão do SDK os incluir.
+**Webhooks:** se você terminar eventos em seu endpoint HTTPS, registre um webhook com `POST /2/webhooks`, passe pelos desafios de CRC e depois crie suas assinaturas de atividade com `POST /2/activity/subscriptions`, referenciando seu `webhook_id` (veja as operações de Webhooks e Activity no OpenAPI). Os XDKs de Python/TypeScript podem expor helpers para webhooks e atividade quando sua versão do SDK os incluir.
 
 <Tabs>
   <Tab title="Python">
@@ -74,130 +74,88 @@ Corpos de requisição e escopos requeridos estão definidos na operação OpenA
   </Tab>
 </Tabs>
 
-Inscreva-se também em `chat.sent` se precisar de cópias de saída. Outras linguagens: chame diretamente as mesmas rotas HTTPS `/2/activity/*` (token de contexto de usuário para criar assinaturas, Bearer token de app para o stream).
+Assine também `chat.sent` se você precisar de cópias de saída. Outras linguagens: chame as mesmas rotas HTTPS `/2/activity/*` diretamente (token em contexto de usuário para criar assinaturas, Bearer token de app para o stream).
 
 ---
 
 ## 2. CRC (apenas webhooks)
 
-Se você usa webhooks, responda aos Challenge-Response Checks (GET `crc_token`) com HMAC-SHA256 do token usando seu consumer secret, no formato JSON que seu produto de webhook espera (tipicamente `sha256=<base64>`).
+Se você usar webhooks, responda aos Challenge-Response Checks (GET `crc_token`) com HMAC-SHA256 do token usando seu consumer secret, no formato JSON esperado pelo seu produto de webhook (normalmente `sha256=<base64>`).
 
 ---
 
-## 3. Descriptografar com o Chat XDK
+## 3. Descriptografe com o Chat XDK
 
-Campos ao vivo: **`payload.encoded_event`**, opcional **`payload.conversation_key_change_event`**. Deduplique por **`event_uuid`**.
+Campos ao vivo: **`payload.encoded_event`**, opcional **`payload.conversation_key_change_event`**. Deduplique entregas por **`event_uuid`**; deduplique mensagens pelo **`message_id`** carregado no evento descriptografado — ele faz parte do conteúdo assinado, enquanto sequence ids são metadados não assinados atribuídos pelo backend.
 
-JavaScript usa tipos de evento em camelCase (`message`); outros bindings usam `"Message"` e campos snake_case.
+Os snippets abaixo usam os dois armazenamentos de sessão **opcionais** para o handler mais curto: `set_signing_keys` guarda as chaves públicas dos participantes (buscadas uma vez do [endpoint de chaves públicas](/x-api/chat/get-user-public-keys)) e `set_cache_keys(true)` mantém a chave verificada de cada conversa, de modo que `decrypt_event` só precisa do evento. Quando um payload traz `conversation_key_change_event`, execute-o antes por `decrypt_events`: isso verifica a mudança de chave e, com caching ativado, retém sua chave para a chamada de `decrypt_event`. Prefere nenhum estado na instância? Passe as chaves por chamada — veja a nota no final desta seção.
+
+JavaScript usa tipos de evento em camelCase (`message`); outros bindings usam `"Message"` e campos em snake_case.
 
 <Tabs>
   <Tab title="Python">
     ```python
-    from chat_xdk import Chat
-
-    chat = Chat(JUICEBOX_CONFIG_JSON)
-    chat.unlock("YOUR_PASSCODE")
-    chat.set_key_version(SIGNING_KEY_VERSION)
-    conversation_keys = {}
-
-    def signing_keys(user_id: str):
-        resp = api_client.chat.get_user_public_keys(
-            user_id,
-            public_key_fields=[
-                "public_key_version", "public_key", "signing_public_key", "identity_public_key_signature",
-            ],
-        )
-        return [
-            {
-                "user_id": user_id,
-                "public_key_version": r["public_key_version"],
-                "public_key": r["signing_public_key"],
-                "identity_public_key": r["public_key"],
-                "identity_public_key_signature": r["identity_public_key_signature"],
-            }
-            for r in resp.data
-        ]
+    # chat has keys loaded and set_identity called (see Getting Started)
+    chat.set_cache_keys(True)
+    chat.set_signing_keys(participant_signing_keys)  # all participants, from the public-key routes
 
     data = body.get("data") or {}
     if data.get("event_type") in ("chat.received", "chat.sent"):
         p = data.get("payload") or {}
-        cid = p.get("conversation_id")
         if p.get("conversation_key_change_event"):
-            conversation_keys[cid] = chat.extract_conversation_keys(
-                [p["conversation_key_change_event"]]
-            )["keys"]
-        ev = chat.decrypt_event(
-            p["encoded_event"],
-            conversation_keys.get(cid, {}),
-            signing_keys(p["sender_id"]),
-        )
+            # Verify the key change and retain its key in the cache
+            chat.decrypt_events([p["conversation_key_change_event"]])
+        ev = chat.decrypt_event(p["encoded_event"])
+        if ev["type"] == "Message":
+            print(ev["sender_id"], ev["content"]["text"])
     ```
   </Tab>
   <Tab title="TypeScript">
     ```typescript
-    import { createChat } from '@xdevplatform/chat-xdk';
-
-    const chat = await createChat({
-      juiceboxConfig: JUICEBOX_CONFIG_JSON,
-      getAuthToken: async (realmId) => getRealmToken(realmId),
-    });
-    await chat.unlock('YOUR_PASSCODE');
-    chat.setKeyVersion(SIGNING_KEY_VERSION);
-    const conversationKeys = new Map<string, Record<string, Uint8Array>>();
-
-    async function signingKeys(userId: string) {
-      const resp = await apiClient.chat.getUserPublicKeys(userId, {
-        publicKeyFields: [
-          'public_key_version', 'public_key', 'signing_public_key', 'identity_public_key_signature',
-        ],
-      });
-      return resp.data.map((r: any) => ({
-        userId,
-        publicKeyVersion: r.public_key_version,
-        publicKey: r.signing_public_key,
-        identityPublicKey: r.public_key,
-        identityPublicKeySignature: r.identity_public_key_signature,
-      }));
-    }
+    // chat has keys loaded and setIdentity called (see Getting Started)
+    chat.setCacheKeys(true);
+    chat.setSigningKeys(participantSigningKeys); // all participants, from the public-key routes
 
     const data = body?.data ?? {};
     if (data.event_type === 'chat.received' || data.event_type === 'chat.sent') {
       const p = data.payload ?? {};
-      const cid = p.conversation_id as string;
       if (p.conversation_key_change_event) {
-        conversationKeys.set(
-          cid,
-          chat.extractConversationKeys([p.conversation_key_change_event]).keys,
-        );
+        // Verify the key change and retain its key in the cache
+        chat.decryptEvents([p.conversation_key_change_event]);
       }
-      const ev = chat.decryptEvent(
-        p.encoded_event,
-        conversationKeys.get(cid) ?? {},
-        await signingKeys(p.sender_id),
-      );
+      const ev = chat.decryptEvent(p.encoded_event);
+      if (ev.type === 'message') {
+        console.log(ev.senderId, ev.content.text);
+      }
     }
     ```
   </Tab>
   <Tab title="Rust">
     ```rust
-    // chat: ChatCore or Chat, already unlocked / keys imported
+    // chat has keys loaded and set_identity called (see Getting Started)
+    chat.set_cache_keys(true);
+    chat.set_signing_keys(participant_signing_keys); // all participants
+
     if let Some(kc) = key_change.as_deref() {
-        let extracted = chat.extract_conversation_keys(&[kc]);
-        conv_keys.extend(extracted.keys);
+        // Verify the key change and retain its key in the cache
+        let _ = chat.decrypt_events(&[kc], &[]);
     }
-    // sender_signing_keys from GET /2/users/{sender_id}/public_keys
-    let event = chat.decrypt_event(&encoded_event, &conv_keys, &sender_signing_keys)?;
+    // Decrypt with the cached conversation key; verify against the stored signing keys
+    let event = chat.decrypt_event(&encoded_event, &Default::default(), &[])?;
     ```
   </Tab>
   <Tab title="Go">
     ```go
+    // chat has keys loaded and SetIdentity called (see Getting Started)
+    chat.SetCacheKeys(true)
+    _ = chat.SetSigningKeys(participantSigningKeys) // all participants
+
     if keyChange != "" {
-        extracted, _ := chat.ExtractConversationKeys([]string{keyChange})
-        for v, k := range extracted.Keys {
-            convKeys[v] = k
-        }
+        // Verify the key change and retain its key in the cache
+        _, _ = chat.DecryptEvents([]string{keyChange}, nil)
     }
-    event, err := chat.DecryptEvent(encodedEvent, convKeys, senderSigningKeys)
+    // Decrypt with the cached conversation key; verify against the stored signing keys
+    event, err := chat.DecryptEvent(encodedEvent, nil, nil)
     if err == nil && event.Type == "Message" {
         fmt.Println(event.AsMessage().Text())
     }
@@ -205,24 +163,33 @@ JavaScript usa tipos de evento em camelCase (`message`); outros bindings usam `"
   </Tab>
   <Tab title="C#">
     ```csharp
+    // chat has keys loaded and SetIdentity called (see Getting Started)
+    chat.SetCacheKeys(true);
+    chat.SetSigningKeys(participantSigningKeys); // all participants
+
     if (!string.IsNullOrEmpty(keyChangeB64))
     {
-        var extracted = chat.ExtractConversationKeys(new[] { keyChangeB64 });
-        foreach (var kv in extracted.Keys)
-            convKeys[kv.Key] = kv.Value;
+        // Verify the key change and retain its key in the cache
+        chat.DecryptEvents(new[] { keyChangeB64 });
     }
-    var evt = chat.DecryptEvent(encodedEvent, convKeys, senderSigningKeys);
+    // Decrypt with the cached conversation key; verify against the stored signing keys
+    var evt = chat.DecryptEvent(encodedEvent);
     if (evt.GetProperty("type").GetString() == "Message")
         Console.WriteLine(evt.GetProperty("content").GetProperty("text").GetString());
     ```
   </Tab>
   <Tab title="Java">
     ```java
+    // chat has keys loaded and setIdentity called (see Getting Started)
+    chat.setCacheKeys(true);
+    chat.setSigningKeys(participantSigningKeys); // all participants
+
     if (keyChangeB64 != null && !keyChangeB64.isEmpty()) {
-        var extracted = chat.extractConversationKeys(List.of(keyChangeB64));
-        convKeys.putAll(extracted.keys);
+        // Verify the key change and retain its key in the cache
+        chat.decryptEvents(List.of(keyChangeB64), null);
     }
-    JsonNode evt = chat.decryptEvent(encodedEvent, convKeys, senderSigningKeys);
+    // Decrypt with the cached conversation key; verify against the stored signing keys
+    JsonNode evt = chat.decryptEvent(encodedEvent, (Map<String, byte[]>) null, null);
     if ("Message".equals(evt.path("type").asText())) {
         System.out.println(evt.path("content").path("text").asText());
     }
@@ -230,7 +197,9 @@ JavaScript usa tipos de evento em camelCase (`message`); outros bindings usam `"
   </Tab>
 </Tabs>
 
-Histórico: [`GET /2/chat/conversations/{id}/events`](/x-api/chat/get-chat-conversation-events) + **`decrypt_events`** — veja [Guia de introdução](/xchat/getting-started#6-receive-and-decrypt).
+Para manter os mapas de chave em suas próprias mãos, `extract_conversation_keys` descriptografa as chaves de `conversation_key_change_event` e `decrypt_event` as aceita (junto com as chaves de assinatura do remetente) como argumentos explícitos — um argumento explícito e não vazio sempre prevalece sobre os armazenamentos.
+
+Histórico: [`GET /2/chat/conversations/{id}/events`](/x-api/chat/get-chat-conversation-events) + **`decrypt_events`** — veja [Primeiros passos](/pt/xchat/getting-started#6-receive-and-decrypt).
 
 ---
 
@@ -256,7 +225,7 @@ Histórico: [`GET /2/chat/conversations/{id}/events`](/x-api/chat/get-chat-conve
 
 ## Práticas
 
-- Verifique assinaturas de webhook conforme os requisitos de cada plataforma
-- Faça cache das chaves de conversa e das chaves públicas dos remetentes
-- Aplique blobs de mudança de chave antes de descriptografar mensagens dependentes
-- Deduplique por `event_uuid`
+- Verifique assinaturas de webhook conforme os requisitos da plataforma
+- Defina os armazenamentos de sessão uma vez: `set_signing_keys` para todos os participantes, `set_cache_keys(true)` para chaves de conversa
+- Aplique blobs de mudança de chave (via `decrypt_events`) antes de descriptografar mensagens dependentes
+- Deduplique entregas por `event_uuid` e mensagens pelo `message_id` assinado
