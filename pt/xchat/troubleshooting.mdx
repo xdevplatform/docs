@@ -1,22 +1,22 @@
 ---
 title: Solução de problemas
 sidebarTitle: Solução de problemas
-description: Diagnostique problemas comuns de criptografia no X Chat, como erros do Chat XDK, recuperação de backup seguro de chaves e falhas de descriptografia.
+description: Diagnostique problemas comuns de criptografia do X Chat, incluindo erros do Chat XDK, recuperação do backup seguro de chave, falhas de descriptografia e montagem de payloads de envio assinados.
 keywords: ["X Chat errors", "Chat XDK", "decryption", "secure key backup", "encryption"]
 ---
 
-Esta página cobre problemas que são **específicos da criptografia do X Chat e do Chat XDK** — chaves, backup seguro de chaves, descriptografia/verificação e construção de payloads criptografados de envio.
+Esta página cobre problemas **específicos da criptografia do X Chat e do Chat XDK** — chaves, backup seguro de chave, descriptografar/verificar e montagem de payloads de envio criptografados.
 
-Para webhooks, OAuth, códigos de status HTTP e limites de taxa, use a documentação geral da [X API](/x-api/introduction) e de [autenticação](/fundamentals/authentication/overview).
+Para webhooks, OAuth, códigos de status HTTP e limites de taxa, use a documentação geral da [API do X](/pt/x-api/introduction) e de [autenticação](/pt/fundamentals/authentication/overview).
 
 ---
 
-## Chaves e backup seguro de chaves
+## Chaves e backup seguro de chave
 
-### O desbloqueio falha (código de acesso inválido)
+### Unlock falha (código de acesso inválido)
 
 - Confirme que o código de acesso corresponde ao usado com `setup`
-- Aguarde entre tentativas; realms limitam tentativas incorretas e podem travar a recuperação após muitas falhas
+- Aguarde entre tentativas; os realms limitam a taxa de tentativas incorretas e podem bloquear a recuperação após falhas demais
 
 <Tabs>
   <Tab title="Python">
@@ -62,80 +62,81 @@ Para webhooks, OAuth, códigos de status HTTP e limites de taxa, use a documenta
   </Tab>
 </Tabs>
 
-### Criptografar ou descriptografar falha porque as chaves não foram carregadas
+### Criptografia ou descriptografia falha porque as chaves ou a identidade não estão definidas
 
-Carregue as chaves privadas primeiro e depois defina a **versão** de chave pública do seu registro no X.
+Carregue as chaves privadas primeiro e depois defina a **identidade da sessão** — seu ID de usuário mais o `public_key_version` do seu registro no X. Os métodos `encrypt_*` e `prepare_*` assinam com ela; chamá-los sem uma identidade de sessão (e sem um override explícito por chamada) é um erro.
 
 <Tabs>
   <Tab title="Python">
     ```python
     chat.unlock(passcode)  # or: chat.import_keys(blob)
-    chat.set_key_version(signing_key_version)
+    chat.set_identity(my_user_id, signing_key_version)
     ```
   </Tab>
   <Tab title="TypeScript">
     ```typescript
     await chat.unlock(passcode);
-    chat.setKeyVersion(signingKeyVersion);
+    chat.setIdentity(myUserId, signingKeyVersion);
     ```
   </Tab>
   <Tab title="Rust">
     ```rust
     chat.import_keys(&blob)?;
-    chat.set_key_version(&signing_key_version);
+    chat.set_identity(&my_user_id, &signing_key_version);
     ```
   </Tab>
   <Tab title="Go">
     ```go
     blob, _ := chatxdk.Base64ToBytes(privateKeysB64)
     _ = chat.ImportKeys(blob)
-    chat.SetKeyVersion(signingKeyVersion)
+    _ = chat.SetIdentity(myUserID, signingKeyVersion)
     ```
   </Tab>
   <Tab title="C#">
     ```csharp
     chat.ImportKeys(blobBytes);
-    chat.SetKeyVersion(signingKeyVersion);
+    chat.SetIdentity(myUserId, signingKeyVersion);
     ```
   </Tab>
   <Tab title="Java">
     ```java
     chat.importKeys(blobBytes);
-    chat.setKeyVersion(signingKeyVersion);
+    chat.setIdentity(myUserId, signingKeyVersion);
     ```
   </Tab>
 </Tabs>
 
 ### Chave de conversa ausente para uma mensagem
 
-Você não tem a chave **em bruto** para o `conversation_key_version` daquela mensagem.
+Um erro como `Message encrypted with key version '…' but no matching key found` significa que você não tem a chave em **bruto** para o `conversation_key_version` daquela mensagem.
 
-1. Descriptografe o material de chave a partir de `conversation_key_change_event` (eventos ao vivo) ou `meta.conversation_key_events` (histórico) com `extract_conversation_keys`, **ou** inclua esses blobs em `decrypt_events`
-2. Confirme que as chaves de conversa foram adicionadas para essa versão e que você ainda é um participante (veja [Guia de introdução](/xchat/getting-started#4-set-up-conversation-keys))
+1. Descriptografe o material de chave de `conversation_key_change_event` (eventos ao vivo) ou `meta.conversation_key_events` (histórico) com `extract_conversation_keys`, **ou** inclua esses blobs em `decrypt_events` — com `set_cache_keys(true)` habilitado, `decrypt_events` também retém a chave verificada mais recente de cada conversa, de modo que chamadas posteriores de `decrypt_event` e `encrypt_*` podem omiti-la
+2. Confirme que as chaves de conversa foram adicionadas para aquela versão e que você ainda é um participante (veja [Primeiros passos](/pt/xchat/getting-started#4-set-up-conversation-keys))
 
-### O par não tem chaves públicas
+### O peer não tem chaves públicas
 
-Pode ser que ele não tenha concluído o onboarding. Depois que ele se registrar, carregue `public_key`, `signing_public_key`, `identity_public_key_signature` e `public_key_version` a partir de **Referência da API → Chaves de criptografia**.
+Talvez ele não tenha concluído o onboarding. Depois que ele se registrar, carregue `public_key`, `signing_public_key`, `identity_public_key_signature` e `public_key_version` em **Referência da API → Chaves de criptografia**.
 
 ---
 
 ## Descriptografia e assinaturas
 
-### A descriptografia falha
+### Descriptografia falha
 
-- Chave de conversa **em bruto** obsoleta ou errada, ou versão de chave errada
+- Chave da conversa em **bruto** obsoleta ou incorreta, ou versão de chave errada
 - String `encoded_event` incompleta
-- O tipo de evento não é uma mensagem criptografada que você pode tratar como conteúdo descriptografável
+- O tipo de evento não é uma mensagem criptografada que você possa tratar como conteúdo descriptografável
 
-### A assinatura não verifica
+### A assinatura não é verificada
 
-A verificação é **fail-closed por padrão** (`reject_unverified = true`): o SDK já rejeita eventos assinados não verificados, então uma falha aqui significa que as entradas de verificação estão erradas, e não que você precisa ativar a verificação. Causas comuns:
+A verificação é **fail-closed por padrão** (`reject_unverified = true`): o SDK já rejeita eventos assinados não verificados, então uma falha aqui significa que as entradas de verificação estão erradas, não que você precisa ligar a checagem. Causas comuns:
 
-- Entrada de chave de assinatura ausente ou incompleta para o **remetente** (todos os campos exigidos pelo Chat XDK — veja a referência do [Chat XDK](/xchat/xchat-xdk))
-- O remetente rotacionou versões — busque as chaves públicas dele novamente
+- Entrada de chave de assinatura ausente ou incompleta para o **remetente** (todos os campos exigidos pelo Chat XDK — veja a referência do [Chat XDK](/pt/xchat/xchat-xdk))
+- Nenhuma chave de assinatura passada na chamada nem armazenada via `set_signing_keys`
+- O remetente rotacionou as versões — busque suas chaves públicas novamente
 - Uma versão de chave abaixo do piso aceito nunca é verificada
 
-O setter `set_reject_unverified` existe para você **desabilitar** esse padrão (`false`, não recomendado). Se você o desativou antes, restaure o padrão fail-closed:
+O setter `set_reject_unverified` existe para **desabilitar** esse padrão (`false`, não recomendado). Se você o desabilitou anteriormente, restaure o padrão fail-closed:
 
 <Tabs>
   <Tab title="Python">
@@ -170,37 +171,41 @@ O setter `set_reject_unverified` existe para você **desabilitar** esse padrão 
   </Tab>
 </Tabs>
 
+### Uma resposta traz `reply_preview_validation: "Invalid"`
+
+Respostas descriptografadas podem trazer `reply_preview_validation` (`"Valid"` / `"Invalid"`; JavaScript usa `'valid'` / `'invalid'`). `Invalid` significa que o preview citado dentro da mensagem não corresponde ao evento original assinado que ela incorpora — trate a citação como não confiável e renderize o conteúdo citado apenas a partir do original validado. A mensagem em si é verificada separadamente e continua autêntica; nada é lançado por um preview inválido.
+
 ### Eventos antigos falham permanentemente na verificação
 
-Erros como `signature missing or no matching signing key` ou uma incompatibilidade ECDSA em eventos **antigos** são permanentes. Assinaturas são imutáveis e verificadas reconstruindo o payload assinado a partir do próprio evento, então um evento que foi assinado sobre bytes diferentes (ou nunca foi assinado) falha em cada carregamento futuro — nenhuma nova tentativa, atualização de chave ou chamada de API pode curá-lo. Trate esses eventos como lápides, não como erros repetíveis. Rotacionar a chave de conversa inicia um histórico limpo e verificável a partir daquele ponto; novas mensagens não são afetadas.
+Erros como `signature missing or no matching signing key` ou um mismatch de ECDSA em **eventos antigos** são permanentes. Assinaturas são imutáveis e verificadas reconstruindo o payload assinado a partir do próprio evento, então um evento assinado sobre bytes diferentes (ou nunca assinado) falha em toda carga futura — nenhuma retentativa, atualização de chave ou chamada de API pode consertá-lo. Trate esses eventos como tombstones, não como erros com retentativa. Rotacionar a chave da conversa inicia um histórico limpo e verificável a partir desse ponto; novas mensagens não são afetadas.
 
 ---
 
-## Construindo o payload de envio
+## Montando o payload de envio
 
-Estes erros são específicos da criptografia do X Chat (não são erros HTTP gerais):
+Estes erros são específicos da criptografia do X Chat (não erros HTTP gerais):
 
 | Problema | Correção |
 |:---------|:---------|
-| Bytes de chave errados | Passe os bytes da chave de conversa **em bruto** para o Chat XDK, não a string de chave criptografada da API |
-| Nomes de campos JSON errados | Mapeie `encrypted_content` → `encoded_message_create_event` e `encoded_event_signature` → `encoded_message_event_signature` |
-| ID de mensagem ausente | Gere `message_id` você mesmo e envie o mesmo valor no corpo da requisição |
-| Versão incompatível | Alinhe `conversation_key_version` com a chave usada; alinhe a versão da chave de assinatura com `set_key_version` / seu registro de chave pública |
-| Forma do ID no path | Paths de URL ainda precisam do ID de conversa com hífen (`:` → `-`), mas para assinar o SDK aceita qualquer forma: `A:B`, `A-B` (em qualquer ordem), ou apenas o ID de usuário do destinatário — todos são canonicalizados para os mesmos bytes assinados |
+| Bytes de chave incorretos | Passe os bytes da chave da conversa em **bruto** para o Chat XDK, não a string de chave criptografada da API |
+| Nomes de campo JSON errados | Mapeie `encrypted_content` → `encoded_message_create_event` e `encoded_event_signature` → `encoded_message_event_signature` |
+| ID de mensagem errado | Envie o `message_id` do payload retornado — o SDK o gera e o incorpora ao evento assinado, então qualquer outro valor falha. Em retentativas, reutilize o mesmo payload criptografado para que o ID nunca seja gerado duas vezes |
+| Descompasso de versão | Alinhe `conversation_key_version` com a chave que você usa; alinhe a versão da chave de assinatura passada para `set_identity` com seu registro de chave pública |
+| Forma do ID no caminho | Caminhos de URL ainda precisam do ID da conversa com hífen (`:` → `-`), mas para assinatura o SDK aceita qualquer forma: `A:B`, `A-B` (qualquer ordem) ou apenas o ID do usuário destinatário — todos canonizam para os mesmos bytes assinados |
 
-### A API retorna 400 para uma chamada que altera estado
+### A API retorna 400 para uma chamada que muda estado
 
-Toda chamada de chat que altera estado — adicionar ou rotacionar chaves de conversa, criar um grupo, adicionar membros — requer **`action_signatures`** no corpo da requisição, validado na fronteira da API. Uma entrada ausente ou malformada (cada uma precisa de `message_id`, `encoded_message_event_detail` e um `message_event_signature` com `signature`, `public_key_version` e `signature_version`) retorna imediatamente uma resposta HTTP 400 problem-details. Use os métodos prepare do SDK (`prepare_conversation_key_change`, `prepare_group_create`, `prepare_group_members_change`) e envie **todas** as assinaturas retornadas — criar grupo e adicionar membros retornam duas.
+Toda chamada de chat que muda estado — adicionar ou rotacionar chaves de conversa, criar um grupo, adicionar membros — requer **`action_signatures`** no corpo da requisição, validado na borda da API. Uma entrada ausente ou malformada (cada uma precisa de `message_id`, `encoded_message_event_detail` e um `message_event_signature` com `signature`, `public_key_version` e `signature_version`) retorna uma resposta problem-details HTTP 400 imediatamente. Use os métodos prepare do SDK (`prepare_conversation_key_change`, `prepare_group_create`, `prepare_group_members_change`) e envie **todas** as assinaturas retornadas — criação de grupo e adição de membros retornam duas.
 
 ---
 
-## Criptografar e descriptografar mídia
+## Criptografia e descriptografia de mídia
 
 - Use a **mesma** chave de conversa (e versão) da mensagem que referencia o anexo
 - Trate respostas de download como **texto cifrado** até executar `decrypt_stream`
-- Deduza o tipo MIME **após** descriptografar; o `Content-Type` do download frequentemente não é o tipo real da imagem
+- Infira o tipo MIME **após** descriptografar; o `Content-Type` do download frequentemente não é o tipo real da imagem
 
-Detalhes: [Mídia](/xchat/media).
+Detalhes: [Mídia](/pt/xchat/media).
 
 ---
 
@@ -210,5 +215,5 @@ Ao investigar falhas de criptografia:
 
 - Registre apenas IDs de conversa, IDs de evento e **versões** de chave
 - **Não** registre texto simples, códigos de acesso, chaves privadas ou blobs de chave completos
-- Confirme que `set_key_version` corresponde ao `public_key_version` no seu registro de chave pública
-- Para histórico incompleto, pagine **todas** as páginas de eventos para que os metadados de mudança de chave não sejam pulados antes de descriptografar
+- Confirme que a versão de chave de assinatura passada para `set_identity` corresponde ao `public_key_version` do seu registro de chave pública
+- Para histórico incompleto, pagine **todas** as páginas de eventos para que metadados de mudança de chave não sejam pulados antes de descriptografar

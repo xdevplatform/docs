@@ -1,22 +1,22 @@
 ---
 title: トラブルシューティング
 sidebarTitle: トラブルシューティング
-description: Chat XDK のエラー、セキュアな鍵バックアップからの復元、復号の失敗など、X Chat の暗号化に関するよくある問題を診断します。
+description: Chat XDK のエラー、セキュアキーバックアップの復元、復号失敗、署名付き送信ペイロードの構築など、X Chat 暗号化に関する一般的な問題を診断します。
 keywords: ["X Chat errors", "Chat XDK", "decryption", "secure key backup", "encryption"]
 ---
 
-このページでは、**X Chat の暗号化と Chat XDK に特有の**問題（鍵、安全な鍵バックアップ、復号/検証、暗号化された送信ペイロードの構築）を扱います。
+このページでは、**X Chat の暗号化と Chat XDK に固有の**問題(鍵、セキュアキーバックアップ、復号/検証、および暗号化された送信ペイロードの構築)を扱います。
 
-Webhook、OAuth、HTTP ステータスコード、レート制限については、一般的な [X API](/x-api/introduction) および [認証](/fundamentals/authentication/overview) のドキュメントを参照してください。
+Webhook、OAuth、HTTP ステータスコード、レート制限については、一般の [X API](/ja/x-api/introduction) および [認証](/ja/fundamentals/authentication/overview) のドキュメントを使用してください。
 
 ---
 
-## 鍵と安全な鍵バックアップ
+## 鍵とセキュアキーバックアップ
 
-### アンロックに失敗する（無効なパスコード）
+### アンロックに失敗する(無効なパスコード)
 
-- パスコードが `setup` で使用したものと一致するか確認する
-- 試行の間で待機する；realm は間違った推測をレート制限し、多くの失敗の後に復元をロックすることがある
+- パスコードが `setup` で使用したものと一致していることを確認してください
+- 試行の間に待機してください。レルムは誤答をレート制限し、失敗が多すぎると復元をロックすることがあります
 
 <Tabs>
   <Tab title="Python">
@@ -62,80 +62,81 @@ Webhook、OAuth、HTTP ステータスコード、レート制限については
   </Tab>
 </Tabs>
 
-### 鍵がロードされていないため暗号化または復号に失敗する
+### 鍵やアイデンティティがセットされていないため暗号化/復号が失敗する
 
-まず秘密鍵をロードし、次に X のレコードから公開鍵**バージョン**を設定します。
+まず秘密鍵をロードし、次に**セッションアイデンティティ**を設定してください——あなたのユーザー ID と、X 上のレコードの `public_key_version` です。`encrypt_*` および `prepare_*` メソッドはこれで署名します。セッションアイデンティティなし(かつ明示的な呼び出し単位のオーバーライドもなし)でこれらを呼び出すとエラーになります。
 
 <Tabs>
   <Tab title="Python">
     ```python
     chat.unlock(passcode)  # or: chat.import_keys(blob)
-    chat.set_key_version(signing_key_version)
+    chat.set_identity(my_user_id, signing_key_version)
     ```
   </Tab>
   <Tab title="TypeScript">
     ```typescript
     await chat.unlock(passcode);
-    chat.setKeyVersion(signingKeyVersion);
+    chat.setIdentity(myUserId, signingKeyVersion);
     ```
   </Tab>
   <Tab title="Rust">
     ```rust
     chat.import_keys(&blob)?;
-    chat.set_key_version(&signing_key_version);
+    chat.set_identity(&my_user_id, &signing_key_version);
     ```
   </Tab>
   <Tab title="Go">
     ```go
     blob, _ := chatxdk.Base64ToBytes(privateKeysB64)
     _ = chat.ImportKeys(blob)
-    chat.SetKeyVersion(signingKeyVersion)
+    _ = chat.SetIdentity(myUserID, signingKeyVersion)
     ```
   </Tab>
   <Tab title="C#">
     ```csharp
     chat.ImportKeys(blobBytes);
-    chat.SetKeyVersion(signingKeyVersion);
+    chat.SetIdentity(myUserId, signingKeyVersion);
     ```
   </Tab>
   <Tab title="Java">
     ```java
     chat.importKeys(blobBytes);
-    chat.setKeyVersion(signingKeyVersion);
+    chat.setIdentity(myUserId, signingKeyVersion);
     ```
   </Tab>
 </Tabs>
 
-### メッセージに対する会話鍵が欠落している
+### メッセージに対する会話鍵が見つからない
 
-そのメッセージの `conversation_key_version` に対応する**未加工の**鍵を持っていません。
+`Message encrypted with key version '…' but no matching key found` のようなエラーは、そのメッセージの `conversation_key_version` に対応する**生の**鍵を持っていないことを意味します。
 
-1. `extract_conversation_keys` で `conversation_key_change_event`（ライブイベント）または `meta.conversation_key_events`（履歴）から鍵素材を復号する、**または**これらの blob を `decrypt_events` に含める
-2. そのバージョンの会話鍵が追加されていること、およびあなたがまだ参加者であることを確認する（[Getting Started](/xchat/getting-started#4-set-up-conversation-keys) を参照）
+1. `conversation_key_change_event`(ライブイベント)または `meta.conversation_key_events`(履歴)の鍵素材を `extract_conversation_keys` で復号する、**あるいは**それらのブロブを `decrypt_events` に含める。`set_cache_keys(true)` が有効なら、`decrypt_events` は各会話の最新の検証済み鍵も保持するため、以後の `decrypt_event` や `encrypt_*` の呼び出しでは省略できます
+2. そのバージョンに対して会話鍵が追加されており、まだ参加者であることを確認してください([はじめに](/ja/xchat/getting-started#4-set-up-conversation-keys) を参照)
 
-### ピアが公開鍵を持っていない
+### ピアに公開鍵がない
 
-彼らはオンボーディングを完了していない可能性があります。彼らが登録した後、**API リファレンス → Encryption keys** から `public_key`、`signing_public_key`、`identity_public_key_signature`、`public_key_version` をロードしてください。
+ピアがオンボードを完了していない可能性があります。登録後、**API リファレンス → Encryption keys** から `public_key`、`signing_public_key`、`identity_public_key_signature`、`public_key_version` をロードしてください。
 
 ---
 
 ## 復号と署名
 
-### 復号が失敗する
+### 復号に失敗する
 
-- 古いまたは間違った**未加工の**会話鍵、または間違った鍵バージョン
-- 不完全な `encoded_event` 文字列
+- **生の**会話鍵が古い/誤っている、または鍵バージョンが間違っている
+- `encoded_event` 文字列が不完全である
 - イベントタイプが復号可能なコンテンツとして扱える暗号化メッセージではない
 
 ### 署名が検証されない
 
-検証は**デフォルトで fail-closed**（`reject_unverified = true`）です: SDK はすでに検証されていない署名付きイベントを拒否しているため、ここでの失敗はチェックをオンにする必要があるという意味ではなく、検証入力が間違っていることを意味します。一般的な原因:
+検証は**デフォルトで失敗クローズ**です(`reject_unverified = true`):SDK は検証されていない署名付きイベントを既に拒否しているため、ここで失敗した場合は、チェックを有効にする必要があるのではなく、検証入力が誤っていることを意味します。よくある原因:
 
-- **送信者**の署名鍵エントリが欠落または不完全（Chat XDK に必要なすべてのフィールド — [Chat XDK](/xchat/xchat-xdk) リファレンスを参照）
-- 送信者がバージョンをローテーションした — 公開鍵を再取得する
-- 受け入れフロアより下の鍵バージョンは検証されない
+- **送信者の**署名鍵エントリが欠落または不完全(Chat XDK が必要とするすべてのフィールド——[Chat XDK](/ja/xchat/xchat-xdk) リファレンスを参照)
+- 呼び出しに署名鍵が渡されておらず、`set_signing_keys` で保存されているものもない
+- 送信者がバージョンをローテーションした——公開鍵を再取得してください
+- 許容フロアより下の鍵バージョンは決して検証されません
 
-`set_reject_unverified` セッターは、このデフォルトから**オプトアウト**する（`false`、推奨されません）ために存在します。以前に無効化した場合は、fail-closed のデフォルトを復元してください:
+`set_reject_unverified` セッターは、このデフォルトから**オプトアウト**するために存在します(`false`。推奨されません)。以前に無効にした場合は、失敗クローズのデフォルトに戻してください。
 
 <Tabs>
   <Tab title="Python">
@@ -170,45 +171,49 @@ Webhook、OAuth、HTTP ステータスコード、レート制限については
   </Tab>
 </Tabs>
 
+### 返信に `reply_preview_validation: "Invalid"` が付いている
+
+復号された返信は `reply_preview_validation`(`"Valid"` / `"Invalid"`。JavaScript は `'valid'` / `'invalid'`)を持つことがあります。`Invalid` は、メッセージ内の引用プレビューが埋め込まれた署名済みオリジナルイベントと一致しないことを意味します——引用は信頼できないものとして扱い、検証済みオリジナルからのみ引用内容を描画してください。メッセージ自体は別途検証されており、依然として本物です。プレビューが無効でも何もスローされません。
+
 ### 古いイベントが恒久的に検証に失敗する
 
-**古い**イベントでの `signature missing or no matching signing key` や ECDSA の不一致のようなエラーは恒久的です。署名は不変であり、イベント自体から署名済みペイロードを再構築することで検証されるため、異なるバイトに対して署名された（またはそもそも署名されていない）イベントは、将来のすべてのロードで失敗します — 再試行、鍵の更新、または API 呼び出しでは治せません。これらのイベントは、再試行可能なエラーではなくトゥームストーンとして扱ってください。会話鍵をローテーションすると、その時点からクリーンで検証可能な履歴が始まります；新しいメッセージには影響しません。
+`signature missing or no matching signing key` や、**古い**イベントでの ECDSA 不一致のようなエラーは恒久的です。署名は不変であり、イベント自体から署名済みペイロードを再構築することで検証されます。そのため、異なるバイトに署名された(あるいはまったく署名されていない)イベントは、以後のロードでも毎回失敗します——リトライ、鍵の更新、API 呼び出しでは修復できません。これらのイベントはリトライ可能なエラーではなく tombstone として扱ってください。会話鍵をローテーションすれば、そこから先はクリーンで検証可能な履歴が始まります。新しいメッセージは影響を受けません。
 
 ---
 
 ## 送信ペイロードの構築
 
-これらのミスは X Chat の暗号化に特有のものです（一般的な HTTP エラーではありません）:
+これらのミスは X Chat 暗号化に固有です(一般的な HTTP エラーではありません):
 
 | 問題 | 修正 |
 |:------|:----|
-| 間違った鍵バイト | API からの暗号化された鍵文字列ではなく、**未加工の**会話鍵バイトを Chat XDK に渡す |
-| 間違った JSON フィールド名 | `encrypted_content` → `encoded_message_create_event`、`encoded_event_signature` → `encoded_message_event_signature` にマップする |
-| メッセージ ID の欠落 | `message_id` を自分で生成し、同じ値をリクエストボディで送信する |
-| バージョンの不一致 | `conversation_key_version` を使用する鍵と揃える；署名鍵バージョンを `set_key_version` / 公開鍵レコードと揃える |
-| パス ID の形式 | URL パスには依然としてハイフン付きの会話 ID が必要（`:` → `-`）ですが、署名の場合、SDK は任意の形式を受け付けます: `A:B`、`A-B`（どちらの順序でも）、または受信者のユーザー ID だけ — すべては同じ署名バイトに正規化される |
+| 鍵バイトが誤っている | API からの暗号化された鍵文字列ではなく、**生の**会話鍵バイトを Chat XDK に渡してください |
+| JSON フィールド名が誤っている | `encrypted_content` → `encoded_message_create_event`、`encoded_event_signature` → `encoded_message_event_signature` をマップしてください |
+| メッセージ ID が誤っている | 返されたペイロードの `message_id` を送信してください——SDK が生成し署名済みイベントに埋め込むため、他の値では失敗します。リトライ時は同じ暗号化ペイロードを再利用して、ID が二度発行されないようにしてください |
+| バージョン不一致 | 使用する鍵と `conversation_key_version` を揃え、`set_identity` に渡す署名鍵バージョンを public-key レコードに揃えてください |
+| パス ID の形式 | URL パスは依然としてハイフン付き会話 ID(`:` → `-`)が必要ですが、署名について SDK は任意の形式を受け付けます:`A:B`、`A-B`(順不同)、または裸の受信者ユーザー ID——すべて同じ署名バイトに正規化されます |
 
-### 状態を変更する呼び出しに対して API が 400 を返す
+### 状態を変更する呼び出しで API が 400 を返す
 
-状態を変更するすべてのチャット呼び出し — 会話鍵の追加やローテーション、グループの作成、メンバーの追加 — は、リクエストボディに **`action_signatures`** を要求し、API 境界で検証されます。エントリの欠落や不正な形式（それぞれに `message_id`、`encoded_message_event_detail`、および `signature`、`public_key_version`、`signature_version` を持つ `message_event_signature` が必要）は、即座に HTTP 400 problem-details レスポンスを返します。SDK の prepare メソッド（`prepare_conversation_key_change`、`prepare_group_create`、`prepare_group_members_change`）を使い、返された**すべての**署名を送信してください — グループ作成とメンバー追加は 2 つ返します。
+状態を変更するすべてのチャット呼び出し(会話鍵の追加やローテーション、グループの作成、メンバーの追加)は、リクエストボディに **`action_signatures`** を必要とし、API 境界で検証されます。エントリが欠落または不正な形式(それぞれに `message_id`、`encoded_message_event_detail`、および `signature`、`public_key_version`、`signature_version` を持つ `message_event_signature` が必要)の場合、直ちに HTTP 400 problem-details レスポンスを返します。SDK の prepare メソッド(`prepare_conversation_key_change`、`prepare_group_create`、`prepare_group_members_change`)を使い、返された**すべての**署名を送信してください——グループ作成とメンバー追加は 2 つ返します。
 
 ---
 
 ## メディアの暗号化と復号
 
-- 添付を参照するメッセージと**同じ**会話鍵（およびバージョン）を使用する
-- ダウンロードレスポンスは `decrypt_stream` を実行するまで**暗号文**として扱う
-- MIME タイプは復号**後**に推測する；ダウンロードの `Content-Type` は実際の画像タイプでないことがよくある
+- 添付を参照するメッセージと**同じ**会話鍵(およびバージョン)を使用してください
+- ダウンロードレスポンスは、`decrypt_stream` を実行するまで**暗号文**として扱ってください
+- MIME タイプは**復号後に**推測してください。ダウンロードの `Content-Type` は多くの場合、実際の画像タイプではありません
 
-詳細: [Media](/xchat/media)。
+詳細:[メディア](/ja/xchat/media)。
 
 ---
 
 ## 安全なデバッグ
 
-暗号処理の失敗を調査する際:
+暗号化の失敗を調査する際は:
 
-- 会話 ID、イベント ID、鍵の**バージョン**のみをログに記録する
-- 平文、パスコード、秘密鍵、または完全な鍵 blob は**ログに記録しない**
-- `set_key_version` が公開鍵レコードの `public_key_version` と一致することを確認する
-- 履歴が不完全な場合、復号する前に鍵変更のメタデータがスキップされないよう、**すべての**イベントページをページングする
+- 会話 ID、イベント ID、鍵の**バージョン**のみをログに出力してください
+- 平文、パスコード、秘密鍵、完全な鍵ブロブは**ログに出力しないでください**
+- `set_identity` に渡した署名鍵バージョンが public-key レコードの `public_key_version` と一致することを確認してください
+- 履歴が不完全な場合は、鍵変更メタデータがスキップされないよう、復号前に**すべての**イベントページをページングしてください
