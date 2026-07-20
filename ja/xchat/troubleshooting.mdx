@@ -106,6 +106,73 @@ Webhook、OAuth、HTTP ステータスコード、レート制限については
   </Tab>
 </Tabs>
 
+### ローカルの公開鍵がアカウントの登録済み鍵と一致しない
+
+クライアントはしばしば、*「このデバイス上の鍵は、このアカウントに登録されている鍵のいずれかか？」* に答える必要があります — 復元またはインポート後に正しい `public_key_version` を採用するため、あるいはオンボーディングがすでに完了しているかを判断するためです。Chat XDK の `get_public_keys` の出力を API の `public_key` フィールドと**文字列として比較すると、同じ鍵であっても常に失敗します**。両者が異なるエンコーディングを使用しているためです:
+
+- **API** は登録時にアップロードされたとおりの鍵を保存して返します: DER (SPKI) エンコーディング — 固定のアルゴリズム識別子プレフィックスの後ろにある生の鍵
+- **Chat XDK** の `get_public_keys` は、そのプレフィックスなしの生の鍵だけを返します
+
+同じ鍵、2 つの表記です。比較するには、両方を base64 デコードし、API のバイト列が SDK のバイト列で**終わる**ことを確認します（両側が同じエンコーディングを持つ場合に備え、完全一致も一致として扱います）:
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import base64
+
+    def same_key(local_b64: str, server_b64: str) -> bool:
+        local = base64.b64decode(local_b64)    # chat.get_public_keys()["identity"]
+        server = base64.b64decode(server_b64)  # API row's "public_key"
+        return local == server or (len(server) > len(local) and server.endswith(local))
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const sameKey = (localB64: string, serverB64: string): boolean => {
+      const local = Buffer.from(localB64, 'base64');   // chat.getPublicKeys().identity
+      const server = Buffer.from(serverB64, 'base64'); // API row's public_key
+      return local.equals(server) ||
+        (server.length > local.length && server.subarray(server.length - local.length).equals(local));
+    };
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    fn same_key(local: &[u8], server: &[u8]) -> bool {
+        local == server || (server.len() > local.len() && server.ends_with(local))
+    }
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    func sameKey(local, server []byte) bool {
+        return bytes.Equal(local, server) ||
+            (len(server) > len(local) && bytes.HasSuffix(server, local))
+    }
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    static bool SameKey(byte[] local, byte[] server) =>
+        local.SequenceEqual(server) ||
+        (server.Length > local.Length &&
+         server.AsSpan(server.Length - local.Length).SequenceEqual(local));
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    static boolean sameKey(byte[] local, byte[] server) {
+        if (Arrays.equals(local, server)) return true;
+        if (server.length <= local.length) return false;
+        byte[] tail = Arrays.copyOfRange(server, server.length - local.length, server.length);
+        return Arrays.equals(tail, local);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+一致したら、その行の `public_key_version` を `set_identity` に採用してください。バージョンを比較するとき（たとえば最新の鍵を選ぶ場合）は、**数値として**比較してください — バージョンはミリ秒のタイムスタンプで文字列長が可変なので、辞書順比較では誤ったものが選ばれます。
+
 ### メッセージに対する会話鍵が欠落している
 
 `Message encrypted with key version '…' but no matching key found` のようなエラーは、そのメッセージの `conversation_key_version` に対応する**未加工の**鍵を持っていないことを意味します。
@@ -135,6 +202,7 @@ Webhook、OAuth、HTTP ステータスコード、レート制限については
 - 呼び出しに署名鍵が渡されておらず、`set_signing_keys` 経由で保存もされていない
 - 送信者がバージョンをローテーションした — 公開鍵を再取得する
 - 受け入れフロアより下の鍵バージョンは決して検証されない
+- **グループの鍵変更イベント**で、署名者がすでにそのグループを離脱していると、その鍵はもはや配信されない — [離脱したメンバーによる鍵変更](/xchat/groups#離脱したメンバーによる鍵変更) を参照
 
 `set_reject_unverified` セッターは、このデフォルトから**オプトアウト**する（`false`、推奨されません）ために存在します。以前に無効化した場合は、fail-closed のデフォルトを復元してください:
 

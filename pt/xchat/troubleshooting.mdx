@@ -106,6 +106,73 @@ Carregue as chaves privadas primeiro e depois defina a **identidade da sessão**
   </Tab>
 </Tabs>
 
+### Sua chave pública local nunca corresponde às chaves registradas da conta
+
+Os clientes frequentemente precisam responder *"a chave neste dispositivo é uma das chaves registradas para esta conta?"* — após uma restauração ou importação, para adotar o `public_key_version` correto, ou para decidir se o onboarding já aconteceu. Comparar a saída de `get_public_keys` do Chat XDK com o campo `public_key` da API **como strings sempre falha**, mesmo para a mesma chave, porque as duas usam codificações diferentes:
+
+- A **API** armazena e retorna a chave exatamente como o registro fez o upload: a codificação DER (SPKI) — a chave crua atrás de um prefixo fixo de identificador de algoritmo
+- O `get_public_keys` do **Chat XDK** retorna apenas a chave crua, sem esse prefixo
+
+A mesma chave, duas grafias. Para comparar, decodifique ambas de base64 e verifique se os bytes da API **terminam com** os bytes do SDK (bytes idênticos também correspondem, caso ambos os lados algum dia mantenham a mesma codificação):
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import base64
+
+    def same_key(local_b64: str, server_b64: str) -> bool:
+        local = base64.b64decode(local_b64)    # chat.get_public_keys()["identity"]
+        server = base64.b64decode(server_b64)  # API row's "public_key"
+        return local == server or (len(server) > len(local) and server.endswith(local))
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const sameKey = (localB64: string, serverB64: string): boolean => {
+      const local = Buffer.from(localB64, 'base64');   // chat.getPublicKeys().identity
+      const server = Buffer.from(serverB64, 'base64'); // API row's public_key
+      return local.equals(server) ||
+        (server.length > local.length && server.subarray(server.length - local.length).equals(local));
+    };
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    fn same_key(local: &[u8], server: &[u8]) -> bool {
+        local == server || (server.len() > local.len() && server.ends_with(local))
+    }
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    func sameKey(local, server []byte) bool {
+        return bytes.Equal(local, server) ||
+            (len(server) > len(local) && bytes.HasSuffix(server, local))
+    }
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    static bool SameKey(byte[] local, byte[] server) =>
+        local.SequenceEqual(server) ||
+        (server.Length > local.Length &&
+         server.AsSpan(server.Length - local.Length).SequenceEqual(local));
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    static boolean sameKey(byte[] local, byte[] server) {
+        if (Arrays.equals(local, server)) return true;
+        if (server.length <= local.length) return false;
+        byte[] tail = Arrays.copyOfRange(server, server.length - local.length, server.length);
+        return Arrays.equals(tail, local);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Depois de haver correspondência, adote o `public_key_version` daquela linha para `set_identity`. Ao comparar versões (por exemplo, para escolher a chave mais nova), compare **numericamente** — as versões são timestamps em milissegundos com comprimento de string variável, então uma comparação lexicográfica escolhe a errada.
+
 ### Chave de conversa ausente para uma mensagem
 
 Um erro como `Message encrypted with key version '…' but no matching key found` significa que você não tem a chave **em bruto** para o `conversation_key_version` daquela mensagem.
@@ -135,6 +202,7 @@ A verificação é **fail-closed por padrão** (`reject_unverified = true`): o S
 - Nenhuma chave de assinatura passada na chamada e nenhuma armazenada via `set_signing_keys`
 - O remetente rotacionou versões — busque as chaves públicas dele novamente
 - Uma versão de chave abaixo do piso aceito nunca é verificada
+- Em um **evento de mudança de chave de grupo**, quem assinou já saiu do grupo, então suas chaves não são mais servidas — veja [Mudanças de chave de membros que saíram](/xchat/groups#mudanças-de-chave-de-membros-que-saíram)
 
 O setter `set_reject_unverified` existe para você **desabilitar** esse padrão (`false`, não recomendado). Se você o desativou antes, restaure o padrão fail-closed:
 
