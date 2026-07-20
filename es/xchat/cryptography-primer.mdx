@@ -1,31 +1,66 @@
 ---
-title: Introducción a la criptografía
-sidebarTitle: Introducción a la criptografía
-description: Aprende los conceptos de ECDH, cifrado de clave pública y firmas digitales detrás del cifrado de extremo a extremo de X Chat sin detalles de implementación.
-keywords: ["X Chat cryptography", "E2EE primer", "encryption basics", "public key encryption", "ECDH", "digital signatures", "conversation keys"]
+title: Manual básico de criptografía
+sidebarTitle: Manual básico de criptografía
+description: "Los conceptos detrás del cifrado de extremo a extremo de X Chat: cómo se protegen tus mensajes."
+keywords: ["X Chat cryptography", "E2EE primer", "encryption basics", "public key encryption", "ECDH", "ECIES", "digital signatures", "conversation keys"]
 ---
 
-import { Button } from '/snippets/button.mdx';
+X Chat está cifrado de extremo a extremo: los mensajes de un usuario, en texto plano, solo existen en sus dispositivos. Esta página explica cómo funciona.
 
-Esta introducción explica las ideas criptográficas detrás de X Chat a nivel conceptual. No necesitas esta profundidad para construir—el [Chat XDK](/es/xchat/xchat-xdk) realiza el cifrado, descifrado, firma y almacenamiento de claves por ti—pero el modelo mental ayuda cuando diseñas tu app o depuras su comportamiento.
-
-Cuando estés listo para implementarlo, usa [Primeros pasos](/es/xchat/getting-started) para un recorrido completo y la [referencia de la API](/x-api/chat/get-chat-conversations) en la barra lateral para las rutas individuales.
 
 <Note>
-**Tú no implementas esta criptografía por tu cuenta.** El Chat XDK se encarga. Esta página es para entender, no una lista de verificación de la API.
+**Esta página es informativa. No necesitas este conocimiento para construir (el [Chat XDK](/xchat/xchat-xdk) realiza cada operación aquí por ti).**
 </Note>
 
 ---
 
 ## El panorama general
 
-X Chat usa un sistema de cifrado por capas donde:
+Veamos el flujo completo desde la creación de la cuenta hasta el envío y recepción de mensajes.
 
-1. Los **mensajes** se cifran con una **clave de conversación** (cifrado simétrico rápido)
-2. Las **claves de conversación** se cifran para cada participante usando su **clave pública de identidad** (intercambio de claves asimétrico)
-3. Los **mensajes se firman** con la **clave de firma** para que los destinatarios puedan verificar quién los envió y que nada fue alterado
+<Steps>
+  <Step title="Creación de la cuenta">
+    Aquí el Chat XDK genera dos pares de claves en tu dispositivo:
 
-El cifrado simétrico es eficiente para grandes volúmenes de tráfico de mensajes; el cifrado asimétrico se usa principalmente para **distribuir** claves de conversación de manera segura.
+    - un **par de claves de identidad**, para recibir secretos
+    - un **par de claves de firma**, para demostrar la autoría
+
+    Las mitades privadas van a la [copia de seguridad segura de claves](#secure-key-backup-distributed-key-storage), que detallaremos más adelante. Lo importante aquí es que solo son recuperables con tu código de acceso; X no puede recuperarlas.
+
+    Las mitades públicas se publican al backend de X a través de la API de **public key**, con una firma que vincula las claves de identidad y de firma entre sí.
+  </Step>
+  <Step title="Creación de la conversación">
+    Para enviarte un mensaje, el remitente genera una nueva **clave de conversación**, una clave simétrica que cifrará los mensajes.
+
+    Descarga tu clave pública desde el backend de X, verifica la firma que la acompaña y cifra la clave de conversación con tu clave de identidad.
+
+    Esta es una propiedad crucial de la criptografía de clave pública: cualquiera puede cifrar hacia tu clave pública; **solo tu clave privada puede descifrar, y solo tú la tienes**. Así que X puede almacenar y entregar la copia cifrada, pero nunca abrirla. (Para los esquemas exactos utilizados, consulta el [glosario](#glossary).)
+
+    ¿Por qué no ciframos los mensajes directamente con tu clave pública? Por velocidad: el cifrado de clave pública es mucho más costoso que el cifrado de clave simétrica, por lo que intercambiar una clave permite una mejor eficiencia para los mensajes posteriores.
+  </Step>
+  <Step title="Mensajería">
+    Cuando alguien te envía un mensaje, recibirás la clave de conversación, cifrada con tu clave pública de identidad, y los mensajes cifrados con la clave de conversación.
+
+    Usas tu clave privada de identidad para descifrar la clave de conversación (de nuevo, solo tú tienes esta clave) y luego usas la clave de conversación resultante para descifrar los mensajes.
+
+    De vez en cuando, las claves en una conversación rotan (se comparte una nueva clave simétrica), por diferentes motivos. Por eso, cada clave de conversación tiene una versión para que los participantes siempre sepan que están usando la clave correcta.
+  </Step>
+  <Step title="Firma">
+    El cifrado permite que cualquiera te envíe un mensaje que solo tú puedes descifrar. La firma es, en cierto sentido, lo contrario: te permite (y solo a ti) firmar un mensaje, y a cualquiera verificar la firma. En la práctica, la clave privada es necesaria para firmar, y la clave pública puede usarse para verificar.
+
+    En X Chat, cada remitente firma su mensaje. Las firmas prueban tanto quién firmó el mensaje como los bytes exactos firmados, así todos los destinatarios pueden verificar que este mensaje exacto es lo que el remitente escribió. Nuevamente, el XDK se encarga de esto por ti; cubrimos los detalles en [Firmas explicadas](#signatures-explained).
+  </Step>
+</Steps>
+
+---
+
+## Poniéndolo todo junto
+
+X Chat combina tres herramientas criptográficas estándar, cada una haciendo el trabajo en el que es buena:
+
+1. Una **clave de conversación** cifra los mensajes: simétrica, lo bastante rápida para todo el tráfico de mensajes y multimedia.
+2. Un **par de claves de identidad** entrega las claves de conversación a cada participante sin que nadie más (incluido X) las vea.
+3. Un **par de claves de firma** demuestra la autoría: cada mensaje lleva una firma que los destinatarios verifican.
 
 ```mermaid
 flowchart TB
@@ -33,265 +68,194 @@ flowchart TB
         A[Your Message] --> B[Encrypt with<br/>Conversation Key]
         B --> C[Encrypted Message]
     end
-    
-    subgraph "Key Distribution"
-        D[Conversation Key] --> E[Encrypt with<br/>Recipient's Public Key]
-        E --> F[Encrypted Key<br/>for Recipient]
+
+    subgraph "Key Delivery"
+        D[Conversation Key] --> E[Wrap to Recipient's<br/>Identity Public Key]
+        E --> F[Encrypted Key Copy<br/>for Recipient]
     end
-    
+
     subgraph "Authentication"
-        C --> G[Sign with<br/>Your Private Key]
+        C --> G[Sign with Your<br/>Signing Private Key]
         G --> H[Signature]
     end
 ```
 
-En el flujo del producto, X transporta **texto cifrado y sobres de clave**—no contenido legible del mensaje ni la clave de conversación en bruto. Tu app usa el Chat XDK para la criptografía y la [Chat API](/es/xchat/introduction) (a través del XDK en Python/TypeScript, o HTTPS) para registrar claves y enviar o recibir esos payloads cifrados. Consulta [Primeros pasos](/es/xchat/getting-started) para ver cómo encajan estas piezas.
+X transporta y almacena únicamente **texto cifrado y claves envueltas**, nada que pueda abrir. El XDK hace la criptografía; la [Chat API](/xchat/introduction) registra las claves y mueve las cargas cifradas ([Primeros pasos](/xchat/getting-started)).
+
+El elenco completo:
+
+| Clave | Quién la tiene | Qué hace |
+|:------|:---------------|:---------|
+| **Identity keypair** | Mitad privada: solo tú. Mitad pública: publicada | Recibe claves de conversación envueltas |
+| **Signing keypair** | Mitad privada: solo tú. Mitad pública: publicada | Firma mensajes y cambios de estado; otros verifican |
+| **Conversation key** | Cada participante de una conversación | Cifra mensajes y multimedia; con versión, rota |
 
 ---
 
-## Tipos de claves explicados
+## Un ejemplo práctico
 
-X Chat usa tres tipos de material de clave, cada uno con un propósito específico.
-
-### 1. Par de claves de identidad
-
-**Propósito:** Intercambiar de manera segura claves de conversación entre usuarios
-
-| Componente | Descripción |
-|:----------|:------------|
-| **Clave pública de identidad** | Se comparte con otros; se usa para cifrar claves de conversación *dirigidas a* ti |
-| **Clave privada de identidad** | Se mantiene en secreto; se usa para descifrar claves de conversación enviadas *a* ti |
-
-Cuando alguien te añade a una conversación, cifra la clave de conversación usando tu clave pública de identidad. Solo tu clave privada de identidad puede descifrarla.
-
-Las mitades públicas se registran y se descubren a través de las APIs de **public-key** de la plataforma (consulta Claves de cifrado en la referencia de la API). Las mitades privadas permanecen en el Chat XDK (por ejemplo, mediante [copia de seguridad segura de claves](#secure-key-backup-distributed-key-storage) o un blob de claves cuidadosamente protegido).
-
-### 2. Par de claves de firma
-
-**Propósito:** Demostrar que fuiste el autor de un mensaje
-
-| Componente | Descripción |
-|:----------|:------------|
-| **Clave pública de firma** | Se comparte con otros; se usa para verificar tus firmas |
-| **Clave privada de firma** | Se mantiene en secreto; se usa para firmar tus mensajes |
-
-Cuando envías un mensaje, se firma con tu clave privada de firma. Los destinatarios lo verifican usando tu clave pública de firma (también publicada a través de las APIs de public-key). El Chat XDK firma como parte del cifrado de un mensaje y puede verificar al descifrar cuando proporcionas el material de clave pública del remitente.
-
-### 3. Clave de conversación
-
-**Propósito:** Cifrar y descifrar mensajes (y [contenido multimedia](/es/xchat/media)) dentro de una conversación específica
-
-| Propiedad | Descripción |
-|:---------|:------------|
-| **Simétrica** | La misma clave cifra y descifra |
-| **Por conversación** | Cada conversación tiene su propia clave |
-| **Compartida entre participantes** | Todos los participantes que deban leer la conversación tienen una copia |
-| **Versionada** | Las claves pueden rotarse; las apps deben rastrear las versiones a lo largo del tiempo |
-
-Las claves de conversación se generan cuando se configura una conversación o cuando las claves rotan. Cada participante recibe una **copia cifrada** de la clave, generada con su clave pública de identidad. Después de descifrar tu copia una vez, guardas la clave de conversación en **bruto** y la usas para el cifrado rápido de mensajes (y [contenido multimedia](/es/xchat/media)). La configuración de esas copias para una conversación se realiza mediante el Chat XDK junto con los endpoints de **key** de conversación—se recorre en [Primeros pasos](/es/xchat/getting-started#4-set-up-conversation-keys).
-
----
-
-## Cómo funciona el cifrado (conceptualmente)
-
-### Enviar un mensaje
+Veamos qué sucede en realidad cuando creas un grupo con Bob y Carol.
 
 <Steps>
-  <Step title="Empieza con texto plano">
-    Escribes: "Hola, ¿cómo estás?"
+  <Step title="Generar la clave de conversación">
+    El XDK genera una nueva clave de conversación aleatoria. Hasta ahora existe solo en memoria en tu dispositivo.
   </Step>
-  <Step title="Obtén la clave de conversación">
-    Tu app usa la clave de conversación en bruto para este chat (de la configuración o de un evento anterior de distribución de claves), para la versión de clave correcta.
+  <Step title="Descargar y verificar las claves de los participantes">
+    Tu app descarga las claves públicas de Bob y Carol desde el backend de X y verifica la firma de cada una. Si una firma no cuadra, te detienes; nunca cifres hacia una clave que no pudiste verificar.
   </Step>
-  <Step title="Cifra el mensaje">
-    El Chat XDK cifra tu mensaje con la clave de conversación. El resultado es texto cifrado que es inútil sin esa clave.
+  <Step title="Envolver la clave para cada participante">
+    El XDK envuelve la clave de conversación tres veces: para la clave pública de identidad de Bob, la de Carol y la tuya (para que tus otros dispositivos también puedan leerla).
   </Step>
-  <Step title="Firma el mensaje">
-    El Chat XDK firma el payload cifrado con tu clave privada de firma, demostrando que fuiste el autor de este contenido exacto.
+  <Step title="Firmar el cambio">
+    El XDK firma una carga que describe exactamente este cambio: el grupo, sus miembros, las claves envueltas. Crear un grupo necesita **dos** [firmas de acción](#signed-state-changes-action-signatures); el XDK produce ambas por ti.
   </Step>
-  <Step title="Envía a X">
-    Tu app envía el payload cifrado y la firma a X a través del endpoint **send message** de la Chat API. X almacena y entrega bytes que no puede leer como texto plano.
+  <Step title="Publicar">
+    Tu app hace POST de las copias envueltas y las firmas a X. El servidor almacena tres blobs cifrados que no puede abrir. ¡En ningún momento la clave de conversación en bruto salió de tu dispositivo!
+  </Step>
+  <Step title="Bob lee">
+    El XDK de Bob desenvuelve su copia con su clave privada de identidad, verifica que el cambio de clave provino de ti y guarda la clave de conversación en bruto.
   </Step>
 </Steps>
 
-### Recibir un mensaje
+Esa es la configuración única. A partir de aquí, cada mensaje sigue los mismos dos flujos:
 
-<Steps>
-  <Step title="Recibe datos cifrados">
-    Tu app recibe texto cifrado de X—a través de [webhooks o un activity stream](/es/xchat/real-time-events), o al leer **events** de conversación para el historial.
-  </Step>
-  <Step title="Obtén la clave de conversación">
-    Usa tu clave en bruto en caché, u obténla descifrando tu copia desde un evento de distribución de claves (cambio de clave) si es nueva o rotada.
-  </Step>
-  <Step title="Verifica la firma">
-    El Chat XDK comprueba la firma usando la clave pública de firma del remitente (y el enlace de identidad asociado), para que sepas quién lo envió y que no fue modificado.
-  </Step>
-  <Step title="Descifra el mensaje">
-    El Chat XDK descifra con la clave de conversación. Ahora puedes leer: "Hola, ¿cómo estás?"
-  </Step>
-</Steps>
+**Envío.** El XDK cifra tu mensaje con la clave de conversación actual, lo firma, y tu app hace POST de ambos al endpoint **send message**. X almacena y entrega bytes que no puede leer.
 
-La implementación de cifrar, enviar, recibir y descifrar está en [Primeros pasos](/es/xchat/getting-started) y en la referencia del [Chat XDK](/es/xchat/xchat-xdk).
+**Recepción.** El texto cifrado llega a través de [webhooks o un activity stream](/xchat/real-time-events), o leyendo los **events** de la conversación para el historial. El XDK verifica primero la firma del remitente, luego descifra con tu clave de conversación almacenada (si la clave rotó, un evento **key change** entrega tu nueva copia envuelta). Si la verificación falla, el mensaje se rechaza.
 
----
-
-## Distribución de claves explicada
-
-Un desafío central en el cifrado de extremo a extremo es la **distribución de claves**: cómo los participantes obtienen la clave de conversación **sin** que X (o un observador) vea esa clave en claro.
-
-### Configuración inicial de la clave
-
-Cuando se prepara una conversación para mensajería:
-
-1. El Chat XDK genera una clave de conversación aleatoria
-2. El Chat XDK cifra esa clave para **la clave pública de identidad de cada participante**
-3. Tu app publica esas copias cifradas a través de las Chat APIs de X
-4. Cada participante descifra **su** copia con su clave privada de identidad (en el Chat XDK)
-
-X solo maneja las copias **envueltas**, nunca la clave de conversación en bruto.
-
-### Eventos de cambio de clave
-
-Cuando la clave de conversación rota (por ejemplo cuando cambia la membresía), los participantes reciben un evento de **cambio de clave** con nuevas copias cifradas para cada miembro.
-
-Tu app debe:
-
-1. Detectar material de cambio de clave en eventos en vivo o en el historial de la conversación
-2. Descifrar y almacenar la nueva clave de conversación (y versión)
-3. Usar la versión más reciente para los envíos posteriores
-
-[Primeros pasos](/es/xchat/getting-started#6-receive-and-decrypt) y [Eventos en tiempo real](/es/xchat/real-time-events) describen dónde aparecen esos eventos en la práctica.
+La implementación vive en [Primeros pasos](/xchat/getting-started) y en la referencia del [Chat XDK](/xchat/xchat-xdk).
 
 ---
 
 ## Copia de seguridad segura de claves: almacenamiento distribuido de claves
 
-Tus claves **privadas** de identidad y de firma deben almacenarse con cuidado. X Chat incluye un sistema de **copia de seguridad segura de claves** para que las claves puedan recuperarse con un código de acceso en distintos dispositivos sin darle a un solo servidor el secreto completo.
+Antes dijimos que tus claves privadas se guardan en la **copia de seguridad segura de claves**, recuperables solo con tu código de acceso. Veamos cómo funciona, porque es la parte sobre la que la gente es más escéptica: ¿cómo pueden las claves respaldarse sin que X pueda leerlas?
 
-### El problema con el almacenamiento tradicional de claves
+### El problema del almacenamiento tradicional de claves
 
 | Enfoque | Problema |
-|:---------|:--------|
-| Almacenar solo en el dispositivo | Perder el dispositivo = perder las claves = perder acceso al historial de mensajes |
-| Almacenar en una copia de seguridad en la nube común | El proveedor podría acceder al material de la clave |
-| Recordar una clave larga | Las personas no pueden memorizar de forma confiable claves de alta entropía |
+|:--------|:---------|
+| Guardar solo en el dispositivo | Perder el dispositivo = perder las claves = perder acceso al historial de mensajes |
+| Guardar en un backup en la nube común | El proveedor puede acceder al material de la clave |
+| Recordar una clave larga | Las personas no pueden memorizar secretos de alta entropía |
 
 ### Cómo lo resuelve la copia de seguridad segura de claves
 
-La copia de seguridad segura de claves combina **compartición de secretos** con **protección por código de acceso**:
+X Chat usa el protocolo de código abierto [**Juicebox**](https://juicebox.xyz), que combina **compartición de secretos con umbral** con protección por código de acceso. El protocolo completo está especificado allí; la versión corta:
 
-1. Las claves privadas se **dividen en shares**
-2. Los shares los guardan **realms independientes** (servidores separados)
-3. **Ningún realm** tiene por sí solo información suficiente para reconstruir las claves
-4. La recuperación requiere tu **código de acceso** y la cooperación de **suficientes realms**
-5. Los códigos de acceso incorrectos están **limitados por tasa** para ralentizar las conjeturas
+**Almacenar (una sola vez, al crear la cuenta).** El XDK divide tus claves privadas en fragmentos y los distribuye a tres **realms**, servicios separados aislados entre sí. Los tres son operados por X, así que el aislamiento por sí solo no significaría gran cosa. Ahí es donde entra el hardware: dos de los realms viven dentro de **módulos de seguridad de hardware** (HSM), hardware resistente a manipulación que no entregará su fragmento a nadie, ni siquiera a un administrador de X con acceso completo al servidor. Un fragmento por sí solo no revela nada, y la recuperación requiere fragmentos de **dos de los tres** realms, por lo que cada recuperación posible pasa por al menos un HSM: no hay un camino solo por software hacia tus claves. El software del HSM y la **key ceremony** que lo aprovisionó están documentados públicamente.
+
+**Recuperar (nuevo dispositivo).** Ingresas tu código de acceso, y el XDK demuestra a cada realm que lo conoces. El protocolo Juicebox hace esto posible sin que el código de acceso salga jamás de tu dispositivo. Cada realm que te verifica libera su fragmento de tus claves, y una vez que dos de los tres responden, el XDK reconstruye tus claves en tu dispositivo.
+
+**Límites de intentos.** Cada realm permite como máximo **20 intentos incorrectos de código de acceso**. En el vigésimo intento incorrecto, tu fragmento de clave se elimina del realm. Esto se aplica por hardware mediante los HSM y protege contra cualquier ataque de fuerza bruta.
 
 ```mermaid
 flowchart LR
-    A[Your Private Keys] --> B[Split into Shares]
-    B --> C[Realm 1<br/>Share A]
-    B --> D[Realm 2<br/>Share B]
-    B --> E[Realm 3<br/>Share C]
-    
-    subgraph Recovery
-        F[Your Passcode + Multiple Realms] --> G[Reconstruct Keys]
+    subgraph Storing
+        A[Your Private Keys] --> B[Split into Shares]
+        B --> C[Realm 1<br/>Share A · HSM]
+        B --> D[Realm 2<br/>Share B · HSM]
+        B --> E[Realm 3<br/>Share C]
     end
+
+    subgraph Recovering
+        F[Your Passcode + 2 of 3 Realms] --> G[Reconstruct Keys]
+    end
+
+    E ~~~ F
 ```
 
-Obtienes capacidad de recuperación (nuevo dispositivo + código de acceso) sin que una sola parte guarde todo el secreto.
+El resultado: puedes recuperar tus claves en un dispositivo nuevo solo con tu código de acceso, ningún realm por sí solo contiene el secreto completo, y los realms respaldados por hardware imponen sus límites incluso contra el propio X.
 
 <Note>
-No configuras servidores de copia de seguridad de claves manualmente para el flujo normal. El Chat XDK incluye el cliente de copia de seguridad; la configuración de los realms viene de la X API como el campo **`juicebox_config`** en tu registro de public-key. El almacenamiento inicial del código de acceso y el desbloqueo posterior son llamadas del Chat XDK—consulta [inicializar con claves existentes](/es/xchat/getting-started#2-initialize-the-chat-xdk-with-existing-keys) y [crear y registrar claves](/es/xchat/getting-started#3-create-and-register-keys-first-time-setup) en Primeros pasos. Algunas apps (especialmente servidores y bots) usan un blob de claves exportado en lugar de la copia de seguridad segura de claves; protege ese material como si fuera una contraseña.
+No configuras nada de esto a mano. El Chat XDK incluye el cliente de copia de seguridad, y la configuración del realm llega desde el backend de X con tu registro de clave pública. El almacenamiento del código de acceso y el desbloqueo son llamadas del Chat XDK; consulta [initialize with existing keys](/xchat/getting-started#2-initialize-the-chat-xdk-with-existing-keys) y [create and register keys](/xchat/getting-started#3-create-and-register-keys-first-time-setup). Los servidores y bots suelen omitir la copia de seguridad y usan un blob de claves exportado; protégelo como si fuera una contraseña.
 </Note>
 
 ---
 
 ## Firmas explicadas
 
-Cada mensaje de X Chat incluye una **firma digital** que aporta:
+La firma de cada mensaje ofrece a los destinatarios dos garantías:
 
-1. **Autenticidad** — se produjo con la clave privada de firma del remitente  
-2. **Integridad** — el contenido cifrado no se modificó después de firmarse  
+1. **Autenticidad**: producida por el titular de la clave privada de firma del remitente
+2. **Integridad**: el contenido cifrado no se modificó después de firmar
 
-### Cómo funcionan las firmas (conceptualmente)
+Si algo en el contenido firmado cambia, la verificación falla. Por supuesto, esta garantía es tan fuerte como el secreto de la clave de firma, por lo que el [almacenamiento de claves](#secure-key-backup-distributed-key-storage) importa tanto.
 
-| Acción | Clave utilizada | Resultado |
-|:-------|:---------|:-------|
-| **Firmar** | Clave privada de firma del remitente | Una firma vinculada a este mensaje cifrado exacto |
-| **Verificar** | Clave pública de firma del remitente | Confirma que la firma coincide con el mensaje y la clave |
+**En tu app.** El XDK firma cuando ciframos y verifica cuando desciframos. El rechazo ocurre en ambos extremos: X Chat mismo rechaza eventos que no puede verificar, y el XDK hace lo mismo al recibirlos, **obligatorio por defecto** (deshabilitar esto no se recomienda). Detalles: [Chat XDK](/xchat/xchat-xdk).
 
-Si algo en el material firmado cambia, la verificación falla. Solo alguien con la clave privada de firma puede producir una firma válida para esa clave.
-
-### En tu app
-
-El Chat XDK firma cuando cifras mensajes salientes y verifica cuando descifras los entrantes contra el material de clave pública del remitente (obtenido de las APIs de public-key). La verificación es **obligatoria por defecto**: el SDK rechaza eventos firmados no verificados a menos que desactives explícitamente la comprobación (no recomendado). Los detalles están en la referencia del [Chat XDK](/es/xchat/xchat-xdk).
-
-Las firmas también cubren el contenido citado. Una respuesta incrusta el mensaje original **firmado** en bruto que cita; cuando el Chat XDK descifra la respuesta, verifica ese original incrustado y compara la cita contra él, reportando el resultado como `reply_preview_validation` (`Valid` / `Invalid`). Un resultado `Invalid` significa que la cita no coincide con el original firmado—trata el material citado como no confiable, aunque la respuesta en sí se verifique por separado—de modo que ningún participante pueda atribuir palabras inventadas a otro.
+Las firmas también cubren el contenido citado. Una respuesta incrusta el mensaje original **firmado** en bruto que cita; cuando el Chat XDK descifra la respuesta, verifica ese original incrustado y compara la cita con él, reportando el resultado como `reply_preview_validation` (`Valid` / `Invalid`). Un resultado `Invalid` significa que la cita no coincide con el original firmado—trata el material citado como no confiable, aunque la respuesta en sí se verifique por separado—de modo que ningún participante pueda atribuir palabras inventadas a otro.
 
 ### Cambios de estado firmados (firmas de acción)
 
-Los mensajes no son el único material firmado. Cada llamada que cambia el estado de una conversación—añadir o rotar claves de conversación, crear un grupo, añadir miembros—debe llevar una o más **firmas de acción**: el remitente firma un payload que describe exactamente lo que hace el cambio (para un cambio de clave, ese payload incluye la nueva clave de conversación en sí), y la API rechaza la solicitud si las firmas faltan o están mal formadas.
+Los mensajes no son lo único que se firma. Todo cambio en una conversación (crear un grupo, agregar miembros, rotar una clave) también debe llevar **firmas de acción**: el remitente firma una carga que describe exactamente qué hace el cambio, y la API rechaza las solicitudes donde estas faltan o están mal formadas. El XDK las produce por ti.
 
-Como el servidor nunca posee la clave de conversación en texto plano, no puede comprobar criptográficamente la firma de un cambio de clave; valida que la descripción firmada y codificada del cambio coincida con la solicitud que recibió. La comprobación **criptográfica** ocurre en los extremos: el Chat XDK de cada destinatario verifica la firma contra la clave pública de firma del remitente cuando descifra el evento de cambio de clave. Los métodos `prepare` del Chat XDK producen estas firmas por ti—las creaciones de grupo y las adiciones de miembros devuelven **dos** (el cambio de clave más la acción del grupo), y ambas deben enviarse.
+**Por qué el servidor no puede verificar completamente un cambio de clave.** El servidor nunca tiene la clave de conversación en bruto (esa es la idea), por lo que no puede comprobar una firma sobre material que no puede ver. Verifica lo que puede—que la descripción firmada coincida con la solicitud—y los destinatarios hacen la verificación criptográfica real cuando desenvuelven el cambio de clave.
 
-Las firmas están vinculadas al contenido del evento y son inmutables: un evento cuya firma no se verifica nunca podrá volverse válido más tarde. Consulta [Solución de problemas](/es/xchat/troubleshooting) para saber cómo tratarlos.
+Los eventos son inmutables: uno que falle la verificación es permanentemente inválido. Consulta [Solución de problemas](/xchat/troubleshooting).
 
 ---
 
 ## Propiedades de seguridad
 
-### Contra qué protege X Chat
+Esto es contra lo que X Chat protege, y —igual de importante— contra lo que no.
 
-| Amenaza | Protección |
-|:-------|:-----------|
-| **X lee los cuerpos de los mensajes** | El contenido se cifra antes de enviarse a X |
-| **Espías de la red** | Seguridad del transporte más contenido cifrado de extremo a extremo |
-| **Manipulación de mensajes** | Las firmas detectan la modificación |
-| **Suplantación trivial del remitente** | Las firmas válidas requieren la clave privada de firma del remitente |
-| **Robo de claves en un solo servidor (con copia de seguridad segura de claves)** | Los shares se dividen entre realms y están protegidos por código de acceso |
+### Contra lo que X Chat protege
 
-### Contra qué **no** protege X Chat
+| Amenaza | Protección | Se apoya en |
+|:--------|:-----------|:------------|
+| **X leyendo los cuerpos de los mensajes** | El contenido se cifra antes de llegar a X | Las claves de conversación nunca salen de los dispositivos de los participantes sin envolver |
+| **Espías en la red** | Seguridad de transporte más contenido cifrado de extremo a extremo | TLS estándar, más todo lo anterior |
+| **Manipulación de mensajes** | Las firmas detectan cualquier modificación | Verificación de firma en cada evento |
+| **Suplantación del remitente** | Una firma válida requiere la clave privada de firma del remitente | Secreto de la clave de firma, más la vinculación de claves que verificaste |
+| **Robo de claves desde un servidor de copia de seguridad** | Los fragmentos se dividen entre realms y están protegidos por código de acceso, con un límite estricto de intentos | Ningún realm por sí solo puede reconstruir las claves; los HSM imponen el límite de intentos por hardware |
 
-| Amenaza | Por qué no |
-|:-------|:--------|
-| **Dispositivo comprometido** | El texto plano y las claves pueden quedar expuestos en un cliente desbloqueado |
-| **Metadatos** | X puede saber quién envió mensajes a quién y cuándo—no el texto del mensaje |
-| **Confidencialidad hacia adelante** | El compromiso de las claves de identidad puede exponer las claves de conversación que se envolvieron con esas claves |
-| **Seguridad post-compromiso** | Rotar las claves no reescribe el historial |
+### Contra lo que X Chat no protege, y por qué
+
+| Limitación | La versión honesta |
+|:-----------|:-------------------|
+| **Un dispositivo comprometido** | Un cliente desbloqueado contiene texto plano y claves en bruto. Ningún diseño de extremo a extremo sobrevive a un endpoint comprometido. |
+| **Metadatos** | X debe saber quién envió un mensaje a quién, y cuándo, para enrutar el texto cifrado. El cifrado oculta el *qué*, no el *quién* ni el *cuándo*. |
+| **Sin forward secrecy** | Las claves de conversación se envuelven con claves de identidad de larga duración: un atacante con tu clave privada de identidad puede desenvolver sobres capturados previamente y, con ellos, texto cifrado pasado. |
+| **Sin recuperación automática tras compromiso** | La recuperación funciona, pero es deliberada en lugar de automática: expulsar a un atacante rota la clave de conversación, y recuperar un dispositivo comprometido normalmente incluye generar una nueva clave de identidad y nuevas claves de conversación, de modo que incluso las claves robadas no lean nada nuevo. Lo que ninguna rotación puede hacer es reescribir el pasado, o protegerte en la ventana antes de que se atienda el compromiso. |
 
 ---
 
 ## Glosario
 
 | Término | Definición |
-|:-----|:-----------|
-| **Cifrado simétrico** | La misma clave cifra y descifra (usado para mensajes y streams de multimedia) |
-| **Cifrado asimétrico** | Claves diferentes para cifrar y descifrar (usado para intercambiar claves de conversación) |
-| **Clave pública** | Se puede compartir con seguridad; se usa para cifrar *a* alguien o verificar sus firmas |
-| **Clave privada** | Debe permanecer secreta; se usa para descifrar o firmar |
-| **Par de claves** | Una clave pública y una clave privada vinculadas |
-| **ECDH / ECIES** | Algoritmos usados al intercambiar claves de conversación mediante claves de identidad |
-| **ECDSA** | Algoritmo de firma usado para la autoría de mensajes |
-| **P-256** | Curva elíptica usada en X Chat (secp256r1) |
-| **Clave de conversación** | Clave simétrica compartida por los participantes de una conversación (versionada en el tiempo) |
-| **Compartición de secretos** | Dividir un secreto de forma que se necesiten varias piezas para reconstruirlo |
-| **Realm** | Un servidor independiente de copia de seguridad segura de claves que guarda un share de tu material de clave |
+|:--------|:-----------|
+| **Cifrado simétrico** | La misma clave cifra y descifra (usado para mensajes y multimedia) |
+| **Cifrado asimétrico** | Clave pública para cifrar, clave privada para descifrar (usado para entregar claves de conversación) |
+| **Clave pública** | Se puede publicar sin riesgo; se usa para cifrar *hacia* alguien o verificar sus firmas |
+| **Clave privada** | Debe mantenerse en secreto; se usa para descifrar o firmar |
+| **ECDH** | *Acuerdo* de claves: dos partes derivan un secreto compartido a partir de la clave privada de una y la clave pública de la otra |
+| **ECIES** | Cifrado híbrido construido sobre ECDH: derivar un secreto compartido, cifrar simétricamente con él. Así se envuelven las claves de conversación |
+| **ECDSA** | El algoritmo de firma de curva elíptica usado para mensajes y firmas de acción |
+| **P-256** | La curva elíptica (secp256r1) que usan todos los pares de claves de X Chat |
+| **Vinculación de claves** | La firma publicada que une la clave de identidad de un usuario con su clave de firma; se verifica antes de envolver cualquier cosa hacia un registro descargado |
+| **Clave de conversación** | Clave simétrica compartida por los participantes de una conversación, con versión a lo largo del tiempo |
+| **Envoltura** | Cifrar una clave con otra; aquí, una clave de conversación con una clave pública de identidad |
+| **Compartición de secretos con umbral** | Dividir un secreto en fragmentos de modo que solo un subconjunto suficiente pueda reconstruirlo; menos del umbral no aprende nada |
+| **Juicebox** | El protocolo de código abierto detrás de la copia de seguridad segura de claves: recuperación con umbral protegida por código de acceso con límites estrictos de intentos |
+| **HSM** | Hardware security module: hardware resistente a manipulación que contiene el fragmento de un realm y hace cumplir su límite de intentos |
+| **Realm** | Un servicio de copia de seguridad segura de claves separado y aislado que contiene un fragmento de tu material de claves |
 
 ---
 
 ## Próximos pasos
 
 <CardGroup cols={2}>
-  <Card title="Primeros pasos" icon="rocket" href="/es/xchat/getting-started">
-    Implementa claves, envío y recepción paso a paso
+  <Card title="Primeros pasos" icon="rocket" href="/xchat/getting-started">
+    Implementa claves, envía y recibe paso a paso
   </Card>
-  <Card title="Referencia del Chat XDK" icon="code" href="/es/xchat/xchat-xdk">
+  <Card title="Referencia del Chat XDK" icon="code" href="/xchat/xchat-xdk">
     Métodos y tipos del SDK de cifrado
   </Card>
-  <Card title="Introducción" icon="book" href="/es/xchat/introduction">
+  <Card title="Introducción" icon="book" href="/xchat/introduction">
     Descripción general del producto y arquitectura
   </Card>
-  <Card title="Eventos en tiempo real" icon="bolt" href="/es/xchat/real-time-events">
+  <Card title="Eventos en tiempo real" icon="bolt" href="/xchat/real-time-events">
     Cómo se entregan los eventos cifrados
   </Card>
 </CardGroup>
