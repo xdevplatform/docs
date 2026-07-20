@@ -45,11 +45,10 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
     ```toml
     [dependencies]
     # chat-xdk-core is not yet on crates.io — use the git dependency
-    chat-xdk-core = { git = "https://github.com/xdevplatform/chat-xdk", tag = "v0.2.1" }
+    chat-xdk-core = { git = "https://github.com/xdevplatform/chat-xdk", tag = "v0.4.0" }
     reqwest = { version = "0.12", features = ["blocking", "json"] }
     serde_json = "1"
     base64 = "0.22"
-    uuid = { version = "1", features = ["v4"] }
 
     # Required until thrift 0.24 is released on crates.io
     [patch.crates-io]
@@ -68,14 +67,14 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
     dotnet add package XDevPlatform.ChatXdk
     ```
 
-    패키지는 자체 완결형입니다. macOS (arm64, x64), Linux (x64), Windows (x64)용 네이티브 라이브러리가 포함되어 있습니다. .NET 8+ 필요.
+    패키지는 자체 완결형입니다: macOS (arm64, x64), Linux (x64), Windows (x64)용 네이티브 라이브러리가 내부에 포함되어 있습니다. .NET 8+ 필요.
   </Tab>
   <Tab title="Java">
     ```xml
     <dependency>
       <groupId>com.x</groupId>
       <artifactId>chatxdk</artifactId>
-      <version>0.2.1</version>
+      <version>0.4.0</version>
     </dependency>
     ```
 
@@ -136,9 +135,9 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
 이 단계는 **이미 보유한 키를 로드**합니다—이 신원이 이전에 최초 설정을 완료한 경우 사용하세요:
 
 - **보안 키 백업:** 공개 키 레코드의 `juicebox_config`로 SDK를 구성한 다음, 패스코드로 `unlock`하여 개인 키를 복구합니다 (예: 새 기기에서).
-- **키 blob:** 이전에 `export_keys`로 내보낸 blob으로 `import_keys`를 호출합니다.
+- **키 blob:** 이전에 `export_keys`로 내보낸 blob으로 `import_keys`를 호출하고, 등록된 키 버전을 함께 전달합니다 (Rust와 Go에서는 이 변형을 `import_keys_with_version` / `ImportKeysWithVersion`이라고 부릅니다).
 
-그런 다음 등록된 공개 키 버전(레코드의 `public_key_version`)을 설정합니다.
+그런 다음 사용자 ID와 레코드의 `public_key_version`을 함께 **`set_identity(user_id, signing_key_version)`**를 한 번 호출합니다. 이는 세션 신원을 저장하므로, 이후의 모든 encrypt 및 prepare 호출은 이 신원으로 서명합니다. 따라서 호출마다 발신자 ID나 서명 키 버전을 전달할 필요가 없습니다.
 
 **처음 설정하시나요?** 동일한 방식으로 SDK를 구성하되 `unlock`/`import_keys`는 건너뛰고, [3단계](#3-키-생성-및-등록-최초-설정)로 계속 진행하여 키를 생성, 백업, 등록하세요.
 
@@ -160,7 +159,9 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
 
     chat = Chat(json.dumps(record["juicebox_config"]))
     chat.unlock("YOUR_PASSCODE")  # recovers keys stored by setup() during first-time setup (step 3)
-    chat.set_key_version(signing_key_version)
+    # Or load a key blob instead of secure key backup:
+    # chat.import_keys(blob, version=signing_key_version)
+    chat.set_identity("YOUR_USER_ID", signing_key_version)
     ```
   </Tab>
   <Tab title="TypeScript">
@@ -181,7 +182,7 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
       getAuthToken: async (realmId) => getRealmTokenFromYourBackend(realmId),
     });
     await chat.unlock('YOUR_PASSCODE');
-    chat.setKeyVersion(signingKeyVersion);
+    chat.setIdentity('YOUR_USER_ID', signingKeyVersion);
     ```
   </Tab>
   <Tab title="Rust">
@@ -189,11 +190,11 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
     use base64::{engine::general_purpose::STANDARD as B64, Engine};
     use chat_xdk_core::ChatCore;
 
-    let mut chat = ChatCore::new();
+    let chat = ChatCore::new();
     let blob = B64.decode(std::env::var("PRIVATE_KEYS_B64")?)?;
     let signing_key_version = std::env::var("SIGNING_KEY_VERSION").unwrap_or_else(|_| "1".into());
-    chat.import_keys(&blob)?;
-    chat.set_key_version(&signing_key_version);
+    chat.import_keys_with_version(&blob, &signing_key_version)?;
+    chat.set_identity("YOUR_USER_ID", &signing_key_version);
     ```
   </Tab>
   <Tab title="Go">
@@ -207,14 +208,16 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
     if err != nil {
         log.Fatal(err)
     }
-    if err := chat.ImportKeys(blob); err != nil {
-        log.Fatal(err)
-    }
     signingKeyVersion := os.Getenv("SIGNING_KEY_VERSION")
     if signingKeyVersion == "" {
         signingKeyVersion = "1"
     }
-    chat.SetKeyVersion(signingKeyVersion)
+    if err := chat.ImportKeysWithVersion(blob, signingKeyVersion); err != nil {
+        log.Fatal(err)
+    }
+    if err := chat.SetIdentity(myUserID, signingKeyVersion); err != nil {
+        log.Fatal(err)
+    }
     ```
   </Tab>
   <Tab title="C#">
@@ -224,8 +227,8 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
     using var chat = new Chat();
     var signingKeyVersion = Environment.GetEnvironmentVariable("SIGNING_KEY_VERSION") ?? "1";
     chat.ImportKeys(Convert.FromBase64String(
-        Environment.GetEnvironmentVariable("PRIVATE_KEYS_B64")!));
-    chat.SetKeyVersion(signingKeyVersion);
+        Environment.GetEnvironmentVariable("PRIVATE_KEYS_B64")!), signingKeyVersion);
+    chat.SetIdentity(myUserId, signingKeyVersion);
     ```
   </Tab>
   <Tab title="Java">
@@ -234,8 +237,8 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
 
     String signingKeyVersion = Optional.ofNullable(System.getenv("SIGNING_KEY_VERSION")).orElse("1");
     try (Chat chat = new Chat()) {
-        chat.importKeys(Base64.getDecoder().decode(System.getenv("PRIVATE_KEYS_B64")));
-        chat.setKeyVersion(signingKeyVersion);
+        chat.importKeys(Base64.getDecoder().decode(System.getenv("PRIVATE_KEYS_B64")), signingKeyVersion);
+        chat.setIdentity(myUserId, signingKeyVersion);
     }
     ```
   </Tab>
@@ -254,8 +257,14 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
 [2단계](#2-기존-키로-chat-xdk-초기화)에서 기존 키를 로드했다면 이 단계를 건너뛰세요. 그렇지 않은 경우, 새 신원에 대한 일회성 설정은 **세 가지 작업**을 수행합니다:
 
 1. **키페어 생성** — `generate_keypairs`가 신원 및 서명 키페어를 생성합니다.
-2. **공개 키 등록** — 다른 사람이 사용자에게 암호화하고 서명을 검증할 수 있도록 등록 페이로드를 공개 키 추가 엔드포인트에 POST합니다.
-3. **개인 키 저장** — 패스코드로 `setup`하면 보안 키 백업에 기록됩니다(클라이언트). 또는 `export_keys`가 안전하게 저장할 키 blob을 반환합니다(서버 및 봇).
+2. **개인 키 저장** — 패스코드로 `setup`하면 보안 키 백업에 기록됩니다(클라이언트). 또는 `export_keys`가 안전하게 저장할 키 blob을 반환합니다(서버 및 봇).
+3. **공개 키 등록** — 다른 사람이 사용자에게 암호화하고 서명을 검증할 수 있도록 등록 페이로드를 공개 키 추가 엔드포인트에 POST합니다.
+
+마지막으로 등록의 키 버전으로 `set_identity`를 호출하여 이 세션이 새 신원으로 서명하도록 합니다.
+
+<Tip>
+모든 바인딩(Python, TypeScript, Go, Rust, C#, Java)에서 바로 실행할 수 있는 일회성 등록 스크립트는 [`chat-xdk/examples`](https://github.com/xdevplatform/chat-xdk/tree/main/examples)에 있습니다. 새 신원을 온보딩하기만 하면 되는 경우, 아래의 흐름을 직접 작성하는 대신 이 스크립트를 사용하세요.
+</Tip>
 
 <Tabs>
   <Tab title="Python">
@@ -280,7 +289,7 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
         ),
     )
     chat.setup("YOUR_PASSCODE")
-    chat.set_key_version(str(registration.version or signing_key_version))
+    chat.set_identity("YOUR_USER_ID", str(registration.version or "1"))
     ```
   </Tab>
   <Tab title="TypeScript">
@@ -300,7 +309,7 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
       generate_version: registration.generateVersion,
     });
     await chat.setup('YOUR_PASSCODE');
-    chat.setKeyVersion(String(registration.version ?? signingKeyVersion));
+    chat.setIdentity('YOUR_USER_ID', String(registration.version ?? '1'));
     ```
   </Tab>
   <Tab title="Rust">
@@ -316,6 +325,8 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
         anyhow::bail!("register keys: {}", resp.text()?);
     }
     let _blob = chat.export_keys()?; // store securely
+    let key_version = registration.version.clone().unwrap_or_else(|| "1".into());
+    chat.set_identity(&user_id, &key_version);
     ```
   </Tab>
   <Tab title="Go">
@@ -335,9 +346,15 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
         log.Fatal(err)
     }
     resp.Body.Close()
-    privateKeysB64, _ := chat.ExportKeys() // store securely
-    _ = privateKeysB64
-    chat.SetKeyVersion(signingKeyVersion)
+    privateKeys, _ := chat.ExportKeys() // store securely
+    _ = privateKeys
+    keyVersion := "1"
+    if registration.Version != nil {
+        keyVersion = *registration.Version
+    }
+    if err := chat.SetIdentity(userID, keyVersion); err != nil {
+        log.Fatal(err)
+    }
     ```
   </Tab>
   <Tab title="C#">
@@ -349,7 +366,7 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
         $"https://api.x.com/2/users/{Uri.EscapeDataString(userId)}/public_keys", content);
     regResp.EnsureSuccessStatusCode();
     var blob = chat.ExportKeys(); // store securely
-    chat.SetKeyVersion(signingKeyVersion);
+    chat.SetIdentity(userId, registration.Version ?? "1");
     ```
   </Tab>
   <Tab title="Java">
@@ -367,7 +384,7 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
         throw new RuntimeException("register keys: " + regResp.body());
     }
     byte[] blob = chat.exportKeys(); // store securely
-    chat.setKeyVersion(signingKeyVersion);
+    chat.setIdentity(myUserId, registration.version != null ? registration.version : "1");
     ```
   </Tab>
 </Tabs>
@@ -380,12 +397,12 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
 
 ## 4. 대화 키 설정
 
-사용자 ID, 서명 키 버전, 그리고 모든 참가자의 신원 공개 키와 함께 **`prepare_conversation_key_change`**를 호출합니다. 한 번의 호출로 새로운 대화 키가 생성되고, 각 참가자에 대해 암호화되며, 변경 사항이 서명됩니다. 결과를 **대화 키 추가** 엔드포인트(`POST /2/chat/conversations/{id}/keys`)에 POST합니다—본문에는 `conversation_key_version`, `conversation_participant_keys`(SDK `encrypted_key` → API `encrypted_conversation_key`), 그리고 **`action_signatures`**(필수; 없으면 API가 호출을 거부함)가 필요합니다. 전송에 사용할 **원시** 대화 키를 보관하세요.
+모든 참가자의 신원 공개 키와 함께 **`prepare_conversation_key_change`**를 호출하세요. 발신자 신원은 2단계에서 설정한 세션에서 가져옵니다. 한 번의 호출로 새 대화 키가 생성되고, 각 참가자에 대해 암호화되며, 변경 사항이 서명됩니다. 결과를 **대화 키 추가** 엔드포인트(`POST /2/chat/conversations/{id}/keys`)에 POST하세요—본문에는 `conversation_key_version`, `conversation_participant_keys`(SDK `encrypted_key` → API `encrypted_conversation_key`), 그리고 **`action_signatures`**(필수; 없으면 API가 호출을 거부함)가 필요합니다. 전송에 사용할 **원시** 대화 키를 보관하세요.
 
-응답은 표준 대화 ID(`data.conversation_id`—1:1의 경우 하이픈으로 연결된 쌍, 또는 그룹의 경우 g- 접두사가 붙은 ID)와 키 변경의 `data.sequence_id`를 반환합니다. 클라이언트 측에서 재구성하는 대신 이후 요청에 반환된 ID를 사용하세요. 같은 호출은 나중에 키를 **교체**하기도 합니다: 기존 대화 ID를 `prepare_conversation_key_change`에 전달하고 최신 키 버전과 함께 POST합니다. 대화 키가 노출되었다고 의심될 때 교체하세요—교체는 **향후** 메시지만 보호합니다. 이전 키 버전으로 암호화된 메시지는 그 버전을 보유한 사람이라면 누구나 계속 읽을 수 있습니다.
+응답은 표준 대화 ID(`data.conversation_id`—1:1의 경우 하이픈으로 연결된 쌍, 그룹의 경우 g- 접두사가 붙은 ID)와 키 변경의 `data.sequence_id`를 반환합니다. 클라이언트 측에서 재구성하는 대신 이후 요청에는 반환된 ID를 사용하세요. 같은 호출은 나중에 키를 **교체**하기도 합니다: 기존 대화 ID를 `prepare_conversation_key_change`에 전달하고 최신 키 버전으로 POST합니다. 대화 키가 노출된 것으로 의심될 때 교체하세요—교체는 **향후** 메시지만 보호합니다. 이전 키 버전으로 암호화된 메시지는 그 버전을 보유한 사람이라면 누구나 계속 읽을 수 있습니다.
 
 <Warning>
-**래핑하기 전에 가져온 키를 검증하세요.** `prepare_conversation_key_change`는 새 대화 키를 전달된 공개 키로 암호화합니다. 대체된 신원 키가 대화 키를 받지 못하도록, 각 가져온 레코드를 먼저 `verify_key_binding(identity, signing, signature)`로 확인하세요—공개 키 API의 `public_key`, `signing_public_key`, `identity_public_key_signature` 필드를 전달합니다.
+**래핑하기 전에 가져온 키를 검증하세요.** `prepare_conversation_key_change`는 전달된 공개 키로 새 대화 키를 암호화합니다. 각 가져온 레코드를 먼저 `verify_key_binding(identity, signing, signature)`로 확인하세요—공개 키 API의 `public_key`, `signing_public_key`, `identity_public_key_signature` 필드를 전달하면 대체된 신원 키가 대화 키를 받는 것을 방지할 수 있습니다.
 </Warning>
 
 <Tabs>
@@ -398,8 +415,6 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
         return {"user_id": user_id, "public_key": r["public_key"], "key_version": r["public_key_version"]}
 
     prepared = chat.prepare_conversation_key_change(
-        "YOUR_USER_ID",
-        signing_key_version,
         [public_key_input("YOUR_USER_ID"), public_key_input("RECIPIENT_USER_ID")],
         # conversation_id=None for a new 1:1; pass the id to rotate later
     )
@@ -446,8 +461,6 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
 
     // Omit conversationId for a new 1:1; pass the id to rotate later
     const prepared = chat.prepareConversationKeyChange({
-      senderId: 'YOUR_USER_ID',
-      signingKeyVersion,
       publicKeys: [
         await publicKeyInput('YOUR_USER_ID'),
         await publicKeyInput('RECIPIENT_USER_ID'),
@@ -480,9 +493,9 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
     ```rust
     // public_key_inputs: Vec<PublicKeyInput> from GET public keys
     // (user_id, public_key, key_version ← public_key_version)
-    // new 1:1; set params.conversation_id = Some(id) to rotate later
+    // New 1:1; set params.conversation_id = Some(id) to rotate later
     let prepared = chat.prepare_conversation_key_change(
-        ConversationKeyChangeParams::new(&sender_id, &signing_key_version, public_key_inputs),
+        ConversationKeyChangeParams::new(public_key_inputs),
     )?;
     let participant_keys: Vec<_> = prepared
         .participant_keys
@@ -532,8 +545,6 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
     ```go
     // KeyVersion comes from the public_key_version field on each record
     prepared, err := chat.PrepareConversationKeyChange(chatxdk.ConversationKeyChangeParams{
-        SenderID:          myUserID,
-        SigningKeyVersion: signingKeyVersion,
         PublicKeys: []chatxdk.PublicKeyInput{
             {UserID: myUserID, PublicKey: myIdentityPubB64, KeyVersion: myKeyVersion},
             {UserID: recipientID, PublicKey: theirIdentityPubB64, KeyVersion: theirKeyVersion},
@@ -572,21 +583,18 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
     req.Header.Set("Content-Type", "application/json")
     resp, err := httpClient.Do(req)
     // Response data.conversation_id is the canonical id for later requests
-    // prepared.ConversationKey feeds EncryptMessage
     _ = resp
+    convKey := prepared.ConversationKey
+    convKeyVersion := prepared.ConversationKeyVersion
     ```
   </Tab>
   <Tab title="C#">
     ```csharp
     // KeyVersion comes from the public_key_version field on each record
-    var prepared = chat.PrepareConversationKeyChange(new ConversationKeyChangeParams {
-        SenderId = myUserId,
-        SigningKeyVersion = signingKeyVersion,
-        PublicKeys = new[] {
-            new PublicKeyInput { UserId = myUserId, PublicKey = myPk, KeyVersion = myVer },
-            new PublicKeyInput { UserId = recipientId, PublicKey = theirPk, KeyVersion = theirVer },
-        },
-    }); // ConversationId null for a new 1:1; pass the id to rotate later
+    var prepared = chat.PrepareConversationKeyChange(new ConversationKeyChangeParams(new[] {
+        new PublicKeyInput { UserId = myUserId, PublicKey = myPk, KeyVersion = myVer },
+        new PublicKeyInput { UserId = recipientId, PublicKey = theirPk, KeyVersion = theirVer },
+    })); // ConversationId null for a new 1:1; set it to rotate later
     var keysBody = new {
         conversation_key_version = prepared.ConversationKeyVersion,
         conversation_participant_keys = prepared.ParticipantKeys.Select(pk => new {
@@ -625,12 +633,9 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
     PublicKeyInput theirs = new PublicKeyInput();
     theirs.userId = recipientId; theirs.publicKey = theirIdentityPubB64; theirs.keyVersion = theirKeyVersion;
 
-    ConversationKeyChangeParams keyParams = new ConversationKeyChangeParams();
-    keyParams.senderId = myUserId;
-    keyParams.signingKeyVersion = signingKeyVersion;
-    keyParams.publicKeys = List.of(mine, theirs);
-    // keyParams.conversationId null for a new 1:1; set the id to rotate later
-    PreparedConversationChange prepared = chat.prepareConversationKeyChange(keyParams);
+    // conversationId stays null for a new 1:1; set it to rotate later
+    PreparedConversationChange prepared =
+        chat.prepareConversationKeyChange(new ConversationKeyChangeParams(List.of(mine, theirs)));
 
     List<Map<String, String>> parts = new ArrayList<>();
     for (var pk : prepared.participantKeys) {
@@ -673,36 +678,32 @@ X Chat 앱은 두 가지 구성 요소를 함께 사용합니다:
 
 ## 5. 메시지 보내기
 
-**원시** 대화 키 바이트로 암호화합니다. 전송 요청에서 다음과 같이 매핑합니다:
+4단계의 **원시** 대화 키로 암호화합니다. SDK가 메시지 ID(UUID)를 생성하여 서명된 이벤트에 삽입하고 페이로드에 반환합니다—직접 만들지 마세요. 전송 요청에서 다음과 같이 매핑합니다:
 
 | Chat XDK 필드 | 요청 본문 필드 |
 |:---------------|:-------------------|
 | `encrypted_content` / `encryptedContent` / `EncryptedContent` | `encoded_message_create_event` |
 | `encoded_event_signature` / `encodedEventSignature` / `EncodedEventSignature` | `encoded_message_event_signature` |
-| 생성한 ID | `message_id` |
+| 페이로드 `message_id` / `messageId` / `MessageId` | `message_id` |
 
-API가 요구할 때 URL 경로에 **하이픈으로 연결된** 대화 ID를 사용하세요(`:` → `-`). SDK 자체는 유연합니다: `encrypt_message`와 `encrypt_reply`는 보유하고 있는 어떤 형태의 ID든 허용합니다—이벤트의 `A:B`, 목록이나 URL 경로의 `A-B`(어떤 순서든), 또는 그저 수신자의 사용자 ID—그리고 서명 전에 정규화합니다. 그룹 ID(`g` 접두사)는 그대로 통과됩니다.
+API가 요구할 때 URL 경로에는 **하이픈으로 연결된** 대화 ID를 사용하세요(`:` → `-`). SDK 자체는 유연합니다: `encrypt_message`와 `encrypt_reply`는 보유하고 있는 어떤 형태의 ID든 허용합니다—이벤트의 `A:B`, 목록이나 URL 경로의 `A-B`(어떤 순서든), 또는 그저 수신자의 사용자 ID—그리고 서명 전에 정규화합니다. 그룹 ID(`g` 접두사)는 그대로 통과됩니다.
 
 <Tabs>
   <Tab title="Python">
     ```python
-    import uuid
     from xdk.chat.models import SendMessageRequest
 
-    message_id = str(uuid.uuid4())
+    # Sender identity resolves from set_identity (step 2)
     payload = chat.encrypt_message(
-        message_id,
-        "YOUR_USER_ID",
         "CONVERSATION_ID",
-        conv_key,
         "Hello!",
-        conv_key_version,
-        signing_key_version,
+        conversation_key=conv_key,
+        conversation_key_version=conv_key_version,
     )
     client.chat.send_message(
         "RECIPIENT_USER_ID",
         SendMessageRequest(
-            message_id=message_id,
+            message_id=payload.message_id,  # SDK-generated, embedded in the signed event
             encoded_message_create_event=payload.encrypted_content,
             encoded_message_event_signature=payload.encoded_event_signature,
         ),
@@ -711,20 +712,15 @@ API가 요구할 때 URL 경로에 **하이픈으로 연결된** 대화 ID를 �
   </Tab>
   <Tab title="TypeScript">
     ```typescript
-    import { randomUUID } from 'crypto';
-
-    const messageId = randomUUID();
+    // Sender identity resolves from setIdentity (step 2)
     const payload = chat.encryptMessage({
-      messageId,
-      senderId: 'YOUR_USER_ID',
       conversationId: 'CONVERSATION_ID',
-      conversationKey: convKey,
       text: 'Hello!',
+      conversationKey: convKey,
       conversationKeyVersion: convKeyVersion,
-      signingKeyVersion,
     });
     await client.chat.sendMessage('RECIPIENT_USER_ID', {
-      message_id: messageId,
+      message_id: payload.messageId, // SDK-generated, embedded in the signed event
       encoded_message_create_event: payload.encryptedContent,
       encoded_message_event_signature: payload.encodedEventSignature,
     });
@@ -734,18 +730,14 @@ API가 요구할 때 URL 경로에 **하이픈으로 연결된** 대화 ID를 �
     ```rust
     use chat_xdk_core::EncryptMessageParams;
 
-    let message_id = uuid::Uuid::new_v4().to_string();
-    let payload = chat.encrypt_message(EncryptMessageParams::new(
-        &message_id,
-        &sender_id,
-        &conversation_id,
-        conv_key,
-        "Hello!",
-        &conv_key_version,
-        &signing_key_version,
-    ))?;
+    // Sender identity resolves from set_identity (step 2)
+    let payload = chat.encrypt_message(
+        EncryptMessageParams::new(&conversation_id, "Hello!")
+            .with_conversation_key(conv_key, &conv_key_version),
+    )?;
     let body = serde_json::json!({
-        "message_id": message_id,
+        // SDK-generated, embedded in the signed event
+        "message_id": payload.message_id,
         "encoded_message_create_event": payload.encrypted_content,
         "encoded_message_event_signature": payload.encoded_event_signature,
     });
@@ -758,18 +750,19 @@ API가 요구할 때 URL 경로에 **하이픈으로 연결된** 대화 ID를 �
   </Tab>
   <Tab title="Go">
     ```go
-    messageID := uuid.NewString()
+    // Sender identity resolves from SetIdentity (step 2)
     payload, err := chat.EncryptMessage(chatxdk.EncryptMessageParams{
-        MessageID:              messageID,
-        SenderID:               senderID,
         ConversationID:         conversationID,
-        ConversationKey:        convKey,
         Text:                   "Hello!",
+        ConversationKey:        convKey,
         ConversationKeyVersion: convKeyVersion,
-        SigningKeyVersion:      signingKeyVersion,
     })
+    if err != nil {
+        log.Fatal(err)
+    }
     body, _ := json.Marshal(map[string]string{
-        "message_id":                      messageID,
+        // SDK-generated, embedded in the signed event
+        "message_id":                      payload.MessageID,
         "encoded_message_create_event":    payload.EncryptedContent,
         "encoded_message_event_signature": payload.EncodedEventSignature,
     })
@@ -785,18 +778,14 @@ API가 요구할 때 URL 경로에 **하이픈으로 연결된** 대화 ID를 �
   </Tab>
   <Tab title="C#">
     ```csharp
-    var messageId = Guid.NewGuid().ToString();
-    var payload = chat.EncryptMessage(new EncryptMessageParams {
-        MessageId = messageId,
-        SenderId = senderId,
-        ConversationId = conversationId,
+    // Sender identity resolves from SetIdentity (step 2)
+    var payload = chat.EncryptMessage(new EncryptMessageParams(conversationId, "Hello!") {
         ConversationKey = convKey,
-        Text = "Hello!",
         ConversationKeyVersion = convKeyVersion,
-        SigningKeyVersion = signingKeyVersion,
     });
     var sendJson = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string> {
-        ["message_id"] = messageId,
+        // SDK-generated, embedded in the signed event
+        ["message_id"] = payload.MessageId,
         ["encoded_message_create_event"] = payload.EncryptedContent,
         ["encoded_message_event_signature"] = payload.EncodedEventSignature,
     });
@@ -810,19 +799,16 @@ API가 요구할 때 URL 경로에 **하이픈으로 연결된** 대화 ID를 �
   </Tab>
   <Tab title="Java">
     ```java
-    EncryptMessageParams params = new EncryptMessageParams();
-    params.messageId = UUID.randomUUID().toString();
-    params.senderId = senderId;
-    params.conversationId = conversationId;
+    // Sender identity resolves from setIdentity (step 2)
+    EncryptMessageParams params = new EncryptMessageParams(conversationId, "Hello!");
     params.conversationKey = convKey;
-    params.text = "Hello!";
     params.conversationKeyVersion = convKeyVersion;
-    params.signingKeyVersion = signingKeyVersion;
     SendPayload payload = chat.encryptMessage(params);
 
     String pathId = conversationId.replace(':', '-');
     String sendJson = new ObjectMapper().writeValueAsString(Map.of(
-        "message_id", params.messageId,
+        // SDK-generated, embedded in the signed event
+        "message_id", payload.messageId,
         "encoded_message_create_event", payload.encryptedContent,
         "encoded_message_event_signature", payload.encodedEventSignature));
     HttpRequest req = HttpRequest.newBuilder()
@@ -836,6 +822,10 @@ API가 요구할 때 URL 경로에 **하이픈으로 연결된** 대화 ID를 �
   </Tab>
 </Tabs>
 
+<Note>
+위 스니펫은 방금 4단계에서 만든 대화 키를 명시적으로 전달합니다. 키 캐시가 켜져 있고 `decrypt_events` 처리 과정에서 해당 대화의 키가 검증되면([6단계](#6-수신-및-복호화)), `encrypt_message(conversation_id, text)`만으로도 충분합니다—SDK가 검증된 최신 키를 자동으로 채웁니다. 재시도 시에는 **동일한** 암호화 페이로드를 다시 보내야 ID가 두 번 생성되지 않습니다.
+</Note>
+
 ---
 
 ## 6. 수신 및 복호화
@@ -843,15 +833,15 @@ API가 요구할 때 URL 경로에 **하이픈으로 연결된** 대화 ID를 �
 실시간 트래픽에는 [웹훅 또는 활동 스트림](/xchat/real-time-events)을, 이력 조회에는 대화 **이벤트**의 페이지 처리를 사용하세요.
 
 - 실시간 페이로드 필드: `encoded_event`, 선택적 `conversation_key_change_event`
-- 이력: `GET /2/chat/conversations/{id}/events` — 모든 이벤트에 대해 **`decrypt_events`**와 `meta.conversation_key_events`를 함께 사용하는 것이 좋음
-- 서명 검증을 위해 발신자의 공개 키를 복호화에 전달합니다 (API 필드를 `SigningKeyEntry`로 매핑; [Chat XDK](/xchat/xchat-xdk) 참조)
-- JavaScript는 camelCase 이벤트 유형(`message`)을 사용합니다; 다른 언어는 `"Message"`와 JSON의 snake_case 필드를 사용합니다
+- 이력: `GET /2/chat/conversations/{id}/events` — 모든 이벤트에 대해 **`decrypt_events`**를 실행하고 `meta.conversation_key_events`를 함께 사용하는 것이 좋습니다
+- 복호화하려면 발신자의 **서명 키**가 필요합니다. 그래야 SDK가 각 메시지의 작성자를 검증할 수 있습니다. 이는 다른 참가자들의 *공개* 키입니다—4단계에서 사용한 동일한 공개 키 엔드포인트에서 가져와 필드를 `SigningKeyEntry`로 매핑하세요(아래 스니펫에 매핑이 포함되어 있습니다)
+- 서명 키(및 `decrypt_event`의 경우 대화 키)를 매 호출마다 전달하거나, **또는** 두 개의 선택적 세션 저장소를 한 번 설정하고 짧은 호출 형식을 사용할 수 있습니다. 아래 스니펫은 저장소를 사용합니다: `set_signing_keys(entries)`는 참가자의 키를 보관하고, `set_cache_keys(true)`(기본값 꺼짐)는 각 대화의 **서명 검증된** 최신 키를 유지하여 이후 호출에서 키 인수를 생략할 수 있게 합니다. 두 방식 모두 동일하게 검증합니다
+- JavaScript는 camelCase 이벤트 유형(`message`)을 사용합니다. 다른 언어는 `"Message"`와 JSON의 snake_case 필드를 사용합니다
 
 <Tabs>
   <Tab title="Python">
     ```python
-    conversation_keys = {}  # conversation_id -> { version: key_bytes }
-
+    # Once per process: fill the signing-key store and enable the key cache
     def signing_keys_for(user_id: str) -> list[dict]:
         resp = client.chat.get_user_public_keys(
             user_id,
@@ -870,25 +860,34 @@ API가 요구할 때 URL 경로에 **하이픈으로 연결된** 대화 ID를 �
             for r in resp.data
         ]
 
+    chat.set_signing_keys(
+        signing_keys_for("YOUR_USER_ID") + signing_keys_for("RECIPIENT_USER_ID")
+    )
+    chat.set_cache_keys(True)
+
+    # Initial load or pagination: batch decrypt. Conversation keys are
+    # extracted from the KeyChange events in the batch; per-event failures
+    # are collected in result["errors"], never raised.
+    result = chat.decrypt_events(all_events_b64)
+    for dm in result["messages"]:
+        event = dm["event"]
+        if event["type"] == "Message" and event["content"]["content_type"] == "Text":
+            print(event["sender_id"], event["content"]["text"], event["verified"])
+
+    # Live traffic: one event at a time
     def handle_payload(payload: dict):
-        cid = payload["conversation_id"]
         if payload.get("conversation_key_change_event"):
-            conversation_keys[cid] = chat.extract_conversation_keys(
-                [payload["conversation_key_change_event"]]
-            )["keys"]
-        event = chat.decrypt_event(
-            payload["encoded_event"],
-            conversation_keys.get(cid, {}),
-            signing_keys_for(payload["sender_id"]),
-        )
-        if event.get("type") == "Message" and event.get("content", {}).get("content_type") == "Text":
-            print(event["sender_id"], event["content"]["text"], event.get("verified"))
+            # A rotation enters the key cache only after its signature
+            # verifies, which is what decrypt_events does
+            chat.decrypt_events([payload["conversation_key_change_event"]])
+        event = chat.decrypt_event(payload["encoded_event"])  # raises on failure
+        if event["type"] == "Message" and event["content"]["content_type"] == "Text":
+            print(event["sender_id"], event["content"]["text"], event["verified"])
     ```
   </Tab>
   <Tab title="TypeScript">
     ```typescript
-    const conversationKeys = new Map<string, Record<string, Uint8Array>>();
-
+    // Once per process: fill the signing-key store and enable the key cache
     async function signingKeysFor(userId: string) {
       const resp = await client.chat.getUserPublicKeys(userId, {
         publicKeyFields: [
@@ -909,24 +908,33 @@ API가 요구할 때 URL 경로에 **하이픈으로 연결된** 대화 ID를 �
       }));
     }
 
-    async function handlePayload(payload: {
-      conversation_id: string;
+    chat.setSigningKeys([
+      ...(await signingKeysFor('YOUR_USER_ID')),
+      ...(await signingKeysFor('RECIPIENT_USER_ID')),
+    ]);
+    chat.setCacheKeys(true);
+
+    // Initial load or pagination: batch decrypt. Conversation keys are
+    // extracted from the KeyChange events in the batch; per-event failures
+    // are collected in result.errors, never thrown.
+    const result = chat.decryptEvents(allEventsB64);
+    for (const dm of result.messages) {
+      if (dm.event.type === 'message' && dm.event.content?.contentType === 'text') {
+        console.log(dm.event.senderId, dm.event.content.text, dm.event.verified);
+      }
+    }
+
+    // Live traffic: one event at a time
+    function handlePayload(payload: {
       encoded_event: string;
-      sender_id: string;
       conversation_key_change_event?: string;
     }) {
-      const cid = payload.conversation_id;
       if (payload.conversation_key_change_event) {
-        conversationKeys.set(
-          cid,
-          chat.extractConversationKeys([payload.conversation_key_change_event]).keys,
-        );
+        // A rotation enters the key cache only after its signature
+        // verifies, which is what decryptEvents does
+        chat.decryptEvents([payload.conversation_key_change_event]);
       }
-      const event = chat.decryptEvent(
-        payload.encoded_event,
-        conversationKeys.get(cid) ?? {},
-        await signingKeysFor(payload.sender_id),
-      );
+      const event = chat.decryptEvent(payload.encoded_event); // throws on failure
       if (event.type === 'message' && event.content?.contentType === 'text') {
         console.log(event.senderId, event.content.text, event.verified);
       }
@@ -935,25 +943,48 @@ API가 요구할 때 URL 경로에 **하이픈으로 연결된** 대화 ID를 �
   </Tab>
   <Tab title="Rust">
     ```rust
-    // Build Vec<SigningKeyEntry> from GET /2/users/{id}/public_keys
-    // (public_key_version, public_key, signing_public_key, identity_public_key_signature)
+    // Once per instance: fill the signing-key store (Vec<SigningKeyEntry>
+    // from GET /2/users/{id}/public_keys) and enable the key cache
+    chat.set_signing_keys(participant_signing_keys);
+    chat.set_cache_keys(true);
 
+    // Initial load: batch decrypt — per-event failures land in result.errors
+    let result = chat.decrypt_events(&all_events_b64, &[]);
+
+    // Live traffic: a rotation enters the key cache only after its
+    // signature verifies, which is what decrypt_events does
     if let Some(kc) = key_change_b64.as_deref() {
-        let extracted = chat.extract_conversation_keys(&[kc]);
-        conv_keys.extend(extracted.keys);
+        chat.decrypt_events(&[kc], &[]);
     }
-    let event = chat.decrypt_event(&encoded_event, &conv_keys, &sender_signing_keys)?;
+    let event = chat.decrypt_event(&encoded_event, &Default::default(), &[])?;
     ```
   </Tab>
   <Tab title="Go">
     ```go
-    if keyChange != "" {
-        extracted, _ := chat.ExtractConversationKeys([]string{keyChange})
-        for v, k := range extracted.Keys {
-            convKeys[v] = k
+    // Once per instance: fill the signing-key store ([]SigningKeyEntry
+    // from GET /2/users/{id}/public_keys) and enable the key cache
+    if err := chat.SetSigningKeys(participantSigningKeys); err != nil {
+        log.Fatal(err)
+    }
+    chat.SetCacheKeys(true)
+
+    // Initial load: batch decrypt — per-event failures land in result.Errors
+    result, err := chat.DecryptEvents(allEventsB64, nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+    for _, dm := range result.Messages {
+        if dm.Event.Type == "Message" {
+            fmt.Println(dm.Event.AsMessage().Text())
         }
     }
-    event, err := chat.DecryptEvent(encodedEvent, convKeys, senderSigningKeys)
+
+    // Live traffic: a rotation enters the key cache only after its
+    // signature verifies, which is what DecryptEvents does
+    if keyChange != "" {
+        chat.DecryptEvents([]string{keyChange}, nil)
+    }
+    event, err := chat.DecryptEvent(encodedEvent, nil, nil)
     if err == nil && event.Type == "Message" {
         fmt.Println(event.AsMessage().Text())
     }
@@ -961,24 +992,49 @@ API가 요구할 때 URL 경로에 **하이픈으로 연결된** 대화 ID를 �
   </Tab>
   <Tab title="C#">
     ```csharp
-    if (!string.IsNullOrEmpty(keyChangeB64))
+    // Once per instance: fill the signing-key store (SigningKeyEntry list
+    // from GET /2/users/{id}/public_keys) and enable the key cache
+    chat.SetSigningKeys(participantSigningKeys);
+    chat.SetCacheKeys(true);
+
+    // Initial load: batch decrypt — per-event failures land in result.Errors
+    var result = chat.DecryptEvents(allEventsB64);
+    foreach (var dm in result.Messages)
     {
-        var extracted = chat.ExtractConversationKeys(new[] { keyChangeB64 });
-        foreach (var kv in extracted.Keys)
-            convKeys[kv.Key] = kv.Value;
+        if (dm.Event.GetProperty("type").GetString() == "Message")
+            Console.WriteLine(dm.Event.GetProperty("content").GetProperty("text").GetString());
     }
-    var evt = chat.DecryptEvent(encodedEvent, convKeys, senderSigningKeys);
+
+    // Live traffic: a rotation enters the key cache only after its
+    // signature verifies, which is what DecryptEvents does
+    if (!string.IsNullOrEmpty(keyChangeB64))
+        chat.DecryptEvents(new[] { keyChangeB64 });
+    var evt = chat.DecryptEvent(encodedEvent);  // throws on failure
     if (evt.GetProperty("type").GetString() == "Message")
         Console.WriteLine(evt.GetProperty("content").GetProperty("text").GetString());
     ```
   </Tab>
   <Tab title="Java">
     ```java
-    if (keyChangeB64 != null && !keyChangeB64.isEmpty()) {
-        var extracted = chat.extractConversationKeys(List.of(keyChangeB64));
-        convKeys.putAll(extracted.keys);
+    // Once per instance: fill the signing-key store (SigningKeyEntry list
+    // from GET /2/users/{id}/public_keys) and enable the key cache
+    chat.setSigningKeys(participantSigningKeys);
+    chat.setCacheKeys(true);
+
+    // Initial load: batch decrypt — per-event failures land in result.errors
+    DecryptEventsResult result = chat.decryptEvents(allEventsB64, null);
+    for (DecryptedMessage dm : result.messages) {
+        if ("Message".equals(dm.event.path("type").asText())) {
+            System.out.println(dm.event.path("content").path("text").asText());
+        }
     }
-    JsonNode evt = chat.decryptEvent(encodedEvent, convKeys, senderSigningKeys);
+
+    // Live traffic: a rotation enters the key cache only after its
+    // signature verifies, which is what decryptEvents does
+    if (keyChangeB64 != null && !keyChangeB64.isEmpty()) {
+        chat.decryptEvents(List.of(keyChangeB64), null);
+    }
+    JsonNode evt = chat.decryptEvent(encodedEvent, (Map<String, byte[]>) null, null);
     if ("Message".equals(evt.path("type").asText())) {
         System.out.println(evt.path("content").path("text").asText());
     }
@@ -986,33 +1042,15 @@ API가 요구할 때 URL 경로에 **하이픈으로 연결된** 대화 ID를 �
   </Tab>
 </Tabs>
 
+<Note>
+**서버리스 또는 다중 인스턴스인가요?** 서명 키 저장소와 키 캐시는 SDK 인스턴스의 메모리에 존재합니다. 이러한 환경에 맞지 않는 경우—한 호출은 복호화하고 다른 호출은 전송하는 경우—키를 명시적으로 전달하세요: `decrypt_events(events, signing_keys)`, `decrypt_event(event_b64, conversation_keys, signing_keys)`, 그리고 encrypt 메서드의 `conversation_key`/`conversation_key_version` 재정의를 사용합니다. `decrypt_events`가 반환하는 `conversation_keys`를 직접 유지하고 다시 전달하세요.
+</Note>
+
 모든 언어에 대한 전체 폴링-응답 봇 예제: [chat-xdk/examples](https://github.com/xdevplatform/chat-xdk/tree/main/examples).
 
 ---
 
 ## 모범 사례
 
-- 원시 대화 키와 발신자 공개 키를 캐시하고, 서명 검증 실패 시 갱신하세요
+- 서명 키 저장소를 최신 상태로 유지하세요: 발신자가 새 키 버전을 등록하면 전체 참가자 세트로 `set_signing_keys`를 다시 호출하고, 서명 검증 실패 시 갱신하세요
 - `event_uuid`로 실시간 전달을 중복 제거하세요
-- 페이지네이션이 완료될 때까지 이벤트 이력을 페이지 처리하여 키 변경 메타데이터를 놓치지 마세요
-- 프로덕션에서 패스코드, 개인 키, 메시지 평문을 로그에 남기지 마세요
-- 웹 앱에서는 OAuth 토큰(및 키 백업 realm 토큰 발급)을 서버에 유지하세요; 개인 키는 클라이언트 Chat XDK에만 보관하는 것이 좋습니다
-
----
-
-## 다음 단계
-
-<CardGroup cols={2}>
-  <Card title="Chat XDK" icon="code" href="/xchat/xchat-xdk">
-    모든 언어 바인딩의 메서드 및 타입
-  </Card>
-  <Card title="미디어" icon="image" href="/xchat/media">
-    암호화된 이미지 및 파일 첨부
-  </Card>
-  <Card title="그룹" icon="users" href="/xchat/groups">
-    다자간 대화 및 메타데이터
-  </Card>
-  <Card title="실시간 이벤트" icon="bolt" href="/xchat/real-time-events">
-    웹훅 및 활동 전달
-  </Card>
-</CardGroup>
