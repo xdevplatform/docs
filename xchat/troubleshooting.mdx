@@ -106,6 +106,73 @@ Load private keys first, then set the **session identity**—your user id plus t
   </Tab>
 </Tabs>
 
+### Your local public key never matches the account's registered keys
+
+Clients often need to answer *"is the key on this device one of the keys registered to this account?"*—after a restore or import, to adopt the right `public_key_version`, or to decide whether onboarding already happened. Comparing the Chat XDK's `get_public_keys` output against the API's `public_key` field **as strings always fails**, even for the same key, because the two use different encodings:
+
+- The **API** stores and returns the key exactly as registration uploaded it: the DER (SPKI) encoding — the raw key behind a fixed algorithm-identifier prefix
+- The **Chat XDK**'s `get_public_keys` returns the raw key alone, without that prefix
+
+Same key, two spellings. To compare, base64-decode both and check that the API bytes **end with** the SDK bytes (identical bytes also match, in case both sides ever hold the same encoding):
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import base64
+
+    def same_key(local_b64: str, server_b64: str) -> bool:
+        local = base64.b64decode(local_b64)    # chat.get_public_keys()["identity"]
+        server = base64.b64decode(server_b64)  # API row's "public_key"
+        return local == server or (len(server) > len(local) and server.endswith(local))
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    const sameKey = (localB64: string, serverB64: string): boolean => {
+      const local = Buffer.from(localB64, 'base64');   // chat.getPublicKeys().identity
+      const server = Buffer.from(serverB64, 'base64'); // API row's public_key
+      return local.equals(server) ||
+        (server.length > local.length && server.subarray(server.length - local.length).equals(local));
+    };
+    ```
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    fn same_key(local: &[u8], server: &[u8]) -> bool {
+        local == server || (server.len() > local.len() && server.ends_with(local))
+    }
+    ```
+  </Tab>
+  <Tab title="Go">
+    ```go
+    func sameKey(local, server []byte) bool {
+        return bytes.Equal(local, server) ||
+            (len(server) > len(local) && bytes.HasSuffix(server, local))
+    }
+    ```
+  </Tab>
+  <Tab title="C#">
+    ```csharp
+    static bool SameKey(byte[] local, byte[] server) =>
+        local.SequenceEqual(server) ||
+        (server.Length > local.Length &&
+         server.AsSpan(server.Length - local.Length).SequenceEqual(local));
+    ```
+  </Tab>
+  <Tab title="Java">
+    ```java
+    static boolean sameKey(byte[] local, byte[] server) {
+        if (Arrays.equals(local, server)) return true;
+        if (server.length <= local.length) return false;
+        byte[] tail = Arrays.copyOfRange(server, server.length - local.length, server.length);
+        return Arrays.equals(tail, local);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Once matched, adopt that row's `public_key_version` for `set_identity`. When comparing versions (for example to pick the newest key), compare **numerically**—versions are millisecond timestamps of varying string length, so lexicographic comparison picks the wrong one.
+
 ### Missing conversation key for a message
 
 An error like `Message encrypted with key version '…' but no matching key found` means you do not have the **raw** key for that message’s `conversation_key_version`.
@@ -135,6 +202,7 @@ Verification is **fail-closed by default** (`reject_unverified = true`): the SDK
 - No signing keys passed on the call and none stored via `set_signing_keys`
 - The sender rotated versions—re-fetch their public keys
 - A key version below the accepted floor never verifies
+- On a **group key-change event**, the signer has since left the group, so their keys are no longer served—see [Key changes from departed members](/xchat/groups#key-changes-from-departed-members)
 
 The `set_reject_unverified` setter exists to opt **out** of this default (`false`, not recommended). If you disabled it earlier, restore the fail-closed default:
 

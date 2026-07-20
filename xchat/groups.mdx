@@ -179,6 +179,17 @@ Sending and receiving in a group is the same as 1:1 once you have the raw conver
 
 Always encrypt with the **latest** key version after a membership-driven rotation.
 
+### Key changes from departed members
+
+A group's key-change events are signed by whoever performed them—often the creator or an admin. If that member later **leaves the group** (or deactivates), the public-keys endpoints stop returning their keys, so the verified decrypt path (`decrypt_events` with signing keys) fails on those key-change events with `signature missing or no matching signing key`. The events are not corrupt; the verification material is simply no longer served.
+
+Long-lived groups should expect this and fall back to **`extract_conversation_keys`** for key-change events that cannot be verified. This path skips the signature check and recovers the conversation key by decrypting it with your identity key. The security model holds because:
+
+- Only key material that was **encrypted to your identity key** can be recovered at all—a third party cannot inject a key you can read
+- Every **message** is still signature-verified against its own sender, so message authorship is unaffected
+
+Keep the verified path first: use `decrypt_events` (which also feeds the SDK's key cache when `set_cache_keys(true)` is enabled), and reach for `extract_conversation_keys` only for the key-change events it rejects.
+
 ---
 
 ## Checklist
