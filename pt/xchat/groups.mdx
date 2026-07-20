@@ -179,6 +179,17 @@ Enviar e receber em um grupo é igual a 1:1 uma vez que você tenha a chave da c
 
 Sempre criptografe com a versão **mais recente** da chave após uma rotação motivada por mudança de composição.
 
+### Mudanças de chave por membros que saíram
+
+Os eventos de mudança de chave de um grupo são assinados por quem os realizou — muitas vezes o criador ou um administrador. Se esse membro depois **sair do grupo** (ou desativar a conta), os endpoints de chaves públicas param de retornar suas chaves, então o caminho de descriptografia verificado (`decrypt_events` com chaves de assinatura) falha nesses eventos de mudança de chave com `signature missing or no matching signing key`. Os eventos não estão corrompidos; o material de verificação simplesmente não é mais servido.
+
+Grupos de longa duração devem prever isso e recorrer a **`extract_conversation_keys`** para eventos de mudança de chave que não podem ser verificados. Esse caminho ignora a verificação de assinatura e recupera a chave de conversa descriptografando-a com sua chave de identidade. O modelo de segurança se mantém porque:
+
+- Somente material de chave que foi **criptografado para sua chave de identidade** pode ser recuperado — um terceiro não pode injetar uma chave que você consiga ler
+- Cada **mensagem** ainda tem sua assinatura verificada contra o próprio remetente, então a autoria da mensagem não é afetada
+
+Mantenha o caminho verificado primeiro: use `decrypt_events` (que também alimenta o cache de chaves do SDK quando `set_cache_keys(true)` está habilitado) e recorra a `extract_conversation_keys` apenas para os eventos de mudança de chave que ele rejeitar.
+
 ---
 
 ## Checklist

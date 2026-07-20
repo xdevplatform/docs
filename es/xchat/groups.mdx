@@ -179,6 +179,17 @@ Enviar y recibir en un grupo es lo mismo que 1:1 una vez que tienes la clave de 
 
 Siempre cifra con la **última** versión de clave tras una rotación por cambio de membresía.
 
+### Cambios de clave por parte de miembros que han abandonado el grupo
+
+Los eventos de cambio de clave de un grupo son firmados por quien los realizó—a menudo el creador o un administrador. Si ese miembro más tarde **abandona el grupo** (o se desactiva), los endpoints de claves públicas dejan de devolver sus claves, por lo que la ruta de descifrado verificada (`decrypt_events` con claves de firma) falla en esos eventos de cambio de clave con `signature missing or no matching signing key`. Los eventos no están corruptos; simplemente ya no se sirve el material de verificación.
+
+Los grupos de larga duración deben esperar esto y recurrir a **`extract_conversation_keys`** para los eventos de cambio de clave que no puedan verificarse. Esta ruta omite la comprobación de firma y recupera la clave de conversación descifrándola con tu clave de identidad. El modelo de seguridad se mantiene porque:
+
+- Solo el material de clave que fue **cifrado con tu clave de identidad** puede recuperarse—un tercero no puede inyectar una clave que puedas leer
+- Cada **mensaje** sigue verificándose por firma contra su propio remitente, por lo que la autoría de los mensajes no se ve afectada
+
+Mantén primero la ruta verificada: usa `decrypt_events` (que también alimenta la caché de claves del SDK cuando `set_cache_keys(true)` está habilitado), y recurre a `extract_conversation_keys` solo para los eventos de cambio de clave que rechace.
+
 ---
 
 ## Lista de verificación
