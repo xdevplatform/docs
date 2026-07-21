@@ -1,0 +1,624 @@
+---
+title: Account Activity API V2
+sidebarTitle: Introducción
+description: "La Account Activity API (AAA) ofrece una forma de recibir eventos en tiempo real relacionados con X. Referencia para el nivel estándar de la X API v2 que cubre la actividad de la cuenta."
+keywords: ["account activity", "webhooks", "eventos en tiempo real", "API de account activity", "eventos de webhook", "AAA", "account activity v2"]
+tag: "DEPRECATED"
+---
+
+
+import { Button } from '/snippets/button.mdx';
+
+
+<Warning>
+La Account Activity API (AAA) está siendo deprecada. Consulta la [X Activity API (XAA)](/x-api/activity/introduction) para la entrega de actividad de usuario en tiempo real en el futuro.
+</Warning>
+
+La Account Activity API (AAA) ofrece una forma de recibir eventos en tiempo real relacionados con cuentas de usuario de X mediante webhooks. Al suscribir cuentas de usuario específicas a un webhook preconfigurado, tu aplicación puede recibir notificaciones sobre diversas actividades como Posts, mensajes directos, Likes, seguimientos, bloqueos y más, desde una o varias de tus cuentas propias o suscritas a través de una única conexión.
+
+Esta API se utiliza habitualmente para desarrollar aplicaciones que necesitan reaccionar de inmediato a las acciones del usuario o mantener un estado actualizado según la actividad del usuario.
+
+## Resumen
+
+<CardGroup cols={2}>
+  <Card title="Entrega por webhook" icon="webhook">
+    Eventos entregados a tu servidor en tiempo real
+  </Card>
+  <Card title="Tiempo real" icon="bolt">
+    Entrega los datos a la velocidad de X — sin necesidad de sondeo (polling)
+  </Card>
+  <Card title="Completo" icon="list">
+    Posts, DMs, seguimientos, likes, bloqueos, silencios y más
+  </Card>
+  <Card title="Basado en suscripciones" icon="bell">
+    Suscribe cuentas de usuario para recibir toda su actividad
+  </Card>
+</CardGroup>
+
+---
+
+## Cómo funciona
+
+1. **Registra el webhook** — Registra la URL de tu webhook mediante la [V2 Webhooks API](/x-api/webhooks/introduction)
+2. **Suscribe usuarios** — Añade suscripciones de usuario a tu webhook
+3. **Recibe eventos** — Recibe los eventos de actividad como solicitudes POST con cargas JSON
+4. **Procesa eventos** — Gestiona los eventos en tu aplicación y responde con `200 OK`
+
+---
+
+## Tipos de actividad
+
+Recibirás todas las actividades relacionadas que se indican a continuación por cada suscripción de usuario en el registro de tu webhook:
+
+- **Posts** (del usuario)
+- **Eliminaciones de Posts** (del usuario)
+- **@menciones** (al usuario)
+- **Respuestas** (hacia o desde el usuario)
+- **Reposts** (del usuario o al usuario)
+- **Quote Posts** (del usuario o al usuario)
+- **Reposts de Quoted Posts** (del usuario o al usuario)
+- **Likes** (del usuario o al usuario)
+- **Seguimientos** (del usuario o al usuario)
+- **Dejar de seguir** (por el usuario o al usuario)
+- **Bloqueos** (por el usuario o al usuario)
+- **Desbloqueos** (por el usuario o al usuario)
+- **Silencios** (por el usuario o al usuario)
+- **Dejar de silenciar** (por el usuario o al usuario)
+- **Mensajes directos enviados** (por el usuario)
+- **Mensajes directos recibidos** (por el usuario)
+- **Indicadores de escritura** (al usuario)
+- **Confirmaciones de lectura** (al usuario)
+- **Revocaciones de suscripción** (por el usuario)
+
+<Note>
+No entregamos datos del timeline de inicio mediante la Account Activity API. Utiliza el endpoint [User Posts timeline by User ID](/x-api/users/get-posts) para obtener estos datos.
+
+Los Posts devueltos por la Account Activity API cuentan para el [Post cap](/x-api/fundamentals/post-cap) mensual.
+</Note>
+
+---
+
+## Resumen de funciones
+
+| Nivel | Número de suscripciones únicas | Número de webhooks |
+|:-----|:-------------------------------|:-------------------|
+| Pay Per Use | 3 | 1 |
+| Enterprise | 5000+ | 5+ |
+
+---
+
+## Estructura del objeto de datos de Account Activity
+
+| Objeto | Detalles |
+|:-------|:--------|
+| `for_user_id` | Identifica la suscripción del usuario con la que está relacionado el evento. |
+| `is_blocked_by` | (Condicional) Se muestra únicamente en eventos de mención en Post si el usuario que menciona está bloqueado por el usuario suscrito. |
+| `source` | El usuario que realiza la actividad (por ejemplo, el usuario que sigue, bloquea o silencia). |
+| `target` | El usuario al que se aplica la actividad (por ejemplo, el usuario seguido, bloqueado o silenciado). |
+
+### Actividades disponibles
+
+| Tipo de mensaje | Detalles |
+|:-------------|:--------|
+| `tweet_create_events` | Estado de Post para Posts, Retweets, respuestas, @menciones, Quote Tweets o Retweets de Quote Tweets. |
+| `favorite_events` | Evento de like con usuario y destino. |
+| `follow_events` | Evento de seguimiento con usuario y destino. |
+| `unfollow_events` | Evento de dejar de seguir con usuario y destino. |
+| `block_events` | Evento de bloqueo con usuario y destino. |
+| `unblock_events` | Evento de desbloqueo con usuario y destino. |
+| `mute_events` | Evento de silencio con usuario y destino. |
+| `unmute_events` | Evento de dejar de silenciar con usuario y destino. |
+| `user_event` | Eventos de revocación cuando un usuario retira la autorización de la app (la suscripción se elimina automáticamente). |
+| `direct_message_events` | Estado de DM para mensajes enviados o recibidos. |
+| `direct_message_indicate_typing_events` | Evento de escritura de DM con usuario y destino. |
+| `direct_message_mark_read_events` | Evento de lectura de DM con usuario y destino. |
+| `tweet_delete_events` | Aviso de Posts eliminados por motivos de cumplimiento. |
+
+---
+
+## Ejemplos de payload
+
+A continuación se muestran ejemplos de payload para cada evento de Account Activity.
+
+### tweet\_create\_events (Posts, Retweets, respuestas, QuoteTweets)
+
+```json
+{
+  "for_user_id": "2244994945",
+  "tweet_create_events": [
+    {
+      <Tweet Object>
+    }
+  ]
+}
+```
+
+### tweet\_create\_events (@menciones)
+
+```json
+{
+  "for_user_id": "2244994945",
+  "user_has_blocked": "false",
+  "tweet_create_events": [
+    {
+      <Tweet Object>
+    }
+  ]
+}
+```
+
+### favorite\_events
+
+```json
+{
+  "for_user_id": "2244994945",
+  "favorite_events": [{
+    "id": "a7ba59eab0bfcba386f7acedac279542",
+    "created_at": "Mon Mar 26 16:33:26 +0000 2018",
+    "timestamp_ms": 1522082006140,
+    "favorited_status": {
+      <Tweet Object>
+    },
+    "user": {
+      <User Object>
+    }
+  }]
+}
+```
+
+### follow\_events
+
+```json
+{
+  "for_user_id": "2244994945",
+  "follow_events": [{
+    "type": "follow",
+    "created_timestamp": "1517588749178",
+    "target": {
+      <User Object>
+    },
+    "source": {
+      <User Object>
+    }
+  }]
+}
+```
+
+### unfollow\_events
+
+```json
+{
+  "for_user_id": "2244994945",
+  "follow_events": [{
+    "type": "unfollow",
+    "created_timestamp": "1517588749178",
+    "target": {
+      <User Object>
+    },
+    "source": {
+      <User Object>
+    }
+  }]
+}
+```
+
+### block\_events
+
+```json
+{
+  "for_user_id": "2244994945",
+  "block_events": [{
+    "type": "block",
+    "created_timestamp": "1518127020304",
+    "source": {
+      <User Object>
+    },
+    "target": {
+      <User Object>
+    }
+  }]
+}
+```
+
+### unblock\_events
+
+```json
+{
+  "for_user_id": "2244994945",
+  "block_events": [{
+    "type": "unblock",
+    "created_timestamp": "1518127020304",
+    "source": {
+      <User Object>
+    },
+    "target": {
+      <User Object>
+    }
+  }]
+}
+```
+
+### mute\_events
+
+```json
+{
+  "for_user_id": "2244994945",
+  "mute_events": [
+    {
+      "type": "mute",
+      "created_timestamp": "1518127020304",
+      "source": {
+        <User Object>
+      },
+      "target": {
+        <User Object>
+      }
+    }
+  ]
+}
+```
+
+### unmute\_events
+
+```json
+{
+  "for_user_id": "2244994945",
+  "mute_events": [
+    {
+      "type": "unmute",
+      "created_timestamp": "1518127020304",
+      "source": {
+        <User Object>
+      },
+      "target": {
+        <User Object>
+      }
+    }
+  ]
+}
+```
+
+### user\_event
+
+```json
+{
+  "user_event": {
+    "revoke": {
+      "date_time": "2018-05-24T09:48:12+00:00",
+      "target": {
+        "app_id": "13090192"
+      },
+      "source": {
+        "user_id": "63046977"
+      }
+    }
+  }
+}
+```
+
+### direct\_message\_events
+
+```json
+{
+  "for_user_id": "4337869213",
+  "direct_message_events": [{
+    "type": "message_create",
+    "id": "954491830116155396",
+    "created_timestamp": "1516403560557",
+    "message_create": {
+      "target": {
+        "recipient_id": "4337869213"
+      },
+      "sender_id": "3001969357",
+      "source_app_id": "13090192",
+      "message_data": {
+        "text": "Hello World!",
+        "entities": {
+          "hashtags": [],
+          "symbols": [],
+          "user_mentions": [],
+          "urls": []
+        }
+      }
+    }
+  }],
+  "apps": {
+    "13090192": {
+      "id": "13090192",
+      "name": "FuriousCamperTestApp1",
+      "url": "https://x.com/furiouscamper"
+    }
+  },
+  "users": {
+    "3001969357": {
+      "id": "3001969357",
+      "created_timestamp": "1422556069340",
+      "name": "Jordan Brinks",
+      "screen_name": "furiouscamper",
+      "location": "Boulder, CO",
+      "description": "Alter Ego - X PE opinions-are-my-own",
+      "url": "https://t.co/SnxaA15ZuY",
+      "protected": false,
+      "verified": false,
+      "followers_count": 22,
+      "friends_count": 45,
+      "statuses_count": 494,
+      "profile_image_url_https": "https://pbs.twimg.com/profile_images/851526626785480705/cW4WTi7C_normal.jpg"
+    },
+    "4337869213": {
+      "id": "4337869213",
+      "created_timestamp": "1448312972328",
+      "name": "Harrison Test",
+      "screen_name": "Harris_0ff",
+      "location": "Burlington, MA",
+      "protected": false,
+      "verified": false,
+      "followers_count": 8,
+      "friends_count": 8,
+      "statuses_count": 240,
+      "profile_image_url_https": "https://abs.twimg.com/sticky/default_profile_images/default_profile_normal.png"
+    }
+  }
+}
+```
+
+### direct\_message\_indicate\_typing\_events
+
+```json
+{
+  "for_user_id": "4337869213",
+  "direct_message_indicate_typing_events": [{
+    "created_timestamp": "1518127183443",
+    "sender_id": "3284025577",
+    "target": {
+      "recipient_id": "3001969357"
+    }
+  }],
+  "users": {
+    "3001969357": {
+      "id": "3001969357",
+      "created_timestamp": "1422556069340",
+      "name": "Jordan Brinks",
+      "screen_name": "furiouscamper",
+      "location": "Boulder, CO",
+      "description": "Alter Ego - X PE opinions-are-my-own",
+      "url": "https://t.co/SnxaA15ZuY",
+      "protected": false,
+      "verified": false,
+      "followers_count": 23,
+      "friends_count": 47,
+      "statuses_count": 509,
+      "profile_image_url_https": "https://pbs.twimg.com/profile_images/851526626785480705/cW4WTi7C_normal.jpg"
+    },
+    "3284025577": {
+      "id": "3284025577",
+      "created_timestamp": "1437281176085",
+      "name": "Bogus Bogart",
+      "screen_name": "bogusbogart",
+      "protected": true,
+      "verified": false,
+      "followers_count": 1,
+      "friends_count": 4,
+      "statuses_count": 35,
+      "profile_image_url_https": "https://pbs.twimg.com/profile_images/763383202857779200/ndvZ96mE_normal.jpg"
+    }
+  }
+}
+```
+
+### direct\_message\_mark\_read\_events
+
+```json
+{
+  "for_user_id": "4337869213",
+  "direct_message_mark_read_events": [{
+    "created_timestamp": "1518452444662",
+    "sender_id": "199566737",
+    "target": {
+      "recipient_id": "3001969357"
+    },
+    "last_read_event_id": "963085315333238788"
+  }],
+  "users": {
+    "199566737": {
+      "id": "199566737",
+      "created_timestamp": "1286429788000",
+      "name": "Le Braat",
+      "screen_name": "LeBraat",
+      "location": "Denver, CO",
+      "description": "data by day @X, design by dusk",
+      "protected": false,
+      "verified": false,
+      "followers_count": 299,
+      "friends_count": 336,
+      "statuses_count": 752,
+      "profile_image_url_https": "https://pbs.twimg.com/profile_images/936652894371119105/YHEozVAg_normal.jpg"
+    },
+    "3001969357": {
+      "id": "3001969357",
+      "created_timestamp": "1422556069340",
+      "name": "Jordan Brinks",
+      "screen_name": "furiouscamper",
+      "location": "Boulder, CO",
+      "description": "Alter Ego - X PE opinions-are-my-own",
+      "url": "https://t.co/SnxaA15ZuY",
+      "protected": false,
+      "verified": false,
+      "followers_count": 23,
+      "friends_count": 48,
+      "statuses_count": 510,
+      "profile_image_url_https": "https://pbs.twimg.com/profile_images/851526626785480705/cW4WTi7C_normal.jpg"
+    }
+  }
+}
+```
+
+### tweet\_delete\_events
+
+```json
+{
+  "for_user_id": "930524282358325248",
+  "tweet_delete_events": [
+    {
+      "status": {
+        "id": "1045405559317569537",
+        "user_id": "930524282358325248"
+      },
+      "timestamp_ms": "1432228155593"
+    }
+  ]
+}
+```
+
+---
+
+## Compatibilidad con posts de formato largo
+
+La Account Activity API V2 admite posts de **formato largo**, que son posts que superan los 280 caracteres. Cuando se incluye un post de formato largo en un payload `tweet_create_events`, el campo `text` contiene los primeros 140 caracteres (o menos) y el campo `truncated` se establece en `true`. El contenido completo del post se entrega en el objeto `extended_tweet`, que incluye:
+
+- `full_text` — El texto completo del post, incluidos todos los caracteres más allá del límite de 280 caracteres.
+- `entities` — Las entidades (por ejemplo, hashtags, URLs, menciones de usuario, símbolos) que aparecen en el texto completo, incluidas las que están después del carácter 280.
+- `display_text_range` — El rango de caracteres a mostrar, teniendo en cuenta el texto completo.
+
+Esto garantiza que las aplicaciones puedan procesar todo el contenido de los posts de formato largo, incluidas las menciones u otras entidades que aparecen más adelante en el texto. A continuación se muestra un ejemplo de payload `tweet_create_events` para un post de formato largo:
+
+```json
+{
+  "for_user_id": "1603419180975409153",
+  "tweet_create_events": [
+    {
+      "created_at": "Mon May 19 14:01:46 +0000 2025",
+      "id": 1924465506158879000,
+      "id_str": "1924465506158878979",
+      "text": "The Antikythera Mechanism: A Window into Ancient Ingenuity Discovered in 1901 among the wreckage of a Roman ship of… https://t.co/bzbEKj8cd8",
+      "display_text_range": [0, 140],
+      "truncated": true,
+      "user": { ... },
+      "extended_tweet": {
+        "full_text": "The Antikythera Mechanism: A Window into Ancient Ingenuity Discovered in 1901 among the wreckage of a Roman ship off the Greek island of Antikythera...",
+        "display_text_range": [0, 2051],
+        "entities": {
+          "hashtags": [],
+          "urls": [],
+          "user_mentions": [
+            {
+              "screen_name": "xai",
+              "name": "xAI",
+              "id": 1661523610111193000,
+              "id_str": "1661523610111193088",
+              "indices": [2032, 2036]
+            },
+            {
+              "screen_name": "HistoryInPics",
+              "name": "History Photographed",
+              "id": 1582853809,
+              "id_str": "1582853809",
+              "indices": [2037, 2051]
+            }
+          ],
+          "symbols": []
+        }
+      },
+      "entities": {
+        "hashtags": [],
+        "urls": [
+          {
+            "url": "https://t.co/bzbEKj8cd8",
+            "expanded_url": "https://twitter.com/i/web/status/1924465506158878979",
+            "display_url": "twitter.com/i/web/status/1…",
+            "indices": [117, 140]
+          }
+        ],
+        "user_mentions": [],
+        "symbols": []
+      }
+    }
+  ]
+}
+```
+
+---
+
+## Preguntas frecuentes
+
+<AccordionGroup>
+  <Accordion title="¿Cuáles son las ventajas de usar la Account Activity API?">
+    La Account Activity API usa webhooks, entregando datos en tiempo real sin necesidad de una conexión abierta (a diferencia de las APIs de streaming) ni de sondeo frecuente (a diferencia de las APIs REST). Los beneficios incluyen:
+
+    - **Velocidad** — Entrega los datos a la velocidad de X.
+    - **Sencillez** — Proporciona todos los eventos de la cuenta a través de una única conexión de webhook, incluyendo Posts, @menciones, respuestas, Reposts, Quote Tweets, Likes, DMs, seguimientos, bloqueos y silencios.
+    - **Escala** — Admite todas las actividades de las cuentas gestionadas sin límites de tasa ni topes de eventos (nivel Enterprise).
+  </Accordion>
+
+  <Accordion title="Necesito entornos de desarrollo, staging y producción. ¿Es posible?">
+    ¡Sí! Puedes registrar varias URLs de webhook y gestionar las suscripciones por separado a través de la [V2 Webhooks API](/x-api/webhooks/introduction).
+  </Accordion>
+
+  <Accordion title="¿Tienen alguna guía paso a paso para la configuración?">
+    ¡Sí! Consulta el [Inicio rápido de la Account Activity API](/x-api/account-activity/quickstart), la [Guía de introducción a los webhooks](/x-api/webhooks/quickstart) y la [Aplicación de ejemplo de la Account Activity API](https://github.com/xdevplatform/account-activity-dashboard-enterprise/tree/master).
+  </Accordion>
+
+  <Accordion title="¿Qué autenticación necesito para la Account Activity API?">
+    Los requisitos de autenticación varían según el endpoint:
+
+    - Las **acciones específicas de usuario** (por ejemplo, suscribir a un usuario) requieren **OAuth 1.0a** (flujo de OAuth de 3 pasos).
+    - Las **acciones a nivel de app** (por ejemplo, listar/eliminar suscripciones, conteo de suscripciones) requieren **OAuth2 App Only Bearer Token**.
+
+    Revisa la [sección de autenticación](/fundamentals/authentication/overview) para más detalles.
+  </Accordion>
+
+  <Accordion title="¿Recibiré actividades duplicadas si me suscribo a usuarios que interactúan entre sí?">
+    Sí. Si tu app tiene suscripciones para el Usuario A y el Usuario B, y el Usuario A menciona al Usuario B en un Post, tu webhook recibe dos eventos (uno por usuario). Utiliza el campo `for_user_id` para identificar la suscripción.
+  </Accordion>
+
+  <Accordion title="¿Puedo reemplazar /all/ en el endpoint para limitar las actividades entregadas?">
+    No. El producto `/all/` es la única opción y entrega todos los tipos de eventos admitidos.
+  </Accordion>
+
+  <Accordion title="Si tengo acceso a tres webhooks, ¿puedo usar tres webhooks para cada una de mis apps?">
+    El límite de webhooks se establece a nivel de cuenta, no por app. Por ejemplo, con tres webhooks y dos apps, podrías usar dos webhooks para una app y uno para la otra, pero no tres por app.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Índice de referencia de la API
+
+| Propósito | Endpoint V2 |
+|:--------|:------------|
+| Suscribe una aplicación a los eventos de una cuenta | [`POST /2/account_activity/webhooks/:webhook_id/subscriptions/all`](/x-api/account-activity/create-subscription) |
+| Devuelve un conteo de las suscripciones activas actualmente | [`GET /2/account_activity/subscriptions/count`](/x-api/account-activity/get-subscription-count) |
+| Comprueba si un webhook está suscrito a una cuenta | [`GET /2/account_activity/webhooks/:webhook_id/subscriptions/all`](/x-api/account-activity/validate-subscription) |
+| Devuelve una lista de las suscripciones activas actualmente | [`GET /2/account_activity/webhooks/:webhook_id/subscriptions/all/list`](/x-api/account-activity/get-subscriptions) |
+| Desactiva una suscripción usando OAuth solo de app | [`DELETE /2/account_activity/webhooks/:webhook_id/subscriptions/:user_id/all`](/x-api/account-activity/delete-subscription) |
+| Crea un trabajo de replay | [`POST /2/account_activity/replay/webhooks/:webhook_id/subscriptions/all`](/x-api/account-activity/create-replay-job) |
+
+Para endpoints de gestión de webhooks (registrar, ver, validar, eliminar), consulta la [documentación de la V2 Webhooks API](/x-api/webhooks/introduction).
+
+---
+
+## Primeros pasos
+
+<Note>
+**Requisitos previos**
+
+- Una [cuenta de desarrollador](https://developer.x.com/en/portal/petition/essential/basic-info) aprobada
+- Un [Project y App](/resources/fundamentals/developer-apps) en la Developer Console
+- Un endpoint de webhook HTTPS accesible públicamente
+- Acceso Enterprise o Pay Per Use para la Account Activity API
+</Note>
+
+<CardGroup cols={2}>
+  <Card title="Inicio rápido" icon="rocket" href="/x-api/account-activity/quickstart">
+    Configura suscripciones y empieza a recibir eventos
+  </Card>
+  <Card title="Webhooks API" icon="webhook" href="/x-api/webhooks/introduction">
+    Registra y gestiona tus webhooks
+  </Card>
+  <Card title="Guía de migración" icon="right-left" href="/x-api/account-activity/migrate/overview">
+    Migra desde Enterprise heredada a v2
+  </Card>
+  <Card title="Activity stream" icon="bars-staggered" href="/x-api/activity/introduction">
+    Alternativa de streaming a los webhooks
+  </Card>
+</CardGroup>

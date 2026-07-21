@@ -1,0 +1,364 @@
+---
+title: クイックスタート
+sidebarTitle: クイックスタート
+description: "このガイドでは、Account Activity API のセットアップ方法や、ユーザーサブスクリプションの管理方法について解説します。X API v2 スタンダードティアのアカウントアクティビティに関するリファレンスです。"
+keywords: ["account activity quickstart", "AAA setup", "webhook subscriptions", "account activity setup", "manage subscriptions", "replay"]
+tag: "DEPRECATED"
+---
+
+<Warning>
+Account Activity API (AAA) は非推奨となります。今後のリアルタイムなユーザーアクティビティ配信については [X Activity API (XAA)](/x-api/activity/introduction) をご確認ください。
+</Warning>
+
+このガイドでは、Account Activity API のセットアップ、ユーザーサブスクリプションの管理、Webhook の検証、そして見逃したイベントを復旧するためのリプレイ機能の利用方法について解説します。
+
+## 1. X App を作成する
+
+承認済みの開発者アカウントを用いて、[developer portal](https://developer.x.com/en/portal/products/enterprise) から X app を作成します。会社を代表してアプリを作成する場合は、企業の X アカウントを使用してください。
+
+- アプリページの permissions タブで **"Read, Write, and Access direct messages"** を有効化します。
+- "Keys and Access Tokens" タブで、アプリの **Consumer Key (API Key)**、**Consumer Token (API Secret)**、**Bearer Token** を控えておきます。
+- アプリの **Access Token** と **Access Token Secret** を生成します。これらはユーザーアカウントをサブスクライブするために必要です。
+- X Sign-in やユーザーコンテキストに慣れていない場合は、[アクセストークンの取得方法](/fundamentals/authentication/overview)を確認してください。
+- developer portal の "Apps" ページからアプリの数値 ID を控えておきます。Account Activity API のアクセス申請時に必要になります。
+
+---
+
+## 2. Account Activity API のアクセス権を取得する
+
+Account Activity API は Enterprise および Pay Per Use のティアで利用できます。アクセス申請は [developer portal](https://developer.x.com/en/portal/products/enterprise) から行います。
+
+---
+
+## 3. Webhook を登録する
+
+Account Activity イベントを受信するには、公開アクセス可能な HTTPS URL を持つ Webhook を登録する必要があります。Webhook を消費するアプリの開発、Webhook の登録、セキュリティ、Challenge-Response Checks (CRC) の取り扱いの詳細は、[V2 Webhooks API ドキュメント](/x-api/webhooks/introduction)を参照してください。
+
+- Webhook が JSON エンコードされたイベントペイロードを含む POST リクエストを処理できるように構成してください。
+- Webhook の登録レスポンスから **`webhook_id`** を取得します。これはサブスクリプションを管理するために必要です。
+
+```bash
+curl --request POST \
+  --url 'https://api.x.com/2/webhooks' \
+  --header 'Authorization: Bearer $BEARER_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{"url": "https://yourdomain.com/webhooks/twitter"}'
+```
+
+---
+
+## 4. セットアップを検証する
+
+アプリと Webhook が正しく構成されていることを検証するには:
+
+1. Webhook にユーザーアカウントをサブスクライブします (後述の [サブスクリプションの追加](#adding-a-subscription) を参照)。
+2. アプリがサブスクライブしている X アカウントの 1 つが投稿した Post に「いいね」を付けます。
+3. Webhook URL への POST リクエストとして `favorite_events` ペイロードを受信するはずです。
+
+<Note>
+サブスクリプションを追加してからイベントの配信が始まるまで、最大 10 秒程度かかる場合があります。
+</Note>
+
+---
+
+## サブスクリプションの管理
+
+有効な `webhook_id` を持つ Webhook を登録した後、ユーザーサブスクリプションを管理してアカウントのアクティビティを受信できるようになります。サブスクリプションの追加、閲覧、削除には以下のエンドポイントを使用します。
+
+### サブスクリプションの追加
+
+**エンドポイント:** `POST /2/account_activity/webhooks/:webhook_id/subscriptions/all` — [API リファレンス](/x-api/account-activity/create-subscription)
+
+指定した Webhook 経由でイベントを受信するために、認証済みユーザーをサブスクライブします。
+
+**認証:** OAuth 1.0a (サブスクライブされるユーザーを表す 3-legged OAuth フローが必要)。
+
+| パスパラメーター | 説明 |
+|:---------------|:------------|
+| `webhook_id` | サブスクリプションを紐付ける Webhook の ID。 |
+
+```bash
+curl --request POST \
+  --url 'https://api.x.com/2/account_activity/webhooks/:WEBHOOK_ID/subscriptions/all' \
+  --header 'authorization: OAuth oauth_consumer_key="<CONSUMER_KEY>", oauth_nonce="GENERATED", oauth_signature="GENERATED", oauth_signature_method="HMAC-SHA1", oauth_timestamp="GENERATED", oauth_token="<ACCESS_TOKEN>", oauth_version="1.0"'
+```
+
+**成功 (200 OK):**
+
+```json
+{
+  "data": {
+    "subscribed": true
+  }
+}
+```
+
+**失敗理由:**
+
+| 理由 | 説明 |
+|:-------|:------------|
+| `WebhookIdInvalid` | 指定した `webhook_id` が見つからないか、アプリに紐付けられていません。 |
+| `DuplicateSubscriptionFailed` | 指定した `webhook_id` に対して、このユーザーのサブスクリプションが既に存在しています。 |
+| `SubscriptionLimitExceeded` | アプリケーションがすべての Webhook にわたるサブスクリプション上限に達しています。 |
+
+---
+
+### サブスクリプションの確認
+
+**エンドポイント:** `GET /2/account_activity/webhooks/:webhook_id/subscriptions/all` — [API リファレンス](/x-api/account-activity/validate-subscription)
+
+認証済みユーザーが指定した Webhook にサブスクライブされているかを確認します。
+
+**認証:** OAuth 1.0a (3-legged OAuth フローが必要)。
+
+| パスパラメーター | 説明 |
+|:---------------|:------------|
+| `webhook_id` | 確認する Webhook の ID。 |
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/2/account_activity/webhooks/:WEBHOOK_ID/subscriptions/all' \
+  --header 'authorization: OAuth oauth_consumer_key="<CONSUMER_KEY>", oauth_nonce="GENERATED", oauth_signature="GENERATED", oauth_signature_method="HMAC-SHA1", oauth_timestamp="GENERATED", oauth_token="<ACCESS_TOKEN>", oauth_version="1.0"'
+```
+
+**成功 (200 OK):**
+
+```json
+{
+  "data": {
+    "subscribed": true
+  }
+}
+```
+
+**失敗理由:**
+
+| 理由 | 説明 |
+|:-------|:------------|
+| `WebhookIdInvalid` | 指定した `webhook_id` が見つからないか、アプリに紐付けられていません。 |
+
+---
+
+### サブスクリプションの削除
+
+**エンドポイント:** `DELETE /2/account_activity/webhooks/:webhook_id/subscriptions/:user_id/all` — [API リファレンス](/x-api/account-activity/delete-subscription)
+
+指定したユーザー ID のサブスクリプションを無効化し、Webhook へのイベント配信を停止します。
+
+**認証:** OAuth2 App Only Bearer Token。
+
+| パスパラメーター | 説明 |
+|:---------------|:------------|
+| `webhook_id` | サブスクリプションを含む Webhook の ID。 |
+| `user_id` | サブスクリプションを解除するユーザーの数値 ID。 |
+
+```bash
+curl --request DELETE \
+  --url 'https://api.x.com/2/account_activity/webhooks/:WEBHOOK_ID/subscriptions/:USER_ID/all' \
+  --header 'authorization: Bearer <BEARER_TOKEN>'
+```
+
+**成功 (200 OK):**
+
+```json
+{
+  "data": {
+    "subscribed": false
+  }
+}
+```
+
+**失敗理由:**
+
+| 理由 | 説明 |
+|:-------|:------------|
+| `SubscriptionNotFound` | 指定した `webhook_id` 上に、その `user_id` のサブスクリプションが存在しません。 |
+| `WebhookIdInvalid` | 指定した `webhook_id` が見つからないか、アプリに紐付けられていません。 |
+
+---
+
+### すべてのサブスクリプションの閲覧
+
+**エンドポイント:** `GET /2/account_activity/webhooks/:webhook_id/subscriptions/all/list` — [API リファレンス](/x-api/account-activity/get-subscriptions)
+
+指定した Webhook に現在サブスクライブされているすべてのユーザー ID のリストを取得します。
+
+**認証:** OAuth2 App Only Bearer Token。
+
+| パスパラメーター | 説明 |
+|:---------------|:------------|
+| `webhook_id` | サブスクリプションを一覧表示する Webhook の ID。 |
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/2/account_activity/webhooks/:WEBHOOK_ID/subscriptions/all/list' \
+  --header 'authorization: Bearer <BEARER_TOKEN>'
+```
+
+**成功 (200 OK):**
+
+```json
+{
+  "data": {
+    "application_id": "<your app id>",
+    "webhook_id": "<webhook id>",
+    "webhook_url": "<the webhook's callback url>",
+    "subscriptions": [
+      { "user_id": "<user_id_1>" },
+      { "user_id": "<user_id_2>" }
+    ]
+  }
+}
+```
+
+**失敗理由:**
+
+| 理由 | 説明 |
+|:-------|:------------|
+| `WebhookIdInvalid` | 指定した `webhook_id` が見つからないか、アプリに紐付けられていません。 |
+
+---
+
+### サブスクリプション数
+
+**エンドポイント:** `GET /2/account_activity/subscriptions/count` — [API リファレンス](/x-api/account-activity/get-subscription-count)
+
+認証済みアプリケーションのアクティブなサブスクリプションの合計数と、プロビジョニングされた上限を返します。
+
+**認証:** OAuth2 App Only Bearer Token。
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/2/account_activity/subscriptions/count' \
+  --header 'authorization: Bearer <BEARER_TOKEN>'
+```
+
+**成功 (200 OK):**
+
+```json
+{
+  "data": {
+    "account_name": "<your application name>",
+    "provisioned_count": "<subscription limit allocated>",
+    "subscriptions_count_all": "<current active subscription count>",
+    "subscriptions_count_direct_messages": "0"
+  }
+}
+```
+
+<Note>
+DM 専用のサブスクリプションはサポートされなくなりました。`subscriptions_count_direct_messages` フィールドは常に `"0"` になります。
+</Note>
+
+---
+
+## リプレイ
+
+AAAv2 はリプレイ機能を提供しており、指定した時間範囲内の過去のイベントを取得して Webhook に再配信できます。ダウンタイムによって取り逃したイベントの復旧に便利です。
+
+**エンドポイント:** `POST /2/account_activity/replay/webhooks/:webhook_id/subscriptions/all` — [API リファレンス](/x-api/account-activity/create-replay-job)
+
+**認証:** OAuth2 App Only Bearer Token。
+
+| パスパラメーター | 説明 |
+|:---------------|:------------|
+| `webhook_id` | リプレイを開始する Webhook の ID。 |
+
+| クエリパラメーター | 説明 |
+|:----------------|:------------|
+| `from_date` | イベントを提供する最も古い (開始) UTC タイムスタンプ。`yyyymmddhhmm` 形式で指定する必要があります。タイムスタンプは分単位の粒度で、その分を含みます (すなわち 12:00 は 00 分を含みます)。有効な時刻は直近 24 時間以内 (UTC) で、かつ現時点から 31 分以上前でなければなりません。`from_date` と `to_date` の間隔は約 2 時間以内にすることを推奨します。 |
+| `to_date` | イベントを提供する最も新しい (終了) UTC タイムスタンプ。`yyyymmddhhmm` 形式で指定する必要があります。タイムスタンプは分単位の粒度で、その分を含みません (すなわち 12:30 は 30 分を含みません)。有効な時刻は直近 24 時間以内 (UTC) で、かつ現時点から 10 分以上前でなければなりません。 |
+
+**成功 (200 OK):**
+
+```json
+{
+  "for_user_id": "<USER_ID>",
+  "replay_event": {
+    "job_id": "<REPLAY_JOB_ID>",
+    "created_at": "yyyy-mm-ddThh:mm:ss.000Z"
+  }
+}
+```
+
+**失敗理由:**
+
+| 理由 | 説明 |
+|:-------|:------------|
+| `QueryParamInvalid` | `from_date` が現在時刻から 24 時間以上前です。 |
+| `QueryParamInvalid` | `from_date` が `to_date` より新しいです。 |
+| `QueryParamInvalid` | `from_date` が未来の時刻です。 |
+| `QueryParamInvalid` | `to_date` が未来の時刻です。 |
+| `QueryParamInvalid` | `from_date` または `to_date` が正しい形式ではありません。 |
+| `CrcValidationFailed` | CRC 検証中に Webhook URL から不正なレスポンスを受信しました。 |
+| `ReplayConflictError` | 指定した Webhook で既にリプレイジョブが実行中です。 |
+| `WebhookIdInvalid` | 指定した `webhook_id` が無効か、アプリに紐付けられていません。 |
+
+### ジョブ完了メッセージ
+
+リプレイジョブが正常に完了すると、X は以下のジョブ完了イベントを配信します。このイベントを受信した時点でジョブの実行は完了しており、次のジョブを送信できます。
+
+```json
+{
+  "replay_job_status": {
+    "webhook_id": "<WEBHOOK_ID>",
+    "job_state": "Complete",
+    "job_state_description": "Job completed successfully",
+    "job_id": "<JOB_ID>"
+  }
+}
+```
+
+ジョブが正常に完了しなかった場合、X はリプレイジョブの再試行を促す以下のメッセージを返します。このイベントを受信した時点でジョブの実行は完了しており、次のジョブを送信できます。
+
+```json
+{
+  "replay_job_status": {
+    "webhook_id": "<WEBHOOK_ID>",
+    "job_state": "Incomplete",
+    "job_state_description": "Job failed to deliver all events, please retry your replay job",
+    "job_id": "<JOB_ID>"
+  }
+}
+```
+
+---
+
+## 重要な注意事項
+
+<Warning>
+- **認証**: ユーザーをサブスクライブする際は、そのユーザーアカウントの consumer key、consumer secret、access token、access token secret を使用してください。
+- **ダイレクトメッセージ**: 送受信されるすべてのダイレクトメッセージ (`POST /2/dm_conversations/with/:participant_id/messages` 経由で送信されるもの) は、DM アクティビティを把握できるよう Webhook を通じてアプリに配信されます。
+- **イベントの重複**:
+  - サブスクライブされた 2 人のユーザーが同じ DM 会話にいる場合、Webhook は重複したイベント (ユーザーごとに 1 件) を受信します。`for_user_id` フィールドで区別してください。
+  - 複数のアプリが同じ Webhook URL とユーザーを共有している場合、イベントは複数回 (アプリごとに 1 回) 送信されます。
+  - アプリはイベント ID を使ってイベントを重複排除し、時折発生する重複に対応する必要があります。
+</Warning>
+
+---
+
+## サンプルアプリ
+
+| アプリ | 説明 |
+|:----|:------------|
+| [シンプルな Webhook サーバー](https://github.com/m-rosinsky/XWebhookTest/blob/main/app.py) | CRC チェックへの応答と POST イベントの受け付け方法を示す、単一の Python スクリプト |
+| [Account Activity API ダッシュボード](https://github.com/xdevplatform/account-activity-dashboard-enterprise/tree/master) | [bun.sh](https://bun.sh) で書かれた Web アプリで、Webhook やサブスクリプションを管理し、ライブイベントを受信できます |
+
+---
+
+## 次のステップ
+
+<CardGroup cols={2}>
+  <Card title="はじめに" icon="book" href="/x-api/account-activity/introduction">
+    アクティビティタイプ、データオブジェクト、ペイロード例
+  </Card>
+  <Card title="Webhooks API" icon="webhook" href="/x-api/webhooks/introduction">
+    Webhook の登録と管理
+  </Card>
+  <Card title="移行ガイド" icon="right-left" href="/x-api/account-activity/migrate/overview">
+    レガシーの Enterprise から v2 へ移行する
+  </Card>
+  <Card title="Webhook クイックスタート" icon="rocket" href="/x-api/webhooks/quickstart">
+    CRC のセットアップ、セキュリティ、Webhook の登録
+  </Card>
+</CardGroup>

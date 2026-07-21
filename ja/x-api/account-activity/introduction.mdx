@@ -1,0 +1,624 @@
+---
+title: V2 Account Activity API
+sidebarTitle: はじめに
+description: "Account Activity API (AAA) は、X に関連するイベントをリアルタイムに受け取る仕組みを提供します。X API v2 スタンダードティアのアカウントアクティビティに関するリファレンスです。"
+keywords: ["account activity", "webhooks", "real-time events", "account activity API", "webhook events", "AAA", "account activity v2"]
+tag: "DEPRECATED"
+---
+
+
+import { Button } from '/snippets/button.mdx';
+
+
+<Warning>
+Account Activity API (AAA) は非推奨となります。今後のリアルタイムなユーザーアクティビティ配信については [X Activity API (XAA)](/x-api/activity/introduction) をご確認ください。
+</Warning>
+
+Account Activity API (AAA) は、Webhook を介して X ユーザーアカウントに関連するイベントをリアルタイムで受け取る方法を提供します。事前に構成した Webhook に特定のユーザーアカウントをサブスクライブすることで、Post、ダイレクトメッセージ、いいね、フォロー、ブロックなど、所有または購読している 1 つ以上のアカウントで発生するさまざまなアクティビティを、単一の接続を通じてアプリケーションで受け取ることができます。
+
+この API は、ユーザーの操作に即座に反応する必要があるアプリケーションや、ユーザーのアクティビティに基づいて最新の状態を維持する必要があるアプリケーションの構築によく利用されます。
+
+## 概要
+
+<CardGroup cols={2}>
+  <Card title="Webhook 配信" icon="webhook">
+    イベントをサーバーへリアルタイムに配信
+  </Card>
+  <Card title="リアルタイム" icon="bolt">
+    X のスピードでデータを配信 — ポーリング不要
+  </Card>
+  <Card title="包括的" icon="list">
+    Post、DM、フォロー、いいね、ブロック、ミュートなど
+  </Card>
+  <Card title="サブスクリプション方式" icon="bell">
+    ユーザーアカウントをサブスクライブしてすべてのアクティビティを受信
+  </Card>
+</CardGroup>
+
+---
+
+## 仕組み
+
+1. **Webhook を登録する** — [V2 Webhooks API](/x-api/webhooks/introduction) 経由で Webhook URL を登録します
+2. **ユーザーをサブスクライブする** — Webhook にユーザーサブスクリプションを追加します
+3. **イベントを受信する** — JSON ペイロードを含む POST リクエストとしてアクティビティイベントを受け取ります
+4. **イベントを処理する** — アプリケーションでイベントを処理し、`200 OK` を返します
+
+---
+
+## アクティビティタイプ
+
+Webhook 登録に対する各ユーザーサブスクリプションについて、以下のすべての関連アクティビティを受信します:
+
+- **Post** (ユーザーによる)
+- **Post の削除** (ユーザーによる)
+- **@メンション** (ユーザーへの)
+- **返信** (ユーザーへ、またはユーザーから)
+- **リポスト** (ユーザーによる、またはユーザーの Post に対する)
+- **引用 Post** (ユーザーによる、またはユーザーの Post に対する)
+- **引用 Post のリポスト** (ユーザーによる、またはユーザーの Post に対する)
+- **いいね** (ユーザーによる、またはユーザーの Post に対する)
+- **フォロー** (ユーザーによる、またはユーザーに対する)
+- **アンフォロー** (ユーザーによる、またはユーザーに対する)
+- **ブロック** (ユーザーによる、またはユーザーに対する)
+- **ブロック解除** (ユーザーによる、またはユーザーに対する)
+- **ミュート** (ユーザーによる、またはユーザーに対する)
+- **ミュート解除** (ユーザーによる、またはユーザーに対する)
+- **ダイレクトメッセージの送信** (ユーザーによる)
+- **ダイレクトメッセージの受信** (ユーザーによる)
+- **入力中インジケーター** (ユーザーへの)
+- **既読通知** (ユーザーへの)
+- **サブスクリプションの取り消し** (ユーザーによる)
+
+<Note>
+Account Activity API 経由でホームタイムラインのデータは配信されません。このデータの取得には [User Posts timeline by User ID](/x-api/users/get-posts) エンドポイントをご利用ください。
+
+Account Activity API から返される Post は、月次の [Post 上限](/x-api/fundamentals/post-cap)にカウントされます。
+</Note>
+
+---
+
+## 機能サマリー
+
+| ティア | 一意のサブスクリプション数 | Webhook 数 |
+|:-----|:-------------------------------|:-------------------|
+| Pay Per Use | 3 | 1 |
+| Enterprise | 5000+ | 5+ |
+
+---
+
+## Account Activity データオブジェクトの構造
+
+| オブジェクト | 詳細 |
+|:-------|:--------|
+| `for_user_id` | イベントに関連するユーザーサブスクリプションを識別します。 |
+| `is_blocked_by` | (条件付き) Post のメンションイベントで、メンションしたユーザーがサブスクライブされたユーザーによってブロックされている場合にのみ表示されます。 |
+| `source` | アクティビティを実行したユーザー (例: フォロー・ブロック・ミュートしているユーザー)。 |
+| `target` | アクティビティの対象となるユーザー (例: フォロー・ブロック・ミュートされているユーザー)。 |
+
+### 利用可能なアクティビティ
+
+| メッセージタイプ | 詳細 |
+|:-------------|:--------|
+| `tweet_create_events` | Post、リポスト、返信、@メンション、引用 Post、または引用 Post のリポストに関する Post のステータス。 |
+| `favorite_events` | ユーザーと対象を含むいいねイベント。 |
+| `follow_events` | ユーザーと対象を含むフォローイベント。 |
+| `unfollow_events` | ユーザーと対象を含むアンフォローイベント。 |
+| `block_events` | ユーザーと対象を含むブロックイベント。 |
+| `unblock_events` | ユーザーと対象を含むブロック解除イベント。 |
+| `mute_events` | ユーザーと対象を含むミュートイベント。 |
+| `unmute_events` | ユーザーと対象を含むミュート解除イベント。 |
+| `user_event` | ユーザーがアプリの認可を解除したときの取り消しイベント (サブスクリプションは自動的に削除されます)。 |
+| `direct_message_events` | 送信または受信したメッセージの DM ステータス。 |
+| `direct_message_indicate_typing_events` | ユーザーと対象を含む DM 入力中イベント。 |
+| `direct_message_mark_read_events` | ユーザーと対象を含む DM 既読イベント。 |
+| `tweet_delete_events` | コンプライアンス対応のための Post 削除通知。 |
+
+---
+
+## ペイロード例
+
+以下は各 Account Activity イベントのペイロード例です。
+
+### tweet\_create\_events (Post、リポスト、返信、引用 Post)
+
+```json
+{
+  "for_user_id": "2244994945",
+  "tweet_create_events": [
+    {
+      <Tweet Object>
+    }
+  ]
+}
+```
+
+### tweet\_create\_events (@メンション)
+
+```json
+{
+  "for_user_id": "2244994945",
+  "user_has_blocked": "false",
+  "tweet_create_events": [
+    {
+      <Tweet Object>
+    }
+  ]
+}
+```
+
+### favorite\_events
+
+```json
+{
+  "for_user_id": "2244994945",
+  "favorite_events": [{
+    "id": "a7ba59eab0bfcba386f7acedac279542",
+    "created_at": "Mon Mar 26 16:33:26 +0000 2018",
+    "timestamp_ms": 1522082006140,
+    "favorited_status": {
+      <Tweet Object>
+    },
+    "user": {
+      <User Object>
+    }
+  }]
+}
+```
+
+### follow\_events
+
+```json
+{
+  "for_user_id": "2244994945",
+  "follow_events": [{
+    "type": "follow",
+    "created_timestamp": "1517588749178",
+    "target": {
+      <User Object>
+    },
+    "source": {
+      <User Object>
+    }
+  }]
+}
+```
+
+### unfollow\_events
+
+```json
+{
+  "for_user_id": "2244994945",
+  "follow_events": [{
+    "type": "unfollow",
+    "created_timestamp": "1517588749178",
+    "target": {
+      <User Object>
+    },
+    "source": {
+      <User Object>
+    }
+  }]
+}
+```
+
+### block\_events
+
+```json
+{
+  "for_user_id": "2244994945",
+  "block_events": [{
+    "type": "block",
+    "created_timestamp": "1518127020304",
+    "source": {
+      <User Object>
+    },
+    "target": {
+      <User Object>
+    }
+  }]
+}
+```
+
+### unblock\_events
+
+```json
+{
+  "for_user_id": "2244994945",
+  "block_events": [{
+    "type": "unblock",
+    "created_timestamp": "1518127020304",
+    "source": {
+      <User Object>
+    },
+    "target": {
+      <User Object>
+    }
+  }]
+}
+```
+
+### mute\_events
+
+```json
+{
+  "for_user_id": "2244994945",
+  "mute_events": [
+    {
+      "type": "mute",
+      "created_timestamp": "1518127020304",
+      "source": {
+        <User Object>
+      },
+      "target": {
+        <User Object>
+      }
+    }
+  ]
+}
+```
+
+### unmute\_events
+
+```json
+{
+  "for_user_id": "2244994945",
+  "mute_events": [
+    {
+      "type": "unmute",
+      "created_timestamp": "1518127020304",
+      "source": {
+        <User Object>
+      },
+      "target": {
+        <User Object>
+      }
+    }
+  ]
+}
+```
+
+### user\_event
+
+```json
+{
+  "user_event": {
+    "revoke": {
+      "date_time": "2018-05-24T09:48:12+00:00",
+      "target": {
+        "app_id": "13090192"
+      },
+      "source": {
+        "user_id": "63046977"
+      }
+    }
+  }
+}
+```
+
+### direct\_message\_events
+
+```json
+{
+  "for_user_id": "4337869213",
+  "direct_message_events": [{
+    "type": "message_create",
+    "id": "954491830116155396",
+    "created_timestamp": "1516403560557",
+    "message_create": {
+      "target": {
+        "recipient_id": "4337869213"
+      },
+      "sender_id": "3001969357",
+      "source_app_id": "13090192",
+      "message_data": {
+        "text": "Hello World!",
+        "entities": {
+          "hashtags": [],
+          "symbols": [],
+          "user_mentions": [],
+          "urls": []
+        }
+      }
+    }
+  }],
+  "apps": {
+    "13090192": {
+      "id": "13090192",
+      "name": "FuriousCamperTestApp1",
+      "url": "https://x.com/furiouscamper"
+    }
+  },
+  "users": {
+    "3001969357": {
+      "id": "3001969357",
+      "created_timestamp": "1422556069340",
+      "name": "Jordan Brinks",
+      "screen_name": "furiouscamper",
+      "location": "Boulder, CO",
+      "description": "Alter Ego - X PE opinions-are-my-own",
+      "url": "https://t.co/SnxaA15ZuY",
+      "protected": false,
+      "verified": false,
+      "followers_count": 22,
+      "friends_count": 45,
+      "statuses_count": 494,
+      "profile_image_url_https": "https://pbs.twimg.com/profile_images/851526626785480705/cW4WTi7C_normal.jpg"
+    },
+    "4337869213": {
+      "id": "4337869213",
+      "created_timestamp": "1448312972328",
+      "name": "Harrison Test",
+      "screen_name": "Harris_0ff",
+      "location": "Burlington, MA",
+      "protected": false,
+      "verified": false,
+      "followers_count": 8,
+      "friends_count": 8,
+      "statuses_count": 240,
+      "profile_image_url_https": "https://abs.twimg.com/sticky/default_profile_images/default_profile_normal.png"
+    }
+  }
+}
+```
+
+### direct\_message\_indicate\_typing\_events
+
+```json
+{
+  "for_user_id": "4337869213",
+  "direct_message_indicate_typing_events": [{
+    "created_timestamp": "1518127183443",
+    "sender_id": "3284025577",
+    "target": {
+      "recipient_id": "3001969357"
+    }
+  }],
+  "users": {
+    "3001969357": {
+      "id": "3001969357",
+      "created_timestamp": "1422556069340",
+      "name": "Jordan Brinks",
+      "screen_name": "furiouscamper",
+      "location": "Boulder, CO",
+      "description": "Alter Ego - X PE opinions-are-my-own",
+      "url": "https://t.co/SnxaA15ZuY",
+      "protected": false,
+      "verified": false,
+      "followers_count": 23,
+      "friends_count": 47,
+      "statuses_count": 509,
+      "profile_image_url_https": "https://pbs.twimg.com/profile_images/851526626785480705/cW4WTi7C_normal.jpg"
+    },
+    "3284025577": {
+      "id": "3284025577",
+      "created_timestamp": "1437281176085",
+      "name": "Bogus Bogart",
+      "screen_name": "bogusbogart",
+      "protected": true,
+      "verified": false,
+      "followers_count": 1,
+      "friends_count": 4,
+      "statuses_count": 35,
+      "profile_image_url_https": "https://pbs.twimg.com/profile_images/763383202857779200/ndvZ96mE_normal.jpg"
+    }
+  }
+}
+```
+
+### direct\_message\_mark\_read\_events
+
+```json
+{
+  "for_user_id": "4337869213",
+  "direct_message_mark_read_events": [{
+    "created_timestamp": "1518452444662",
+    "sender_id": "199566737",
+    "target": {
+      "recipient_id": "3001969357"
+    },
+    "last_read_event_id": "963085315333238788"
+  }],
+  "users": {
+    "199566737": {
+      "id": "199566737",
+      "created_timestamp": "1286429788000",
+      "name": "Le Braat",
+      "screen_name": "LeBraat",
+      "location": "Denver, CO",
+      "description": "data by day @X, design by dusk",
+      "protected": false,
+      "verified": false,
+      "followers_count": 299,
+      "friends_count": 336,
+      "statuses_count": 752,
+      "profile_image_url_https": "https://pbs.twimg.com/profile_images/936652894371119105/YHEozVAg_normal.jpg"
+    },
+    "3001969357": {
+      "id": "3001969357",
+      "created_timestamp": "1422556069340",
+      "name": "Jordan Brinks",
+      "screen_name": "furiouscamper",
+      "location": "Boulder, CO",
+      "description": "Alter Ego - X PE opinions-are-my-own",
+      "url": "https://t.co/SnxaA15ZuY",
+      "protected": false,
+      "verified": false,
+      "followers_count": 23,
+      "friends_count": 48,
+      "statuses_count": 510,
+      "profile_image_url_https": "https://pbs.twimg.com/profile_images/851526626785480705/cW4WTi7C_normal.jpg"
+    }
+  }
+}
+```
+
+### tweet\_delete\_events
+
+```json
+{
+  "for_user_id": "930524282358325248",
+  "tweet_delete_events": [
+    {
+      "status": {
+        "id": "1045405559317569537",
+        "user_id": "930524282358325248"
+      },
+      "timestamp_ms": "1432228155593"
+    }
+  ]
+}
+```
+
+---
+
+## ロングフォーム Post のサポート
+
+V2 Account Activity API は **ロングフォーム** Post、つまり 280 文字を超える Post をサポートしています。ロングフォーム Post が `tweet_create_events` ペイロードに含まれる場合、`text` フィールドには最初の 140 文字 (またはそれ以下) が含まれ、`truncated` フィールドは `true` に設定されます。Post の全文は `extended_tweet` オブジェクトで配信され、以下が含まれます:
+
+- `full_text` — 280 文字の制限を超える文字も含めた、Post の全文。
+- `entities` — 全文中に現れるエンティティ (ハッシュタグ、URL、ユーザーメンション、シンボルなど)。280 文字目以降に現れるものも含みます。
+- `display_text_range` — 全文を考慮して表示する文字の範囲。
+
+これにより、アプリケーションはテキストの後半に現れるメンションやその他のエンティティを含め、ロングフォーム Post のコンテンツ全体を処理できます。以下は、ロングフォーム Post に対する `tweet_create_events` ペイロードの例です:
+
+```json
+{
+  "for_user_id": "1603419180975409153",
+  "tweet_create_events": [
+    {
+      "created_at": "Mon May 19 14:01:46 +0000 2025",
+      "id": 1924465506158879000,
+      "id_str": "1924465506158878979",
+      "text": "The Antikythera Mechanism: A Window into Ancient Ingenuity Discovered in 1901 among the wreckage of a Roman ship of… https://t.co/bzbEKj8cd8",
+      "display_text_range": [0, 140],
+      "truncated": true,
+      "user": { ... },
+      "extended_tweet": {
+        "full_text": "The Antikythera Mechanism: A Window into Ancient Ingenuity Discovered in 1901 among the wreckage of a Roman ship off the Greek island of Antikythera...",
+        "display_text_range": [0, 2051],
+        "entities": {
+          "hashtags": [],
+          "urls": [],
+          "user_mentions": [
+            {
+              "screen_name": "xai",
+              "name": "xAI",
+              "id": 1661523610111193000,
+              "id_str": "1661523610111193088",
+              "indices": [2032, 2036]
+            },
+            {
+              "screen_name": "HistoryInPics",
+              "name": "History Photographed",
+              "id": 1582853809,
+              "id_str": "1582853809",
+              "indices": [2037, 2051]
+            }
+          ],
+          "symbols": []
+        }
+      },
+      "entities": {
+        "hashtags": [],
+        "urls": [
+          {
+            "url": "https://t.co/bzbEKj8cd8",
+            "expanded_url": "https://twitter.com/i/web/status/1924465506158878979",
+            "display_url": "twitter.com/i/web/status/1…",
+            "indices": [117, 140]
+          }
+        ],
+        "user_mentions": [],
+        "symbols": []
+      }
+    }
+  ]
+}
+```
+
+---
+
+## よくある質問
+
+<AccordionGroup>
+  <Accordion title="Account Activity API を利用する利点は何ですか?">
+    Account Activity API は Webhook を利用しており、(ストリーミング API のような) 接続を張り続ける必要も、(REST API のような) 頻繁なポーリングも不要でリアルタイムにデータを配信します。主な利点は以下のとおりです:
+
+    - **速度** — X のスピードでデータを配信します。
+    - **シンプルさ** — Post、@メンション、返信、リポスト、引用 Post、いいね、DM、フォロー、ブロック、ミュートなど、アカウントに関するすべてのイベントを単一の Webhook 接続を通じて提供します。
+    - **スケール** — 管理対象アカウントのすべてのアクティビティを、レート制限やイベント上限なしでサポートします (Enterprise ティア)。
+  </Accordion>
+
+  <Accordion title="開発・ステージング・本番の環境が必要ですが、可能ですか?">
+    はい! 複数の Webhook URL を登録し、[V2 Webhooks API](/x-api/webhooks/introduction) を介してサブスクリプションを個別に管理できます。
+  </Accordion>
+
+  <Accordion title="セットアップの手順を示したガイドはありますか?">
+    はい! [Account Activity API クイックスタート](/x-api/account-activity/quickstart)、[Webhooks 入門ガイド](/x-api/webhooks/quickstart)、および [Account Activity API サンプルアプリケーション](https://github.com/xdevplatform/account-activity-dashboard-enterprise/tree/master) をご覧ください。
+  </Accordion>
+
+  <Accordion title="Account Activity API にはどの認証方式が必要ですか?">
+    認証要件はエンドポイントによって異なります:
+
+    - **ユーザー固有のアクション** (例: ユーザーのサブスクライブ) には **OAuth 1.0a** (3-legged OAuth フロー) が必要です。
+    - **アプリレベルのアクション** (例: サブスクリプションの一覧取得や削除、サブスクリプション数の取得) には **OAuth2 App Only Bearer Token** が必要です。
+
+    詳細は[認証セクション](/fundamentals/authentication/overview)をご確認ください。
+  </Accordion>
+
+  <Accordion title="相互にやり取りしているユーザー同士をサブスクライブすると、重複したアクティビティが届きますか?">
+    はい。アプリがユーザー A とユーザー B のサブスクリプションを持っている場合に、ユーザー A が Post 内でユーザー B をメンションすると、Webhook は 2 件のイベント (ユーザーごとに 1 件) を受信します。`for_user_id` フィールドを使用してサブスクリプションを識別してください。
+  </Accordion>
+
+  <Accordion title="エンドポイントの /all/ を置き換えて、配信されるアクティビティを制限できますか?">
+    いいえ。利用可能なのは `/all/` プロダクトのみで、サポートされるすべてのイベントタイプを配信します。
+  </Accordion>
+
+  <Accordion title="3 つの Webhook にアクセスできる場合、各アプリで 3 つずつ Webhook を使えますか?">
+    Webhook の上限はアプリごとではなく、アカウント単位で設定されています。例えば、Webhook が 3 つでアプリが 2 つの場合、一方のアプリで 2 つ、もう一方で 1 つの Webhook を利用することはできますが、各アプリで 3 つずつ利用することはできません。
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## API リファレンス一覧
+
+| 目的 | V2 エンドポイント |
+|:--------|:------------|
+| アプリケーションをアカウントのイベントにサブスクライブする | [`POST /2/account_activity/webhooks/:webhook_id/subscriptions/all`](/x-api/account-activity/create-subscription) |
+| 現在アクティブなサブスクリプションの件数を返す | [`GET /2/account_activity/subscriptions/count`](/x-api/account-activity/get-subscription-count) |
+| Webhook がアカウントにサブスクライブされているか確認する | [`GET /2/account_activity/webhooks/:webhook_id/subscriptions/all`](/x-api/account-activity/validate-subscription) |
+| 現在アクティブなサブスクリプションの一覧を返す | [`GET /2/account_activity/webhooks/:webhook_id/subscriptions/all/list`](/x-api/account-activity/get-subscriptions) |
+| App-only OAuth を用いてサブスクリプションを無効化する | [`DELETE /2/account_activity/webhooks/:webhook_id/subscriptions/:user_id/all`](/x-api/account-activity/delete-subscription) |
+| リプレイジョブを作成する | [`POST /2/account_activity/replay/webhooks/:webhook_id/subscriptions/all`](/x-api/account-activity/create-replay-job) |
+
+Webhook 管理用のエンドポイント (登録、閲覧、検証、削除) については、[V2 Webhooks API ドキュメント](/x-api/webhooks/introduction)を参照してください。
+
+---
+
+## はじめる
+
+<Note>
+**前提条件**
+
+- 承認済みの[開発者アカウント](https://developer.x.com/en/portal/petition/essential/basic-info)
+- Developer Console 内の [Project と App](/resources/fundamentals/developer-apps)
+- 公開アクセス可能な HTTPS Webhook エンドポイント
+- Account Activity API に対する Enterprise または Pay Per Use のアクセス権
+</Note>
+
+<CardGroup cols={2}>
+  <Card title="クイックスタート" icon="rocket" href="/x-api/account-activity/quickstart">
+    サブスクリプションを設定してイベントの受信を開始する
+  </Card>
+  <Card title="Webhooks API" icon="webhook" href="/x-api/webhooks/introduction">
+    Webhook を登録・管理する
+  </Card>
+  <Card title="移行ガイド" icon="right-left" href="/x-api/account-activity/migrate/overview">
+    レガシーの Enterprise から v2 へ移行する
+  </Card>
+  <Card title="Activity stream" icon="bars-staggered" href="/x-api/activity/introduction">
+    Webhook に代わるストリーミング方式
+  </Card>
+</CardGroup>
