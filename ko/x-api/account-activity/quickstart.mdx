@@ -1,0 +1,364 @@
+---
+title: 빠른 시작
+sidebarTitle: 빠른 시작
+description: "이 가이드는 Account Activity API 설정, 사용자 관리를 안내합니다. 계정 활동을 다루는 X API v2 스탠다드 등급 레퍼런스입니다."
+keywords: ["account activity quickstart", "AAA setup", "webhook subscriptions", "account activity setup", "manage subscriptions", "replay"]
+tag: "DEPRECATED"
+---
+
+<Warning>
+Account Activity API(AAA)는 지원 중단 예정입니다. 앞으로는 실시간 사용자 활동 전달을 위해 [X Activity API(XAA)](/x-api/activity/introduction)를 확인하세요.
+</Warning>
+
+이 가이드는 Account Activity API 설정, 사용자 구독 관리, 웹훅 검증, 그리고 놓친 이벤트를 복구하기 위한 리플레이 기능 사용 방법을 안내합니다.
+
+## 1. X 앱 생성
+
+승인된 개발자 계정으로 [개발자 포털](https://developer.x.com/en/portal/products/enterprise)에서 X 앱을 생성하세요. 회사를 대신해 앱을 생성하는 경우 회사용 X 계정을 사용하세요.
+
+- 앱 페이지의 권한 탭에서 **"Read, Write, and Access direct messages"**를 활성화하세요.
+- "Keys and Access Tokens" 탭에서 앱의 **Consumer Key(API Key)**, **Consumer Token(API Secret)** 및 **Bearer Token**을 확인해 두세요.
+- 앱의 **Access Token**과 **Access Token Secret**을 생성하세요. 사용자 계정을 구독하는 데 필요합니다.
+- X 로그인 및 사용자 컨텍스트에 익숙하지 않다면 [Access Token 획득](/fundamentals/authentication/overview)을 검토하세요.
+- 개발자 포털의 "Apps" 페이지에서 앱의 숫자 ID를 확인해 두세요. Account Activity API 접근을 신청할 때 필요합니다.
+
+---
+
+## 2. Account Activity API 접근 권한 획득
+
+Account Activity API는 Enterprise 및 Pay Per Use 등급에서 사용할 수 있습니다. [개발자 포털](https://developer.x.com/en/portal/products/enterprise)을 통해 접근 신청을 제출하세요.
+
+---
+
+## 3. 웹훅 등록
+
+Account Activity 이벤트를 받으려면 공개적으로 접근 가능한 HTTPS URL로 웹훅을 등록해야 합니다. 웹훅 컨슈머 앱 개발, 웹훅 등록, 보안 설정, Challenge-Response Check(CRC) 처리에 대한 자세한 내용은 [V2 Webhooks API 문서](/x-api/webhooks/introduction)를 참조하세요.
+
+- 웹훅이 JSON으로 인코딩된 이벤트 페이로드가 포함된 POST 요청을 처리할 수 있도록 구성되어 있는지 확인하세요.
+- 구독을 관리하는 데 필요하므로 웹훅 등록 응답에서 **`webhook_id`**를 확보하세요.
+
+```bash
+curl --request POST \
+  --url 'https://api.x.com/2/webhooks' \
+  --header 'Authorization: Bearer $BEARER_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{"url": "https://yourdomain.com/webhooks/twitter"}'
+```
+
+---
+
+## 4. 설정 검증
+
+앱과 웹훅이 올바르게 구성되었는지 검증하려면:
+
+1. 웹훅에 사용자 계정을 구독하세요(아래 [구독 추가](#adding-a-subscription) 참조).
+2. 앱이 구독하고 있는 X 계정 중 하나가 게시한 Post에 좋아요를 누르세요.
+3. 웹훅 URL로 `favorite_events` 페이로드가 POST 요청을 통해 전달되어야 합니다.
+
+<Note>
+구독 추가 후 이벤트 전달이 시작되기까지 최대 10초가 걸릴 수 있습니다.
+</Note>
+
+---
+
+## 구독 관리
+
+유효한 `webhook_id`가 있는 등록된 웹훅이 있으면, 사용자 계정 활동을 받기 위한 사용자 구독을 관리할 수 있습니다. 아래 엔드포인트를 사용해 구독을 추가, 조회 또는 제거하세요.
+
+### 구독 추가
+
+**엔드포인트:** `POST /2/account_activity/webhooks/:webhook_id/subscriptions/all` — [API 레퍼런스](/x-api/account-activity/create-subscription)
+
+인증된 사용자를 지정된 웹훅을 통해 이벤트를 받도록 구독합니다.
+
+**인증:** OAuth 1.0a (구독되는 사용자를 대표하는 3-legged OAuth 흐름 필요).
+
+| 경로 매개변수 | 설명 |
+|:---------------|:------------|
+| `webhook_id` | 구독을 연결할 웹훅의 ID. |
+
+```bash
+curl --request POST \
+  --url 'https://api.x.com/2/account_activity/webhooks/:WEBHOOK_ID/subscriptions/all' \
+  --header 'authorization: OAuth oauth_consumer_key="<CONSUMER_KEY>", oauth_nonce="GENERATED", oauth_signature="GENERATED", oauth_signature_method="HMAC-SHA1", oauth_timestamp="GENERATED", oauth_token="<ACCESS_TOKEN>", oauth_version="1.0"'
+```
+
+**성공 (200 OK):**
+
+```json
+{
+  "data": {
+    "subscribed": true
+  }
+}
+```
+
+**실패 사유:**
+
+| 사유 | 설명 |
+|:-------|:------------|
+| `WebhookIdInvalid` | 제공된 `webhook_id`를 찾을 수 없거나 앱에 연결되어 있지 않습니다. |
+| `DuplicateSubscriptionFailed` | 지정된 `webhook_id`에 대해 이 사용자의 구독이 이미 존재합니다. |
+| `SubscriptionLimitExceeded` | 애플리케이션이 모든 웹훅에 걸쳐 구독 한도에 도달했습니다. |
+
+---
+
+### 구독 확인
+
+**엔드포인트:** `GET /2/account_activity/webhooks/:webhook_id/subscriptions/all` — [API 레퍼런스](/x-api/account-activity/validate-subscription)
+
+인증된 사용자가 지정된 웹훅에 구독되어 있는지 확인합니다.
+
+**인증:** OAuth 1.0a (3-legged OAuth 흐름 필요).
+
+| 경로 매개변수 | 설명 |
+|:---------------|:------------|
+| `webhook_id` | 확인할 웹훅의 ID. |
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/2/account_activity/webhooks/:WEBHOOK_ID/subscriptions/all' \
+  --header 'authorization: OAuth oauth_consumer_key="<CONSUMER_KEY>", oauth_nonce="GENERATED", oauth_signature="GENERATED", oauth_signature_method="HMAC-SHA1", oauth_timestamp="GENERATED", oauth_token="<ACCESS_TOKEN>", oauth_version="1.0"'
+```
+
+**성공 (200 OK):**
+
+```json
+{
+  "data": {
+    "subscribed": true
+  }
+}
+```
+
+**실패 사유:**
+
+| 사유 | 설명 |
+|:-------|:------------|
+| `WebhookIdInvalid` | 제공된 `webhook_id`를 찾을 수 없거나 앱에 연결되어 있지 않습니다. |
+
+---
+
+### 구독 제거
+
+**엔드포인트:** `DELETE /2/account_activity/webhooks/:webhook_id/subscriptions/:user_id/all` — [API 레퍼런스](/x-api/account-activity/delete-subscription)
+
+특정 사용자 ID의 구독을 비활성화하여 웹훅으로의 이벤트 전달을 중지합니다.
+
+**인증:** OAuth2 App Only Bearer Token.
+
+| 경로 매개변수 | 설명 |
+|:---------------|:------------|
+| `webhook_id` | 구독이 포함된 웹훅의 ID. |
+| `user_id` | 구독을 취소할 사용자의 숫자 ID. |
+
+```bash
+curl --request DELETE \
+  --url 'https://api.x.com/2/account_activity/webhooks/:WEBHOOK_ID/subscriptions/:USER_ID/all' \
+  --header 'authorization: Bearer <BEARER_TOKEN>'
+```
+
+**성공 (200 OK):**
+
+```json
+{
+  "data": {
+    "subscribed": false
+  }
+}
+```
+
+**실패 사유:**
+
+| 사유 | 설명 |
+|:-------|:------------|
+| `SubscriptionNotFound` | 지정된 `webhook_id`에서 해당 `user_id`에 대한 구독이 존재하지 않습니다. |
+| `WebhookIdInvalid` | 제공된 `webhook_id`를 찾을 수 없거나 앱에 연결되어 있지 않습니다. |
+
+---
+
+### 모든 구독 보기
+
+**엔드포인트:** `GET /2/account_activity/webhooks/:webhook_id/subscriptions/all/list` — [API 레퍼런스](/x-api/account-activity/get-subscriptions)
+
+지정된 웹훅에 현재 구독된 모든 사용자 ID 목록을 조회합니다.
+
+**인증:** OAuth2 App Only Bearer Token.
+
+| 경로 매개변수 | 설명 |
+|:---------------|:------------|
+| `webhook_id` | 구독을 나열할 웹훅의 ID. |
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/2/account_activity/webhooks/:WEBHOOK_ID/subscriptions/all/list' \
+  --header 'authorization: Bearer <BEARER_TOKEN>'
+```
+
+**성공 (200 OK):**
+
+```json
+{
+  "data": {
+    "application_id": "<your app id>",
+    "webhook_id": "<webhook id>",
+    "webhook_url": "<the webhook's callback url>",
+    "subscriptions": [
+      { "user_id": "<user_id_1>" },
+      { "user_id": "<user_id_2>" }
+    ]
+  }
+}
+```
+
+**실패 사유:**
+
+| 사유 | 설명 |
+|:-------|:------------|
+| `WebhookIdInvalid` | 제공된 `webhook_id`를 찾을 수 없거나 앱에 연결되어 있지 않습니다. |
+
+---
+
+### 구독 수
+
+**엔드포인트:** `GET /2/account_activity/subscriptions/count` — [API 레퍼런스](/x-api/account-activity/get-subscription-count)
+
+인증된 애플리케이션의 총 활성 구독 수와 프로비저닝된 한도를 반환합니다.
+
+**인증:** OAuth2 App Only Bearer Token.
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/2/account_activity/subscriptions/count' \
+  --header 'authorization: Bearer <BEARER_TOKEN>'
+```
+
+**성공 (200 OK):**
+
+```json
+{
+  "data": {
+    "account_name": "<your application name>",
+    "provisioned_count": "<subscription limit allocated>",
+    "subscriptions_count_all": "<current active subscription count>",
+    "subscriptions_count_direct_messages": "0"
+  }
+}
+```
+
+<Note>
+DM 전용 구독은 더 이상 지원되지 않습니다. `subscriptions_count_direct_messages` 필드는 항상 `"0"`입니다.
+</Note>
+
+---
+
+## 리플레이
+
+AAAv2는 지정된 시간 범위 동안의 과거 이벤트를 조회하여 웹훅으로 다시 전송할 수 있는 리플레이 기능을 제공합니다. 다운타임으로 인해 놓친 이벤트를 복구하는 데 유용합니다.
+
+**엔드포인트:** `POST /2/account_activity/replay/webhooks/:webhook_id/subscriptions/all` — [API 레퍼런스](/x-api/account-activity/create-replay-job)
+
+**인증:** OAuth2 App Only Bearer Token.
+
+| 경로 매개변수 | 설명 |
+|:---------------|:------------|
+| `webhook_id` | 리플레이를 시작할 웹훅의 ID. |
+
+| 쿼리 매개변수 | 설명 |
+|:----------------|:------------|
+| `from_date` | 이벤트가 제공되는 가장 오래된(시작) UTC 타임스탬프. `yyyymmddhhmm` 형식이어야 합니다. 타임스탬프는 분 단위 정확도이며 포함 값입니다(예: 12:00은 00분을 포함). 유효한 시간은 UTC 기준 지난 24시간 이내여야 하며, 현재 시점보다 31분 이내여야 합니다. `from_date`와 `to_date`는 약 2시간 이내로 두는 것을 권장합니다. |
+| `to_date` | 이벤트가 제공되는 가장 최근(종료) UTC 타임스탬프. `yyyymmddhhmm` 형식이어야 합니다. 타임스탬프는 분 단위 정확도이며 제외 값입니다(예: 12:30은 해당 시간의 30분을 포함하지 않음). 유효한 시간은 UTC 기준 지난 24시간 이내여야 하며, 현재 시점보다 10분 이상 이전이어야 합니다. |
+
+**성공 (200 OK):**
+
+```json
+{
+  "for_user_id": "<USER_ID>",
+  "replay_event": {
+    "job_id": "<REPLAY_JOB_ID>",
+    "created_at": "yyyy-mm-ddThh:mm:ss.000Z"
+  }
+}
+```
+
+**실패 사유:**
+
+| 사유 | 설명 |
+|:-------|:------------|
+| `QueryParamInvalid` | `from_date`가 현재 시각으로부터 24시간 이전입니다. |
+| `QueryParamInvalid` | `from_date`가 `to_date`보다 최근입니다. |
+| `QueryParamInvalid` | `from_date`가 미래입니다. |
+| `QueryParamInvalid` | `to_date`가 미래입니다. |
+| `QueryParamInvalid` | `from_date` 또는 `to_date`가 올바른 형식이 아닙니다. |
+| `CrcValidationFailed` | CRC 검증 중 웹훅 URL에서 잘못된 응답이 수신되었습니다. |
+| `ReplayConflictError` | 지정된 웹훅에 대해 이미 리플레이 작업이 진행 중입니다. |
+| `WebhookIdInvalid` | 제공된 `webhook_id`가 유효하지 않거나 앱에 연결되어 있지 않습니다. |
+
+### 작업 완료 메시지
+
+리플레이 작업이 성공적으로 완료되면, X는 다음 작업 완료 이벤트를 전달합니다. 이 이벤트를 받으면 작업이 종료된 것이며, 다른 작업을 제출할 수 있습니다.
+
+```json
+{
+  "replay_job_status": {
+    "webhook_id": "<WEBHOOK_ID>",
+    "job_state": "Complete",
+    "job_state_description": "Job completed successfully",
+    "job_id": "<JOB_ID>"
+  }
+}
+```
+
+작업이 성공적으로 완료되지 않은 경우, X는 리플레이 작업을 다시 시도할 것을 권장하는 다음 메시지를 반환합니다. 이 이벤트를 받으면 작업이 종료된 것이며, 다른 작업을 제출할 수 있습니다.
+
+```json
+{
+  "replay_job_status": {
+    "webhook_id": "<WEBHOOK_ID>",
+    "job_state": "Incomplete",
+    "job_state_description": "Job failed to deliver all events, please retry your replay job",
+    "job_id": "<JOB_ID>"
+  }
+}
+```
+
+---
+
+## 중요 참고 사항
+
+<Warning>
+- **인증**: 사용자를 구독할 때는 해당 사용자 계정의 컨슈머 키, 컨슈머 시크릿, 액세스 토큰 및 액세스 토큰 시크릿을 사용하세요.
+- **다이렉트 메시지**: 수신 및 발신되는 모든 다이렉트 메시지(`POST /2/dm_conversations/with/:participant_id/messages`를 통해 전송)는 웹훅을 통해 전달되어 앱이 모든 DM 활동을 인지할 수 있도록 합니다.
+- **이벤트 중복**:
+  - 구독된 두 사용자가 동일한 DM 대화에 참여 중인 경우, 웹훅은 사용자마다 한 번씩 중복 이벤트를 받습니다. `for_user_id` 필드를 사용해 구분하세요.
+  - 여러 앱이 동일한 웹훅 URL과 사용자를 공유하는 경우, 이벤트는 앱마다 한 번씩 여러 번 전송됩니다.
+  - 앱은 이벤트 ID를 사용해 이벤트를 중복 제거하여 간헐적인 중복을 처리해야 합니다.
+</Warning>
+
+---
+
+## 샘플 앱
+
+| 앱 | 설명 |
+|:----|:------------|
+| [간단한 웹훅 서버](https://github.com/m-rosinsky/XWebhookTest/blob/main/app.py) | CRC 체크에 응답하고 POST 이벤트를 수락하는 방법을 보여주는 단일 Python 스크립트 |
+| [Account Activity API 대시보드](https://github.com/xdevplatform/account-activity-dashboard-enterprise/tree/master) | [bun.sh](https://bun.sh)로 작성된 웹 앱으로 웹훅과 구독을 관리하고 라이브 이벤트를 받을 수 있음 |
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="소개" icon="book" href="/x-api/account-activity/introduction">
+    활동 유형, 데이터 객체 및 페이로드 예제
+  </Card>
+  <Card title="Webhooks API" icon="webhook" href="/x-api/webhooks/introduction">
+    웹훅 등록 및 관리
+  </Card>
+  <Card title="마이그레이션 가이드" icon="right-left" href="/x-api/account-activity/migrate/overview">
+    레거시 Enterprise에서 v2로 마이그레이션
+  </Card>
+  <Card title="웹훅 빠른 시작" icon="rocket" href="/x-api/webhooks/quickstart">
+    CRC 설정, 보안 및 웹훅 등록
+  </Card>
+</CardGroup>

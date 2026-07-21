@@ -1,0 +1,63 @@
+---
+title: Account Activity API v2 移行ガイド
+description: レガシーの Account Activity API から X API v2 の対応するエンドポイントへ、Webhook、サブスクリプション、認証を移行する手順を段階的に解説するガイドです。
+keywords: ["Account Activity API migration", "AAA migration", "v2 migration", "API migration guide", "migrate to v2", "Account Activity API v2"]
+tag: "DEPRECATED"
+---
+
+<Warning>
+Account Activity API (AAA) は非推奨となります。今後のリアルタイムなユーザーアクティビティ配信については [X Activity API (XAA)](/x-api/activity/introduction) をご確認ください。
+</Warning>
+
+このガイドは、レガシーの Enterprise Account Activity API から V2 Account Activity API への移行を支援します。中核となる機能は変わりませんが、エンドポイント構造や認証方式は X API v2 との一貫性のために更新されています。
+
+### 変更点のサマリー
+
+* **API 形式**: エンドポイントは `/1.1/account_activity/` の代わりに `/2/account_activity/` のベースパスを使用します。
+* **Webhook の管理**: Webhook の作成、一覧取得、検証 (CRC)、削除は [V2 Webhooks API](https://github.com/m-rosinsky/XWebhookTest/blob/main/app.py) で処理されます。
+* **認証**: V2 エンドポイントでは以下のいずれかが必要です:
+  * ユーザー固有のアクション (例: ユーザーのサブスクライブ) には **OAuthUser** (3-legged OAuth)。
+  * アプリレベルのアクション (例: サブスクリプションの一覧取得や削除) には **OAuth2 App Only** (Bearer Token)。
+  * V1.1 では要件がまちまちで、多くの場合 OAuth 1.0a が使用されていました。
+* **エンドポイントの対応関係**:
+
+| V1.1 エンドポイント | V2 の相当機能・動作 | 備考 |
+| ----- | ----- | ----- |
+| POST /1.1/account\_activity/webhooks.json?url=\<URL\> | POST /2/webhooks | [ドキュメント](https://docs.x.com/x-api/webhooks/introduction)。OAuth2AppOnly が必要です。 |
+| GET /1.1/account\_activity/webhooks.json | GET /2/webhooks | [ドキュメント](https://docs.x.com/x-api/webhooks/introduction)。OAuth2AppOnly が必要です。 |
+| PUT /1.1/account\_activity/webhooks/:webhook\_id.json | PUT /2/webhooks/:webhook\_id | CRC を発動します。[ドキュメント](https://docs.x.com/x-api/webhooks/introduction)。OAuth2AppOnly が必要です。 |
+| DELETE /1.1/account\_activity/webhooks/:webhook\_id.json | DELETE /2/webhooks/:webhook\_id | [ドキュメント](https://docs.x.com/x-api/webhooks/introduction)。OAuth2AppOnly が必要です。 |
+| POST /1.1/account\_activity/webhooks/:webhook\_id/subscriptions/all.json | POST /2/account\_activity/webhooks/:webhook\_id/subscriptions/all | OAuthUser が必要です。 |
+| GET /1.1/account\_activity/subscriptions/count.json | GET /2/account\_activity/subscriptions/count | OAuth2AppOnly が必要です。 |
+| GET /1.1/account\_activity/webhooks/:webhook\_id/subscriptions/all.json | GET /2/account\_activity/webhooks/:webhook\_id/subscriptions/all | OAuthUser が必要です。 |
+| GET /1.1/account\_activity/webhooks/:webhook\_id/subscriptions/all/list.json | GET /2/account\_activity/webhooks/:webhook\_id/subscriptions/all/list | OAuth2AppOnly が必要です。 |
+| DELETE /1.1/account\_activity/webhooks/:webhook\_id/subscriptions/:user\_id/all | DELETE /2/account\_activity/webhooks/:webhook\_id/subscriptions/:user\_id/all | OAuth2AppOnly が必要です。 |
+| DELETE /1.1/account\_activity/webhooks/:webhook\_id/subscriptions/all | 非推奨 / 直接の相当機能なし | 個別に削除するか、DELETE /2/webhooks/:webhook\_id で Webhook 自体を削除してください。 |
+
+* **レスポンス形式**: AAAPI ドキュメントで成功時およびエラー時のレスポンス構造を確認してください。
+
+移行時には、新しいベースパスを使用するようコードを更新し、認証フローを調整して、[V2 Webhooks API](https://docs.x.com/x-api/webhooks/introduction) を使って Webhook を管理してください。
+
+### 移行方法
+
+* **パッケージを選定する**:
+  * Account Activity API のアクセスに向けて、以下を検討しながら Enterprise または Self-serve のパッケージを選択します:
+    * 必要な Webhook 数。
+    * 現在または見込みのサブスクリプションおよび認可済みユーザー数。
+    * X クライアントアプリケーションの数。
+    * 希望するサポートレベル (フォーラム対応か、マネージドな Enterprise の 1:1 サポートか)。
+    * 料金の詳細 (Enterprise はセールスに問い合わせてください)。
+* **認証を OAuth 2.0 に更新する**:
+  * X App に "Read, Write, and Access Direct Messages" 権限が付与されていることを確認します。
+  * V2 エンドポイント向けに OAuth 2.0 に更新します。スコープが変更されている場合は、ユーザーの再認可を行ってください。
+  * Developer Console から以下を管理します:
+    * OAuth 2.0 のアクセストークン。
+    * Client ID と Client Secret。
+* **Webhook を検証または再構成する**:
+  * 既存の Webhook URL を利用するか、新規に用意します (例: `https://your_domain.com/webhook/twitter`)。
+  * [V2 Webhooks API ドキュメント](https://docs.x.com/x-api/webhooks/introduction) に従って Webhook を登録・管理してください。
+* **サンプルアプリ:**
+  * [シンプルな Webhook サーバー](https://github.com/m-rosinsky/XWebhookTest/blob/main/app.py)
+    * CRC チェックへの応答と POST イベントの受け付け方法を示す、単一の Python スクリプトです。
+  * [Account Activity API サンプルダッシュボード](https://github.com/xdevplatform/account-activity-dashboard-enterprise/tree/master)
+    * [bun.sh](http://bun.sh) で書かれた Web アプリで、Webhook やサブスクリプションの管理、ライブイベントの受信をアプリ内で直接行えます。
