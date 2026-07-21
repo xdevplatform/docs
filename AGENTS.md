@@ -67,7 +67,7 @@ All pages are available in the navigation tree defined in `docs.json`.
 
 - OpenAPI spec: https://docs.x.com/openapi.json (or https://api.x.com/2/openapi.json)
 - Changelog: https://docs.x.com/changelog.md (RSS feed: https://docs.x.com/changelog/rss.xml)
-- Status page: https://docs.x.com/status.md
+- Status page: https://developer.x.com/status (incident history: https://docs.x.com/incidents.md)
 - Developer Guidelines: https://docs.x.com/developer-guidelines.md
 - Support & Community: https://devcommunity.x.com
 
