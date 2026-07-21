@@ -1,8 +1,8 @@
 ---
 title: Introdução
 sidebarTitle: Introdução
-description: "Visão geral da X Activity API para transmitir em tempo real eventos de atividade do usuário, como post.create, post.delete e atualizações de perfil em X."
-keywords: ["API de atividades", "X Activity API", "eventos de atividade", "atualizações de perfil", "post.create", "post.delete", "atividade do usuário", "eventos em tempo real", "stream de atividades"]
+description: "Transmita em tempo real eventos de atividade do usuário na Plataforma X, incluindo Posts, curtidas, seguidores, silenciamentos, bloqueios, DMs, menções e atualizações de perfil via webhooks."
+keywords: ["API de atividades", "X Activity API", "eventos de atividade", "atualizações de perfil", "post.create", "post.delete", "like.create", "mute.mute", "block.block", "eventos de silenciamento", "eventos de bloqueio", "atividade do usuário", "eventos em tempo real", "stream de atividades"]
 ---
 
 import { Button } from '/snippets/button.mdx';
@@ -36,6 +36,20 @@ Os eventos de Post são acionados quando um usuário cria ou exclui um Post.
 **Eventos de Post via XAA vs Filtered Stream:** A X Activity API oferece suporte aos eventos `post.create` e `post.delete`. Assine por `user_id` para receber notificações em tempo real quando os usuários criarem ou excluírem Posts.
 
 Se você precisa de filtragem direcionada por palavras-chave, lógica booleana, segmentação geográfica, filtros de idioma ou qualquer um dos outros operadores que o Filtered Stream suporta, use o endpoint [Filtered Stream](/x-api/posts/filtered-stream/introduction) em vez disso.
+</Note>
+
+### Eventos de curtida
+
+Os eventos de curtida são acionados quando um usuário curte um Post ou quando um dos Posts do próprio usuário é curtido.
+
+| Nome do evento | Descrição | Filtros |
+| --- | --- | --- |
+| `like.create` | Disparado quando um usuário curte um Post ou um dos seus Posts é curtido | `user_id`, `direction` |
+
+<Note>
+**Filtro de direção:** O evento `like.create` suporta um filtro `direction` opcional definido como `outbound` ou `inbound`. Use `outbound` para curtidas feitas pelo usuário e `inbound` para curtidas recebidas pelos Posts do usuário. Se nenhuma `direction` for especificada, tanto os eventos de curtida de entrada quanto os de saída serão entregues.
+
+**Evento privado:** `like.create` é um evento privado e requer autenticação no contexto do usuário (OAuth 2.0). Consulte [Privacidade e autenticação de eventos](#event-privacy-and-authentication) abaixo.
 </Note>
 
 ### Eventos de seguir
@@ -105,6 +119,32 @@ Os eventos de Spaces são acionados quando um usuário inicia ou encerra um Spac
 | `spaces.start` | Disparado quando um usuário inicia um Space | `user_id` |
 | `spaces.end` | Disparado quando um usuário encerra um Space | `user_id` |
 
+### Eventos de silenciamento
+
+Os eventos de silenciamento são acionados quando o usuário filtrado silencia ou dessilencia outro usuário.
+
+| Nome do evento | Descrição | Filtros |
+| --- | --- | --- |
+| `mute.mute` | Disparado quando um usuário silencia outro usuário | `user_id` |
+| `mute.unmute` | Disparado quando um usuário dessilencia outro usuário | `user_id` |
+
+<Note>
+**Eventos privados:** Os eventos de silenciamento são privados e requerem autenticação no contexto do usuário (OAuth 2.0) com o escopo `mute.read`. O filtro `user_id` corresponde ao usuário que executa a ação de silenciar ou dessilenciar — você não pode assinar notificações sobre um usuário *sendo* silenciado. Consulte [Privacidade e autenticação de eventos](#event-privacy-and-authentication) abaixo.
+</Note>
+
+### Eventos de bloqueio
+
+Os eventos de bloqueio são acionados quando o usuário filtrado bloqueia ou desbloqueia outro usuário.
+
+| Nome do evento | Descrição | Filtros |
+| --- | --- | --- |
+| `block.block` | Disparado quando um usuário bloqueia outro usuário | `user_id` |
+| `block.unblock` | Disparado quando um usuário desbloqueia outro usuário | `user_id` |
+
+<Note>
+**Eventos privados:** Os eventos de bloqueio são privados e requerem autenticação no contexto do usuário (OAuth 2.0) com o escopo `block.read`. O filtro `user_id` corresponde ao usuário que executa a ação de bloquear ou desbloquear — você não pode assinar notificações sobre um usuário *sendo* bloqueado. Consulte [Privacidade e autenticação de eventos](#event-privacy-and-authentication) abaixo.
+</Note>
+
 Em versões futuras, a XAA será expandida para oferecer suporte a tipos de evento adicionais, incluindo interações sociais, engajamento com conteúdo, recursos de monetização e muito mais. Continuaremos atualizando nossa documentação à medida que novos tipos de evento se tornarem disponíveis.
 
 ## Privacidade e autenticação de eventos
@@ -134,6 +174,8 @@ Os eventos privados são atividades que exigem consentimento explícito do usuá
 - DM lido (`dm.read`)
 - Indicador de digitação de DM (`dm.indicate_typing`)
 - Menções em Posts (`post.mention.create`)
+- Silenciamentos (`mute.mute`, `mute.unmute`) — requer o escopo `mute.read`
+- Bloqueios (`block.block`, `block.unblock`) — requer o escopo `block.read`
 
 **Requisitos de autenticação para eventos privados:**
 - O usuário precisa autenticar a sua aplicação via OAuth 2.0
