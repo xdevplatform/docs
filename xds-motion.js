@@ -203,6 +203,16 @@
     indicatorTimer = setTimeout(clearIndicator, 240);
   }, true);
 
+  // Clicks swap panels and re-render lists beneath a stationary
+  // cursor without firing mouseover — hide the pill so it can't
+  // linger over stale geometry. It reappears on the next hover.
+  document.addEventListener('click', function () {
+    if (pill) {
+      pill.style.opacity = '0';
+      activeRoot = null;
+    }
+  }, true);
+
   window.addEventListener('scroll', clearIndicator, true);
   window.addEventListener('resize', clearIndicator);
 
