@@ -24,7 +24,11 @@
   var CONTAINERS = [
     { root: '#sidebar-content', item: 'a, button', inset: 1, radius: 8 },
     { root: '#table-of-contents', item: 'a', inset: 1, radius: 8 },
-    { root: '[data-component-part="tabs-list"]', item: '[data-component-part="tab-button"]', inset: 5, radius: 8 }
+    // Tab buttons carry asymmetric built-in padding (pt-3 pb-2.5,
+    // per-variant px), so a raw-rect pill sits lopsided around the
+    // label. contentBox mode measures computed padding and draws a
+    // symmetric pill around the text instead.
+    { root: '[data-component-part="tabs-list"]', item: '[data-component-part="tab-button"]', contentBox: true, padX: 10, padY: 4, radius: 8 }
   ];
 
   var pill = null;
@@ -53,11 +57,33 @@
     return null;
   }
 
+  function pillRect(item, cfg) {
+    var r = item.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return null;
+    if (!cfg.contentBox) {
+      var inset = cfg.inset || 0;
+      return { left: r.left, top: r.top + inset, width: r.width, height: r.height - inset * 2 };
+    }
+    // Symmetric pill around the content box (text), ignoring the
+    // element's own asymmetric padding.
+    var cs = window.getComputedStyle(item);
+    var pl = parseFloat(cs.paddingLeft) || 0;
+    var pr = parseFloat(cs.paddingRight) || 0;
+    var pt = parseFloat(cs.paddingTop) || 0;
+    var pb = parseFloat(cs.paddingBottom) || 0;
+    var bb = parseFloat(cs.borderBottomWidth) || 0;
+    return {
+      left: r.left + pl - cfg.padX,
+      top: r.top + pt - cfg.padY,
+      width: r.width - pl - pr + cfg.padX * 2,
+      height: r.height - pt - pb - bb + cfg.padY * 2
+    };
+  }
+
   function moveTo(target) {
     var p = ensurePill();
-    var r = target.item.getBoundingClientRect();
-    if (r.width === 0 || r.height === 0) return;
-    var inset = target.cfg.inset;
+    var r = pillRect(target.item, target.cfg);
+    if (!r) return;
     var slide = activeRoot === target.root && p.style.opacity === '1';
 
     if (hideTimer) {
@@ -77,9 +103,9 @@
     }
 
     p.style.width = r.width + 'px';
-    p.style.height = r.height - inset * 2 + 'px';
+    p.style.height = r.height + 'px';
     p.style.borderRadius = target.cfg.radius + 'px';
-    p.style.transform = 'translate(' + r.left + 'px, ' + (r.top + inset) + 'px)';
+    p.style.transform = 'translate(' + r.left + 'px, ' + r.top + 'px)';
     p.style.opacity = '1';
     activeRoot = target.root;
   }
