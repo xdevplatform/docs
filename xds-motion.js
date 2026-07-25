@@ -216,5 +216,80 @@
   window.addEventListener('scroll', clearIndicator, true);
   window.addEventListener('resize', clearIndicator);
 
+  /* ----------------------------------------------------------------
+     Gliding TOC active marker — a 2px bar that slides to the active
+     "On this page" entry as you scroll, sibling to the hover pill.
+     Mintlify flags the active anchor with a text-primary class; a
+     MutationObserver watches for the flag moving and the marker
+     glides to it. Degrades to nothing if the flag never appears.
+     ---------------------------------------------------------------- */
+  var tocMarker = null;
+  var tocRaf = null;
+
+  function activeTocLink() {
+    return document.querySelector(
+      '#table-of-contents li.toc-item a[class*="text-primary"], ' +
+      '#table-of-contents li.toc-item a[aria-current]'
+    );
+  }
+
+  function ensureTocMarker() {
+    if (tocMarker && document.body.contains(tocMarker)) return tocMarker;
+    tocMarker = document.createElement('div');
+    tocMarker.id = 'xds-toc-marker';
+    tocMarker.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(tocMarker);
+    return tocMarker;
+  }
+
+  function positionTocMarker() {
+    tocRaf = null;
+    var link = activeTocLink();
+    var m = ensureTocMarker();
+    if (!link) {
+      m.style.opacity = '0';
+      return;
+    }
+    var li = link.closest('li.toc-item') || link;
+    var lr = li.getBoundingClientRect();
+    var ar = link.getBoundingClientRect();
+    if (ar.height === 0) {
+      m.style.opacity = '0';
+      return;
+    }
+    var wasHidden = m.style.opacity !== '1';
+    // First appearance jumps into place; subsequent moves glide.
+    m.style.transition = wasHidden
+      ? 'opacity 150ms ease'
+      : 'transform 220ms cubic-bezier(0.4, 0, 0.2, 1), height 220ms cubic-bezier(0.4, 0, 0.2, 1), opacity 150ms ease';
+    m.style.height = Math.max(ar.height - 10, 12) + 'px';
+    m.style.transform = 'translate(' + lr.left + 'px, ' + (ar.top + 5) + 'px)';
+    m.style.opacity = '1';
+  }
+
+  function scheduleTocMarker() {
+    if (tocRaf) return;
+    tocRaf = requestAnimationFrame(positionTocMarker);
+  }
+
+  var tocObserver = new MutationObserver(scheduleTocMarker);
+  function watchToc() {
+    var toc = document.getElementById('table-of-contents');
+    if (!toc) {
+      if (tocMarker) tocMarker.style.opacity = '0';
+      return;
+    }
+    tocObserver.disconnect();
+    tocObserver.observe(toc, { attributes: true, attributeFilter: ['class', 'aria-current'], subtree: true, childList: true });
+    scheduleTocMarker();
+  }
+  watchToc();
+  // Re-attach when SPA navigation replaces the TOC subtree.
+  new MutationObserver(function () {
+    watchToc();
+  }).observe(document.body, { childList: true });
+  window.addEventListener('scroll', scheduleTocMarker, true);
+  window.addEventListener('resize', scheduleTocMarker);
+
   document.documentElement.classList.add('xds-motion');
 })();
