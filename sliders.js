@@ -435,7 +435,7 @@ function createSliderContent(endpointName, unitCost, pricingType, options = {}) 
   const container = document.createElement('div');
   container.id = 'injected-slider';
   container.className = 'border border-gray-950/10 dark:border-white/10 rounded-lg p-4';
-  container.style.backgroundColor = '#0B0C0E';
+  container.style.backgroundColor = 'var(--x-bg-secondary, #0B0C0E)';
   container.style.overflow = 'visible'; // Allow tooltip to overflow
   
   // Title section with info icon
@@ -460,7 +460,7 @@ function createSliderContent(endpointName, unitCost, pricingType, options = {}) 
   
   const infoIcon = document.createElement('div');
   infoIcon.className = 'cursor-help';
-  infoIcon.style.color = '#9ca3af'; // gray-400
+  infoIcon.style.color = 'var(--x-fg-secondary, #9ca3af)';
   infoIcon.innerHTML = `
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
       <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" fill="none"/>
@@ -479,8 +479,8 @@ function createSliderContent(endpointName, unitCost, pricingType, options = {}) 
   tooltip.style.padding = '8px 12px';
   tooltip.style.fontSize = '12px';
   // Use the same dark background as the container
-  tooltip.style.backgroundColor = '#0B0C0E';
-  tooltip.style.color = '#e5e7eb'; // gray-200 - light text for good contrast
+  tooltip.style.backgroundColor = 'var(--x-tooltip-bg, #0B0C0E)';
+  tooltip.style.color = 'var(--x-tooltip-fg, #e5e7eb)';
   tooltip.style.borderRadius = '8px';
   tooltip.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.2)';
   tooltip.style.maxWidth = '250px';
@@ -546,7 +546,7 @@ function createSliderContent(endpointName, unitCost, pricingType, options = {}) 
   if (options.ownedReadCost) {
     const ownedReadNote = document.createElement('div');
     ownedReadNote.className = 'text-xs mb-2';
-    ownedReadNote.style.color = '#00BA7C';
+    ownedReadNote.style.color = 'var(--x-green-500, #00BA7C)';
     ownedReadNote.textContent = `Owned Read price: $${options.ownedReadCost.toFixed(3)} ${unitLabel} when accessing your own data as the app owner`;
     container.appendChild(ownedReadNote);
   }
@@ -555,7 +555,7 @@ function createSliderContent(endpointName, unitCost, pricingType, options = {}) 
   if (options.enterpriseOnly) {
     const enterpriseNote = document.createElement('div');
     enterpriseNote.className = 'text-xs mb-2';
-    enterpriseNote.style.cssText = 'color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); border-radius: 6px; padding: 6px 8px;';
+    enterpriseNote.style.cssText = 'color: var(--x-fg-warning, #f59e0b); border: 1px solid var(--x-border-normal); border-radius: 6px; padding: 6px 8px;';
     enterpriseNote.textContent = 'This endpoint requires an Enterprise plan. Not available on self-serve (pay-per-use) tiers.';
     container.appendChild(enterpriseNote);
   }
@@ -564,7 +564,7 @@ function createSliderContent(endpointName, unitCost, pricingType, options = {}) 
   if (options.urlNote) {
     const urlNote = document.createElement('div');
     urlNote.className = 'text-xs mb-2';
-    urlNote.style.color = '#9ca3af';
+    urlNote.style.color = 'var(--x-fg-secondary, #9ca3af)';
     urlNote.textContent = 'Posts containing a URL: $0.200 per request (summoned replies remain at standard price).';
     container.appendChild(urlNote);
   }

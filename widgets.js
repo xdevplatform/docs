@@ -45,8 +45,8 @@
     card.style.marginRight = 'auto';
     card.style.borderRadius = '12px';
     card.style.overflow = 'hidden';
-    card.style.backgroundColor = '#000';
-    card.style.border = '1px solid #333';
+    card.style.backgroundColor = 'var(--x-bg-primary, #000)';
+    card.style.border = '1px solid var(--x-border-normal, #333)';
     card.style.transition = 'transform 0.2s, box-shadow 0.2s';
     
     // Hover effect
@@ -64,7 +64,7 @@
     previewContainer.style.position = 'relative';
     previewContainer.style.width = '100%';
     previewContainer.style.paddingTop = '56.25%'; // 16:9 aspect ratio
-    previewContainer.style.background = 'linear-gradient(135deg, #0f0f0f 0%, #050505 100%)'; // Very dark gray gradient for black background
+    previewContainer.style.background = 'linear-gradient(135deg, var(--x-neutral-1000, #0f0f0f) 0%, var(--x-black, #050505) 100%)'; // Very dark gray gradient for black background
     previewContainer.style.backgroundSize = 'cover';
     previewContainer.style.backgroundPosition = 'center';
     previewContainer.style.overflow = 'hidden';
@@ -104,7 +104,7 @@
     overlay.style.flexDirection = 'column';
     overlay.style.alignItems = 'center';
     overlay.style.justifyContent = 'center';
-    overlay.style.color = '#fff';
+    overlay.style.color = 'var(--x-fg-on-color, #fff)';
     overlay.style.cursor = 'pointer';
     overlay.style.backgroundColor = 'rgba(0,0,0,0.3)';
     
@@ -124,7 +124,7 @@
     var playIcon = document.createElement('div');
     playIcon.innerHTML = '▶';
     playIcon.style.fontSize = '32px';
-    playIcon.style.color = '#ffffff';
+    playIcon.style.color = 'var(--x-fg-on-color, #ffffff)';
     playIcon.style.marginLeft = '4px';
     playIconContainer.appendChild(playIcon);
     
@@ -144,8 +144,8 @@
     if (title) {
       var titleContainer = document.createElement('div');
       titleContainer.style.padding = '16px 20px';
-      titleContainer.style.backgroundColor = '#000';
-      titleContainer.style.borderTop = '1px solid #333';
+      titleContainer.style.backgroundColor = 'var(--x-bg-primary, #000)';
+      titleContainer.style.borderTop = '1px solid var(--x-border-normal, #333)';
       
       // Parse title and date (date is in parentheses)
       var titleText = title;
@@ -158,7 +158,7 @@
       
       // Title element
       var titleElement = document.createElement('div');
-      titleElement.style.color = '#fff';
+      titleElement.style.color = 'var(--x-fg-primary, #fff)';
       titleElement.style.fontSize = '16px';
       titleElement.style.fontWeight = '600';
       titleElement.style.lineHeight = '1.4';
@@ -169,7 +169,7 @@
       // Date element (if date found)
       if (dateText) {
         var dateElement = document.createElement('div');
-        dateElement.style.color = '#999';
+        dateElement.style.color = 'var(--x-fg-secondary, #999)';
         dateElement.style.fontSize = '14px';
         dateElement.style.fontWeight = '400';
         dateElement.style.lineHeight = '1.4';
@@ -331,7 +331,7 @@
         carouselContainer.style.webkitOverflowScrolling = 'touch';
         // Hide scrollbar but keep functionality
         carouselContainer.style.scrollbarWidth = 'thin';
-        carouselContainer.style.scrollbarColor = '#333 transparent';
+        carouselContainer.style.scrollbarColor = 'var(--x-neutral-800, #333) transparent';
         
         // Insert carousel container after the "Past Broadcasts" heading
         // Find the next element sibling or insert after the heading
