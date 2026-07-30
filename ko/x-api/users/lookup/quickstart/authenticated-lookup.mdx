@@ -1,0 +1,215 @@
+---
+title: 인증된 사용자 퀵스타트
+sidebarTitle: 인증된 사용자
+description: "이 가이드는 `/me` 엔드포인트를 사용하여 현재 인증된 사용자의 프로필을 조회하는 방법을 안내합니다. 퀵스타트를 다루는 X API v2 standard 티어 레퍼런스입니다."
+keywords: ["인증된 사용자", "me 엔드포인트", "현재 사용자", "인증된 조회"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+이 가이드는 `/me` 엔드포인트를 사용하여 현재 인증된 사용자의 프로필을 조회하는 방법을 안내합니다.
+
+<Note>
+**사전 요구사항**
+
+시작하기 전에 다음이 필요합니다:
+- 승인된 App이 포함된 [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- User Access Token (OAuth 1.0a 또는 OAuth 2.0 PKCE)
+</Note>
+
+---
+
+## 인증된 사용자 가져오기
+
+User Access Token으로 `/me` 엔드포인트에 요청을 보내세요:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/me?\
+user.fields=created_at,description,verified,public_metrics,profile_image_url" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# 인증된 사용자 가져오기
+response = client.users.get_me(
+    user_fields=["created_at", "description", "verified", "public_metrics", "profile_image_url"]
+)
+
+print(f"Username: {response.data.username}")
+print(f"ID: {response.data.id}")
+print(f"Followers: {response.data.public_metrics.followers_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// 인증된 사용자 가져오기
+const response = await client.users.getMe({
+  userFields: ["created_at", "description", "verified", "public_metrics", "profile_image_url"],
+});
+
+console.log(`Username: ${response.data?.username}`);
+console.log(`ID: ${response.data?.id}`);
+console.log(`Followers: ${response.data?.public_metrics?.followers_count}`);
+```
+
+</CodeGroup>
+
+---
+
+## 응답
+
+```json title="응답 예시" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "XDevelopers",
+    "created_at": "2013-12-14T04:35:55.000Z",
+    "description": "The voice of the X developer community",
+    "verified": true,
+    "profile_image_url": "https://pbs.twimg.com/profile_images/...",
+    "public_metrics": {
+      "followers_count": 583423,
+      "following_count": 2048,
+      "tweet_count": 14052,
+      "listed_count": 1672
+    }
+  }
+}
+```
+
+---
+
+## 사용 사례
+
+`/me` 엔드포인트는 다음과 같은 경우에 필수적입니다:
+
+- **인증 확인** — 사용자가 올바르게 인증되었는지 확인
+- **사용자 ID 가져오기** — 다른 API 호출에 사용할 인증된 사용자의 ID 조회
+- **개인화된 경험 제공** — 앱에서 사용자의 프로필 표시
+- **사용자를 대신한 요청** — 어떤 사용자를 위해 요청하는지 파악
+
+---
+
+## 고정된 Post 포함하기
+
+사용자의 고정된 Post 요청:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/me?\
+user.fields=pinned_tweet_id&\
+expansions=pinned_tweet_id&\
+tweet.fields=created_at,text" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# 고정된 Post와 함께 인증된 사용자 가져오기
+response = client.users.get_me(
+    user_fields=["pinned_tweet_id"],
+    expansions=["pinned_tweet_id"],
+    tweet_fields=["created_at", "text"]
+)
+
+print(f"Username: {response.data.username}")
+# 고정된 Post는 response.includes.tweets에 있음
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// 고정된 Post와 함께 인증된 사용자 가져오기
+const response = await client.users.getMe({
+  userFields: ["pinned_tweet_id"],
+  expansions: ["pinned_tweet_id"],
+  tweetFields: ["created_at", "text"],
+});
+
+console.log(`Username: ${response.data?.username}`);
+// 고정된 Post는 response.includes?.tweets에 있음
+```
+
+</CodeGroup>
+
+### expansion이 포함된 응답
+
+```json title="응답 예시" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "XDevelopers",
+    "pinned_tweet_id": "1234567890"
+  },
+  "includes": {
+    "tweets": [
+      {
+        "id": "1234567890",
+        "text": "Welcome to my profile!",
+        "created_at": "2024-01-01T00:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 사용 가능한 필드
+
+| Field | Description |
+|:------|:------------|
+| `created_at` | 계정 생성 날짜 |
+| `description` | 사용자 소개 |
+| `profile_image_url` | 아바타 URL |
+| `verified` | 인증 상태 |
+| `public_metrics` | 팔로워/팔로잉 수 |
+| `location` | 사용자가 설정한 위치 |
+| `url` | 사용자의 웹사이트 |
+| `protected` | 비공개 계정 상태 |
+| `pinned_tweet_id` | 고정된 Post ID |
+
+---
+
+## 인증 요구사항
+
+<Warning>
+`/me` 엔드포인트는 User Context 인증이 필요합니다. App-Only (Bearer Token) 인증은 지원되지 않습니다.
+</Warning>
+
+다음 중 하나를 사용하세요:
+- [OAuth 1.0a User Context](/resources/fundamentals/authentication)
+- [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2)
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="User lookup" icon="/icons/xds/icon-people.svg" href="/x-api/users/lookup/quickstart/user-lookup">
+    다른 사용자 조회
+  </Card>
+  <Card title="통합 가이드" icon="/icons/xds/icon-book.svg" href="/x-api/users/lookup/integrate">
+    핵심 개념 및 모범 사례
+  </Card>
+  <Card title="API 레퍼런스" icon="/icons/xds/icon-code.svg" href="/x-api/users/get-my-user">
+    전체 엔드포인트 문서
+  </Card>
+</CardGroup>

@@ -1,0 +1,225 @@
+---
+title: "Scripting: Eventos"
+description: "Vincule callbacks a eventos de widget do X for Websites como loaded, rendered, tweet, follow, retweet, like e click usando twttr.events.bind para analytics."
+sidebarTitle: "Scripting: Eventos"
+---
+
+O JavaScript do X for Websites dispara eventos na inicialização e depois que um visualizador interage com um widget. Aprimore sua aplicação e analytics utilizando eventos de widget.
+
+Note que eventos de Web Intent são disparados quando a interação ocorre, não depois que a ação é concluída.
+
+Vincule um evento de widget do X em seu código JavaScript registrando uma função de callback com `twttr.events.bind`.
+
+```javascript
+twttr.events.bind(
+  'click',
+  function (ev) {
+    console.log(ev);
+  }
+);
+```
+
+## O Intent Event Object
+
+Quando uma ação detectável ocorre dentro de um Web Intent ou widget, um objeto representando o evento é passado para seu callback JavaScript. Objetos Intent Event incluem os seguintes dados:
+
+### Propriedades do intent event object
+
+| Propriedade | Tipo de dado    | Descrição                                                                                                           |
+|----------|--------------|-----------------------------------------------------------------------------------------------------------------------|
+| `target` | `HTMLElement` | O nó DOM onde o widget é instanciado. Provavelmente um iframe, mas também pode ser o elemento original do código de embed se o widget falhou ao inicializar, ou outro elemento em sandbox. Use este valor para diferenciar entre diferentes intents ou botões na mesma página. |
+| `region` | `String`     | Detalhe estendido indicando onde no widget o evento se originou. Por exemplo, componentes de botão ou contagem das integrações de Post button ou Follow button, ou ações de Post dentro de um Post incorporado. |
+| `data`   | `Object`     | Pares chave/valor relevantes ao evento.                                                                                |
+
+## Esperando por recursos assíncronos
+
+Carregar o arquivo widgets.js de forma assíncrona exigirá que você espere antes de vincular eventos: as funções que você está chamando ainda não existem. Você precisará envolver seus bindings de eventos em uma função de callback como a fila de funções assíncronas twttr.ready, que será invocada uma vez que tudo tenha carregado. Todos os exemplos de evento abaixo assumem que você envolveu esses bindings de eventos neste callback.
+
+```javascript
+twttr.ready(
+  function (twttr) {
+    // vincule eventos aqui
+  }
+);
+```
+
+## Eventos disponíveis
+
+### loaded
+
+Ocorre depois que `twttr.widgets.load` inicializou os widgets em uma página. Inclui um array de referências aos nós de widget recém-criados.
+
+```javascript
+twttr.events.bind(
+  'loaded',
+  function (event) {
+    event.widgets.forEach(function (widget) {
+      console.log("Created widget", widget.id);
+    });
+  }
+);
+```
+
+### rendered
+
+Ocorre depois que um widget individual em uma página é renderizado. Inclui uma referência ao nó de widget recém-criado. Ocorre ao mesmo tempo que `loaded`, mas para cada widget individual. Também é disparado ao criar um widget com uma função factory.
+
+```javascript
+twttr.events.bind(
+  'rendered',
+  function (event) {
+    console.log("Created widget", event.target.id);
+  }
+);
+```
+
+### tweet
+
+Este evento é disparado quando o usuário clica em um Post Web Intent.
+
+Inclui um Post em resposta a um [Post incorporado](/x-for-websites/timelines/overview) ou um Post exibido em uma [Timeline incorporada](/x-for-websites/timelines/overview).
+
+```javascript
+twttr.events.bind(
+  'tweet',
+  function (event) {
+    // Faça algo aqui
+  }
+);
+```
+
+### follow
+
+Este evento preencherá o `user_id` ou `screen_name` seguido no argumento data do objeto de evento, dependendo dos parâmetros que você forneceu no web intent.
+
+```javascript
+twttr.events.bind(
+  'follow',
+  function (event) {
+    var followedUserId = event.data.user_id;
+    var followedScreenName = event.data.screen_name;
+  }
+);
+```
+
+### retweet
+
+Este evento preencherá o `source_tweet_id` do Post original que foi repostado no argumento data do objeto de evento.
+
+```javascript
+twttr.events.bind(
+  'retweet',
+  function(event) {
+    var repostedPostId = event.data.source_tweet_id;
+  }
+);
+```
+
+### like
+
+Este evento preencherá o `tweet_id` curtido no argumento data do objeto de evento.
+
+```javascript
+twttr.events.bind(
+  'like',
+  function(event) {
+    var likedPostId = event.data.tweet_id;
+  }
+);
+```
+
+### click
+
+Receba um evento quando o usuário invocar um Web Intent de dentro de um widget incorporado.
+
+## Exemplo: Detectando eventos para web analytics
+
+
+É fácil capturar esses eventos e enviá-los para sua solução de web analytics. Note que você precisará estar usando os protocolos HTTP ou HTTPs na página hospedeira para esses eventos.
+
+```javascript title="Exemplo" expandable lines wrap icon="square-js"
+// Loga qualquer tipo de evento Web Intent no Google Analytics
+// Category: "twitter_web_intents"
+// Action: Intent Event Type
+// Label: Identifier for action taken: tweet_id, screen_name/user_id, click region
+
+// Primeiro, carrega o arquivo widgets.js de forma assíncrona
+window.twttr = (function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0],
+    t = window.twttr || {};
+  if (d.getElementById(id)) return;
+  js = d.createElement(s);
+  js.id = id;
+  js.src = "https://platform.x.com/widgets.js";
+  fjs.parentNode.insertBefore(js, fjs);
+
+  t._e = [];
+  t.ready = function(f) {
+    t._e.push(f);
+  };
+
+  return t;
+}(document, "script", "twitter-wjs"));
+
+// Defina nossos handlers de evento personalizados
+function clickEventToAnalytics (intentEvent) {
+  if (!intentEvent) return;
+  var label = intentEvent.region;
+  pageTracker._trackEvent('twitter_web_intents', intentEvent.type, label);
+}
+
+function postIntentToAnalytics (intentEvent) {
+  if (!intentEvent) return;
+  var label = "tweet";
+  pageTracker._trackEvent(
+    'twitter_web_intents',
+    intentEvent.type,
+    label
+  );
+}
+
+function likeIntentToAnalytics (intentEvent) {
+  postIntentToAnalytics(intentEvent);
+}
+
+function repostIntentToAnalytics (intentEvent) {
+  if (!intentEvent) return;
+  var label = intentEvent.data.source_tweet_id;
+  pageTracker._trackEvent(
+    'twitter_web_intents',
+    intentEvent.type,
+    label
+  );
+}
+
+function followIntentToAnalytics (intentEvent) {
+  if (!intentEvent) return;
+  var label = intentEvent.data.user_id + " (" + intentEvent.data.screen_name + ")";
+  pageTracker._trackEvent(
+    'twitter_web_intents',
+    intentEvent.type,
+    label
+  );
+}
+
+// Espera pelos recursos assíncronos carregarem
+twttr.ready(function (twttr) {
+  // Agora vincula nossos eventos de intent personalizados
+  twttr.events.bind('click', clickEventToAnalytics);
+  twttr.events.bind('tweet', postIntentToAnalytics);
+  twttr.events.bind('retweet', repostIntentToAnalytics);
+  twttr.events.bind('like', likeIntentToAnalytics);
+  twttr.events.bind('follow', followIntentToAnalytics);
+});
+```
+
+## Recursos e exemplos suplementares de eventos
+
+- [Guia de Event Tracking do Google Analytics](http://code.google.com/apis/analytics/docs/tracking/eventTrackerGuide.html)
+- [Plugin SocialWidgetTracker do Google Analytics](https://github.com/googleanalytics/autotrack/blob/master/lib/plugins/social-widget-tracker.js)
+- [X Intent Events with Google Analytics using _gaq.push();](http://null-uk.com/55090968) por [@nulluk](http://x.com/intent/user?screen_name=nulluk)
+- [Uma abordagem otimizada para integração com Google Analytics](https://gist.github.com/1004702) por [@yahel](https://x.com/yahel)
+
+Essas funções tornam possível integrar dinamicamente o conteúdo de usuários do X ao seu site em uma aplicação JavaScript, e integrar interações de usuário à experiência da sua própria aplicação.
+
+Por favor, faça perguntas e compartilhe seu código e exemplos no [fórum de desenvolvedores](https://devcommunity.x.com/). Você também pode consultar a [documentação principal do X for Websites](/x-for-websites/overview).

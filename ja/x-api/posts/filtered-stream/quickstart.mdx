@@ -1,0 +1,311 @@
+---
+title: クイックスタート
+sidebarTitle: クイックスタート
+description: "このガイドでは、Filtered stream に接続してフィルタルールに一致する投稿をほぼリアルタイムで受信する方法を説明します。filtered stream を扱う X API v2 スタンダードティアのリファレンス。"
+keywords: ["filtered stream クイックスタート", "streaming クイックスタート", "filtered stream チュートリアル", "ストリームガイド", "streaming の例"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+このガイドでは、Filtered stream に接続してフィルタルールに一致する投稿をほぼリアルタイムで受信する方法を説明します。
+
+<Note>
+**前提条件**
+
+始める前に以下が必要です:
+- [開発者アカウント](https://developer.x.com/en/portal/petition/essential/basic-info)
+- App の Bearer Token(Developer Console の「Keys and tokens」で確認できます)
+</Note>
+
+---
+
+<Steps>
+  <Step title="フィルタルールを作成する" icon="/icons/xds/icon-filter.svg">
+    ルールは受信する投稿を定義します。演算子を使ってキーワード、ハッシュタグ、ユーザーなどでマッチできます。
+
+    **ルール例:** "cat" を含み画像がある投稿にマッチ:
+
+    ```
+    cat has:images
+    ```
+
+    <Card title="ルールを組み立てる" icon="/icons/xds/icon-filter.svg" href="/x-api/posts/filtered-stream/integrate/build-a-rule">
+      ルール構文と演算子を学ぶ
+    </Card>
+  </Step>
+
+  <Step title="ストリームにルールを追加する" icon="plus">
+    rules エンドポイントを使用してルールを追加します。各投稿がどのルールに一致したかを識別するため、`tag` を含めます:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Authorization: Bearer $BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "add": [
+      {"value": "cat has:images", "tag": "cats with images"}
+    ]
+  }'
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Filtered stream にルールを追加
+response = client.filtered_stream.add_rules(
+    add=[{"value": "cat has:images", "tag": "cats with images"}]
+)
+
+for rule in response.data:
+    print(f"Rule added: {rule.id} - {rule.value}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Filtered stream にルールを追加
+const response = await client.filteredStream.addRules({
+  add: [{ value: "cat has:images", tag: "cats with images" }],
+});
+
+response.data?.forEach((rule) => {
+  console.log(`Rule added: ${rule.id} - ${rule.value}`);
+});
+```
+
+</CodeGroup>
+
+    **レスポンス:**
+
+    ```json
+    {
+      "data": [
+        {
+          "id": "1273026480692322304",
+          "value": "cat has:images",
+          "tag": "cats with images"
+        }
+      ],
+      "meta": {
+        "sent": "2024-01-15T10:30:00.000Z",
+        "summary": {
+          "created": 1,
+          "not_created": 0,
+          "valid": 1,
+          "invalid": 0
+        }
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="ルールを確認する" icon="check">
+    アクティブなルールをすべて表示し、ルールが追加されたか確認します:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# アクティブなルールをすべて取得
+response = client.filtered_stream.get_rules()
+
+for rule in response.data:
+    print(f"Active rule: {rule.id} - {rule.value}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// アクティブなルールをすべて取得
+const response = await client.filteredStream.getRules();
+
+response.data?.forEach((rule) => {
+  console.log(`Active rule: ${rule.id} - ${rule.value}`);
+});
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="ストリームに接続する" icon="plug">
+    永続接続を開いて一致する投稿を受信します:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/stream?\
+tweet.fields=created_at,author_id&\
+expansions=author_id&\
+user.fields=username" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Filtered stream に接続
+for post in client.filtered_stream.stream(
+    tweet_fields=["created_at", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username"]
+):
+    print(f"New post: {post.data.text}")
+    print(f"Matching rules: {post.matching_rules}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Filtered stream に接続
+const stream = client.filteredStream.stream({
+  tweetFields: ["created_at", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username"],
+});
+
+for await (const post of stream) {
+  console.log(`New post: ${post.data?.text}`);
+  console.log(`Matching rules: ${post.matching_rules}`);
+}
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="受信した投稿を処理する" icon="/icons/xds/icon-chat.svg">
+    一致する投稿は JSON オブジェクトとしてストリーミングされます:
+
+    ```json
+    {
+      "data": {
+        "id": "1234567890",
+        "text": "Look at this cute cat! 🐱",
+        "author_id": "9876543210",
+        "created_at": "2024-01-15T10:35:00.000Z",
+        "edit_history_tweet_ids": ["1234567890"]
+      },
+      "includes": {
+        "users": [
+          {
+            "id": "9876543210",
+            "username": "catperson"
+          }
+        ]
+      },
+      "matching_rules": [
+        {
+          "id": "1273026480692322304",
+          "tag": "cats with images"
+        }
+      ]
+    }
+    ```
+
+    <Tip>
+    `matching_rules` 配列には、定義したタグを用いて、投稿に一致したルールが表示されます。
+    </Tip>
+  </Step>
+
+  <Step title="ルールを削除する(オプション)" icon="trash">
+    ID を指定してルールを削除します:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Authorization: Bearer $BEARER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "delete": {
+      "ids": ["1273026480692322304"]
+    }
+  }'
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# ID でルールを削除
+response = client.filtered_stream.delete_rules(
+    delete={"ids": ["1273026480692322304"]}
+)
+print(f"Deleted: {response.meta.summary.deleted}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// ID でルールを削除
+const response = await client.filteredStream.deleteRules({
+  delete: { ids: ["1273026480692322304"] },
+});
+console.log(`Deleted: ${response.meta?.summary?.deleted}`);
+```
+
+</CodeGroup>
+
+  </Step>
+</Steps>
+
+---
+
+## 接続を管理する
+
+<AccordionGroup>
+  <Accordion title="Keep-alive シグナル">
+    ストリームは 20 秒ごとに空行 (`\r\n`) を送信します。20 秒間データや keep-alive を受信しない場合は再接続してください。
+  </Accordion>
+
+  <Accordion title="切断">
+    `Ctrl+C` を押して接続を閉じるか、ターミナルウィンドウを閉じます。
+  </Accordion>
+
+  <Accordion title="接続数の制限">
+    App あたり 1 つの接続のみ許可されます。新しい接続を開くと既存の接続が閉じられます。
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## 次のステップ
+
+<CardGroup cols={2}>
+  <Card title="ルールを組み立てる" icon="/icons/xds/icon-filter.svg" href="/x-api/posts/filtered-stream/integrate/build-a-rule">
+    ルール構文を学ぶ
+  </Card>
+  <Card title="演算子リファレンス" icon="list-check" href="/x-api/posts/filtered-stream/integrate/operators">
+    すべての利用可能な演算子
+  </Card>
+  <Card title="切断の処理" icon="plug" href="/x-api/fundamentals/handling-disconnections">
+    グレースフルに再接続
+  </Card>
+  <Card title="API リファレンス" icon="/icons/xds/icon-code.svg" href="/x-api/posts/filtered-stream">
+    エンドポイントの完全なドキュメント
+  </Card>
+</CardGroup>

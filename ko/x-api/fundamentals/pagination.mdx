@@ -1,0 +1,197 @@
+---
+title: 페이지네이션
+description: "meta 객체의 next_token과 previous_token 커서를 사용해 X API v2 결과를 페이지 단위로 조회하여 여러 요청에 걸쳐 모든 결과를 가져오세요."
+sidebarTitle: 페이지네이션
+keywords: ["pagination", "pagination tokens", "next token", "결과 페이지 넘기기", "cursor pagination"]
+---
+
+API 응답에 한 번에 반환할 수 있는 것보다 더 많은 결과가 포함된 경우, 페이지네이션을 사용해 모든 페이지의 데이터를 조회하세요.
+
+---
+
+## 페이지네이션 작동 방식
+
+1. `max_results`로 초기 요청을 만드세요
+2. `meta` 객체에서 `next_token`이 있는지 응답을 확인하세요
+3. 있는 경우 해당 토큰을 `pagination_token`으로 사용해 다른 요청을 만드세요
+4. `next_token`이 반환되지 않을 때까지 반복하세요
+
+```bash
+# Initial request
+curl "https://api.x.com/2/users/12345/tweets?max_results=100" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Response includes next_token
+# {"data": [...], "meta": {"next_token": "abc123", ...}}
+
+# Next page
+curl "https://api.x.com/2/users/12345/tweets?max_results=100&pagination_token=abc123" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## 페이지네이션 토큰
+
+| 토큰 | 설명 |
+|:------|:------------|
+| `next_token` | 응답 `meta`에 있음. 다음 페이지를 가져올 때 사용. |
+| `previous_token` | 응답 `meta`에 있음. 이전 페이지로 돌아갈 때 사용. |
+| `pagination_token` | 요청 파라미터. `next_token` 또는 `previous_token` 값으로 설정. |
+
+---
+
+## 응답 구조
+
+```json
+{
+  "data": [
+    {"id": "1234", "text": "..."},
+    {"id": "1235", "text": "..."}
+  ],
+  "meta": {
+    "result_count": 100,
+    "next_token": "7140w9gefhslx3",
+    "previous_token": "77qp89slxjd"
+  }
+}
+```
+
+더 이상 결과가 없으면 `next_token`이 생략됩니다:
+
+```json
+{
+  "data": [...],
+  "meta": {
+    "result_count": 42,
+    "previous_token": "77qp89abc"
+  }
+}
+```
+
+---
+
+## 페이지네이션 파라미터
+
+| 파라미터 | 설명 | 기본값 |
+|:----------|:------------|:--------|
+| `max_results` | 페이지당 결과 수 | Endpoint에 따라 다름 |
+| `pagination_token` | 이전 응답의 토큰 | 없음 |
+
+특정 `max_results` 한도는 각 endpoint의 API 레퍼런스를 확인하세요.
+
+---
+
+## 예시: 모든 결과 페이지네이션
+
+<Tabs>
+  <Tab title="Python">
+```python title="Example" lines wrap icon="python"
+import requests
+
+def get_all_tweets(user_id, bearer_token):
+    url = f"https://api.x.com/2/users/{user_id}/tweets"
+    headers = {"Authorization": f"Bearer {bearer_token}"}
+    params = {"max_results": 100}
+    
+    all_tweets = []
+    
+    while True:
+        response = requests.get(url, headers=headers, params=params)
+        data = response.json()
+        
+        if "data" in data:
+            all_tweets.extend(data["data"])
+        
+        # Check for next page
+        next_token = data.get("meta", {}).get("next_token")
+        if not next_token:
+            break
+            
+        params["pagination_token"] = next_token
+    
+    return all_tweets
+```
+  </Tab>
+  <Tab title="JavaScript">
+```javascript title="Example" expandable lines wrap icon="square-js"
+async function getAllTweets(userId, bearerToken) {
+  const url = `https://api.x.com/2/users/${userId}/tweets`;
+  const headers = { Authorization: `Bearer ${bearerToken}` };
+  
+  let allTweets = [];
+  let paginationToken = null;
+  
+  do {
+    const params = new URLSearchParams({ max_results: 100 });
+    if (paginationToken) {
+      params.set("pagination_token", paginationToken);
+    }
+    
+    const response = await fetch(`${url}?${params}`, { headers });
+    const data = await response.json();
+    
+    if (data.data) {
+      allTweets.push(...data.data);
+    }
+    
+    paginationToken = data.meta?.next_token;
+  } while (paginationToken);
+  
+  return allTweets;
+}
+```
+  </Tab>
+</Tabs>
+
+---
+
+## 모범 사례
+
+<CardGroup cols={2}>
+  <Card title="최대 결과 사용" icon="arrow-up-1-9">
+    API 호출을 최소화하려면 허용된 최대 `max_results`를 요청하세요.
+  </Card>
+  <Card title="부분 페이지 처리" icon="square-check">
+    마지막 페이지는 `max_results`보다 적은 결과를 가질 수 있습니다.
+  </Card>
+  <Card title="토큰 저장" icon="database">
+    나중에 페이지네이션을 재개해야 하는 경우 `next_token`을 저장하세요.
+  </Card>
+  <Card title="페이지네이션으로 폴링하지 않기" icon="clock">
+    새 데이터의 경우 반복 페이지네이션 대신 `since_id`를 사용하세요.
+  </Card>
+</CardGroup>
+
+---
+
+## 결과 정렬
+
+결과는 **최신순(역시간순)** 으로 반환됩니다:
+
+- 첫 페이지의 첫 결과 = 가장 최근
+- 마지막 페이지의 마지막 결과 = 가장 오래된 것
+
+이는 페이지 내부와 페이지 간에 모두 적용됩니다.
+
+---
+
+## 참고 사항
+
+- 페이지네이션 토큰은 불투명한 문자열입니다 — 파싱하거나 수정하지 마세요
+- 토큰은 일정 시간 후 만료될 수 있습니다
+- `max_results`보다 적은 결과를 받으면 더 많은 결과가 존재할 수 있습니다(`next_token`이 없을 때까지 계속하세요)
+- 자동 페이지네이션 처리를 위해 [SDK](/tools-and-libraries)를 사용하세요
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="Rate limit" icon="gauge-high" href="/x-api/fundamentals/rate-limits">
+    페이지네이션 시 요청 제한 이해하기.
+  </Card>
+  <Card title="SDK" icon="cube" href="/tools-and-libraries">
+    페이지네이션이 내장된 라이브러리.
+  </Card>
+</CardGroup>

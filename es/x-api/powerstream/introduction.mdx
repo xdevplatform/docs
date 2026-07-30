@@ -1,0 +1,308 @@
+---
+title: Powerstream — API de streaming de baja latencia en X API v2
+sidebarTitle: Introducción
+keywords: ["powerstream", "powerstream API", "streaming en tiempo real", "streaming de baja latencia", "reglas de streaming", "filtered stream", "streaming empresarial", "GNIP powerstream"]
+description: "Powerstream es el endpoint de streaming de menor latencia de X API v2 para datos públicos de Post, usando rules estilo PowerTrack para filtrar por palabras clave, operadores y metadatos."
+---
+
+Powerstream es nuestra **API de streaming de menor latencia** para acceder a datos públicos de X en tiempo real. A diferencia de otros endpoints de streaming que priorizan la hidratación y entrega de datos (con ~6-7 segundos de latencia P99), Powerstream está optimizado para la velocidad y entrega los datos con un retraso mínimo.
+
+Al igual que la antigua GNIP Powertrack API, utiliza rules para filtrar Posts según palabras clave, operadores y metadatos. Una vez que se establece una conexión HTTP persistente con el endpoint de Powerstream, puedes comenzar a recibir Posts coincidentes en tiempo real.
+
+Actualmente, Powerstream admite hasta 1.000 rules y cada rule puede tener 2048 caracteres.
+
+## Características clave
+- **Entrega de datos en tiempo real**: Opción de menor latencia para transmitir Posts a medida que se publican.
+- **Filtrado preciso**: Filtra exactamente los datos que buscas usando consultas booleanas con operadores.
+- **Entrega**: Respuesta JSON sobre HTTP/1.1 con codificación chunked.
+- **Soporte de datacenter local**: Obtén Posts solo del datacenter local para reducir aún más la latencia evitando el retardo de replicación.
+
+<Note>
+La Powerstream API es una oferta premium disponible bajo planes Enterprise seleccionados.
+
+Si te interesa acceder a Powerstream o conocer más sobre nuestras ofertas Enterprise, comunícate con nuestro equipo de Ventas enviando el [Formulario de solicitud Enterprise](/forms/enterprise-api-interest).
+Con gusto discutiremos cómo Powerstream puede apoyar tus necesidades.
+</Note>
+
+## Inicio rápido
+
+Esta sección muestra cómo empezar rápidamente con los endpoints de PowerStream usando Python con la librería `requests`. Instálala vía `pip install requests`. Todos los ejemplos usan autenticación OAuth 2.0 Bearer Token. Reemplaza `YOUR_BEARER_TOKEN` con tu token real (guárdalo de forma segura, por ejemplo, vía `os.getenv('BEARER_TOKEN')`).
+
+Cubriremos cada endpoint con fragmentos de código. Asume estos imports al inicio:
+
+```python
+import requests
+import json
+import time
+import sys
+import os  # For env vars
+```
+
+### Configuración
+```python
+bearer_token = os.getenv('BEARER_TOKEN') or "YOUR_BEARER_TOKEN"  # Use env var for security
+base_url = "https://api.x.com/2/powerstream"
+rules_url = f"{base_url}/rules"  # For rule management
+headers = {
+   "Authorization": f"Bearer {bearer_token}",
+   "Content-Type": "application/json"
+}
+```
+
+### 1. Crear rules (POST /rules)
+Agrega rules para filtrar tu stream.
+
+```python title="Ejemplo" lines wrap icon="python"
+data = {
+   "rules": [
+       {
+           "value": "(cat OR dog) lang:en -is:retweet",
+           "tag": "pet-monitor"
+       },
+       # Add more rules as needed (up to 100)
+   ]
+}
+
+response = requests.post(rules_url, headers=headers, json=data)
+if response.status_code == 201:
+   rules_added = response.json().get("data", {}).get("rules", [])
+   print("Rules added:")
+   for rule in rules_added:
+       print(f"ID: {rule['id']}, Value: {rule['value']}, Tag: {rule.get('tag', 'N/A')}")
+else:
+   print(f"Error {response.status_code}: {response.text}")
+```
+
+### 2. Eliminar rules (POST /rules)
+Elimina rules por ID (recomendado) o por valor.
+
+```python title="Ejemplo" lines wrap icon="python"
+data = {
+   "rules": [
+       {
+           "value": "(cat OR dog) lang:en -is:retweet",
+           "tag": "pet-monitor"
+       },
+       # Add more rules as needed (up to 100)
+   ]
+}
+
+response = requests.delete(rules_url, headers=headers, json=data)
+if response.status_code == 200:
+   deleted = response.json().get("data", {})
+   print(f"Deleted count: {deleted.get('deleted', 'N/A')}")
+   if 'not_deleted' in deleted:
+       print("Not deleted:", deleted['not_deleted'])
+else:
+   print(f"Error {response.status_code}: {response.text}")
+```
+
+**Tip**: Para eliminar todas las rules, primero hazles GET, extrae los IDs y luego elimínalas en bloque.
+
+### 3. Obtener rules (GET /rules)
+Obtén todas las rules activas.
+
+```python
+response = requests.get(rules_url, headers=headers)
+if response.status_code == 200:
+   rules = response.json().get("data", {}).get("rules", [])
+   if rules:
+       print("Active rules:")
+       for rule in rules:
+           print(f"ID: {rule['id']}, Value: {rule['value']}, Tag: {rule.get('tag', 'N/A')}")
+   else:
+       print("No active rules.")
+else:
+   print(f"Error {response.status_code}: {response.text}")
+```
+
+### 4. PowerStream (GET /stream)
+Conéctate al stream para recibir Posts en tiempo real y con baja latencia. Usa `stream=True` para lectura línea por línea. Implementa lógica de reconexión para robustez.
+
+```python title="Ejemplo" lines wrap icon="python"
+stream_url = base_url
+
+def main():
+   while True:
+       response = requests.request("GET", stream_url, headers=headers, stream=True)
+       print(response.status_code)
+       for response_line in response.iter_lines():
+           if response_line:
+               json_response = json.loads(response_line)
+               print(json.dumps(json_response, indent=4, sort_keys=True))
+               if response.status_code != 200:
+                   print(response.headers)
+                   raise Exception(
+                       "Request returned an error: {} {}".format(
+                           response.status_code, response.text
+                       )
+                   )
+```
+
+#### Soporte de datacenter local
+
+Para la optimización de latencia, Powerstream ofrece la opción de obtener solo posts originados o creados en el datacenter local donde se establece la conexión. Esto evita el retardo de replicación, lo que resulta en una entrega más rápida en comparación con posts de otros datacenters. Para habilitarlo, agrega el parámetro de consulta `?localDcOnly=true` al endpoint de stream (por ejemplo, `/2/powerstream?localDcOnly=true`). El datacenter al que estés conectado se indicará tanto en el payload inicial del stream como en una cabecera HTTP de la respuesta.
+
+Para usarlo en el código:
+
+```python
+# For local datacenter only:
+stream_url = "https://api.x.com/2/powerstream?localDcOnly=true"
+```
+
+Si el parámetro `localDcOnly` está habilitado, cuando el stream se conecte por primera vez, incluirá las siguientes cabeceras de respuesta que indican qué datacenter local se está usando:
+
+```bash
+'x-powerstream-datacenter': 'atla',
+'x-powerstream-localdconly': 'true'
+```
+
+Además, también enviará un payload inicial que especifica el datacenter:
+
+```bash
+{
+    "type": "connection_metadata",
+    "datacenter": "atla",
+    "timestamp": 1762557264155
+}
+```
+
+<Note>
+**Tip:** Para optimizar la latencia, configura conexiones desde diferentes ubicaciones geográficas (por ejemplo, una cerca de Atlanta en la costa este de EE. UU. y otra cerca de Portland en la costa oeste de EE. UU.), habilitando `localDcOnly=true` para cada una. Esto proporciona un acceso más rápido a los posts de cada datacenter correspondiente. Agrega los streams en tu extremo para combinar datos entre datacenters.
+</Note>
+
+## Operadores
+
+Para establecer rules de filtrado, puedes usar palabras clave y operadores.
+
+<Card title="Operadores de Powerstream" icon="list-check" href="/x-api/powerstream/operators">
+  Lista completa de operadores disponibles
+</Card>
+
+---
+
+## Respuestas
+
+El payload de la Powerstream API tiene el mismo formato que la antigua GNIP Powertrack API. Una respuesta JSON de ejemplo se ve así:
+
+```json title="Respuesta de ejemplo" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+[
+   {
+       "created_at": "Tue Mar 21 20:50:14 +0000 2006",
+       "id": 20,
+       "id_str": "20",
+       "text": "just setting up my twttr",
+       "truncated": false,
+       "entities": {
+           "hashtags": [],
+           "symbols": [],
+           "user_mentions": [],
+           "urls": []
+       },
+       "source": "<a href=\"http://x.com\" rel=\"nofollow\">X Web Client</a>",
+       "in_reply_to_status_id": null,
+       "in_reply_to_status_id_str": null,
+       "in_reply_to_user_id": null,
+       "in_reply_to_user_id_str": null,
+       "in_reply_to_screen_name": null,
+       "user": {
+           "id": 12,
+           "id_str": "12",
+           "name": "jack",
+           "screen_name": "jack",
+           "location": "",
+           "description": "no state is the best state",
+           "url": "https://t.co/ZEpOg6rn5L",
+           "entities": {
+               "url": {
+                   "urls": [
+                       {
+                           "url": "https://t.co/ZEpOg6rn5L",
+                           "expanded_url": "http://primal.net/jack",
+                           "display_url": "primal.net/jack",
+                           "indices": [
+                               0,
+                               23
+                           ]
+                       }
+                   ]
+               },
+               "description": {
+                   "urls": []
+               }
+           },
+           "protected": false,
+           "followers_count": 6427829,
+           "friends_count": 3,
+           "listed_count": 32968,
+           "created_at": "Tue Mar 21 20:50:14 +0000 2006",
+           "favourites_count": 36306,
+           "utc_offset": null,
+           "time_zone": null,
+           "geo_enabled": true,
+           "verified": false,
+           "statuses_count": 30134,
+           "lang": null,
+           "contributors_enabled": false,
+           "is_translator": false,
+           "is_translation_enabled": false,
+           "profile_background_color": "EBEBEB",
+           "profile_background_image_url": "http://abs.twimg.com/images/themes/theme7/bg.gif",
+           "profile_background_image_url_https": "https://abs.twimg.com/images/themes/theme7/bg.gif",
+           "profile_background_tile": false,
+           "profile_image_url": "http://pbs.twimg.com/profile_images/1661201415899951105/azNjKOSH_normal.jpg",
+           "profile_image_url_https": "https://pbs.twimg.com/profile_images/1661201415899951105/azNjKOSH_normal.jpg",
+           "profile_banner_url": "https://pbs.twimg.com/profile_banners/12/1742427520",
+           "profile_link_color": "990000",
+           "profile_sidebar_border_color": "DFDFDF",
+           "profile_sidebar_fill_color": "F3F3F3",
+           "profile_text_color": "333333",
+           "profile_use_background_image": true,
+           "has_extended_profile": true,
+           "default_profile": false,
+           "default_profile_image": false,
+           "following": null,
+           "follow_request_sent": null,
+           "notifications": null,
+           "translator_type": "regular",
+           "withheld_in_countries": []
+       },
+       "geo": null,
+       "coordinates": null,
+       "place": null,
+       "contributors": null,
+       "is_quote_status": false,
+       "retweet_count": 122086,
+       "favorite_count": 263321,
+       "favorited": false,
+       "retweeted": false,
+       "lang": "en"
+   }
+]
+```
+
+## Límites y buenas prácticas
+
+- Límites de tasa: 50 solicitudes/24 h para la gestión de rules; sin límite en streams (pero se aplican límites de conexión).
+- Reconexión: Backoff exponencial en desconexiones.
+- Monitoreo: Usa las cabeceras `Connection: keep-alive`.
+
+---
+
+## Fundamentos de streaming
+
+<CardGroup cols={2}>
+  <Card title="Consumo de datos de streaming" icon="stream" href="/x-api/fundamentals/consuming-streaming-data">
+    Buenas prácticas para clientes de streaming
+  </Card>
+  <Card title="Manejo de desconexiones" icon="plug" href="/x-api/fundamentals/handling-disconnections">
+    Reconéctate de forma elegante
+  </Card>
+  <Card title="Capacidad de alto volumen" icon="gauge-high" href="/x-api/fundamentals/high-volume-capacity">
+    Maneja alto rendimiento
+  </Card>
+  <Card title="Recuperación y redundancia" icon="/icons/xds/icon-shield-keyhole.svg" href="/x-api/fundamentals/recovery-and-redundancy">
+    Construye aplicaciones resilientes
+  </Card>
+</CardGroup>
+

@@ -1,0 +1,226 @@
+---
+title: Expansions
+description: "Usa las expansions de la X API v2 para incluir usuarios, medios, encuestas, lugares y posts referenciados dentro de la sección includes de una única respuesta."
+sidebarTitle: Expansions
+keywords: ["expansions", "expandir objetos", "expansión de objetos", "objetos anidados", "objetos relacionados"]
+---
+
+Las expansions te permiten incluir objetos relacionados en una única respuesta de la API. En lugar de realizar múltiples solicitudes, obtén un post y su autor, medios o posts referenciados en una sola llamada.
+
+---
+
+## Cómo funcionan las expansions
+
+Cuando solicitas una expansion, la API incluye el objeto completo en la sección `includes` de la respuesta:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?expansions=author_id" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Respuesta:
+
+```json title="Ejemplo de respuesta" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "author_id": "2244994945"
+  },
+  "includes": {
+    "users": [{
+      "id": "2244994945",
+      "name": "X Developers",
+      "username": "xdevelopers"
+    }]
+  }
+}
+```
+
+El `author_id` en `data` se vincula al objeto user en `includes`.
+
+---
+
+## Expansions de Post
+
+| Expansion | Devuelve | Caso de uso |
+|:----------|:--------|:---------|
+| `author_id` | Objeto User | Obtener detalles del autor del post |
+| `referenced_tweets.id` | Objeto(s) Post | Obtener posts citados/respondidos |
+| `referenced_tweets.id.author_id` | Objeto(s) User | Obtener autores de posts referenciados |
+| `in_reply_to_user_id` | Objeto User | Obtener el usuario al que se responde |
+| `attachments.media_keys` | Objeto(s) Media | Obtener imágenes, videos, GIFs |
+| `attachments.poll_ids` | Objeto Poll | Obtener opciones y votos de la encuesta |
+| `geo.place_id` | Objeto Place | Obtener detalles de ubicación |
+| `entities.mentions.username` | Objeto(s) User | Obtener usuarios mencionados |
+| `edit_history_tweet_ids` | Objeto(s) Post | Obtener versiones anteriores de posts editados |
+
+---
+
+## Expansions de User
+
+| Expansion | Devuelve | Caso de uso |
+|:----------|:--------|:---------|
+| `pinned_tweet_id` | Objeto Post | Obtener el post fijado del usuario |
+
+---
+
+## Expansions de Space
+
+| Expansion | Devuelve | Caso de uso |
+|:----------|:--------|:---------|
+| `creator_id` | Objeto User | Obtener el creador del Space |
+| `host_ids` | Objeto(s) User | Obtener los hosts del Space |
+| `speaker_ids` | Objeto(s) User | Obtener los speakers del Space |
+| `invited_user_ids` | Objeto(s) User | Obtener los usuarios invitados |
+
+---
+
+## Expansions de DM
+
+| Expansion | Devuelve | Caso de uso |
+|:----------|:--------|:---------|
+| `sender_id` | Objeto User | Obtener el remitente del mensaje |
+| `participant_ids` | Objeto(s) User | Obtener participantes de la conversación |
+| `attachments.media_keys` | Objeto Media | Obtener medios adjuntos |
+| `referenced_tweets.id` | Objeto Post | Obtener el post referenciado |
+
+---
+
+## Expansions de List
+
+| Expansion | Devuelve | Caso de uso |
+|:----------|:--------|:---------|
+| `owner_id` | Objeto User | Obtener el propietario de la lista |
+
+---
+
+## Combinar con fields
+
+Las expansions devuelven fields por defecto para cada objeto. Para obtener campos adicionales, combina las expansions con parámetros de field:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?\
+expansions=author_id,attachments.media_keys&\
+user.fields=description,public_metrics&\
+media.fields=url,alt_text" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Respuesta:
+
+```json title="Ejemplo de respuesta" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Check out this image!",
+    "author_id": "2244994945",
+    "attachments": {
+      "media_keys": ["3_1234567890"]
+    }
+  },
+  "includes": {
+    "users": [{
+      "id": "2244994945",
+      "name": "X Developers",
+      "username": "xdevelopers",
+      "description": "The voice of the X Developer Platform",
+      "public_metrics": {
+        "followers_count": 570842
+      }
+    }],
+    "media": [{
+      "media_key": "3_1234567890",
+      "type": "photo",
+      "url": "https://pbs.twimg.com/media/example.jpg",
+      "alt_text": "Example image"
+    }]
+  }
+}
+```
+
+---
+
+## Múltiples expansions
+
+Solicita varias expansions como una lista separada por comas:
+
+```bash
+expansions=author_id,referenced_tweets.id,attachments.media_keys
+```
+
+---
+
+## Patrones comunes
+
+<Tabs>
+  <Tab title="Contexto completo del post">
+Obtén un post con su autor, medios y posts referenciados:
+
+```bash
+expansions=author_id,attachments.media_keys,referenced_tweets.id
+tweet.fields=created_at,public_metrics,conversation_id
+user.fields=username,name,profile_image_url
+media.fields=url,preview_image_url,type
+```
+  </Tab>
+  <Tab title="Hilo de conversación">
+Obtén respuestas con sus autores:
+
+```bash
+expansions=author_id,in_reply_to_user_id,referenced_tweets.id
+tweet.fields=conversation_id,in_reply_to_user_id,created_at
+user.fields=username,name
+```
+  </Tab>
+  <Tab title="Usuario con post fijado">
+Obtén el perfil de un usuario con su post fijado:
+
+```bash
+expansions=pinned_tweet_id
+user.fields=description,public_metrics,verified
+tweet.fields=created_at,public_metrics
+```
+  </Tab>
+</Tabs>
+
+---
+
+## Vincular data e includes
+
+Los objetos en `includes` no contienen información de posición. Vincúlalos usando IDs:
+
+```python
+# Python example
+response = api_call()
+post = response["data"]
+users = {u["id"]: u for u in response["includes"]["users"]}
+
+# Get the author
+author = users.get(post["author_id"])
+print(f"{author['name']} said: {post['text']}")
+```
+
+```javascript
+// JavaScript example
+const { data: post, includes } = response;
+const users = Object.fromEntries(
+  includes.users.map(u => [u.id, u])
+);
+
+const author = users[post.author_id];
+console.log(`${author.name} said: ${post.text}`);
+```
+
+---
+
+## Próximos pasos
+
+<CardGroup cols={2}>
+  <Card title="Fields" icon="/icons/xds/icon-bulleted-list.svg" href="/x-api/fundamentals/fields">
+    Solicita campos específicos para cada objeto.
+  </Card>
+  <Card title="Diccionario de datos" icon="/icons/xds/icon-book.svg" href="/x-api/fundamentals/data-dictionary">
+    Esquemas completos de objetos.
+  </Card>
+</CardGroup>

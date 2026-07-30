@@ -1,0 +1,265 @@
+---
+title: 統合ガイド
+sidebarTitle: 概要
+description: "このガイドでは、Search Posts エンドポイントをアプリケーションに統合するために必要な主要概念を扱います。integrate を扱う X API v2 スタンダードティアのリファレンス。"
+keywords: ["search 統合", "search 概要", "search ガイド", "search 実装", "tweet search 統合"]
+---
+
+このガイドでは、Search Posts エンドポイントをアプリケーションに統合するために必要な主要概念を扱います。
+
+---
+
+## 認証
+
+### Recent search
+
+Recent search は複数の認証方式をサポートします:
+
+| Method | Use case |
+|:-------|:---------|
+| [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) | 公開投稿データ |
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | 非公開メトリクス |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | 非公開メトリクス |
+
+### Full-archive search
+
+Full-archive search は [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) 認証のみをサポートします。
+
+<Warning>
+Full-archive search では App-Only 認証のみをサポートするため、非公開メトリクス (`non_public_metrics`、`organic_metrics`、`promoted_metrics`) は利用できません。
+</Warning>
+
+---
+
+## クエリを構築する
+
+クエリは演算子を使って投稿にマッチします。ブールロジックで演算子を組み合わせます:
+
+```
+(AI OR "machine learning") lang:en -is:retweet has:links
+```
+
+### クエリ長の制限
+
+| Access level | Recent search | Full-archive search |
+|:-------------|:--------------|:--------------------|
+| Self-serve | 512 文字 | 1,024 文字 |
+| Enterprise | 4,096 文字 | 4,096 文字 |
+
+### 演算子の種類
+
+| Type | Description | Example |
+|:-----|:------------|:--------|
+| **Standalone** | 単独で使用可能 | `#python`, `from:user` |
+| **Conjunction-required** | standalone 演算子と一緒に使用する必要あり | `has:media`, `is:retweet` |
+
+<Card title="クエリを組み立てる" icon="/icons/xds/icon-search.svg" href="/x-api/posts/search/integrate/build-a-query">
+  クエリ構文を詳しく学ぶ
+</Card>
+
+<Card title="演算子リファレンス" icon="list-check" href="/x-api/posts/search/integrate/operators">
+  利用可能なすべての演算子を確認
+</Card>
+
+---
+
+## Fields と expansions
+
+デフォルトでは、レスポンスに `id`、`text`、`edit_history_tweet_ids` のみが含まれます。パラメーターを使って追加データをリクエストします。
+
+### リクエスト例
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/recent?\
+query=python&\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id,attachments.media_keys&\
+user.fields=username,verified&\
+media.fields=url,type" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Recent Posts を検索
+for page in client.posts.search_recent(
+    query="python",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id", "attachments.media_keys"],
+    user_fields=["username", "verified"],
+    media_fields=["url", "type"],
+    max_results=100
+):
+    for post in page.data:
+        print(f"{post.text} - Likes: {post.public_metrics.like_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Recent Posts を検索
+const paginator = client.posts.searchRecent("python", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id", "attachments.media_keys"],
+  userFields: ["username", "verified"],
+  mediaFields: ["url", "type"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text} - Likes: ${post.public_metrics?.like_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+### 利用可能な expansions
+
+| Expansion | Returns |
+|:----------|:--------|
+| `author_id` | 作成者のユーザーオブジェクト |
+| `attachments.media_keys` | 添付メディアオブジェクト |
+| `attachments.poll_ids` | 添付 Poll オブジェクト |
+| `referenced_tweets.id` | 引用または返信された投稿 |
+| `geo.place_id` | Place オブジェクト |
+| `entities.mentions.username` | メンションされたユーザーオブジェクト |
+
+<Card title="Fields と expansions ガイド" icon="sliders" href="/x-api/fundamentals/fields">
+  レスポンスのカスタマイズについて詳しく学ぶ
+</Card>
+
+---
+
+## ページネーション
+
+Search エンドポイントはページで結果を返します。レスポンスの `next_token` を使って追加ページを取得します。
+
+### しくみ
+
+1. `max_results` を指定して最初のリクエストを行う
+2. `meta` オブジェクトで `next_token` を確認
+3. 次のリクエストに `next_token` を含める
+4. `next_token` が返されなくなるまで繰り返す
+
+### 例
+
+<CodeGroup dropdown>
+
+```bash cURL
+# 最初のリクエスト
+curl "https://api.x.com/2/tweets/search/recent?query=python&max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+
+# ページネーショントークン付きの次のリクエスト
+curl "https://api.x.com/2/tweets/search/recent?query=python&max_results=100&next_token=NEXT_TOKEN" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# SDK が自動的にページネーションを処理
+all_posts = []
+
+for page in client.posts.search_recent(query="python", max_results=100):
+    if page.data:
+        all_posts.extend(page.data)
+
+print(f"Found {len(all_posts)} posts")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+async function getAllResults(query) {
+  const allPosts = [];
+
+  // SDK が自動的にページネーションを処理
+  const paginator = client.posts.searchRecent(query, { maxResults: 100 });
+
+  for await (const page of paginator) {
+    if (page.data) {
+      allPosts.push(...page.data);
+    }
+  }
+
+  return allPosts;
+}
+
+// 使用例
+const posts = await getAllResults("python");
+console.log(`Found ${posts.length} posts`);
+```
+
+</CodeGroup>
+
+<Card title="ページネーションガイド" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/posts/search/integrate/paginate">
+  ページネーションについて詳しく学ぶ
+</Card>
+
+---
+
+## 投稿の編集
+
+投稿は 30 分以内に最大 5 回まで編集できます。search エンドポイントは常に最新バージョンを返します。
+
+### 考慮事項
+
+- `edit_history_tweet_ids` にはすべての投稿 ID が古い順に含まれます
+- 30 分の期間経過後に取得した投稿は最終バージョンを表します
+- ニアリアルタイムユースケースでは、公開直後の投稿がまだ編集される可能性があります
+
+<Card title="Edit Posts の基礎" icon="/icons/xds/icon-history.svg" href="/x-api/fundamentals/edit-posts">
+  投稿の編集について詳しく学ぶ
+</Card>
+
+---
+
+## ベストプラクティス
+
+<CardGroup cols={2}>
+  <Card title="具体的に始める" icon="crosshairs">
+    複数の演算子を使って結果を絞り込み、ノイズを減らします。
+  </Card>
+  <Card title="反復的にテストする" icon="flask">
+    広めに開始し、その結果に基づいて絞り込みます。
+  </Card>
+  <Card title="ページネーションを処理" icon="/icons/xds/icon-arrow-right.svg">
+    大規模な結果セットに適切なページネーションを実装します。
+  </Card>
+  <Card title="結果をキャッシュ" icon="database">
+    繰り返しリクエストを避けるため、結果をローカルに保存します。
+  </Card>
+</CardGroup>
+
+---
+
+## 次のステップ
+
+<CardGroup cols={2}>
+  <Card title="クエリを組み立てる" icon="/icons/xds/icon-search.svg" href="/x-api/posts/search/integrate/build-a-query">
+    クエリ構文を習得
+  </Card>
+  <Card title="演算子リファレンス" icon="list-check" href="/x-api/posts/search/integrate/operators">
+    利用可能なすべての演算子
+  </Card>
+  <Card title="ページネーション" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/posts/search/integrate/paginate">
+    大規模な結果セットを処理
+  </Card>
+  <Card title="API リファレンス" icon="/icons/xds/icon-code.svg" href="/x-api/posts/recent-search">
+    エンドポイントの完全なドキュメント
+  </Card>
+</CardGroup>

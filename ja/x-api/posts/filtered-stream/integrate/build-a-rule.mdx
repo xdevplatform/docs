@@ -1,0 +1,323 @@
+---
+title: ルールを組み立てる
+sidebarTitle: ルールを組み立てる
+description: "キーワード演算子、論理積、否定を使って X API v2 Filtered Stream のルールを構築し、フィルターに一致する投稿をほぼリアルタイムで配信します。"
+keywords: ["ルール構築", "フィルタールール", "ストリームルール", "ルールビルダー", "filtered stream ルール", "ルール作成", "ルールガイド"]
+---
+
+Filtered stream エンドポイントは、ストリームに適用された一連のルールに一致する投稿を配信します。ルールは、さまざまな投稿属性に対して一致を行う演算子で構成されます。
+
+複数のルールを [POST /tweets/search/stream/rules](/x-api/stream/update-stream-rules) エンドポイントで追加できます。ルールを追加して [GET /tweets/search/stream](/x-api/stream/get-stream-rules) で接続すると、あなたのルールに一致する投稿だけが配信されます。ルールの追加や削除のために切断する必要はありません。
+
+---
+
+## ルールの制限
+
+ルールの数の制限は[アクセスレベル](/x-api/getting-started/about-x-api)に依存します。具体的な制限については[filtered stream のはじめに](/x-api/posts/filtered-stream/introduction)を参照してください。
+
+---
+
+## 演算子の種類: standalone と conjunction-required
+
+**Standalone 演算子** は単独でも、他の演算子(conjunction-required の演算子を含む)と組み合わせても使用できます。
+
+たとえば、`#hashtag` は standalone 演算子であるため、次のルールは動作します:
+
+```
+#xapiv2
+```
+
+**Conjunction-required 演算子** は単独でルールとしては使用できず、少なくとも 1 つの standalone 演算子を含む場合にのみ使用できます。これらの演算子を単独で使うと非常に大量の投稿に一致してしまうためです。
+
+たとえば、以下のルールは conjunction-required 演算子のみを含んでいるため、**サポートされていません**:
+
+```
+has:media
+```
+
+```
+has:links OR is:retweet
+```
+
+```
+embedding_threshold:0.45
+```
+
+standalone 演算子(たとえばフレーズ `"X data"`)を追加すると、ルールは正しく動作します:
+
+```
+"X data" has:mentions (has:media OR has:links)
+```
+
+`embedding_threshold:` 演算子(セマンティックな `embedding:` ルールと共に使用)も conjunction-required です。
+
+---
+
+## ブール演算子とグルーピング
+
+以下のツールを使って複数の演算子を組み合わせられます:
+
+| Operator | Description | Example |
+| :--- | :--- | :--- |
+| **AND**(空白) | 両方の条件を満たす投稿に一致 | `snow day #NoSchool` は "snow" AND "day" AND #NoSchool を含む投稿に一致 |
+| **OR** | いずれかの条件を満たす投稿に一致 | `grumpy OR cat OR #meme` は "grumpy" OR "cat" OR #meme を含む投稿に一致 |
+| **NOT**(ダッシュ) | この条件を満たす投稿を除外 | `cat #meme -grumpy` は "cat" と #meme を含み、"grumpy" を含まない投稿に一致 |
+| **グルーピング**(括弧) | 演算子をグループ化 | `(grumpy cat) OR (#meme has:images)` はいずれかのグループに一致 |
+
+<Note>
+**否定に関する注意**
+
+- `sample:` と `embedding:` を除き、すべての演算子は否定可能
+- 演算子 `-is:nullcast` は必ず否定して使用する必要がある
+- 否定演算子は単独では使用できない
+- グループ化された演算子は否定しないでください。`skiing -(snow OR day OR noschool)` の代わりに、`skiing -snow -day -noschool` を使用します
+- `-embedding:"query"` の記述はサポートされていません
+</Note>
+
+---
+
+## 演算の順序
+
+AND と OR を組み合わせる場合:
+
+1. AND ロジックで接続された演算子が最初にまとめられます
+2. 次に、OR ロジックで接続された演算子が適用されます
+
+**例:**
+
+| Query | Evaluated as |
+| :--- | :--- |
+| `apple OR iphone ipad` | `apple OR (iphone ipad)` |
+| `ipad iphone OR android` | `(iphone ipad) OR android` |
+
+不確実性を排除するため、括弧を使用してください:
+
+```
+(apple OR iphone) ipad
+```
+
+```
+iphone (ipad OR android)
+```
+
+---
+
+## 句読点、発音区別符、大文字小文字の区別
+
+**発音区別符:** アクセント付きの Filtered stream ルールは、アクセントを含む投稿にのみ一致します。たとえば `diacrítica` は _diacrítica_ に一致しますが、_diacritica_ には**一致しません**。
+
+**大文字小文字の区別:** すべての演算子は大文字小文字を区別しません。`cat` は _cat_、_CAT_、_Cat_ に一致します。
+
+<Note>
+**Search Posts は挙動が異なります**
+
+[検索クエリを組み立てる](/x-api/posts/search/integrate/build-a-query)場合、アクセント付きのキーワードはアクセントの有無にかかわらず投稿に一致します。たとえば `Diacrítica` は _Diacrítica_ と _Diacritica_ の両方に一致します。
+</Note>
+
+---
+
+## Quote Tweet の一致
+
+Filtered stream を使用する場合、演算子は Quote Tweet の内容**と**引用元のオリジナル投稿の内容の両方に一致します。
+
+<Note>
+[Search Posts](/x-api/posts/search/introduction) は挙動が異なり、Quote Tweet の内容にのみ一致し、オリジナル投稿には一致しません。
+</Note>
+
+---
+
+## 具体性と効率
+
+<Warning>
+単一のキーワードやハッシュタグのような広範な演算子の使用は推奨されません。大量の投稿に一致し、接続をすぐに消費してしまうためです。
+</Warning>
+
+**効果的なルールを構築するためのヒント:**
+
+1. **具体的に始めて、その後広げる** — 関連する結果を返すターゲットを絞ったルールを作成
+2. **複数の演算子を使う** — 演算子を組み合わせて結果を絞り込む
+3. **文字数に注意** — ルール文字列全体が上限にカウントされます
+
+**進化の例:**
+
+```
+# 広すぎる - 1 日 200,000 件以上の投稿
+happy
+
+# 改善 - 言語フィルターと除外を追加
+(happy OR happiness) lang:en -birthday -is:retweet
+
+# さらに改善 - 59 文字でより具体的
+(happy OR happiness) place_country:GB -birthday -is:retweet
+```
+
+---
+
+## ルールを反復的に構築する
+
+### ステップ 1: 基本的なルールから始める
+
+```
+happy OR happiness
+```
+
+### ステップ 2: 結果を基にテストして絞り込む
+
+多くの言語の投稿があることに気付きました。言語フィルターを追加します:
+
+```
+(happy OR happiness) lang:en
+```
+
+誕生日のお祝いが含まれています。それらと Retweet を除外します:
+
+```
+(happy OR happiness) lang:en -birthday -is:retweet
+```
+
+### ステップ 3: カバレッジを広げる
+
+より多くの感情を捉えたいので、関連キーワードを追加します:
+
+```
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet
+```
+
+### ステップ 4: トレンドに合わせて調整する
+
+Holiday の投稿が出てきました。除外します:
+
+```
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet -holidays
+```
+
+---
+
+## ルールの追加と削除
+
+[POST /2/tweets/search/stream/rules](/x-api/stream/update-stream-rules) を使用してルールを追加または削除します。
+
+### ルールの追加
+
+`add` JSON ボディを `value`(ルール)と任意の `tag`(一致した投稿を識別)と共に送信します:
+
+```bash
+curl -X POST "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -d '{
+    "add": [
+      {"value": "cat has:media", "tag": "cats with media"},
+      {"value": "cat has:media -grumpy", "tag": "happy cats with media"},
+      {"value": "meme", "tag": "funny things"},
+      {"value": "meme has:images"}
+    ]
+  }'
+```
+
+### ルールの削除
+
+削除するルール ID を含む `delete` JSON ボディを送信します:
+
+```bash
+curl -X POST "https://api.x.com/2/tweets/search/stream/rules" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -d '{
+    "delete": {
+      "ids": [
+        "1165037377523306498",
+        "1165037377523306499"
+      ]
+    }
+  }'
+```
+
+---
+
+## ルールの例
+
+### 自然災害を追跡する
+
+ハリケーン Harvey に関する気象機関からの投稿に一致:
+
+```json
+{
+  "value": "-is:retweet has:geo (from:NWSNHC OR from:NHC_Atlantic OR from:NWSHouston OR from:NWSSanAntonio OR from:USGS_TexasRain OR from:USGS_TexasFlood OR from:JeffLindner1)",
+  "tag": "Hurricane Harvey - weather agencies with geo"
+}
+```
+
+### #nowplaying のセンチメント分析
+
+**ポジティブなセンチメント:**
+
+```json
+{
+  "value": "#nowplaying (happy OR exciting OR excited OR favorite OR fav OR amazing OR lovely OR incredible) (place_country:US OR place_country:MX OR place_country:CA) -horrible -worst -sucks -bad -disappointing",
+  "tag": "#nowplaying positive"
+}
+```
+
+**ネガティブなセンチメント:**
+
+```json
+{
+  "value": "#nowplaying (horrible OR worst OR sucks OR bad OR disappointing) (place_country:US OR place_country:MX OR place_country:CA) -happy -exciting -excited -favorite -fav -amazing -lovely -incredible",
+  "tag": "#nowplaying negative"
+}
+```
+
+### Post annotations を使用する
+
+`context:` 演算子を使用して、画像を含む日本語のペット関連(猫以外)の投稿を検出します:
+
+まず、[Post lookup](/x-api/posts/lookup/introduction) を `tweet.fields=context_annotations` で使用し、domain.entity ID を特定します:
+
+- Cats: `domain` 66, `entity` 852262932607926273
+- Pets: `domain` 65, `entity` 852262932607926273
+
+```json
+{
+  "value": "context:65.852262932607926273 -context:66.852262932607926273 -is:retweet has:images lang:ja",
+  "tag": "Japanese pets with images - no cats"
+}
+```
+
+### エンベディングを使用したセマンティックマッチング(Enterprise)
+
+`embedding:` 演算子を使用して、キーワードではなく概念的意味で投稿を一致させます。これには Enterprise + Embedding ティアが必要です。
+
+```json
+{
+  "value": "embedding:\"climate change policy\" embedding_threshold:0.4",
+  "tag": "climate-semantic"
+}
+```
+
+構造的な演算子と組み合わせて精度を高めます:
+
+```json
+{
+  "value": "embedding:\"quarterly earnings surprises\" lang:en has:links -is:retweet",
+  "tag": "earnings-en"
+}
+```
+
+詳細とベストプラクティスは[演算子リファレンス](/x-api/posts/filtered-stream/integrate/operators)を参照してください。
+
+---
+
+## 次のステップ
+
+<CardGroup cols={2}>
+  <Card title="演算子リファレンス" icon="/icons/xds/icon-bulleted-list.svg" href="/x-api/posts/filtered-stream/integrate/operators">
+    利用可能な演算子の完全なリスト
+  </Card>
+  <Card title="Filtered stream クイックスタート" icon="/icons/xds/icon-rocket.svg" href="/x-api/posts/filtered-stream/quickstart">
+    ストリームに接続
+  </Card>
+  <Card title="サンプルコード" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code/tree/master/Filtered-Stream">
+    複数言語のコード例
+  </Card>
+</CardGroup>

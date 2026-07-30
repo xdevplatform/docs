@@ -1,0 +1,40 @@
+---
+title: Visão geral da migração do filtered stream
+description: Migre consumidores do filtered stream do Standard v1.1 ou do PowerTrack para a X API v2, mapeando endpoints, operadores, regras e requisitos de autenticação.
+sidebarTitle: Visão geral
+keywords: ["migração de filtered stream", "migração de stream", "v1.1 para v2 filtered stream", "guia de migração de filtered stream", "migrar filtered stream"]
+---
+
+## Comparando os endpoints de filtered stream da X API
+
+O grupo de endpoints de filtered stream da v2 está substituindo o [standard v1.1 statuses/filter](https://developer.x.com/en/docs/x-api/v1/tweets/filter-realtime/api-reference/post-statuses-filter) e a [PowerTrack API](/x-api/enterprise-gnip-2.0/powertrack-api). Se você tem código, apps ou ferramentas que usam uma versão mais antiga do endpoint de filtered stream, e está considerando migrar para o endpoint mais novo da X API v2, esta comparação pode ajudar você a começar.
+
+Veja nossos guias de migração mais aprofundados para:
+
+[Migrando do Standard v1.1 em comparação com a X API v2](x-api/posts/filtered-stream#standard-v1-1-compared-to-x-api-v2)
+
+[Migrando da PowerTrack API para a X API v2](/x-api/enterprise-gnip-2.0/powertrack-api#powertrack-operators)
+
+A tabela a seguir compara os endpoints de streaming filtrado que a X oferece:
+
+
+| **Descrição** | **Standard v1.1** | **PowerTrack API** | **X API v2** |
+| :--- | :--- | :--- | :--- |
+| Acesso | X App | Requer um contrato e conta enterprise | Requer uma conta de desenvolvedor ([inscreva-se](https://developer.x.com/en/portal/petition/essential/basic-info)) e um [X App](/resources/fundamentals/developer-apps) dentro de um [Project](/resources/fundamentals/developer-apps) |
+| :--- | :--- | :--- | :--- |
+| Domínio do host | **https://stream.x.com** | **https://gnip-stream.x.com** | **https://api.x.com** |
+| Caminho do endpoint | **1.1/statuses/filter.json** | **/stream/powertrack/accounts/{gnip_account_name}/publishers/twitter/{stream_label}.json**<br/><br/>**/rules/powertrack/accounts/{gnip_account_name}/publishers/twitter/{stream_label}.json **<br/><br/>**/rules/powertrack/accounts/{gnip_account_name}/publishers/twitter/{stream_label}/validation.json** | **/2/tweets/search/stream**<br/><br/>**/2/tweets/search/stream/rules** |
+| [Autenticação](/resources/fundamentals/authentication) | OAuth 1.0a User Context | HTTP Basic Authentication | OAuth 2.0 App-Only |
+| Métodos HTTP suportados | POST | GET  <br/>POST | GET  <br/>POST |
+| Parâmetros obrigatórios | Regra definida na conexão como parâmetro, pelo menos um de:<br/><br/>* **follow**<br/>* **track**<br/>* **locations** | Sem parâmetros obrigatórios para conexão de streaming, parâmetro backfill opcional.<br/><br/>Regras gerenciadas separadamente | Sem parâmetros obrigatórios para conexão de streaming, parâmetros opcionais para definir o formato de resposta e adicionar o [recurso de recuperação backfill](/x-api/fundamentals/recovery-and-redundancy) para acesso Academic Research.<br/><br/>Regras gerenciadas separadamente |
+| Tipo de entrega | Streaming | Streaming<br/><br/>REST (para gerenciamento de regras) | Streaming<br/><br/>REST (para gerenciamento de regras) |
+| Rate limits padrão de requisição | 5 tentativas de conexão por 5 min | 60 requisições por min agregadas para requisições POST e GET<br/><br/>/rules: 60 requisições por minuto, agregadas em todas as requisições ao endpoint /rules da API do stream específico (POST e GET). | Depende do endpoint. Veja [rate limits](/x-api/fundamentals/rate-limits) para os limites atuais. |
+| Máximo de conexões permitidas | 2 concorrentes por usuário autorizado | Suporta múltiplas/redundantes conexões, determinado por contrato | Pay-per-use: 1 |
+| [Recursos de recuperação e redundância](/x-api/fundamentals/recovery-and-redundancy) | Nenhum | Backfill, conexões redundantes e a Replay API |     |
+| Sinal keep-alive/heartbeats | linhas em branco (\\r\\n ou similar) pelo menos a cada 20 segundos | linhas em branco (\\r\\n ou similar) a cada 10 segundos | linhas em branco (\\r\\n ou similar) pelo menos a cada 20 segundos |
+| Latência | 10 segundos | 2 segundos<br/><br/>Pelo menos 10 segundos para enriquecimento de URL unwinding | 10 segundos |
+| Máximo de regras permitidas | 1 regra (dentro da requisição de conexão do endpoint) | Determinado por contrato, até 250.000 | Pay-per-use: 1.000 regras |
+| Limitações do filtro de regra | Uma query por conexão, até:<br/><br/>\- 400 palavras-chave track<br/><br/>\- 5000 IDs de usuário follow<br/><br/>\- 25 caixas de localização | Até 2.048 caracteres por regra | Pay-per-use: 1.024 caracteres por regra |
+| [Formato JSON do Post](/x-api/fundamentals/data-dictionary) | Formato Standard v1.1 | [Native Enriched](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary#native-enriched-tweet-object) ou Activity Streams (selecionado no [console](/x-api/enterprise-gnip-2.0/fundamentals/overview)) | [Formato X API v2](/x-api/fundamentals/data-dictionary) (determinado pelos parâmetros de requisição **fields** e **expansions**, não compatível com versões anteriores do v1.1)<br/><br/>Para saber mais sobre como migrar do formato Standard v1.1 para o formato X API v2, visite nosso [guia de migração de formatos de dados](/x-api/migrate/data-format-migration). Lançaremos guias adicionais de migração de formato de dados para Native Enriched e Activity Streams em breve. |
+| Fornece histórico de edições e metadados de Post | ✔   | ✔   | ✔   |
+| Recursos únicos | Filtragem feita por parâmetros de query na requisição de conexão<br/><br/>Sem UI de configuração | Filtragem feita por regras criadas por meio de um endpoint independente<br/><br/>Recursos de [enriquecimento](/x-api/enterprise-gnip-2.0/enterprise-gnip#enrichments) disponíveis no contrato<br/><br/>Configuração na UI console.gnip.com | Filtragem feita por [regras](/x-api/posts/filtered-stream/integrate/build-a-rule) criadas por meio de um endpoint independente<br/><br/>Recursos de [métricas](/x-api/fundamentals/metrics) e enriquecimento de URL incluídos<br/><br/>[Fields](/x-api/fundamentals/fields) de objeto e [expansions](/x-api/fundamentals/expansions) especificados com parâmetros de requisição<br/><br/>[Annotations](/x-api/fundamentals/post-annotations) de Post<br/><br/>Operador e campo [Conversation ID](/x-api/fundamentals/conversation-id)<br/><br/>Configuração pelo [Developer Console](/resources/fundamentals/developer-portal) |

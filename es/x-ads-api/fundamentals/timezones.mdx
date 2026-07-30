@@ -1,0 +1,52 @@
+---
+title: Zonas horarias
+description: "Cómo la X Ads API maneja las zonas horarias para cuentas y facturación, incluyendo los formatos ISO 8601 de datetime, desplazamientos UTC e implicaciones de timezone_switch_at en analytics."
+keywords: ["zonas horarias", "husos horarios", "manejo de zonas horarias", "formato de zona horaria", "conversión de zonas horarias", "configuración de zona horaria"]
+---
+
+## Zonas horarias, cuentas y facturación
+
+Los valores de datetime siempre se devuelven en hora UTC (como indica la Z al final del valor de datetime). Los datetimes pueden especificarse en cualquier zona horaria en un comando POST o PUT usando el formato estándar ISO 8601 para zonas horarias. El tiempo se representa usando un subconjunto de [ISO-8601](http://en.wikipedia.org/wiki/ISO_8601). Más específicamente, la cadena strptime para nuestro formato de fecha es `%Y-%m-%dT%l:%M:%S%z`. La zona horaria de la cuenta del anunciante determina el momento real en que se congelan las cifras oficiales de facturación.
+
+Al consultar la API a nivel de cuenta ([GET accounts](/x-ads-api/campaign-management/reference#accounts)), obtendrás información de zona horaria similar a esta:
+
+```json title="Respuesta de ejemplo" lines wrap icon="/icons/xds/icon-brackets.svg"
+    {
+      "request": {
+        "params": {
+          "account_id": "18ce54d4x5t"
+        }
+      },
+      "data": {
+        "name": "API McTestface",
+        "business_name": null,
+        "timezone": "America/Los_Angeles",
+        "timezone_switch_at": "2016-07-21T07:00:00Z",
+        "id": "18ce54d4x5t",
+        "created_at": "2016-07-21T22:42:09Z",
+        "salt": "54cb7b5a34183f77d82dd6d0f4329691",
+        "updated_at": "2017-09-09T06:42:14Z",
+        "business_id": null,
+        "approval_status": "ACCEPTED",
+        "deleted": false
+      }
+    }
+```
+
+Esto incluye dos valores de zona horaria: `timezone` (consulta [timezones en wikipedia](https://en.wikipedia.org/wiki/Tz_database#Names_of_time_zones) para una visión general) y `timezone_switch_at`. Ten en cuenta que `timezone_switch_at` se da en la zona horaria UTC (+00:00), pero siempre representará medianoche en la zona horaria dada.
+
+La zona horaria del anunciante no se puede editar a través de la API. Este atributo se establece a nivel contractual/de facturación por el gestor de la cuenta del anunciante en X.
+
+Ten en cuenta el valor `timezone_switch_at` al crear reportes y consultar nuestros endpoints de analytics, ya que habrá un salto en el día en el que la cuenta cambie de la zona horaria America/Los_Angeles al nuevo valor local.
+
+### Especificar valores de datetime con zona horaria
+
+Los valores de datetime siempre se devuelven en hora UTC (como indica la `Z` al final del valor de datetime). Los datetimes pueden especificarse en cualquier zona horaria en un comando POST o PUT usando el formato estándar [ISO 8601](http://en.wikipedia.org/wiki/ISO_8601) para zonas horarias. Por ejemplo, `2017-07-10T08:00:00-0800` es un valor de entrada aceptable y se traducirá automáticamente al valor UTC `2017-07-10T16:00:00Z`.
+
+Al usar los endpoints de analytics con `granularity` de `DAY` o `TOTAL`, el valor `start_time` debe especificarse a medianoche del día deseado en la zona horaria local del titular de la cuenta. El desplazamiento de zona horaria a usar será el del día actual, no el del día en cuestión. Por ejemplo, para una cuenta de anuncios en America/Los_Angeles durante el horario de verano del Pacífico, el desplazamiento UTC es -0700. Así, en una solicitud de analytics, el tiempo debe especificarse como: `start_time=2017-05-21T07:00:00Z` o `start_time=2017-05-21T00:00:00-0700`. Si la cuenta de anuncios estuviera en Asia/Tokyo, donde el desplazamiento es siempre +09:00, los valores se especificarían como: `start_time=2017-05-20T15:00:00Z` o `start_time=2017-05-21T00:00:00+0900`.
+
+### Formatos de desplazamiento UTC aceptados
+
+Consulta los [Designadores de zona horaria de ISO 8601](http://en.wikipedia.org/wiki/ISO_8601#Time_zone_designators).
+
+Soportados: `Z`, `-HHMM`, `+HHMM`, `-HH:MM`, `+HH:MM`, `-HH`, `+HH`

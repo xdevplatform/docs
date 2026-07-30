@@ -1,0 +1,140 @@
+---
+title: クイックスタート
+sidebarTitle: クイックスタート
+keywords: ["filtered stream webhooks quickstart", "webhook stream quickstart", "stream webhooks tutorial", "webhook stream guide"]
+
+description: "v2 filtered stream webhooks API は [v2 filtered stream] エンドポイントに似ています。X API v2 standard tier の stream に関するリファレンスです。"
+---
+
+## Filtered stream webhooks API のはじめに
+
+v2 filtered stream webhooks API は、フィルタリング対象のルールを設定するという点で [v2 filtered stream エンドポイント](/x-api/posts/filtered-stream/introduction)に似ています。違いは、ルールに一致する Post の配信メカニズムにあります。
+* v2 filtered stream エンドポイントの場合、永続的な接続を確立し、ルールに一致する Post をリッスンする必要があります。
+* この filtered stream webhook エンドポイントの場合、Webhook を登録すると、X がルールに一致する Post を Webhook に配信します。
+
+このガイドでは、filtered stream webhooks エンドポイントを使用して Post をフィルタリングし受信する方法を説明します。3 つのステップがあります
+
+1. filtered stream ルールの設定
+2. Webhook の作成
+3. Filtered Stream インスタンスと Webhook のリンク
+
+Filtered Stream インスタンスを Webhook にリンクすると、X はルールに一致する Post を Webhook に送信します。
+
+### Filtered stream ルールの設定
+
+Filtered stream ルールは 1 つ以上のオペレーターで構成され、ブール論理と括弧を組み合わせて、Webhook に配信される Post を定義します。Filtered stream webhooks API はルールの作成と管理に [v2 filtered stream エンドポイント](/x-api/posts/filtered-stream/introduction)と同じエンドポイントセットを使用します。フィルターの作成方法を紹介する[この詳細ガイド](/x-api/posts/filtered-stream/integrate/build-a-rule)をご確認ください。
+
+### Webhook の作成
+
+X API に公開アクセス可能な HTTPS URL を登録して、イベントを受信するための Webhook を作成します。Webhook は CRC 検証のための GET リクエストとイベントペイロードのための POST リクエストを処理する必要があります。Webhook の作成と管理の詳細な手順は、[Webhooks のはじめにドキュメント](/x-api/webhooks/introduction)に従ってください。
+
+**注意:** すでに [Account Activity API (AAA)](/x-api/account-activity/introduction) で Webhook を利用している場合、そのセットアップはここでもまったく同じです。実際、帯域幅が十分でイベントを分離できるのであれば、AAA 用の Webhook エンドポイントをこの API にも使用できます。
+
+### Filtered Stream インスタンスと Webhook のリンク
+
+ルールを設定し、Webhook を作成したら、Webhook を Filtered Stream インスタンスにリンクします。これにより、一致した Post イベントが Webhook URL にルーティングされます。
+
+エンドポイントを使用します: `POST /2/tweets/search/webhooks/:webhook_id `
+
+expansions、fields、media オプションなど、ストリーミングエンドポイント `/2/tweets/search/stream` で使用されるものと同じクエリパラメーターを含めることができます。これにより、イベントペイロードに含まれるデータをカスタマイズできます。
+
+**例:**
+
+```bash
+curl --request POST \ 
+  --url 
+'https://api.x.com/2/tweets/search/webhooks/123456789012345678?ex
+pansions=author_id&user.fields=username,name,id' \ 
+  --header 'Authorization: Bearer $BEARER_TOKEN' 
+```
+
+成功レスポンスの例:
+
+```json
+{ 
+  "data": { 
+    "provisioned": true 
+  } 
+}
+```
+
+**ヒント:** 冗長性のため、または異なるフィールドセットを受信するために、複数の Webhook を同じストリームにリンクできます。各リンクごとに固有のパラメーターを指定できます。
+
+Filtered Stream インスタンスを Webhook にリンクすると、以下のようにルールに一致する Post を受信し始めます:
+
+```json title="レスポンス例" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+    "data": {
+        "id": "1346889436626259968",
+        "text": "Learn how to use the user Post timeline and user mention timeline endpoints in the X API v2 to explore Post… https://t.co/56a0vZUx7i",
+        "created_at": "2021-01-06T18:40:40.000Z",
+        "author_id": "2244994945"
+    },
+    "includes": {
+        "users": [
+            {
+                "id": "2244994945",
+                "name": "Developers",
+                "username": "Xdevelopers",
+                "created_at": "2013-12-14T04:35:55Z",
+                "protected": false
+            }
+        ]
+    },
+    "matching_rules": [
+        {
+            "id": "120897978112909812",
+            "tag": "api-posts"
+        }
+    ]
+}
+```
+
+### Filtered Stream にリンクされている Webhook を取得
+
+現在 Filtered Stream にリンクされているすべての Webhook の一覧を取得します:
+
+```bash
+GET /2/tweets/search/stream/webhooks 
+```
+
+レスポンス例:
+
+```json title="レスポンス例" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+    "data": {
+        "links": [
+            {
+                "application_id": "29893711",
+                "business_user_id": "1877374016438091776",
+                "fields": [
+                    "user.fields=username",
+                    "name",
+                    "id",
+                    "expansions=author_id"
+                ],
+                "instance_id": "1877375130462289920",
+                "webhook_id": "1952390923729424384"
+            }
+        ]
+    }
+}
+```
+
+### Filtered Stream から Webhook のリンクを解除
+
+特定の Webhook でイベントの受信を停止するには、次を使ってリンクを解除します:
+
+```bash
+DELETE /2/tweets/search/webhooks/:webhook_id
+```
+
+レスポンスは以下のようになります:
+
+```json
+{
+    "data": {
+        "deleted": true
+    }
+}
+```

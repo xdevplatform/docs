@@ -1,0 +1,223 @@
+---
+title: Códigos de resposta e erros
+description: "Referência de códigos de status HTTP, formatos de resposta de erro e erros 400, 401, 403, 404, 429 e 500 comuns retornados pela API do X para depuração."
+sidebarTitle: Códigos de resposta
+keywords: ["códigos de resposta", "códigos de erro", "códigos de status HTTP", "erros da API", "tratamento de erros", "depuração"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+A API do X usa códigos de status HTTP padrão. Solicitações bem-sucedidas retornam códigos 2xx; erros retornam códigos 4xx ou 5xx com detalhes no corpo da resposta.
+
+---
+
+## Códigos de status HTTP
+
+### Códigos de sucesso
+
+| Código | Significado | Descrição |
+|:-----|:--------|:------------|
+| **200** | OK | Solicitação bem-sucedida |
+| **201** | Created | Recurso criado (solicitações POST) |
+| **204** | No Content | Sucesso sem corpo de resposta (solicitações DELETE) |
+
+### Códigos de erro do cliente
+
+| Código | Significado | Causas comuns |
+|:-----|:--------|:--------------|
+| **400** | Bad Request | JSON inválido, consulta malformada, parâmetros obrigatórios ausentes |
+| **401** | Unauthorized | Credenciais de autenticação inválidas ou ausentes |
+| **403** | Forbidden | Autenticação válida, mas sem permissão para este recurso ou ação |
+| **404** | Not Found | Recurso não existe ou foi excluído |
+| **409** | Conflict | Stream não tem regras (apenas filtered stream) |
+| **429** | Too Many Requests | Rate limit ou limite de uso excedido |
+
+### Códigos de erro do servidor
+
+| Código | Significado | O que fazer |
+|:-----|:--------|:-----------|
+| **500** | Internal Server Error | Aguarde e tente novamente; verifique a [página de status](https://developer.x.com/status) |
+| **502** | Bad Gateway | Aguarde e tente novamente |
+| **503** | Service Unavailable | O X está sobrecarregado; aguarde e tente novamente |
+| **504** | Gateway Timeout | Aguarde e tente novamente |
+
+---
+
+## Formato da resposta de erro
+
+Respostas de erro incluem detalhes estruturados:
+
+```json
+{
+  "title": "Invalid Request",
+  "detail": "The 'query' parameter is required.",
+  "type": "https://api.x.com/2/problems/invalid-request"
+}
+```
+
+| Field | Descrição |
+|:------|:------------|
+| `type` | URI que identifica o tipo de erro |
+| `title` | Descrição curta do erro |
+| `detail` | Explicação específica para este erro |
+
+Campos adicionais podem estar presentes dependendo do tipo de erro.
+
+---
+
+## Tipos de erro
+
+| Tipo | Descrição |
+|:-----|:------------|
+| `about:blank` | Erro genérico (veja o código de status HTTP) |
+| `.../invalid-request` | Solicitação malformada ou parâmetros inválidos |
+| `.../resource-not-found` | Post, user ou outro recurso não existe |
+| `.../not-authorized-for-resource` | Sem acesso a conteúdo privado/protegido |
+| `.../client-forbidden` | App não inscrito ou sem acesso necessário |
+| `.../usage-capped` | Limite de uso excedido |
+| `.../rate-limit-exceeded` | Rate limit excedido |
+| `.../streaming-connection` | Problema na conexão do stream |
+| `.../rule-cap` | Muitas regras de filtered stream |
+| `.../invalid-rules` | Erro de sintaxe de regra |
+| `.../duplicate-rules` | A regra já existe |
+
+---
+
+## Erros parciais
+
+Algumas solicitações podem ter sucesso parcial. Uma resposta 200 pode incluir tanto `data` quanto `errors`:
+
+```json title="Exemplo de resposta" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {"id": "123", "text": "Hello"}
+  ],
+  "errors": [
+    {
+      "resource_id": "456",
+      "resource_type": "tweet",
+      "title": "Not Found Error",
+      "detail": "Could not find tweet with id: [456].",
+      "type": "https://api.x.com/2/problems/resource-not-found"
+    }
+  ]
+}
+```
+
+Isso acontece ao solicitar vários recursos e alguns estarem indisponíveis.
+
+---
+
+## Solução de problemas comuns
+
+<Accordion title="401 Unauthorized">
+**Verifique sua autenticação:**
+- Verifique se está usando o método de autenticação correto para o endpoint
+- Certifique-se de que as credenciais não foram regeneradas
+- Verifique o formato do cabeçalho `Authorization`
+- Para OAuth 1.0a, verifique o cálculo da assinatura
+
+[Guia de autenticação →](/resources/fundamentals/authentication/overview)
+</Accordion>
+
+<Accordion title="403 Forbidden">
+**Verifique seu acesso:**
+- Verifique se seu app tem acesso a este endpoint
+- Alguns endpoints exigem inscrição ou aprovação específica
+- Endpoints com user-context precisam de escopos OAuth apropriados
+- O recurso pode ser privado ou protegido
+</Accordion>
+
+<Accordion title="429 Too Many Requests">
+**Rate limit atingido:**
+- Verifique o cabeçalho `x-rate-limit-reset` para saber quando tentar novamente
+- Implemente backoff exponencial
+- Considere fazer cache das respostas
+- Espalhe as solicitações ao longo da janela de tempo
+
+[Guia de rate limits →](/x-api/fundamentals/rate-limits)
+</Accordion>
+
+<Accordion title="400 Bad Request">
+**Corrija sua solicitação:**
+- Valide a sintaxe do JSON
+- Verifique parâmetros obrigatórios ausentes
+- Verifique os tipos de parâmetros (strings vs. números)
+- Faça escape de caracteres especiais em consultas
+</Accordion>
+
+<Accordion title="Posts esperados ausentes">
+**Verifique estes fatores:**
+- Posts de contas protegidas só são visíveis com autorização
+- Posts excluídos retornam 404
+- Alguns posts são retidos em certas regiões
+- Verifique se a sintaxe da consulta de search está correta
+</Accordion>
+
+<Accordion title="Desconexões de stream">
+**Trate a reconexão:**
+- Implemente reconexão automática com backoff
+- Use recursos de recovery para dados perdidos
+- Verifique desconexões por buffer cheio (cliente não consumindo rápido o suficiente)
+- Verifique se pelo menos uma regra de stream existe
+
+[Guia de streaming →](/x-api/fundamentals/handling-disconnections)
+</Accordion>
+
+---
+
+## Cabeçalhos de rate limit
+
+Toda resposta inclui informações de rate limit:
+
+```
+x-rate-limit-limit: 900
+x-rate-limit-remaining: 847
+x-rate-limit-reset: 1705420800
+```
+
+| Cabeçalho | Descrição |
+|:-------|:------------|
+| `x-rate-limit-limit` | Máximo de solicitações na janela atual |
+| `x-rate-limit-remaining` | Solicitações restantes |
+| `x-rate-limit-reset` | Timestamp Unix quando a janela é redefinida |
+
+---
+
+## Boas práticas
+
+<CardGroup cols={2}>
+  <Card title="Verifique os códigos de status" icon="square-check">
+    Sempre verifique o status HTTP antes de analisar o corpo da resposta.
+  </Card>
+  <Card title="Trate erros parciais" icon="/icons/xds/icon-warning.svg">
+    Verifique o array `errors` mesmo em respostas 200.
+  </Card>
+  <Card title="Implemente lógica de retry" icon="arrows-rotate">
+    Use backoff exponencial para erros 429 e 5xx.
+  </Card>
+  <Card title="Registre detalhes da solicitação" icon="file-lines">
+    Inclua o request ID e o timestamp para depuração.
+  </Card>
+</CardGroup>
+
+---
+
+## Obtendo ajuda
+
+Ao postar perguntas sobre erros, inclua:
+
+- A URL do endpoint da API
+- Cabeçalhos da solicitação (higienize credenciais)
+- Resposta de erro completa
+- O que você esperava que acontecesse
+- Passos que você tentou
+
+<CardGroup cols={2}>
+  <Card title="Fórum de Desenvolvedores" icon="/icons/xds/icon-chat-unread.svg" href="https://devcommunity.x.com">
+    Faça perguntas e pesquise soluções.
+  </Card>
+  <Card title="Status da API" icon="signal" href="https://developer.x.com/status">
+    Verifique problemas conhecidos.
+  </Card>
+</CardGroup>

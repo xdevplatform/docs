@@ -1,0 +1,229 @@
+---
+title: Post のアノテーション
+description: "X API v2 の entity アノテーションと context アノテーションを使用して、Post テキスト内で人物、場所、製品、組織、トピックドメインをセマンティックに識別します。"
+sidebarTitle: アノテーション
+keywords: ["annotations", "post annotations", "entity annotations", "context annotations", "NER", "named entity recognition", "topics"]
+---
+
+アノテーションは post の内容に関するセマンティックなメタデータを提供します。X は post を解析して entity（人物、場所、製品）と context（トピック、ドメイン）を識別し、コンテンツの理解とフィルタリングを支援します。
+
+---
+
+## アノテーションのタイプ
+
+### Entity アノテーション
+
+固有表現認識（NER）は post テキスト内の特定の言及を識別します。
+
+| Type | Examples |
+|:-----|:---------|
+| **Person** | Barack Obama、Elon Musk |
+| **Place** | San Francisco、日本 |
+| **Product** | iPhone、ChatGPT |
+| **Organization** | NASA、Google |
+| **Other** | Super Bowl、Diabetes |
+
+Entity アノテーションには信頼度スコアとテキスト内の位置が含まれます。
+
+### Context アノテーション
+
+post をトピックとドメインで分類するセマンティック分析です。
+
+- **Domain**: 大きなカテゴリ（Sports、Entertainment、Technology）
+- **Entity**: ドメイン内の具体的なトピック（NBA、Marvel Movies、AI）
+
+Context アノテーションを使うと、キーワードに頼らずに post をフィルタリング・分類できます。
+
+---
+
+## アノテーションのリクエスト
+
+`context_annotations` と `entities` を `tweet.fields` に追加します。
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?tweet.fields=context_annotations,entities" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## レスポンスの構造
+
+```json title="Example response" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Just saw the new Marvel movie - it was amazing!",
+    "entities": {
+      "annotations": [
+        {
+          "start": 17,
+          "end": 22,
+          "probability": 0.9234,
+          "type": "Organization",
+          "normalized_text": "Marvel"
+        }
+      ]
+    },
+    "context_annotations": [
+      {
+        "domain": {
+          "id": "86",
+          "name": "Movie",
+          "description": "A film"
+        },
+        "entity": {
+          "id": "1234567890",
+          "name": "Marvel Cinematic Universe"
+        }
+      },
+      {
+        "domain": {
+          "id": "65",
+          "name": "Interests and Hobbies Vertical"
+        },
+        "entity": {
+          "id": "781974596752842752",
+          "name": "Entertainment"
+        }
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Entity アノテーションのフィールド
+
+| Field | Description |
+|:------|:------------|
+| `start` | テキスト内の開始位置 |
+| `end` | テキスト内の終了位置 |
+| `probability` | 信頼度スコア（0-1） |
+| `type` | Entity のタイプ（Person、Place など） |
+| `normalized_text` | 標準化された entity 名 |
+
+---
+
+## Context ドメイン
+
+X は 80 以上のドメインを使用して post を分類します。よく使われるドメイン:
+
+<Tabs>
+  <Tab title="Entertainment">
+| ID | Domain |
+|:---|:-------|
+| 3 | TV Shows |
+| 4 | TV Episodes |
+| 54 | Musician |
+| 56 | Actor |
+| 86 | Movie |
+| 91 | Podcast |
+  </Tab>
+  <Tab title="Sports">
+| ID | Domain |
+|:---|:-------|
+| 6 | Sports Events |
+| 11 | Sport |
+| 12 | Sports Team |
+| 26 | Sports League |
+| 60 | Athlete |
+| 93 | Coach |
+  </Tab>
+  <Tab title="Business & Tech">
+| ID | Domain |
+|:---|:-------|
+| 45 | Brand Vertical |
+| 46 | Brand Category |
+| 47 | Brand |
+| 48 | Product |
+| 165 | Technology |
+| 166 | Stocks |
+  </Tab>
+  <Tab title="Other">
+| ID | Domain |
+|:---|:-------|
+| 10 | Person |
+| 13 | Place |
+| 29 | Events |
+| 35 | Politicians |
+| 119 | Holiday |
+| 131 | Unified Twitter Taxonomy |
+  </Tab>
+</Tabs>
+
+<Note>
+ドメイン 131（Unified Twitter Taxonomy）は、プラットフォーム上でユーザーに表示される X の Topics 機能を支えています。
+</Note>
+
+---
+
+## フィルタでのアノテーション利用
+
+### Search と filtered stream
+
+Context アノテーションの entity ID で post をフィルタします。
+
+```bash
+# 特定の entity に関する post
+context:86.1234567890
+
+# 特定のドメインの post
+context:86.*
+```
+
+### 実用例
+
+```bash
+# NBA に関する post
+query=context:26.852137520
+
+# Apple 製品に関する post
+query=context:47.10026792024
+
+# 映画に関する post
+query=context:86.*
+```
+
+---
+
+## 言語サポート
+
+アノテーションは複数の言語で利用できます。
+
+| Language | Coverage |
+|:---------|:---------|
+| English | 最も高い |
+| Japanese | 高い |
+| Spanish | 高い |
+| Portuguese | 中程度 |
+| French | 中程度 |
+| Hindi | 中程度 |
+
+カバレッジはドメインやマーケットによって異なります。
+
+---
+
+## 重要な注意事項
+
+<Warning>
+**すべての post にアノテーションが付くわけではありません。** アノテーションのカバレッジは以下に依存します。
+- 言語サポート
+- X のタクソノミにおけるトピックのカバレッジ
+- post テキストのセマンティックな豊かさ
+</Warning>
+
+- アノテーションはさかのぼって付与されません — entity が追跡されているときのみ適用されます
+- 同じ entity が複数のドメインに現れることがあります（例: セレブは Person かつ Actor）
+- Entity ID はドメイン間で安定です
+
+---
+
+## リソース
+
+<CardGroup cols={2}>
+  <Card title="Context Entity List" icon="github" href="https://github.com/xdevplatform/twitter-context-annotations">
+    利用可能な context アノテーション entity の CSV。
+  </Card>
+</CardGroup>

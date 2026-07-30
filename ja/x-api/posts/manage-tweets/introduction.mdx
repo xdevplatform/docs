@@ -1,0 +1,177 @@
+---
+title: X API v2 での Posts の管理
+sidebarTitle: はじめに
+description: "X API v2 スタンダードティアの manage Posts エンドポイントを使用して、認証済みユーザーの代理で投稿を作成・削除します。リクエストとレスポンスの詳細も含みます。"
+keywords: ["manage tweets", "create tweet", "post tweet", "delete tweet", "manage posts", "tweet API"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+Manage Posts エンドポイントを使用して、認証済みユーザーの代理で投稿を作成・削除できます。コンテンツを投稿したり、スレッドを作成したり、ユーザー投稿を管理したりするアプリケーションを構築できます。
+
+## 概要
+
+<CardGroup cols={2}>
+  <Card title="投稿を作成" icon="pen">
+    新しい投稿を公開
+  </Card>
+  <Card title="投稿を削除" icon="trash">
+    既存の投稿を削除
+  </Card>
+  <Card title="返信" icon="reply">
+    他の投稿に返信
+  </Card>
+  <Card title="引用" icon="quote-right">
+    他の投稿を引用
+  </Card>
+</CardGroup>
+
+---
+
+## エンドポイント
+
+| Method | Endpoint | Description |
+|:-------|:---------|:------------|
+| POST | [`/2/tweets`](/x-api/posts/create-post) | 新しい投稿を作成 |
+| DELETE | [`/2/tweets/:id`](/x-api/posts/delete-post) | 投稿を削除 |
+
+---
+
+## 投稿の作成
+
+### 基本的な投稿
+
+```bash
+curl -X POST "https://api.x.com/2/tweets" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Hello from the API!"}'
+```
+
+<Note>
+**セルフサーブのお客様:** API 経由で作成される投稿は、1 投稿あたり最大 1 つの cashtag に制限されます。
+</Note>
+
+### 投稿への返信
+
+```bash
+curl -X POST "https://api.x.com/2/tweets" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "This is a reply!",
+    "reply": {
+      "in_reply_to_tweet_id": "1234567890"
+    }
+  }'
+```
+
+<Note>
+**セルフサーブのお客様:** 返信は、元投稿の作成者が返信アカウントを @ メンションで呼び出したか、返信アカウントの投稿を引用した場合にのみ許可されます。
+</Note>
+
+### 投稿の引用
+
+```bash
+curl -X POST "https://api.x.com/2/tweets" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Check this out!",
+    "quote_tweet_id": "1234567890"
+  }'
+```
+
+### メディア付き投稿
+
+```bash
+curl -X POST "https://api.x.com/2/tweets" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Photo of the day",
+    "media": {
+      "media_ids": ["1234567890123456789"]
+    }
+  }'
+```
+
+<Note>
+まず[メディアアップロードエンドポイント](/x-api/media/quickstart/media-upload-chunked)でメディアをアップロードし、その後投稿で `media_id` を参照します。
+</Note>
+
+### Poll 付き投稿
+
+```bash
+curl -X POST "https://api.x.com/2/tweets" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "What is your favorite color?",
+    "poll": {
+      "options": ["Red", "Blue", "Green", "Yellow"],
+      "duration_minutes": 1440
+    }
+  }'
+```
+
+### 有償パートナーシップ付き投稿
+
+投稿作成時に `paid_partnership` フィールドを使用して、その投稿が有償パートナーシップであること(投稿に有償プロモーションが含まれることを作成者が開示している)を示します。`true` に設定すると、投稿は有償プロモーションとしてラベル付けされます。
+
+```bash
+curl -X POST "https://api.x.com/2/tweets" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Excited to partner with Acme on their latest launch!",
+    "paid_partnership": true
+  }'
+```
+
+既存投稿(自身の投稿を含む)でこの値を取得するには、`tweet.fields` パラメーターでリクエストします:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?tweet.fields=paid_partnership,created_at" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## 投稿の削除
+
+```bash
+curl -X DELETE "https://api.x.com/2/tweets/1234567890" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+<Warning>
+認証済みユーザーが作成した投稿のみ削除できます。
+</Warning>
+
+---
+
+## はじめる
+
+<Note>
+**前提条件**
+
+- 承認済みの[開発者アカウント](https://developer.x.com/en/portal/petition/essential/basic-info)
+- 開発者コンソール内の [Project と App](/resources/fundamentals/developer-apps)
+- [OAuth 2.0 PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) または [3-legged OAuth](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow) によるユーザーアクセストークン
+</Note>
+
+<CardGroup cols={2}>
+  <Card title="クイックスタート" icon="/icons/xds/icon-rocket.svg" href="/x-api/posts/manage-tweets/quickstart">
+    最初の投稿を作成
+  </Card>
+  <Card title="統合ガイド" icon="/icons/xds/icon-book.svg" href="/x-api/posts/manage-tweets/integrate">
+    主要な概念とベストプラクティス
+  </Card>
+  <Card title="メディアアップロード" icon="/icons/xds/icon-photo.svg" href="/x-api/media/quickstart/media-upload-chunked">
+    投稿用にメディアをアップロード
+  </Card>
+  <Card title="API リファレンス" icon="/icons/xds/icon-code.svg" href="/x-api/posts/creation-of-a-post">
+    エンドポイントの完全なドキュメント
+  </Card>
+</CardGroup>

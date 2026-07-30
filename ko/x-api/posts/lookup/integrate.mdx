@@ -1,0 +1,283 @@
+---
+title: 통합 가이드
+sidebarTitle: 통합 가이드
+keywords: ["post lookup 통합", "lookup 통합 가이드", "lookup 구현", "lookup 설정", "tweet lookup 통합"]
+description: "이 가이드는 Post lookup 엔드포인트를 애플리케이션에 통합할 때 알아야 할 핵심 개념을 다룹니다. lookup을 다루는 X API v2 standard 티어 레퍼런스입니다."
+---
+
+import { Button } from "/snippets/button.mdx"
+
+이 가이드는 Post lookup 엔드포인트를 애플리케이션에 통합할 때 알아야 할 핵심 개념을 다룹니다.
+
+---
+
+## 인증
+
+모든 X API v2 엔드포인트는 인증이 필요합니다. 사용 사례에 맞는 방식을 선택하세요:
+
+| Method | Best for | Can access private metrics? |
+|:-------|:---------|:---------------------------|
+| [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) | 서버 간 통신, 공개 데이터 | 아니요 |
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | 사용자 대상 앱 | 예 (인증된 사용자의 게시물) |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | 레거시 통합 | 예 (인증된 사용자의 게시물) |
+
+### App-Only 인증
+
+공개 게시물 데이터의 경우 Bearer Token을 사용합니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/1234567890" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get a single Post by ID
+response = client.posts.get("1234567890")
+print(response.data)
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+const response = await client.posts.get("1234567890");
+console.log(response.data);
+```
+
+</CodeGroup>
+
+### User Context 인증
+
+비공개 지표에 접근하려면 게시물 작성자를 대신해 인증합니다:
+
+<Warning>
+다음 필드는 User Context 인증이 필요합니다:
+- `tweet.fields.non_public_metrics`
+- `tweet.fields.promoted_metrics`
+- `tweet.fields.organic_metrics`
+- `media.fields.non_public_metrics`
+- `media.fields.promoted_metrics`
+- `media.fields.organic_metrics`
+</Warning>
+
+---
+
+## Fields 및 expansions
+
+X API v2는 기본적으로 최소한의 데이터만 반환합니다. `fields`와 `expansions`를 사용해 필요한 데이터를 정확히 요청하세요.
+
+### 기본 응답
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "edit_history_tweet_ids": ["1234567890"]
+  }
+}
+```
+
+### 사용 가능한 필드
+
+<Accordion title="tweet.fields">
+| Field | Description |
+|:------|:------------|
+| `created_at` | 게시물 생성 타임스탬프 |
+| `author_id` | 작성자의 user ID |
+| `public_metrics` | Like, retweet, reply, quote 카운트 |
+| `entities` | Hashtags, mentions, URLs, cashtags |
+| `attachments` | 미디어 키, poll ID |
+| `conversation_id` | 스레드 식별자 |
+| `context_annotations` | Topic/entity 분류 |
+| `in_reply_to_user_id` | 답글 대상 사용자 |
+| `lang` | 감지된 언어 |
+| `source` | 게시 클라이언트 |
+| `possibly_sensitive` | 민감 콘텐츠 플래그 |
+| `reply_settings` | 답글 가능 대상 |
+</Accordion>
+
+<Accordion title="user.fields (author_id expansion 필요)">
+| Field | Description |
+|:------|:------------|
+| `username` | @핸들 |
+| `name` | 표시 이름 |
+| `profile_image_url` | 아바타 URL |
+| `verified` | 인증 상태 |
+| `description` | Bio |
+| `public_metrics` | 팔로워/팔로잉 카운트 |
+| `created_at` | 계정 생성일 |
+</Accordion>
+
+<Accordion title="media.fields (attachments.media_keys expansion 필요)">
+| Field | Description |
+|:------|:------------|
+| `url` | 미디어 URL |
+| `preview_image_url` | 썸네일 URL |
+| `type` | photo, video, animated_gif |
+| `duration_ms` | 동영상 길이 |
+| `height`, `width` | 크기 |
+| `alt_text` | 접근성 텍스트 |
+</Accordion>
+
+### fields 사용 예시
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/1234567890?\
+tweet.fields=created_at,public_metrics,entities&\
+expansions=author_id,attachments.media_keys&\
+user.fields=username,verified&\
+media.fields=url,type" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get a Post with additional fields and expansions
+response = client.posts.get(
+    "1234567890",
+    tweet_fields=["created_at", "public_metrics", "entities"],
+    expansions=["author_id", "attachments.media_keys"],
+    user_fields=["username", "verified"],
+    media_fields=["url", "type"]
+)
+
+print(response.data)
+print(response.includes)  # Contains expanded user and media objects
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+const response = await client.posts.get("1234567890", {
+  tweetFields: ["created_at", "public_metrics", "entities"],
+  expansions: ["author_id", "attachments.media_keys"],
+  userFields: ["username", "verified"],
+  mediaFields: ["url", "type"],
+});
+
+console.log(response.data);
+console.log(response.includes); // Contains expanded user and media objects
+```
+
+</CodeGroup>
+
+---
+
+## 게시물 편집
+
+게시물은 생성 후 30분 이내에 최대 5회까지 편집할 수 있습니다.
+
+### 동작 방식
+
+- 각 편집은 새로운 Post ID를 생성합니다
+- `edit_history_tweet_ids`에는 모든 버전이 포함됩니다(가장 오래된 것부터)
+- 엔드포인트는 항상 가장 최근 버전을 반환합니다
+
+### 예시 응답
+
+```json
+{
+  "data": {
+    "id": "1234567893",
+    "text": "Hello world! (edited twice)",
+    "edit_history_tweet_ids": [
+      "1234567890",
+      "1234567891",
+      "1234567893"
+    ]
+  }
+}
+```
+
+<Tip>
+30분 편집 기간이 지난 후에 조회한 게시물은 최종 버전을 나타냅니다. 실시간 사용 사례에서는 최근에 게시된 게시물이 여전히 편집될 수 있음을 유의하세요.
+</Tip>
+
+---
+
+## 오류 처리
+
+### 일반적인 오류
+
+| Status | Error | Solution |
+|:-------|:------|:---------|
+| 400 | 잘못된 요청 | 파라미터 형식 확인 |
+| 401 | 인증 실패 | 인증 자격 증명 확인 |
+| 403 | 금지됨 | App 권한 확인 |
+| 404 | 찾을 수 없음 | 게시물이 삭제되었거나 존재하지 않음 |
+| 429 | 요청 한도 초과 | 잠시 후 재시도(rate limit 참고) |
+
+### 삭제되거나 보호된 게시물
+
+게시물이 삭제되었거나 팔로우하지 않는 보호 계정의 게시물인 경우:
+- 단일 게시물 조회는 `404`를 반환합니다
+- 다중 게시물 조회는 결과에서 해당 게시물을 생략하고 `errors` 배열을 포함합니다
+
+```json title="예시 응답" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    { "id": "1234567890", "text": "Available post" }
+  ],
+  "errors": [
+    {
+      "resource_id": "1234567891",
+      "resource_type": "tweet",
+      "title": "Not Found Error",
+      "detail": "Could not find tweet with id: [1234567891]."
+    }
+  ]
+}
+```
+
+---
+
+## 모범 사례
+
+<CardGroup cols={2}>
+  <Card title="요청 일괄 처리" icon="layer-group">
+    다중 게시물 엔드포인트를 사용해 한 번에 최대 100개의 게시물을 가져와 API 호출을 줄이세요.
+  </Card>
+  <Card title="필요한 필드만 요청" icon="/icons/xds/icon-filter.svg">
+    응답 크기와 처리 시간을 최소화하기 위해 필요한 필드만 지정하세요.
+  </Card>
+  <Card title="응답 캐싱" icon="database">
+    동일한 콘텐츠에 대한 반복 요청을 줄이기 위해 Post 데이터를 로컬에 캐시하세요.
+  </Card>
+  <Card title="편집 처리" icon="/icons/xds/icon-history.svg">
+    실시간 앱의 경우 30분 편집 기간 이후 게시물을 다시 가져오는 것을 고려하세요.
+  </Card>
+</CardGroup>
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="API 레퍼런스" icon="/icons/xds/icon-code.svg" href="/x-api/posts/post-lookup-by-post-id">
+    전체 엔드포인트 문서
+  </Card>
+  <Card title="데이터 사전" icon="/icons/xds/icon-book.svg" href="/x-api/fundamentals/data-dictionary">
+    사용 가능한 모든 객체와 필드
+  </Card>
+  <Card title="샘플 코드" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    동작하는 코드 예제
+  </Card>
+  <Card title="오류 처리" icon="/icons/xds/icon-warning.svg" href="/x-api/fundamentals/response-codes-and-errors">
+    오류를 원활하게 처리
+  </Card>
+</CardGroup>

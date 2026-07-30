@@ -1,0 +1,190 @@
+---
+title: クエリを組み立てる
+sidebarTitle: クエリを組み立てる
+keywords: ["クエリ構築 counts", "counts クエリ", "counts クエリビルダー", "counts クエリ構文", "counts クエリ構築"]
+description: "使用している access level によってクエリに制限があります。integrate を扱う X API v2 スタンダードティアのリファレンス。"
+---
+
+#### クエリの構築
+
+**クエリの制限!**
+
+クエリは、使用している[アクセスレベル](/x-api/getting-started/about-x-api)によって制限されます。
+
+従量課金の顧客は 512 文字、Enterprise の顧客は最大 4,096 文字までのクエリを利用できます。
+
+Enterprise アクセスをお持ちの場合は、アカウントマネージャーにお問い合わせください。
+
+
+**演算子の可用性**
+
+ほとんどの演算子はすべての開発者が利用できますが、いくつかの演算子は Enterprise アクセスの承認を受けた開発者にのみ提供されています。各演算子がどのアクセスレベルで利用可能かは、[演算子一覧](/x-api/posts/search/integrate/build-a-query)のテーブルに以下のラベルで示しています:
+
+* Core 演算子: 任意の [Project](/resources/fundamentals/developer-apps) で利用可能。
+* Advanced 演算子: Enterprise アクセスを持つ Project で利用可能
+
+
+#### 演算子の種類: standalone と conjunction-required
+
+**Standalone 演算子** は単独でも、他の演算子(conjunction-required の演算子を含む)と組み合わせても使用できます。
+
+たとえば、次のクエリは #hashtag 演算子(standalone)を使用しているため動作します:
+
+#xapiv2
+
+**Conjunction-required** 演算子は単独では使用できず、クエリに少なくとも 1 つの standalone 演算子を含む場合にのみ使用できます。これらの演算子を単独で使うと過度に汎用的となり、非常に大量の投稿に一致してしまうためです。
+
+たとえば、以下のクエリは conjunction-required 演算子のみを含んでいるためサポートされていません:
+
+has:media
+has:links OR is:retweet
+
+standalone 演算子(たとえばフレーズ "X data")を追加すると、クエリは正しく動作します。
+
+"X data" has:mentions (has:media OR has:links)
+
+#### ブール演算子とグルーピング
+
+1 つのクエリで複数の演算子を組み合わせたい場合、以下の方法が利用できます:
+
+|     |     |
+| :--- | :--- |
+| **AND ロジック** | 演算子を空白で区切って並べると、ブールの「AND」ロジックとなり、両方の条件を満たす投稿のみに一致します。たとえば snow day #NoSchool は、snow と day、およびハッシュタグ #NoSchool を含む投稿に一致します。 |
+| **OR ロジック** | 演算子の間に OR を入れて並べると OR ロジックとなり、いずれかの条件を満たせば投稿に一致します。たとえば grumpy OR cat OR #meme は、少なくとも grumpy か cat の語、もしくはハッシュタグ #meme を含む投稿に一致します。 |
+| **NOT ロジック、否定** | キーワード(または任意の演算子)の前にダッシュ (-) を付けると否定 (NOT) になります。たとえば cat #meme -grumpy は、ハッシュタグ #meme と cat の語を含み、かつ grumpy を含まない投稿に一致します。よく使われる句として -is:retweet があり、これは Retweet 以外に一致するため、オリジナル投稿、Quote Tweet、返信のみに一致します。すべての演算子は否定可能ですが、否定演算子は単独では使用できません。 |
+| **グルーピング** | 括弧を使って演算子をグループ化できます。たとえば (grumpy cat) OR (#meme has:images) は、grumpy と cat を含む投稿、またはハッシュタグ #meme を含む画像付き投稿を返します。AND が先に適用され、その後 OR が適用される点に注意してください。 |
+
+**否定に関する注意**
+
+-is:nullcast は必ず否定して使用する必要があります。
+
+否定演算子は単独では使用できません。
+
+括弧でグループ化された演算子のセットを否定しないでください。代わりに、それぞれの演算子を個別に否定します。たとえば skiing -(snow OR day OR noschool) の代わりに、skiing -snow -day -noschool を使用することをお勧めします。
+
+**演算の順序**
+
+AND と OR の機能を組み合わせる場合、以下の順序でクエリが評価されます。
+
+1.  AND ロジックで接続された演算子が最初にまとめられます
+2.  次に、OR ロジックで接続された演算子が適用されます
+
+
+
+たとえば:
+
+* apple OR iphone ipad は apple OR (iphone ipad) として評価されます
+* ipad iphone OR android は (iphone ipad) OR android として評価されます
+
+
+
+不確実性を排除し、意図した通りにクエリが評価されるようにするため、必要に応じて括弧で用語をグループ化してください。
+
+たとえば:
+
+* (apple OR iphone) ipad
+* iphone (ipad OR android)
+
+
+**句読点、発音区別符、大文字小文字の区別**
+
+キーワードまたはハッシュタグクエリでアクセント記号または発音区別符を指定すると、アクセント記号や発音区別符を含む語だけでなく、通常の文字を使った語にも一致します。たとえば Diacrítica というキーワードや #cumpleaños というハッシュタグを含むクエリは、_Diacrítica_ や _#cumpleaños_ に加え、チルダ í や eñe のない _Diacritica_ や _#cumpleanos_ にも一致します。
+
+アクセント記号や発音区別符を含む文字は通常の文字と同様に扱われ、単語の境界としては扱われません。たとえば cumpleaños というキーワードのクエリは _cumpleaños_ を含むアクティビティにのみ一致し、_cumplea_、_cumplean_、_os_ を含むアクティビティには一致しません。
+
+すべての演算子は大文字小文字を区別せずに評価されます。たとえば cat というクエリは _cat_、_CAT_、_Cat_ を含む投稿すべてに一致します。
+
+[filtered stream](/x-api/posts/filtered-stream) の一致挙動は Post counts とは異なります。[filtered stream のルールを組み立てる](/x-api/posts/filtered-stream/integrate/build-a-rule)際、アクセント記号や発音区別符を含むキーワードやハッシュタグは、それらを同様に含む語にのみ一致し、通常の文字を使った語には一致しないことに注意してください。
+
+たとえば、Diacrítica というキーワードや #cumpleaños というハッシュタグを含む filtered stream ルールは、_Diacrítica_ や _#cumpleaños_ にのみ一致し、チルダ í や eñe のない _Diacritica_ や _#cumpleanos_ には一致しません。
+
+**具体性と効率**
+
+クエリを組み立て始める際は、次の点に留意することが重要です。
+
+* 単一のキーワードや #hashtag のような広範な standalone 演算子は、大量の投稿に一致してしまう可能性が高いため、通常は推奨されません。より堅牢なクエリを作成することで、より特定的な投稿セットが得られ、Post counts の精度が向上し、より価値のあるインサイトを見つけやすくなります。
+    * たとえば happy というキーワードのみをクエリとした場合、1 日に 200,000 〜 300,000 件の投稿が該当する可能性があります。
+    * 条件演算子を追加すると結果が絞り込まれます。たとえば (happy OR happiness) place_country:GB -birthday -is:retweet
+* 効率的なクエリを書くことは、文字数制限内に収める上でも有益です。文字数はスペースや演算子を含むクエリ文字列全体を対象にカウントされます。
+    * たとえば、次のクエリは 59 文字です: (happy OR happiness) place_country:GB -birthday -is:retweet
+
+
+**Quote Tweet の一致挙動**
+
+Post counts エンドポイントを使用する場合、演算子は引用元のオリジナル投稿の内容には一致せず、Quote Tweet に含まれる内容にのみ一致します。
+
+ただし、[filtered stream](/x-api/posts/filtered-stream) は引用元のオリジナル投稿の内容と Quote Tweet の内容の両方に一致することに注意してください。
+
+
+**クエリを反復的に構築する**
+
+**クエリを早期かつ頻繁にテストする**
+
+最初から「正しい」結果を返すクエリを作成できることは稀です。X には一見して明らかでない要素が多く、上記のクエリ構文を意図するクエリに合わせるのは難しい場合があります。
+
+クエリを組み立てる際は、[Search Post](/x-api/posts/search/introduction) エンドポイントを使って定期的にテストし、一致する投稿がユースケースに関連していることを確認することが重要です。
+
+このセクションでは、次のクエリから始めて、テストで得られる結果に基づいて調整していきます:
+
+happy OR happiness
+
+**結果を使ってクエリを絞り込む**
+
+Search Posts でクエリをテストする際は、返される投稿を確認し、期待するデータが含まれているか確かめます。広めのクエリから開始し、多くの投稿が一致するようにすることで、結果を確認しつつ不要な結果を除外するようにクエリを絞り込めます。
+
+このサンプルクエリをテストしたところ、さまざまな言語の投稿が返ってきました。今回は英語の投稿のみを受け取りたいため、lang: 演算子を追加します:
+
+(happy OR happiness) lang:en
+
+テストでは「happy birthday」を伝える投稿が多く含まれていたため、-birthday を否定キーワードとして追加します。また、オリジナル投稿のみを受け取りたいので -is:retweet を追加します:
+
+(happy OR happiness) lang:en -birthday -is:retweet
+
+**必要に応じて包含側を調整する**
+
+Search Posts で期待するデータが得られず、返されるはずの投稿があると分かっている場合、演算子が意図せず結果を除外している可能性があります。その場合は演算子を削除してクエリを広げる必要があります。
+
+この例では、パーソナルタイムラインには目的の感情を表す他の投稿があるのに、テスト結果に含まれていないことに気付きました。カバー範囲を広げるため、excited と elated のキーワードを追加します。
+
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet
+
+**期間内で発生する人気トレンド/バーストに合わせて調整する**
+
+X ではトレンドがすぐに移り変わります。クエリのメンテナンスは能動的なプロセスであるべきです。クエリを一定期間使用する予定なら、受信するデータを定期的に確認し、調整が必要かどうか判断することをお勧めします。
+
+この例では、「happy holidays」を伝える投稿が受信されるようになったことに気付きました。これらは結果に含めたくないので、否定キーワード -holidays を追加します。
+
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet -holidays
+
+クエリを適切にテストして反復し終わったら、Post counts エンドポイントに送信して、投稿の完全なペイロードではなく、投稿の件数だけを受信できるようになります。
+
+#### クエリをリクエストに追加する
+
+クエリをリクエストに追加するには query パラメーターを使用します。他のクエリパラメーターと同様、作成したクエリは HTTP エンコードしておく必要があります。
+
+以下は cURL コマンドでの例です。このコマンドを利用する場合は、$BEARER_TOKEN を自身の [Bearer Token](/resources/fundamentals/authentication#oauth-2-0) に置き換えてください:
+
+      ```
+      curl https://api.x.com/2/tweets/counts/recent?query=cat%20has%3Amedia%20-grumpy&tweet.fields=created_at&max_results=100 -H "Authorization: Bearer $BEARER_TOKEN"
+      ```
+
+
+
+#### クエリの例
+
+**自然災害を追跡する**
+
+以下のクエリは、2017 年に Houston を襲ったハリケーン Harvey について、気象機関や観測機器から発信されたオリジナル投稿に一致します。
+
+HTTP エンコードなしのクエリは以下のようになります:
+
+has:geo (from:NWSNHC OR from:NHC\_Atlantic OR from:NWSHouston OR from:NWSSanAntonio OR from:USGS\_TexasRain OR from:USGS_TexasFlood OR from:JeffLindner1) -is:retweet
+
+
+HTTP エンコードと query パラメーター、および recent Post counts の URI を組み合わせると以下のようになります:
+
+https://api.x.com/2/tweets/counts/recent?query=-is%3Aretweet%20has%3Ageo%20(from%3ANWSNHC%20OR%20from%3ANHC\_Atlantic%20OR%20from%3ANWSHouston%20OR%20from%3ANWSSanAntonio%20OR%20from%3AUSGS\_TexasRain%20OR%20from%3AUSGS_TexasFlood%20OR%20from%3AJeffLindner1)
+
+**会話のセンチメントをレビューする**
+
+次のルールは、ハッシュタグ _#nowplaying_ を中心に展開する会話のセンチメントをより深く理解するために使用できます。ただし、期間は

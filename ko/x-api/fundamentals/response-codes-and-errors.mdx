@@ -1,0 +1,223 @@
+---
+title: 응답 코드 및 오류
+description: "디버깅을 위해 X API가 반환하는 HTTP 상태 코드, 오류 응답 형식 및 일반적인 400, 401, 403, 404, 429, 500 오류 레퍼런스."
+sidebarTitle: 응답 코드
+keywords: ["response codes", "오류 코드", "HTTP status codes", "API 오류", "오류 처리", "디버깅"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+X API는 표준 HTTP 상태 코드를 사용합니다. 성공한 요청은 2xx 코드를 반환하고, 오류는 응답 본문에 세부 정보와 함께 4xx 또는 5xx 코드를 반환합니다.
+
+---
+
+## HTTP 상태 코드
+
+### 성공 코드
+
+| 코드 | 의미 | 설명 |
+|:-----|:--------|:------------|
+| **200** | OK | 요청 성공 |
+| **201** | Created | 리소스 생성됨(POST 요청) |
+| **204** | No Content | 응답 본문 없이 성공(DELETE 요청) |
+
+### 클라이언트 오류 코드
+
+| 코드 | 의미 | 일반적인 원인 |
+|:-----|:--------|:--------------|
+| **400** | Bad Request | 잘못된 JSON, 잘못된 쿼리 형식, 필수 파라미터 누락 |
+| **401** | Unauthorized | 잘못되거나 누락된 인증 자격 증명 |
+| **403** | Forbidden | 유효한 인증이지만 이 리소스나 작업에 대한 권한 없음 |
+| **404** | Not Found | 리소스가 존재하지 않거나 삭제됨 |
+| **409** | Conflict | 스트림에 규칙이 없음(filtered stream만) |
+| **429** | Too Many Requests | Rate limit 또는 사용량 한도 초과 |
+
+### 서버 오류 코드
+
+| 코드 | 의미 | 조치 |
+|:-----|:--------|:-----------|
+| **500** | Internal Server Error | 기다렸다가 재시도, [status 페이지](https://developer.x.com/status) 확인 |
+| **502** | Bad Gateway | 기다렸다가 재시도 |
+| **503** | Service Unavailable | X가 과부하 상태, 기다렸다가 재시도 |
+| **504** | Gateway Timeout | 기다렸다가 재시도 |
+
+---
+
+## 오류 응답 형식
+
+오류 응답에는 구조화된 세부 정보가 포함됩니다:
+
+```json
+{
+  "title": "Invalid Request",
+  "detail": "The 'query' parameter is required.",
+  "type": "https://api.x.com/2/problems/invalid-request"
+}
+```
+
+| Field | 설명 |
+|:------|:------------|
+| `type` | 오류 유형을 식별하는 URI |
+| `title` | 짧은 오류 설명 |
+| `detail` | 이 오류에 대한 구체적 설명 |
+
+오류 유형에 따라 추가 field가 있을 수 있습니다.
+
+---
+
+## 오류 유형
+
+| 유형 | 설명 |
+|:-----|:------------|
+| `about:blank` | 일반 오류(HTTP 상태 코드 참조) |
+| `.../invalid-request` | 잘못된 요청 또는 잘못된 파라미터 |
+| `.../resource-not-found` | Post, 사용자, 또는 기타 리소스가 존재하지 않음 |
+| `.../not-authorized-for-resource` | 비공개/보호된 콘텐츠에 접근 불가 |
+| `.../client-forbidden` | 앱이 등록되지 않았거나 필요한 액세스가 없음 |
+| `.../usage-capped` | 사용량 한도 초과 |
+| `.../rate-limit-exceeded` | Rate limit 초과 |
+| `.../streaming-connection` | 스트림 연결 문제 |
+| `.../rule-cap` | Filtered stream 규칙이 너무 많음 |
+| `.../invalid-rules` | 규칙 구문 오류 |
+| `.../duplicate-rules` | 규칙이 이미 존재 |
+
+---
+
+## 부분 오류
+
+일부 요청은 부분적으로 성공할 수 있습니다. 200 응답에 `data`와 `errors`가 모두 포함될 수 있습니다:
+
+```json title="Example response" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {"id": "123", "text": "Hello"}
+  ],
+  "errors": [
+    {
+      "resource_id": "456",
+      "resource_type": "tweet",
+      "title": "Not Found Error",
+      "detail": "Could not find tweet with id: [456].",
+      "type": "https://api.x.com/2/problems/resource-not-found"
+    }
+  ]
+}
+```
+
+이는 여러 리소스를 요청하고 일부를 사용할 수 없을 때 발생합니다.
+
+---
+
+## 일반적인 오류 문제 해결
+
+<Accordion title="401 Unauthorized">
+**인증 확인:**
+- endpoint에 대한 올바른 인증 방법을 사용 중인지 확인하세요
+- 자격 증명이 재생성되지 않았는지 확인하세요
+- `Authorization` 헤더 형식을 확인하세요
+- OAuth 1.0a의 경우 서명 계산을 확인하세요
+
+[인증 가이드 →](/resources/fundamentals/authentication/overview)
+</Accordion>
+
+<Accordion title="403 Forbidden">
+**액세스 확인:**
+- 앱이 이 endpoint에 액세스할 수 있는지 확인하세요
+- 일부 endpoint는 특정 등록 또는 승인이 필요합니다
+- 사용자 컨텍스트 endpoint에는 적절한 OAuth scope가 필요합니다
+- 리소스가 비공개이거나 보호될 수 있습니다
+</Accordion>
+
+<Accordion title="429 Too Many Requests">
+**Rate limit:**
+- 재시도 시점은 `x-rate-limit-reset` 헤더를 확인하세요
+- 지수 백오프를 구현하세요
+- 응답 캐싱을 고려하세요
+- 시간 창에 걸쳐 요청을 분산하세요
+
+[Rate limit 가이드 →](/x-api/fundamentals/rate-limits)
+</Accordion>
+
+<Accordion title="400 Bad Request">
+**요청 수정:**
+- JSON 구문 검증
+- 필수 파라미터 누락 확인
+- 파라미터 유형(문자열 vs. 숫자) 확인
+- 쿼리에서 특수 문자 이스케이프
+</Accordion>
+
+<Accordion title="예상되는 게시물 누락">
+**다음 요인을 확인하세요:**
+- 보호된 계정의 게시물은 인증된 경우에만 표시됩니다
+- 삭제된 게시물은 404를 반환합니다
+- 일부 게시물은 특정 지역에서 보류됩니다
+- 검색 쿼리 구문이 올바른지 확인하세요
+</Accordion>
+
+<Accordion title="스트림 연결 해제">
+**재연결 처리:**
+- 백오프를 사용한 자동 재연결 구현
+- 누락된 데이터를 위한 recovery 기능 사용
+- 전체 버퍼 연결 해제 확인(클라이언트가 충분히 빨리 소비하지 않음)
+- 최소 하나의 스트림 규칙이 존재하는지 확인
+
+[스트리밍 가이드 →](/x-api/fundamentals/handling-disconnections)
+</Accordion>
+
+---
+
+## Rate limit 헤더
+
+모든 응답에는 rate limit 정보가 포함됩니다:
+
+```
+x-rate-limit-limit: 900
+x-rate-limit-remaining: 847
+x-rate-limit-reset: 1705420800
+```
+
+| Header | 설명 |
+|:-------|:------------|
+| `x-rate-limit-limit` | 현재 창의 최대 요청 |
+| `x-rate-limit-remaining` | 남은 요청 |
+| `x-rate-limit-reset` | 창이 재설정되는 Unix 타임스탬프 |
+
+---
+
+## 모범 사례
+
+<CardGroup cols={2}>
+  <Card title="상태 코드 확인" icon="square-check">
+    응답 본문을 파싱하기 전에 항상 HTTP 상태를 확인하세요.
+  </Card>
+  <Card title="부분 오류 처리" icon="/icons/xds/icon-warning.svg">
+    200 응답에서도 `errors` 배열을 확인하세요.
+  </Card>
+  <Card title="재시도 로직 구현" icon="arrows-rotate">
+    429 및 5xx 오류에 대해 지수 백오프를 사용하세요.
+  </Card>
+  <Card title="요청 세부 정보 기록" icon="file-lines">
+    디버깅을 위해 요청 ID와 타임스탬프를 포함하세요.
+  </Card>
+</CardGroup>
+
+---
+
+## 도움 받기
+
+오류에 대한 질문을 게시할 때 다음을 포함하세요:
+
+- API endpoint URL
+- 요청 헤더(자격 증명 삭제)
+- 전체 오류 응답
+- 예상한 결과
+- 시도한 단계
+
+<CardGroup cols={2}>
+  <Card title="Developer Forum" icon="/icons/xds/icon-chat-unread.svg" href="https://devcommunity.x.com">
+    질문하고 해결책을 검색하세요.
+  </Card>
+  <Card title="API Status" icon="signal" href="https://developer.x.com/status">
+    알려진 문제를 확인하세요.
+  </Card>
+</CardGroup>

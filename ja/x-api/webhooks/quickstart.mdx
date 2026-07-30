@@ -1,0 +1,412 @@
+---
+title: クイックスタート
+sidebarTitle: クイックスタート
+description: "このガイドでは、Webhook コンシューマーアプリのセットアップと実装手順を説明します。X API v2 standard tier の webhooks に関するリファレンスです。"
+keywords: ["webhook quickstart", "webhook setup", "CRC check", "challenge response check", "webhook security", "webhook consumer app"]
+---
+
+このガイドでは、Webhook コンシューマーアプリのセットアップ、Challenge-Response Check (CRC) の実装、受信イベントの保護、X への Webhook の登録手順を説明します。
+
+## 1. Webhook コンシューマーアプリを開発する
+
+X アプリに Webhook を登録するには、X の Webhook イベントを受信し CRC セキュリティリクエストに応答する Web アプリを開発、デプロイ、ホストする必要があります。
+
+### URL の要件
+
+イベントを受信する Webhook エンドポイントとして機能する公開アクセス可能な HTTPS URL を持つ Web アプリを作成します:
+
+- URI **パス**は自由に決められます。次の例はすべて有効です:
+  - `https://mydomain.com/service/listen`
+  - `https://mydomain.com/webhook/twitter`
+- URL にポート指定を含めることは**できません** (例: `https://mydomain.com:5000/webhook` は**機能しません**)
+
+### アプリが処理する必要があること
+
+Webhook エンドポイントは 2 種類の HTTP リクエストを処理する必要があります:
+
+| Request type | 目的 |
+|:-------------|:--------|
+| **GET** | [CRC 検証](#2-the-crc-check) — X がエンドポイントの制御を確認 |
+| **POST** | イベント配信 — X が JSON イベントペイロードを送信 |
+
+---
+
+## 2. CRC チェック
+
+Challenge-Response Check (CRC) は、提供されたコールバック URL が有効であり、**あなたがそれを制御している**ことを X が検証する方法です。Web アプリは Webhook の登録と維持のために CRC リクエストに正しく応答する必要があります。
+
+### CRC がトリガーされるタイミング
+
+| Trigger | 説明 |
+|:--------|:------------|
+| **初回登録** | `POST /2/webhooks` を呼び出したとき |
+| **毎時検証** | X が自動的に毎時 Webhook を検証 |
+| **手動再検証** | `PUT /2/webhooks/:webhook_id` を呼び出したとき |
+
+Webhook が CRC チェックに失敗すると、`invalid` としてマークされ、再度合格するまで**イベントの受信が停止**します。
+
+### CRC の仕組み
+
+X が CRC を送信するとき、`crc_token` クエリパラメーター付きで Webhook URL に **GET リクエスト**を行います:
+
+```
+GET https://your-webhook-url.com/webhook?crc_token=challenge_string
+```
+
+アプリケーションは、`response_token` を含む JSON ボディで応答する必要があります:
+
+```json
+{
+  "response_token": "sha256=<base64_encoded_hmac_hash>"
+}
+```
+
+### CRC レスポンスの作り方
+
+1. クエリパラメーターの `crc_token` 値を**メッセージ**として使用
+2. アプリの **consumer secret** (API secret key) を**キー**として使用
+3. **HMAC SHA-256** ハッシュを作成
+4. 結果を **Base64 エンコード**
+5. エンコードされた文字列の先頭に `sha256=` を付ける
+
+<Warning>
+**重要:** Web アプリは CRC 暗号化にアプリの **consumer secret** (API secret key) を使用する必要があります — bearer token やアクセストークンではありません。
+</Warning>
+
+### 例: Python
+
+```python title="例" lines wrap icon="python"
+import hmac
+import hashlib
+import base64
+
+def handle_crc(crc_token, consumer_secret):
+    """
+    Respond to a Twitter CRC check.
+    
+    Args:
+        crc_token: The crc_token query parameter from the GET request
+        consumer_secret: Your app's consumer secret (API secret key)
+    
+    Returns:
+        dict with the response_token
+    """
+    sha256_hash = hmac.new(
+        consumer_secret.encode('utf-8'),
+        crc_token.encode('utf-8'),
+        hashlib.sha256
+    ).digest()
+
+    return {
+        "response_token": "sha256=" + base64.b64encode(sha256_hash).decode('utf-8')
+    }
+```
+
+### 例: Node.js
+
+```javascript title="例" lines wrap icon="square-js"
+const crypto = require('crypto');
+
+function handleCrc(crcToken, consumerSecret) {
+  const hmac = crypto
+    .createHmac('sha256', consumerSecret)
+    .update(crcToken)
+    .digest('base64');
+
+  return {
+    response_token: `sha256=${hmac}`
+  };
+}
+```
+
+### 例: Flask (完全なエンドポイント)
+
+この例は、CRC 検証 (GET) とイベント配信 (POST) の両方を処理する完全な Webhook エンドポイントを示しています:
+
+```python title="例" expandable lines wrap icon="python"
+from flask import Flask, request, jsonify
+import hmac
+import hashlib
+import base64
+
+app = Flask(__name__)
+
+CONSUMER_SECRET = "your_consumer_secret_here"
+
+@app.route("/webhook", methods=["GET", "POST"])
+def webhook():
+    if request.method == "GET":
+        # Handle CRC check
+        crc_token = request.args.get("crc_token")
+        if crc_token:
+            sha256_hash = hmac.new(
+                CONSUMER_SECRET.encode("utf-8"),
+                crc_token.encode("utf-8"),
+                hashlib.sha256,
+            ).digest()
+            response_token = "sha256=" + base64.b64encode(sha256_hash).decode("utf-8")
+            return jsonify({"response_token": response_token}), 200
+        return "Missing crc_token", 400
+
+    elif request.method == "POST":
+        # Handle incoming webhook events
+        event = request.get_json()
+        print("Received event:", event)
+        return "", 200
+```
+
+---
+
+## 3. Webhook のセキュリティ
+
+X の Webhook ベース API は、Webhook サーバーのセキュリティを確認するための 2 つの方法を提供します:
+
+### Challenge-Response Check (CRC)
+
+CRC により、X は Webhook イベントを受信する Web アプリの所有権を確認できます。完全な実装の詳細については、上記の[ステップ 2](#2-the-crc-check) を参照してください。
+
+### 署名検証
+
+X からの各 POST リクエストには `x-twitter-webhooks-signature` ヘッダーが含まれ、着信 Webhook の送信元が X であることを確認できます。
+
+署名を検証するには:
+
+1. 着信リクエストから `x-twitter-webhooks-signature` ヘッダー値を取得
+2. **consumer secret** をキー、**生のリクエストボディ**をメッセージとして HMAC SHA-256 ハッシュを作成
+3. ハッシュを Base64 エンコードし、`sha256=` を先頭に付ける
+4. 計算した値をヘッダー値と比較 — 一致するはずです
+
+```python title="例" expandable lines wrap icon="python"
+import hmac
+import hashlib
+import base64
+
+def verify_signature(payload, signature_header, consumer_secret):
+    """
+    Verify that a webhook POST request actually came from X.
+    
+    Args:
+        payload: The raw request body (bytes)
+        signature_header: The x-twitter-webhooks-signature header value
+        consumer_secret: Your app's consumer secret
+    
+    Returns:
+        True if the signature is valid
+    """
+    expected = "sha256=" + base64.b64encode(
+        hmac.new(
+            consumer_secret.encode("utf-8"),
+            payload,
+            hashlib.sha256
+        ).digest()
+    ).decode("utf-8")
+    
+    return hmac.compare_digest(expected, signature_header)
+```
+
+---
+
+## 4. Webhook を登録する
+
+アプリが CRC チェックを処理できるようになったら、`POST /2/webhooks` リクエストで Webhook URL を登録します。このリクエストを行うと、X は所有権を確認するために Web アプリに即座に CRC リクエストを送信します。
+
+すべての Webhook 管理エンドポイントには **OAuth2 App Only Bearer Token** 認証が必要です。
+
+### Webhook を作成する
+
+**`POST /2/webhooks`** — [API リファレンス](/x-api/webhooks/create-webhook)
+
+```bash
+curl --request POST \
+  --url 'https://api.x.com/2/webhooks' \
+  --header 'Authorization: Bearer $BEARER_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "url": "https://yourdomain.com/webhooks/twitter"
+  }'
+```
+
+**成功レスポンス (200 OK):**
+
+成功レスポンスは、Webhook が作成され、初回の CRC チェックに合格したことを示します。
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "url": "https://yourdomain.com/webhooks/twitter",
+    "valid": true,
+    "created_at": "2025-01-15T12:00:00.000Z"
+  }
+}
+```
+
+Webhook が正常に登録されると、レスポンスに **webhook ID** が含まれます。この ID は、Webhook をサポートする製品にリクエストを行う際に必要です (例: Filtered Stream へのリンク、Account Activity のサブスクリプション作成)。
+
+**よくある失敗理由:**
+
+| Reason | 説明 |
+|:-------|:------------|
+| `CrcValidationFailed` | コールバック URL が CRC チェックに正しく応答しなかった (例: タイムアウト、間違った応答) |
+| `UrlValidationFailed` | コールバック URL が要件を満たしていない (例: `https` でない、無効な形式) |
+| `DuplicateUrlFailed` | この URL に対してアプリケーションによってすでに Webhook が登録されている |
+| `WebhookLimitExceeded` | アプリケーションが許可されている Webhook の最大数に達した |
+
+### Webhook を表示する
+
+**`GET /2/webhooks`** — [API リファレンス](/x-api/webhooks/get-webhook)
+
+アプリケーションに関連付けられたすべての Webhook 設定を取得します。
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/2/webhooks' \
+  --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+**レスポンス (Webhook が 1 つある場合):**
+
+```json title="レスポンス例" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "created_at": "2025-01-15T12:00:00.000Z",
+      "id": "1234567890",
+      "url": "https://yourdomain.com/webhooks/twitter",
+      "valid": true
+    }
+  ],
+  "meta": {
+    "result_count": 1
+  }
+}
+```
+
+**レスポンス (Webhook がない場合):**
+
+```json
+{
+  "data": [],
+  "meta": {
+    "result_count": 0
+  }
+}
+```
+
+### Webhook を削除する
+
+**`DELETE /2/webhooks/:webhook_id`** — [API リファレンス](/x-api/webhooks/delete-webhook)
+
+`webhook_id` (作成またはリストレスポンスから取得) を使用して Webhook を削除します。
+
+```bash
+curl --request DELETE \
+  --url 'https://api.x.com/2/webhooks/1234567890' \
+  --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+**レスポンス:**
+
+```json
+{
+  "data": {
+    "deleted": true
+  }
+}
+```
+
+| Failure reason | 説明 |
+|:---------------|:------------|
+| `WebhookIdInvalid` | 提供された `webhook_id` が見つからないか、アプリに関連付けられていない |
+
+### Webhook を検証して再有効化する
+
+**`PUT /2/webhooks/:webhook_id`** — [API リファレンス](/x-api/webhooks/validate-webhook)
+
+指定された Webhook の CRC チェックをトリガーします。チェックが成功すると、Webhook は `valid: true` で再有効化されます。
+
+```bash
+curl --request PUT \
+  --url 'https://api.x.com/2/webhooks/1234567890' \
+  --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+**レスポンス:**
+
+200 OK レスポンスは、CRC チェックが開始されたことを示します。`valid` フィールドは、チェック試行後のステータスを反映します。現在のステータスは `GET /2/webhooks` を使用して確認できます。
+
+```json
+{
+  "data": {
+    "valid": true
+  }
+}
+```
+
+| Failure reason | 説明 |
+|:---------------|:------------|
+| `WebhookIdInvalid` | 提供された `webhook_id` が見つからないか、アプリに関連付けられていない |
+| `CrcValidationFailed` | コールバック URL が CRC チェックに正しく応答しなかった |
+
+---
+
+## xurl でのテスト
+
+テスト目的で、`xurl` ツールは一時的な Webhook をサポートします。GitHub から [`xurl` プロジェクト](https://github.com/xdevplatform/xurl)の最新バージョンをインストールし、認証情報を設定してから次を実行します:
+
+```bash
+xurl webhook start
+```
+
+これにより、一時的な公開 Webhook URL が生成され、すべての CRC チェックを自動的に処理し、受信したサブスクリプションイベントをログに記録します。デプロイ前にセットアップを確認するのに最適な方法です。出力例:
+
+```
+Starting webhook server with ngrok...
+Enter your ngrok authtoken (leave empty to try NGROK_AUTHTOKEN env var):
+
+Attempting to use NGROK_AUTHTOKEN environment variable for ngrok authentication.
+Configuring ngrok to forward to local port: 8080
+Ngrok tunnel established!
+  Forwarding URL: https://<your-ngrok-subdomain>.ngrok-free.app -> localhost:8080
+
+Use this URL for your X API webhook registration: https://<your-ngrok-subdomain>.ngrok-free.app/webhook
+
+Starting local HTTP server to handle requests from ngrok tunnel...
+```
+
+---
+
+## 重要な注意事項
+
+<Warning>
+- **すべての受信 Direct Message** は Webhook 経由で配信されます。[POST /2/dm_conversations/with/:participant_id/messages](/x-api/direct-messages/send-a-new-message-to-a-user) 経由で送信された DM も配信されるため、アプリは他のクライアントから送信された DM を追跡できます。
+
+- 同じ Webhook URL を共有し、同じユーザーが各アプリにマッピングされている **複数の Web アプリ** がある場合、同じイベントが Webhook に**複数回** (Web アプリごとに 1 回) 送信されます。
+
+- 一部のケースでは、Webhook が**重複イベント**を受信する可能性があります。Webhook アプリはこれを許容し、**イベント ID で重複排除**する必要があります。
+
+- X は **POST リクエスト**として JSON ペイロードでイベントを送信します。ペイロードの例については、[Account Activity データオブジェクト構造](/x-api/account-activity/introduction#account-activity-data-object-structure)を参照してください。
+</Warning>
+
+---
+
+## サンプルアプリ
+
+| App | 説明 |
+|:----|:------------|
+| [Simple webhook server](https://github.com/m-rosinsky/XWebhookTest/blob/main/app.py) | CRC チェックへの応答と POST イベントの受信方法を示す単一の Python スクリプト |
+| [Account Activity API dashboard](https://github.com/xdevplatform/account-activity-dashboard-enterprise/tree/master) | Webhook、サブスクリプションの管理、ライブイベントの受信ができる [bun.sh](https://bun.sh) で書かれた Web アプリ |
+| [xurl testing tool](https://github.com/xdevplatform/xurl) | 一時的な Webhook テスト用 CLI ツール — CRC チェックを自動処理し、イベントをログに記録 |
+
+---
+
+## 次のステップ
+
+<CardGroup cols={2}>
+  <Card title="Filtered Stream Webhooks" icon="/icons/xds/icon-filter.svg" href="/x-api/webhooks/stream/introduction">
+    Webhook 経由でフィルタリングされた Post を受信
+  </Card>
+  <Card title="Account Activity API" icon="/icons/xds/icon-bell.svg" href="/x-api/account-activity/introduction">
+    Webhook 経由でアカウントイベントを受信
+  </Card>
+</CardGroup>

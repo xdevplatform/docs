@@ -1,0 +1,346 @@
+---
+title: 빠른 시작
+sidebarTitle: 빠른 시작
+description: "이 가이드는 인증된 사용자의 Direct Message 이벤트를 조회하는 방법을 안내합니다. 조회를 다루는 X API v2 standard 등급 레퍼런스입니다."
+keywords: ["DM 조회 빠른 시작", "Direct Message 빠른 시작", "DM 가져오기 튜토리얼", "DM 조회 가이드"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+이 가이드는 인증된 사용자의 Direct Message 이벤트를 조회하는 과정을 안내합니다.
+
+<Note>
+**사전 요구 사항**
+
+시작하기 전에 다음이 필요합니다:
+- 승인된 App이 있는 [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- 사용자 Access Token (OAuth 1.0a 또는 OAuth 2.0 PKCE)
+</Note>
+
+---
+
+## 모든 DM 이벤트 가져오기
+
+인증된 사용자의 모든 DM 이벤트를 조회합니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/dm_events?\
+dm_event.fields=created_at,sender_id,text&\
+max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get all DM events with pagination
+for page in client.dm_events.list(
+    dm_event_fields=["created_at", "sender_id", "text"],
+    max_results=100
+):
+    for event in page.data:
+        print(f"{event.event_type}: {event.text}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get all DM events with pagination
+const paginator = client.dmEvents.list({
+  dmEventFields: ["created_at", "sender_id", "text"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((event) => {
+    console.log(`${event.event_type}: ${event.text}`);
+  });
+}
+```
+
+</CodeGroup>
+
+### 응답
+
+```json title="MessageCreate" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "id": "1234567890",
+      "event_type": "MessageCreate",
+      "text": "Hello! How are you?",
+      "sender_id": "9876543210",
+      "created_at": "2024-01-15T10:30:00.000Z"
+    }
+  ],
+  "meta": {
+    "result_count": 1,
+    "next_token": "abc123"
+  }
+}
+```
+
+---
+
+## 1:1 대화 가져오기
+
+특정 1:1 대화의 DM 이벤트를 조회합니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/dm_conversations/with/9876543210/dm_events?\
+dm_event.fields=created_at,sender_id,text" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get DM events from a one-to-one conversation
+for page in client.dm_events.get_by_participant(
+    participant_id="9876543210",
+    dm_event_fields=["created_at", "sender_id", "text"]
+):
+    for event in page.data:
+        print(f"{event.created_at}: {event.text}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get DM events from a one-to-one conversation
+const paginator = client.dmEvents.getByParticipant("9876543210", {
+  dmEventFields: ["created_at", "sender_id", "text"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((event) => {
+    console.log(`${event.created_at}: ${event.text}`);
+  });
+}
+```
+
+</CodeGroup>
+
+`9876543210`을 다른 참가자의 user ID로 교체하세요.
+
+---
+
+## ID로 대화 가져오기
+
+특정 대화 ID의 DM 이벤트를 조회합니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/dm_conversations/1234567890-9876543210/dm_events?\
+dm_event.fields=created_at,sender_id,text" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get DM events from a conversation by ID
+for page in client.dm_events.get_by_conversation(
+    dm_conversation_id="1234567890-9876543210",
+    dm_event_fields=["created_at", "sender_id", "text"]
+):
+    for event in page.data:
+        print(f"{event.created_at}: {event.text}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get DM events from a conversation by ID
+const paginator = client.dmEvents.getByConversation("1234567890-9876543210", {
+  dmEventFields: ["created_at", "sender_id", "text"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((event) => {
+    console.log(`${event.created_at}: ${event.text}`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## 이벤트 유형으로 필터링
+
+특정 이벤트 유형만 가져오기:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/dm_events?\
+event_types=MessageCreate&\
+dm_event.fields=created_at,sender_id,text" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get only MessageCreate events
+for page in client.dm_events.list(
+    event_types=["MessageCreate"],
+    dm_event_fields=["created_at", "sender_id", "text"]
+):
+    for event in page.data:
+        print(f"{event.text}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get only MessageCreate events
+const paginator = client.dmEvents.list({
+  eventTypes: ["MessageCreate"],
+  dmEventFields: ["created_at", "sender_id", "text"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((event) => {
+    console.log(event.text);
+  });
+}
+```
+
+</CodeGroup>
+
+### 이벤트 유형
+
+| 유형 | 설명 |
+|:-----|:------------|
+| `MessageCreate` | 메시지가 전송됨 |
+| `ParticipantsJoin` | 사용자가 대화에 참여함 |
+| `ParticipantsLeave` | 사용자가 대화에서 나감 |
+
+---
+
+## 사용자 데이터 포함
+
+발신자 정보 확장:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/dm_events?\
+dm_event.fields=created_at,sender_id,text&\
+expansions=sender_id&\
+user.fields=username,profile_image_url" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get DM events with sender info
+for page in client.dm_events.list(
+    dm_event_fields=["created_at", "sender_id", "text"],
+    expansions=["sender_id"],
+    user_fields=["username", "profile_image_url"]
+):
+    for event in page.data:
+        # Match sender from includes
+        print(f"{event.sender_id}: {event.text}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get DM events with sender info
+const paginator = client.dmEvents.list({
+  dmEventFields: ["created_at", "sender_id", "text"],
+  expansions: ["sender_id"],
+  userFields: ["username", "profile_image_url"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((event) => {
+    console.log(`${event.sender_id}: ${event.text}`);
+  });
+  // Sender user objects are in page.includes.users
+}
+```
+
+</CodeGroup>
+
+### expansion을 포함한 응답
+
+```json title="MessageCreate" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "id": "1234567890",
+      "event_type": "MessageCreate",
+      "text": "Hello!",
+      "sender_id": "9876543210"
+    }
+  ],
+  "includes": {
+    "users": [
+      {
+        "id": "9876543210",
+        "username": "example_user",
+        "profile_image_url": "https://..."
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 공통 파라미터
+
+| 파라미터 | 설명 |
+|:----------|:------------|
+| `max_results` | 페이지당 이벤트 수 (1-100, 기본 100) |
+| `pagination_token` | 다음 페이지 토큰 |
+| `dm_event.fields` | 반환할 이벤트 field |
+| `event_types` | 이벤트 유형 필터링 |
+| `expansions` | 포함할 관련 객체 |
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="DM 전송" icon="paper-plane" href="/x-api/direct-messages/manage/quickstart">
+    Direct Message 전송하기
+  </Card>
+  <Card title="통합 가이드" icon="/icons/xds/icon-book.svg" href="/x-api/direct-messages/lookup/integrate">
+    핵심 개념 및 모범 사례
+  </Card>
+  <Card title="API 레퍼런스" icon="/icons/xds/icon-code.svg" href="/x-api/direct-messages/get-dm-events">
+    전체 endpoint 문서
+  </Card>
+</CardGroup>

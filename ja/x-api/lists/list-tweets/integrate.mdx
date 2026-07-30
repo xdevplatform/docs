@@ -1,0 +1,82 @@
+---
+title: 連携ガイド
+sidebarTitle: 連携ガイド
+keywords: ["list tweets 連携", "list timeline 連携", "list tweets ガイド", "list timeline セットアップ"]
+description: "このページでは、List Posts lookup エンドポイントを連携するためのツールと主要な概念について説明します。X API v2 スタンダード階層の list tweets に関するリファレンスドキュメントです。"
+
+
+---
+
+import { Button } from '/snippets/button.mdx';
+
+このページでは、List Posts lookup エンドポイントを連携するためのツールと主要な概念について説明します。
+
+## 便利なツール
+
+このエンドポイントの連携に役立ついくつかの主要な概念に進む前に、まず以下について理解しておくことをおすすめします:
+
+### Postman
+
+Postman はエンドポイントをテストするのに便利なツールです。それぞれの Postman リクエストには、利用可能なパスパラメータやボディパラメータがすべて含まれており、何が利用できるかを素早く把握できます。Postman コレクションの詳細については、[「Using Postman」](/tutorials/postman-getting-started) ページをご確認ください。
+
+### コードサンプル
+
+このエンドポイントをお好きなプログラミング言語のコードで動かしてみたいですか?出発点として利用できるいくつかの異なるコードサンプルが [Github ページ](https://github.com/xdevplatform/Twitter-API-v2-sample-code) で公開されています。
+
+### サードパーティライブラリ
+
+コミュニティ提供の[サードパーティライブラリ](/tools-and-libraries)を活用して、開発を始めましょう。適切なバージョンタグを検索することで、v2 エンドポイントに対応したライブラリを見つけられます。
+
+---
+
+## 主要な概念
+
+### 認証
+
+すべての X API v2 エンドポイントでは、キーとトークンと呼ばれる認証情報でリクエストを認証する必要があります。このエンドポイントへのリクエストは、OAuth 1.0a User Context、App only、または OAuth 2.0 Authorization Code with PKCE のいずれかで認証できます。
+
+[OAuth 1.0a User Context](/resources/fundamentals/authentication#oauth-1-0a-2) を利用する場合、成功するリクエストを行うために API Key とユーザー Access Token のセットを使用する必要があります。access token はリクエストを代行するユーザーに紐づいている必要があります。他のユーザーのために access token を生成したい場合は、そのユーザーは [3-legged OAuth フロー](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow)を通じて App を承認する必要があります。
+
+OAuth 1.0a は扱いが難しい場合があります。この認証方式に不慣れな場合は、[ライブラリ](/tools-and-libraries)や Postman のようなツール、あるいは OAuth 2.0 または App only を利用したリクエスト認証をおすすめします。
+
+[OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) では、アプリケーションのスコープをより細かく制御でき、複数のデバイスにまたがる認可フローが可能です。OAuth 2.0 では、ユーザーの代理としての特定の権限を付与するきめ細かいスコープを選択できます。
+
+App で OAuth 2.0 を有効化するには、Developer Console の App settings セクションにある App の認証設定で有効化する必要があります。
+
+[App only](/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token) では、リクエストに [App only Access Token](/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token) を含めるだけで済みます。App only Access Token は developer App 内で直接生成するか、[POST oauth2/token](/resources/fundamentals/authentication#post-oauth2-token) エンドポイントを使って生成できます。
+
+### Developer Console、Project、developer App
+
+X API v2 エンドポイントで動作する認証情報を取得するには、[developer account に登録](https://developer.x.com/en/portal/petition/essential/basic-info)し、そのアカウント内で [Project](/resources/fundamentals/developer-apps) を設定し、その Project 内で [developer App](/resources/fundamentals/developer-apps) を作成する必要があります。その後、developer App 内でキーとトークンを確認できます。
+
+### レート制限
+
+日々、何千人もの開発者が X API へリクエストを送信しています。この膨大なリクエスト量を管理するために、各エンドポイントには[レート制限](https://developer.x.com/x-api/fundamentals/rate-limits)が設定されており、App の代理として、または認証済みユーザーの代理として実行できるリクエスト数が制限されます。
+
+このエンドポイントは App レベルとユーザーレベルの両方でレート制限されます。App のレート制限とは、開発者が任意の App から (API Key と API Secret Key の利用、あるいは Bearer Token の利用により) 一定期間内にこのエンドポイントへ実行できるリクエスト数の上限を意味します。ユーザーのレート制限とは、リクエストを代行する認証済みユーザーが、任意の developer App を横断して、一定回数までしか List Post lookup を実行できないことを意味します。
+
+以下の表は各エンドポイントのレート制限を示しています。
+
+| Endpoint | HTTP method | Rate limit |
+| :--- | :--- | :--- |
+| /2/lists/:id/tweets | GET | 15 分あたり 900 リクエスト |
+
+### Fields と expansions
+
+X API v2 の GET エンドポイントでは、`fields` と `expansions` と呼ばれるツールを使って、API から返すデータを正確に選択できます。`expansions` パラメータは、ペイロード内で参照されるオブジェクトを展開できるようにします。たとえば、List Posts のルックアップでは以下の [expansions](/x-api/fundamentals/expansions) を取得できます:
+
+* `author_id`
+
+`fields` パラメータでは、異なるデータオブジェクト内のどの[フィールド](/x-api/fundamentals/fields)を受け取るかを正確に選択できます。このエンドポイントは主に Post オブジェクトを返します。デフォルトでは、Post オブジェクトは `id` と `text` フィールドを返します。`tweet.created_at` や `tweet.lang` などの追加フィールドを受け取るには、fields パラメータで明示的にリクエストする必要があります。
+
+[fields と expansions](/x-api/fundamentals/data-dictionary/reference#how-to-use-fields-and-expansions) を組み合わせて使用するためのガイドを [X API v2 データディクショナリ](/x-api/fundamentals/data-dictionary)に追加しました。
+
+以下の表は lookup エンドポイントで利用可能なフィールドと expansions を示しています:
+
+| Endpoint | Fields | Expansions |
+| :--- | :--- | :--- |
+| /2/lists/:id/tweets | `tweet.fields`, `user.fields` | `author_id` |
+
+### ページネーション
+
+List Posts のルックアップでは大量のデータが返される可能性があります。常に一貫した高性能な結果を返せるよう、ページネーションを使用しています。ページネーションは、単一のレスポンスで返せる以上の結果を返す X API v2 エンドポイントの機能です。その場合、データは連続する「ページ」として返されます。[結果をページネーションする方法](/x-api/fundamentals/pagination)について詳しくご確認ください。

@@ -1,0 +1,194 @@
+---
+title: Retweets of Me
+sidebarTitle: Retweets of Me
+description: "이 가이드에서는 다른 사람들이 리트윗한 자신의 게시물을 조회하는 방법을 안내합니다. 퀵스타트를 다루는 X API v2 standard 티어 레퍼런스입니다."
+keywords: ["retweets of me", "reposts of me", "내 retweets", "retweets 퀵스타트", "retweets 튜토리얼", "retweets 가이드"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+이 가이드에서는 다른 사람들이 리트윗한 자신의 게시물을 조회하는 방법을 안내합니다.
+
+<Note>
+**사전 요구사항**
+
+시작하기 전에 다음이 필요합니다:
+- 승인된 App이 있는 [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- User Access Token (OAuth 1.0a 또는 OAuth 2.0 PKCE)
+</Note>
+
+---
+
+## 왜 Retweets of Me를 사용하나요?
+
+Retweets of Me 엔드포인트는 다음을 지원합니다:
+
+- **참여도 추적** — 자신의 어떤 게시물이 공유되고 있는지 확인
+- **공감도 파악** — 어떤 콘텐츠가 청중에게 반응을 얻는지 학습
+- **전략 수립** — 공유 패턴을 기반으로 콘텐츠 전략 조정
+
+---
+
+## 리트윗된 게시물 가져오기
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/reposts_of_me?\
+tweet.fields=created_at,public_metrics&\
+max_results=10" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get your Posts that have been Retweeted
+for page in client.posts.get_reposts_of_me(
+    tweet_fields=["created_at", "public_metrics"],
+    max_results=10
+):
+    for post in page.data:
+        print(f"{post.text[:50]}... - Retweets: {post.public_metrics.retweet_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get your Posts that have been Retweeted
+const paginator = client.posts.getRepostsOfMe({
+  tweetFields: ["created_at", "public_metrics"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text?.slice(0, 50)}... - Retweets: ${post.public_metrics?.retweet_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## 응답
+
+```json title="예시 응답" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "id": "1848781937210802364",
+      "text": "ever wanted to discover trends.. before they're trends?...",
+      "created_at": "2024-01-15T10:30:00.000Z",
+      "public_metrics": {
+        "retweet_count": 42,
+        "reply_count": 5,
+        "like_count": 156,
+        "quote_count": 8
+      },
+      "edit_history_tweet_ids": ["1848781937210802364"]
+    },
+    {
+      "id": "1847990559081648620",
+      "text": "posting is just journaling with an audience",
+      "created_at": "2024-01-14T15:20:00.000Z",
+      "public_metrics": {
+        "retweet_count": 28,
+        "reply_count": 12,
+        "like_count": 89,
+        "quote_count": 3
+      },
+      "edit_history_tweet_ids": ["1847990559081648620"]
+    }
+  ],
+  "meta": {
+    "result_count": 2,
+    "next_token": "7140dibdnow9c7btw481s8m561gat797rboud5r80xvzm"
+  }
+}
+```
+
+---
+
+## 시간 범위로 필터링
+
+특정 기간의 리트윗된 게시물 가져오기:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/reposts_of_me?\
+start_time=2024-01-01T00%3A00%3A00Z&\
+end_time=2024-01-31T23%3A59%3A59Z&\
+tweet.fields=created_at,public_metrics" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get Retweeted Posts from a time range
+for page in client.posts.get_reposts_of_me(
+    start_time="2024-01-01T00:00:00Z",
+    end_time="2024-01-31T23:59:59Z",
+    tweet_fields=["created_at", "public_metrics"]
+):
+    for post in page.data:
+        print(f"{post.created_at}: {post.text[:50]}...")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get Retweeted Posts from a time range
+const paginator = client.posts.getRepostsOfMe({
+  startTime: "2024-01-01T00:00:00Z",
+  endTime: "2024-01-31T23:59:59Z",
+  tweetFields: ["created_at", "public_metrics"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.created_at}: ${post.text?.slice(0, 50)}...`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## 공통 파라미터
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `max_results` | 페이지당 결과 수 (1-100) | 10 |
+| `start_time` | 가장 오래된 게시물 타임스탬프 (ISO 8601) | — |
+| `end_time` | 가장 최근 게시물 타임스탬프 (ISO 8601) | — |
+| `pagination_token` | 다음 페이지 토큰 | — |
+| `tweet.fields` | 추가 게시물 필드 | `id`, `text` |
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="Retweets 조회" icon="retweet" href="/x-api/posts/retweets/quickstart/retweets-lookup">
+    게시물을 리트윗한 사용자 보기
+  </Card>
+  <Card title="Retweets 관리" icon="share" href="/x-api/posts/retweets/quickstart/manage-retweets">
+    Retweet 및 취소
+  </Card>
+  <Card title="API 레퍼런스" icon="/icons/xds/icon-code.svg" href="/x-api/users/get-reposts-of-me">
+    전체 엔드포인트 문서
+  </Card>
+</CardGroup>

@@ -1,0 +1,98 @@
+---
+title: Timelines 엔드포인트 마이그레이션 개요
+description: Standard v1.1 사용자 및 멘션 타임라인을 X API v2 역시간순 타임라인 및 user mentions 엔드포인트에 매핑하여 마이그레이션을 계획하세요.
+sidebarTitle: 개요
+keywords: ["timeline 마이그레이션", "timeline 마이그레이션", "v1.1에서 v2 timeline으로", "timeline 마이그레이션 가이드", "timeline 마이그레이션"]
+---
+
+## X API의 timelines 엔드포인트 비교
+
+v2 역시간순 타임라인, user Posts 타임라인, user mention 타임라인 엔드포인트는 각각 [v1.1 statuses/home_timeline,](https://developer.x.com/en/docs/twitter-api/v1/tweets/timelines/api-reference/get-statuses-home_timeline) [v1.1 statuses/user_timeline](https://developer.x.com/en/docs/twitter-api/v1/tweets/timelines/api-reference/get-statuses-user_timeline.html), [v1.1 statuses/mentions_timeline](https://developer.x.com/en/docs/twitter-api/v1/tweets/timelines/api-reference/get-statuses-mentions_timeline.html) 엔드포인트를 대체합니다. 이 엔드포인트의 이전 버전을 사용하는 코드, 앱 또는 도구를 새로운 X API v2 엔드포인트로 마이그레이션하는 것을 고려 중이라면 이 가이드가 유용할 것입니다. 보다 심도 있는 마이그레이션 가이드는 [Standard v1.1에서 X API v2로 마이그레이션](/x-api/posts/timelines/migrate/standard-to-twitter-api-v2)을 참고하세요.
+
+이 페이지에는 세 개의 비교표가 포함되어 있습니다:
+
+* 역시간순 홈 타임라인
+* User Post 타임라인
+* User mention 타임라인
+
+### 역시간순 홈 타임라인
+
+다음 표는 standard v1.1과 X API v2 홈 타임라인 엔드포인트를 비교합니다:
+
+|     |     |     |
+| :--- | :--- | :--- |
+| **Description** | **Standard v1.1** | **X API v2** |
+| 문서 | [API Reference](https://developer.x.com/en/docs/twitter-api/v1/tweets/timelines/api-reference/get-statuses-home_timeline) | [API Reference](https://developer.x.com/x-api/posts/timelines#user-mention-timeline-3) |
+| 지원 HTTP 메서드 | `GET` | `GET` |
+| Host domain | `https://api.x.com` | `https://api.x.com`  |
+| Endpoint 경로 | `/1.1/statuses/home_timeline.json` | `/2/users/:id/timelines/reverse_chronological` |
+| 필수 파라미터 | `user_id` 또는 `screen_name` | path 파라미터 :id에 User ID 설정 |
+| 인증 | OAuth 1.0a User Context | OAuth 1.0a User Context<br/><br/>[OAuth 2.0 Authorization Code Flow with PKCE](/fundamentals/authentication/oauth-2-0/authorization-code) |
+| 요청 rate limit | OAuth 1.0a User Context 시 15분당 15 요청<br/><br/>요청 상한: 24시간 창 내 100,000. | 15분 창당 180 요청 |
+| 응답당 기본 게시물 수 | 15  | 100 |
+| 응답당 최대 게시물 수 | 800 | 이 엔드포인트는 최근 7일 동안 타임라인에 생성된 모든 게시물과, 생성일과 관계없이 가장 최근 800개를 반환합니다. |
+| Post 편집 히스토리 제공 | ✔   | ✔   |
+| 사용 가능한 과거 게시물 | 리트윗을 포함한 가장 최근 800개 게시물 | 리트윗을 포함한 가장 최근 3,200개 게시물 |
+| 타임라인 탐색 옵션 | 업데이트 폴링에 사용되는 since_id(배타적)<br/><br/>`max_id` (포함적) | `start_time`<br/><br/>end_time<br/><br/>업데이트 폴링에 사용되는 `since_id`(배타적) <br/><br/>`until_id` (배타적) |
+| 결과 조정용 선택적 파라미터 | `count`<br/><br/>`exclude_replies`<br/><br/>`include_rts`<br/><br/>`trim_user`<br/><br/>`tweet_mode`<br/><br/>`since_id`<br/><br/>`max_id` | `max_results`<br/><br/>`exclude`(retweets,replies)<br/><br/>`tweet.fields`<br/><br/>`user.fields`<br/><br/>`place.fields`<br/><br/>`media.fields`<br/><br/>`poll.fields`<br/><br/>`expansions`<br/><br/>`start_time`<br/><br/>`end_time`<br/><br/>`since_id`<br/><br/>`until_id` |
+| [annotations](/x-api/fundamentals/post-annotations) 요청 및 수신 지원 | N/A | tweet.fields에 annotations가 포함되면, 결과는 'Music Genre'와 'Folk Music' 또는 'Musician'과 'Dolly Parton' 같이 Post 텍스트를 기반으로 유추된 annotation 데이터로 주석 처리됩니다 |
+| 특정 Post [metrics](/x-api/fundamentals/metrics) 요청 및 수신 지원 | N/A | `tweet.fields`에 annotations가 포함되면 결과는 게시물별 public_metrics(`retweet_count`, `reply_count`, `quote_count`, `like_count`, `impression_count`, `bookmark_count` 포함), `non_public_metrics`(`impression_count`, `user_profile_clicks`, `url_link_clicks`, `engagements` 포함)로 주석 처리됩니다.<br/><br/>view_count 및 동영상 재생 지표와 같은 추가 미디어 지표.<br/><br/>프로모션된 게시물의 경우 User Context와 함께 추가 organic\_metrics 및 promoted\_metrics를 사용할 수 있습니다. |
+| [conversation_id](/x-api/fundamentals/conversation-id) 요청 및 수신 지원 | N/A | 대화 추적에 도움이 되도록, 답글 스레드의 첫 번째로 게시된 Post를 값으로 갖는 conversation_id 필드를 반환합니다. |
+| Post JSON 형식 | [Standard v1.1 data format](https://developer.x.com/en/docs/twitter-api/v1/data-dictionary/overview.html) | [X API v2](/x-api/fundamentals/data-dictionary) format (fields 및 expansions 요청 파라미터로 결정되며 v1.1 형식과 하위 호환되지 않음)<br/><br/>Standard v1.1 형식에서 X API v2 형식으로 마이그레이션하는 방법은 [데이터 형식 마이그레이션 가이드](/x-api/migrate/data-format-migration)를 참고하세요. |
+| 결과 순서 | 역시간순 | 역시간순 |
+| 결과 페이지네이션 | N/A, Post ID 탐색을 사용해야 함 | pagination_token을 사용해 결과를 앞/뒤로 검토할 수 있습니다 |
+| [Project](/resources/fundamentals/developer-apps)에 연결된 [developer App](/resources/fundamentals/developer-apps)의 자격 증명 사용 필요 |     | ✔   |
+
+### User Post 타임라인
+
+다음 표는 standard v1.1과 X API v2 user Post 타임라인 엔드포인트를 비교합니다:
+
+|     |     |     |
+| :--- | :--- | :--- |
+| **Description** | **Standard v1.1** | **X API v2** |
+| 문서 | [API Reference](https://developer.x.com/en/docs/twitter-api/v1/tweets/timelines/api-reference/get-statuses-user_timeline.html) | [API Reference](/x-api/users/get-posts) |
+| 지원 HTTP 메서드 | GET | GET |
+| Host domain | https://api.x.com | https://api.x.com |
+| Endpoint 경로 | /1.1/statuses/user_timeline.json | /2/users/:id/tweets |
+| 필수 파라미터 | user_id 또는 screen_name | path 파라미터 :id에 User ID 설정 |
+| 인증 | OAuth 1.0a User Context<br/><br/>OAuth 2.0 App-Only | OAuth 1.0a User Context<br/><br/>OAuth 2.0 App-Only<br/><br/>OAuth 2.0 Authorization Code with PKCE |
+| 요청 rate limit | OAuth 1.0a User Context 시 15분당 900 요청<br/><br/>OAuth 2.0 App-Only 시 15분당 1500 요청<br/><br/>요청 상한: 24시간 창 내 100,000. | OAuth 1.0a User Context 시 15분 창당 900 요청<br/><br/>OAuth 2.0 App-Only 시 15분 창당 1500 요청 |
+| 응답당 기본 게시물 수 | 15  | 10  |
+| 응답당 최대 게시물 수 | 200 | 100 |
+| 사용 가능한 과거 게시물 | 리트윗을 포함한 가장 최근 3,200개 게시물 | 리트윗을 포함한 가장 최근 3,200개 게시물 |
+| 타임라인 탐색 옵션 | 업데이트 폴링에 사용되는 since_id(배타적)<br/><br/>max_id (포함적) | start_time<br/><br/>end_time<br/><br/>업데이트 폴링에 사용되는 since_id(배타적) <br/><br/>until_id (배타적) |
+| 결과 조정용 선택적 파라미터 | count  <br/>exclude_replies  <br/>include_rts  <br/>trim_user  <br/>tweet_mode  <br/>since_id  <br/>max_id | max_results  <br/>exclude(retweets,replies)  <br/>tweet.fields  <br/>user.fields  <br/>place.fields  <br/>media.fields  <br/>poll.fields  <br/>expansions  <br/>start_time  <br/>end_time  <br/>since_id  <br/>until_id |
+| [annotations](/x-api/fundamentals/post-annotations) 요청 및 수신 지원 | N/A | 'Music Genre'와 'Folk Music' 또는 'Musician'과 'Dolly Parton' 같이 Post 텍스트를 기반으로 유추된 annotation 데이터가 포함된 게시물 결과를 반환합니다 |
+| 특정 Post [metrics](/x-api/fundamentals/metrics) 요청 및 수신 지원 | N/A | 게시물별 사용 가능한 public_metrics(retweet_count, reply_count, quote_count, like_count 포함)가 포함된 게시물 결과를 반환합니다.  <br/>  <br/>OAuth1.0a User Context에서 사용 가능:  <br/>추가 non\_public\_metrics(impression_count, user\_profile\_clicks, url\_link\_clicks 포함).<br/><br/>view_count 및 동영상 재생 지표와 같은 추가 미디어 지표.<br/><br/>프로모션된 게시물의 경우 OAuth 1.0a User Context와 함께 추가 organic_metrics 및 promoted_metrics를 사용할 수 있습니다. |
+| [conversation_id](/x-api/fundamentals/conversation-id) 요청 및 수신 지원 | N/A | 대화 추적에 도움이 되도록, 답글 스레드의 첫 번째로 게시된 Post를 값으로 갖는 conversation_id 필드를 반환합니다. |
+| Post JSON 형식 | [Standard v1.1 data format](/x-api/fundamentals/data-dictionary) | [X API v2](/x-api/fundamentals/data-dictionary) format (fields 및 expansions 요청 파라미터로 결정되며 v1.1 형식과 하위 호환되지 않음)<br/><br/>Standard v1.1 형식에서 X API v2 형식으로 마이그레이션하는 방법은 [데이터 형식 마이그레이션 가이드](/x-api/migrate/data-format-migration)를 참고하세요. |
+| 결과 순서 | 역시간순 | 역시간순 |
+| 결과 페이지네이션 | N/A, Post ID 탐색을 사용해야 함 | pagination_token을 사용해 결과를 앞/뒤로 검토할 수 있습니다 |
+| [Project](/resources/fundamentals/developer-apps)에 연결된 [developer App](/resources/fundamentals/developer-apps)의 자격 증명 사용 필요 |     | ✔   |
+| Post 편집 히스토리 제공 | ✔   | ✔   |
+
+
+ 
+
+### User mention 타임라인
+
+다음 표는 standard v1.1과 X API v2 user mention 타임라인 엔드포인트를 비교합니다
+
+|     |     |     |
+| :--- | :--- | :--- |
+| **Description** | **Standard v1.1** | **X API v2** |
+| 문서 | [API Reference](https://developer.x.com/en/docs/twitter-api/v1/tweets/timelines/api-reference/get-statuses-mentions_timeline.html) | [API Reference](/x-api/users/get-mentions) |
+| 지원 HTTP 메서드 | GET | GET |
+| Host domain | https://api.x.com | https://api.x.com |
+| Endpoint 경로 | /1.1/statuses/mentions_timeline.json | /2/users/:id/mentions |
+| 필수 파라미터 | 필수 파라미터 없음 | path 파라미터 :id에 User ID 설정 |
+| 인증 | OAuth 1.0a User Context | OAuth 1.0a User Context<br/><br/>OAuth 2.0 App-Only<br/><br/>OAuth 2.0 Authorization Code with PKCE |
+| 기본 요청 rate limit | OAuth 1.0a User Context 시 15분당 75 요청<br/><br/>24시간 창 내 100,000 요청 상한. | OAuth 1.0a User Context 시 15분 창당 180 요청<br/><br/>OAuth 2.0 App-Only 시 15분 창당 450 요청 |
+| 응답당 기본 게시물 수 | 15  | 10  |
+| 응답당 최대 게시물 수 | 200 | 100 |
+| 사용 가능한 과거 게시물 | 가장 최근 800개 게시물 | 가장 최근 800개 게시물 |
+| 타임라인 탐색 옵션 | 업데이트 폴링에 사용되는 since_id(배타적)<br/><br/>max_id (포함적) | start_time<br/><br/>end_time<br/><br/>업데이트 폴링에 사용되는 since_id(배타적)<br/><br/>until_id (배타적) |
+| 결과 조정용 선택적 파라미터 | count  <br/>trim_user  <br/>include_entities  <br/>tweet_mode  <br/>since_id  <br/>max_id | max_results  <br/>tweet.fields  <br/>user.fields  <br/>place.fields  <br/>media.fields  <br/>poll.fields  <br/>expansions  <br/>start_time  <br/>end_time  <br/>since_id  <br/>until_id |
+| [annotations](/x-api/fundamentals/post-annotations) 요청 및 수신 지원 | N/A | 'Music Genre'와 'Folk Music' 또는 'Musician'과 'Dolly Parton' 같이 Post 텍스트를 기반으로 유추된 annotation 데이터가 포함된 게시물 결과를 반환합니다 |
+| 특정 Post [metrics](/x-api/fundamentals/metrics) 요청 및 수신 지원 | N/A | 게시물별 사용 가능한 public_metrics(retweet_count, reply_count, quote_count, like_count 포함)가 포함된 게시물 결과를 반환합니다.  <br/>  <br/>OAuth 1.0a User Context에서 사용 가능:  <br/>추가 non\_public\_metrics(impression_count, user\_profile\_clicks, url\_link\_clicks 포함). <br/><br/>view_count 및 동영상 재생 지표와 같은 추가 미디어 지표.<br/><br/>프로모션된 게시물의 경우 OAuth 1.0a User Context와 함께 추가 organic_metrics 및 promoted_metrics를 사용할 수 있습니다 |
+| 

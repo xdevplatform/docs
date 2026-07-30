@@ -1,0 +1,250 @@
+---
+title: User Mentions Timeline
+sidebarTitle: User Mentions
+description: "このガイドでは、特定のユーザーをメンションする投稿の取得方法を説明します。クイックスタートを扱う X API v2 スタンダードティアのリファレンス。"
+keywords: ["user mentions", "mentions timeline", "mentions クイックスタート", "mentions チュートリアル", "mention timeline", "get mentions"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+このガイドでは、特定のユーザーをメンションする投稿の取得方法を説明します。
+
+<Note>
+**前提条件**
+
+始める前に以下が必要です:
+- 承認済みの App を含む[開発者アカウント](https://developer.x.com/en/portal/petition/essential/basic-info)
+- App の Bearer Token(公開データ用)またはユーザーアクセストークン(非公開メトリクス用)
+</Note>
+
+---
+
+## ユーザーのメンションを取得する
+
+<Steps>
+  <Step title="ユーザー ID を取得する">
+    [ユーザールックアップエンドポイント](/x-api/users/lookup/introduction)でユーザー ID を取得します。たとえば、@XDevelopers のユーザー ID は `2244994945` です。
+  </Step>
+
+  <Step title="メンションタイムラインをリクエストする">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/mentions?\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id&\
+user.fields=username,verified&\
+max_results=10" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# ページネーション付きでメンションタイムラインを取得
+for page in client.posts.get_user_mentions(
+    "2244994945",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username", "verified"],
+    max_results=10
+):
+    for post in page.data:
+        print(f"@{post.author_id}: {post.text[:50]}...")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// ページネーション付きでメンションタイムラインを取得
+const paginator = client.posts.getUserMentions("2244994945", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username", "verified"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`@${post.author_id}: ${post.text?.slice(0, 50)}...`);
+  });
+}
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="レスポンスを確認する">
+    ```json
+    {
+      "data": [
+        {
+          "id": "1301573587187331074",
+          "text": "Hey @XDevelopers, love the new API!",
+          "author_id": "1234567890",
+          "created_at": "2024-01-15T10:30:00.000Z",
+          "public_metrics": {
+            "retweet_count": 5,
+            "reply_count": 2,
+            "like_count": 42,
+            "quote_count": 1
+          }
+        }
+      ],
+      "includes": {
+        "users": [
+          {
+            "id": "1234567890",
+            "username": "developer",
+            "name": "Dev Person",
+            "verified": false
+          }
+        ]
+      },
+      "meta": {
+        "newest_id": "1301573587187331074",
+        "oldest_id": "1301573587187331074",
+        "result_count": 1,
+        "next_token": "t3buvdr5pujq9g7bggsnf3ep2ha28"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## メンションをフィルターする
+
+### 返信を除外する
+
+ユーザーをメンションするオリジナル投稿のみを取得します:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/mentions?\
+exclude=replies&\
+max_results=10" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# 返信を除外してメンションを取得
+for page in client.posts.get_user_mentions(
+    "2244994945",
+    exclude=["replies"],
+    max_results=10
+):
+    for post in page.data:
+        print(post.text)
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// 返信を除外してメンションを取得
+const paginator = client.posts.getUserMentions("2244994945", {
+  exclude: ["replies"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(post.text);
+  });
+}
+```
+
+</CodeGroup>
+
+### 期間内のメンションを取得する
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/mentions?\
+start_time=2024-01-01T00%3A00%3A00Z&\
+end_time=2024-01-31T23%3A59%3A59Z" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# 期間内のメンションを取得
+for page in client.posts.get_user_mentions(
+    "2244994945",
+    start_time="2024-01-01T00:00:00Z",
+    end_time="2024-01-31T23:59:59Z"
+):
+    for post in page.data:
+        print(f"{post.created_at}: {post.text[:50]}...")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// 期間内のメンションを取得
+const paginator = client.posts.getUserMentions("2244994945", {
+  startTime: "2024-01-01T00:00:00Z",
+  endTime: "2024-01-31T23:59:59Z",
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.created_at}: ${post.text?.slice(0, 50)}...`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## 一般的なパラメーター
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `max_results` | ページあたりの結果数 (1-100) | 10 |
+| `start_time` | 最も古い投稿タイムスタンプ (ISO 8601) | — |
+| `end_time` | 最も新しい投稿タイムスタンプ (ISO 8601) | — |
+| `since_id` | この ID より後の投稿を返す | — |
+| `until_id` | この ID より前の投稿を返す | — |
+| `exclude` | `retweets`、`replies`、または両方を除外 | — |
+| `pagination_token` | 次ページ用のトークン | — |
+
+---
+
+## 次のステップ
+
+<CardGroup cols={2}>
+  <Card title="Home timeline" icon="house" href="/x-api/posts/timelines/quickstart/reverse-chron-quickstart">
+    ユーザーのホームタイムラインを取得
+  </Card>
+  <Card title="統合ガイド" icon="/icons/xds/icon-book.svg" href="/x-api/posts/timelines/integrate">
+    主要な概念とベストプラクティス
+  </Card>
+  <Card title="API リファレンス" icon="/icons/xds/icon-code.svg" href="/x-api/users/get-mentions">
+    エンドポイントの完全なドキュメント
+  </Card>
+  <Card title="ページネーションガイド" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/fundamentals/pagination">
+    大規模な結果セットを移動
+  </Card>
+</CardGroup>

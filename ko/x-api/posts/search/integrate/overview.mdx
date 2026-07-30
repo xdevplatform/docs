@@ -1,0 +1,265 @@
+---
+title: 통합 가이드
+sidebarTitle: 개요
+description: "이 가이드는 Search Posts 엔드포인트를 애플리케이션에 통합할 때 알아야 할 핵심 개념을 다룹니다. integrate를 다루는 X API v2 standard 티어 레퍼런스입니다."
+keywords: ["search 통합", "search 개요", "search 가이드", "search 구현", "tweet search 통합"]
+---
+
+이 가이드는 Search Posts 엔드포인트를 애플리케이션에 통합할 때 알아야 할 핵심 개념을 다룹니다.
+
+---
+
+## 인증
+
+### Recent search
+
+Recent search는 여러 인증 방식을 지원합니다:
+
+| Method | Use case |
+|:-------|:---------|
+| [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) | 공개 게시물 데이터 |
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | 비공개 지표 |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | 비공개 지표 |
+
+### Full-archive search
+
+Full-archive search는 [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) 인증만 지원합니다.
+
+<Warning>
+비공개 지표(`non_public_metrics`, `organic_metrics`, `promoted_metrics`)는 App-Only 인증만 지원하는 full-archive search에서는 사용할 수 없습니다.
+</Warning>
+
+---
+
+## 쿼리 작성
+
+쿼리는 연산자를 사용해 게시물을 매칭합니다. boolean 로직으로 연산자를 조합하세요:
+
+```
+(AI OR "machine learning") lang:en -is:retweet has:links
+```
+
+### 쿼리 길이 제한
+
+| Access level | Recent search | Full-archive search |
+|:-------------|:--------------|:--------------------|
+| Self-serve | 512자 | 1,024자 |
+| Enterprise | 4,096자 | 4,096자 |
+
+### 연산자 유형
+
+| Type | Description | Example |
+|:-----|:------------|:--------|
+| **Standalone** | 단독으로 사용 가능 | `#python`, `from:user` |
+| **Conjunction-required** | standalone 연산자와 함께 사용해야 함 | `has:media`, `is:retweet` |
+
+<Card title="쿼리 작성" icon="/icons/xds/icon-search.svg" href="/x-api/posts/search/integrate/build-a-query">
+  쿼리 구문을 자세히 익히기
+</Card>
+
+<Card title="연산자 레퍼런스" icon="list-check" href="/x-api/posts/search/integrate/operators">
+  사용 가능한 모든 연산자 보기
+</Card>
+
+---
+
+## Fields 및 expansions
+
+기본적으로 응답에는 `id`, `text`, `edit_history_tweet_ids`만 포함됩니다. 추가 데이터를 요청하려면 파라미터를 사용하세요.
+
+### 예시 요청
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/recent?\
+query=python&\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id,attachments.media_keys&\
+user.fields=username,verified&\
+media.fields=url,type" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Search recent Posts
+for page in client.posts.search_recent(
+    query="python",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id", "attachments.media_keys"],
+    user_fields=["username", "verified"],
+    media_fields=["url", "type"],
+    max_results=100
+):
+    for post in page.data:
+        print(f"{post.text} - Likes: {post.public_metrics.like_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Search recent Posts
+const paginator = client.posts.searchRecent("python", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id", "attachments.media_keys"],
+  userFields: ["username", "verified"],
+  mediaFields: ["url", "type"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text} - Likes: ${post.public_metrics?.like_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+### 사용 가능한 expansions
+
+| Expansion | Returns |
+|:----------|:--------|
+| `author_id` | 작성자의 user 객체 |
+| `attachments.media_keys` | 첨부된 미디어 객체 |
+| `attachments.poll_ids` | 첨부된 poll 객체 |
+| `referenced_tweets.id` | 인용되거나 답글이 달린 게시물 |
+| `geo.place_id` | Place 객체 |
+| `entities.mentions.username` | 멘션된 user 객체 |
+
+<Card title="Fields 및 expansions 가이드" icon="sliders" href="/x-api/fundamentals/fields">
+  응답 커스터마이징에 대해 자세히 알아보기
+</Card>
+
+---
+
+## 페이지네이션
+
+Search 엔드포인트는 페이지 단위로 결과를 반환합니다. 응답의 `next_token`을 사용해 추가 페이지를 가져오세요.
+
+### 동작 방식
+
+1. `max_results`와 함께 첫 요청을 만듭니다
+2. `meta` 객체에서 `next_token`을 확인합니다
+3. 후속 요청에 `next_token`을 포함시킵니다
+4. `next_token`이 반환되지 않을 때까지 반복합니다
+
+### 예시
+
+<CodeGroup dropdown>
+
+```bash cURL
+# First request
+curl "https://api.x.com/2/tweets/search/recent?query=python&max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+
+# Subsequent request with pagination token
+curl "https://api.x.com/2/tweets/search/recent?query=python&max_results=100&next_token=NEXT_TOKEN" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# The SDK handles pagination automatically
+all_posts = []
+
+for page in client.posts.search_recent(query="python", max_results=100):
+    if page.data:
+        all_posts.extend(page.data)
+
+print(f"Found {len(all_posts)} posts")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+async function getAllResults(query) {
+  const allPosts = [];
+
+  // The SDK handles pagination automatically
+  const paginator = client.posts.searchRecent(query, { maxResults: 100 });
+
+  for await (const page of paginator) {
+    if (page.data) {
+      allPosts.push(...page.data);
+    }
+  }
+
+  return allPosts;
+}
+
+// Usage
+const posts = await getAllResults("python");
+console.log(`Found ${posts.length} posts`);
+```
+
+</CodeGroup>
+
+<Card title="페이지네이션 가이드" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/posts/search/integrate/paginate">
+  페이지네이션에 대해 자세히 알아보기
+</Card>
+
+---
+
+## 게시물 편집
+
+게시물은 30분 이내에 최대 5회까지 편집할 수 있습니다. Search 엔드포인트는 항상 가장 최근 버전을 반환합니다.
+
+### 고려 사항
+
+- `edit_history_tweet_ids`에는 모든 Post ID가 포함됩니다(가장 오래된 것부터)
+- 30분 창이 지난 후 가져온 게시물은 최종 버전을 나타냅니다
+- 거의 실시간 사용 사례에서는 최근에 게시된 게시물이 여전히 편집될 수 있습니다
+
+<Card title="게시물 편집 기본" icon="/icons/xds/icon-history.svg" href="/x-api/fundamentals/edit-posts">
+  게시물 편집에 대해 자세히 알아보기
+</Card>
+
+---
+
+## 모범 사례
+
+<CardGroup cols={2}>
+  <Card title="구체적으로 시작" icon="crosshairs">
+    여러 연산자를 사용해 결과를 좁히고 노이즈를 줄이세요.
+  </Card>
+  <Card title="반복적으로 테스트" icon="flask">
+    광범위하게 시작한 뒤 결과를 기반으로 다듬으세요.
+  </Card>
+  <Card title="페이지네이션 처리" icon="/icons/xds/icon-arrow-right.svg">
+    큰 결과 집합에 대해 적절한 페이지네이션을 구현하세요.
+  </Card>
+  <Card title="결과 캐싱" icon="database">
+    반복 요청을 피하기 위해 결과를 로컬에 저장하세요.
+  </Card>
+</CardGroup>
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="쿼리 작성" icon="/icons/xds/icon-search.svg" href="/x-api/posts/search/integrate/build-a-query">
+    쿼리 구문 마스터하기
+  </Card>
+  <Card title="연산자 레퍼런스" icon="list-check" href="/x-api/posts/search/integrate/operators">
+    사용 가능한 모든 연산자
+  </Card>
+  <Card title="페이지네이션" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/posts/search/integrate/paginate">
+    큰 결과 집합 처리
+  </Card>
+  <Card title="API 레퍼런스" icon="/icons/xds/icon-code.svg" href="/x-api/posts/recent-search">
+    전체 엔드포인트 문서
+  </Card>
+</CardGroup>

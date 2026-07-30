@@ -1,0 +1,259 @@
+---
+title: "Scripting: Funções Factory"
+sidebarTitle: "Scripting: Funções Factory"
+description: "Se você está integrando seu site com o X usando X for Websites e Web Intents, pode gerar widgets dinamicamente usando funções JavaScript."
+---
+
+Se você está integrando seu site com o X usando [X for Websites](/x-for-websites/overview) e [Web Intents](/x-for-websites/web-intents/overview), pode gerar widgets dinamicamente usando funções JavaScript.
+
+Os produtos do X for Websites — Post buttons, Follow buttons, Posts e timelines incorporados — são todos carregados usando um utilitário JavaScript chamado `widgets-js`. Ao adicionar um widget do X à sua página, este arquivo JavaScript é incluído no código HTML embed, ou você pode incluir diretamente `https://platform.x.com/widgets.js` em sua página. (Consulte a [documentação de configuração do X for Websites](/x-for-websites/javascript-api/guides/set-up-x-for-websites) para um snippet de código recomendado.)
+
+Por padrão, o `widgets-js` encontrará a marcação em uma página e converterá a marcação básica e funcional em widgets interativos ricos. Além disso, há uma série de funções do `widgets-js` que permitem trabalhar com conteúdo do X dinamicamente:
+
+## Criando widgets em runtime com funções factory
+
+Widgets podem ser gerados em runtime, sem precisar de um código HTML embed. Um conjunto de funções factory pode gerar qualquer tipo de widget:
+
+- [twttr.widgets.createShareButton](/x-for-websites/post-button/guides/javascript-factory-function)
+- [twttr.widgets.createFollowButton](/x-for-websites/follow-button/guides/javascript-factory-function-follow-button)
+- [twttr.widgets.createHashtagButton](/x-for-websites/post-button/guides/hashtag-button)
+- [twttr.widgets.createMentionButton](/x-for-websites/post-button/guides/mention-button)
+- [twttr.widgets.createTimeline](/x-for-websites/timelines/overview)
+- [twttr.widgets.createTweet](/x-for-websites/post-button/overview)
+
+### Botões
+
+`createShareButton`, `createFollowButton`, `createHashtagButton` e `createMentionButton` aceitam argumentos semelhantes.
+
+#### Argumento principal
+
+O primeiro argumento é obrigatório, e é único para o tipo de botão. Forneça uma string representando um de:
+
+- `url`: A URL a ser compartilhada.
+- `screen_name`: O screen_name de um usuário a ser seguido ou mencionado.
+- `hashtag`: Hashtag a ser postada e exibida no botão.
+
+#### Argumentos adicionais:
+
+- `target`: **Obrigatório**. O elemento no qual renderizar o widget.
+- `options`: _Opcional_. Um hash de opções adicionais para configurar o widget.
+
+<Note>
+Widgets geralmente são renderizados como elementos iframe. Quando um iframe é movido dentro do DOM, o navegador recarregará seu conteúdo. Para botões, isso pode desperdiçar largura de banda, enquanto para Posts e timelines isso fará com que o conteúdo injetado dinamicamente seja perdido. Use o argumento target para renderizar widgets em sua localização final na página. Se você precisar atrasar a exibição de um widget, use CSS para posicionar o widget fora da tela até que seja necessário.
+</Note>
+
+Cada função `create` retorna uma `Promise`. Você pode executar código depois que um widget é criado passando um callback para:
+
+```javascript
+twttr.widgets.createFoo()
+  .then(function (element) {
+    console.log("Widget created.")
+  });
+```
+
+Quando resolvida, a promise passará uma referência a um elemento de widget recém-criado para o callback encadeado.
+
+### Exemplos
+
+Criar um share button para uma URL:
+
+```javascript
+twttr.widgets.createShareButton(
+  '/',
+  document.getElementById('new-button'),
+  {
+    count: 'none',
+    text: 'Sharing a URL using the Post Button'
+  }).then(function (el) {
+    console.log("Button created.")
+  });
+```
+
+Criar um Follow button para um usuário:
+
+```javascript
+twttr.widgets.createFollowButton(
+  'endform',
+  document.getElementById('new-button'),
+  {
+    size: 'large'
+  }).then(function (el) {
+    console.log("Follow button created.")
+  });
+```
+
+### Opções
+
+Configurações e opções adicionais podem ser passadas para as funções factory, como nos exemplos acima.
+
+**Configurações adicionais para todos os widgets**
+
+| Opção   | Valores                                      | Padrão     | Notas                                                                                           |
+|----------|---------------------------------------------|-------------|-------------------------------------------------------------------------------------------------|
+| `lang`   | Um código de idioma ISO 639-1                  | `en`        | O idioma no qual renderizar um widget, se suportado (consulte o [Translation Center](http://translate.x.com/)). |
+| `dnt`    | `true`, `false`                             | `false`     | Quando definido como `true`, o embed e sua página incorporada em seu site não são usados para fins que incluem [sugestões personalizadas](https://support.x.com/articles/20169421) e [anúncios personalizados](https://support.x.com/articles/20170405). |
+| `related`| Qualquer lista separada por vírgulas de screen names válidos do X | `Undefined` | Uma lista de screen names do X a serem sugeridos para follow após um Post ou ação de Post ser publicada. |
+| `via`    | Qualquer screen name válido do X                     | `Undefined` | Um usuário do X mencionado no texto padrão do Post como `via@user` quando apropriado.            |
+
+**Opções de configuração adicionais para widgets de botão**
+
+| Opção | Valores                  | Padrão                                      | Notas                                                                 |
+|--------|-------------------------|----------------------------------------------|-----------------------------------------------------------------------|
+| `align`| `left`, `right`         | Dependente da localização (`left` ou `right`, dependendo da direção do texto do idioma) | O alinhamento do botão dentro de um iframe; use isso para garantir layout alinhado ao alinhar botões |
+| `size` | `medium`, `large`       | `medium`                                     |                                                                       |
+
+**Opções adicionais do Post button**
+
+| Opção     | Valores                          | Padrão     | Notas                                                                |
+|------------|---------------------------------|-------------|----------------------------------------------------------------------|
+| `text`     | Qualquer string                      | `Undefined` | O texto padrão destacado que um usuário vê no Post web intent     |
+| `hashtags` | Uma lista de hashtags separada por vírgulas | `Undefined` | Uma lista de hashtags a serem adicionadas ao texto padrão do Post quando apropriado. |
+
+### Posts
+
+`createTweet` aceita o ID de um Post e depois os mesmos argumentos adicionais dos botões.
+
+#### Argumentos
+
+- `tweetId`: O ID de um Post a ser renderizado. (Isto deve ser fornecido como uma `String`, pois os IDs do X são gerados a partir de inteiros de 64 bits, e inteiros JavaScript são limitados a 53 bits.)
+- `target`: **Obrigatório**. O elemento no qual renderizar o widget.
+- `options`: _Opcional_. Um hash de opções adicionais para configurar o widget.
+
+#### Exemplos
+
+Criar um Post incorporado para [um Post do US Department of Interior](https://x.com/Interior/status/511181794914627584):
+
+```javascript
+twttr.widgets.createTweet(
+  '511181794914627584',
+  document.getElementById('first-tweet'),
+  {
+    align: 'left'
+  })
+  .then(function (el) {
+    console.log("Post displayed.")
+  });
+```
+
+### Opções
+
+| Opção        | Valores                              | Padrão                                      | Notas                                                                                   |
+|---------------|-------------------------------------|----------------------------------------------|-----------------------------------------------------------------------------------------|
+| `conversation`| `none`, `all`                       | `all`                                        | Posts em resposta a outro Post exibirão uma versão compacta do Post anterior por padrão. Use `none` para ocultar o Post pai na conversa. |
+| `cards`       | `hidden`, `visible`                 | `visible`                                    | Ocultar fotos, vídeos e prévias de link alimentadas por [Cards](https://dev.x.com/cards). |
+| `width`       | Inteiro positivo                    | `auto` (derivado do tamanho do container)         | Definir a largura máxima do Post incorporado                                            |
+| `align`       | `left`, `right`, `center`           | `Undefined`                                  | Alinhar o Post incorporado à esquerda ou direita para que o texto envolva ao redor dele, ou alinhar ao centro para que flutue no meio de um parágrafo |
+| `theme`       | `dark`, `light`                     | `light`                                      | Alternar o esquema de cores padrão do Post incorporado                                  |
+
+### Timelines
+
+`createTimeline` aceita a definição de fonte de dados para uma timeline. Argumentos adicionais são consistentes com Posts incorporados.
+
+#### Argumentos
+
+- **fonte de dados**: _Obrigatório_ O objeto de definição de fonte de dados para o conteúdo a ser exibido no widget. Pode ser uma string de widget ID para um widget legado.
+- `target`: **Obrigatório**. O elemento no qual renderizar o widget.
+- `options`: _Opcional_. Um hash de opções adicionais para configurar o widget.
+
+#### Exemplos
+
+Criar um widget de timeline:
+
+```javascript title="Exemplo" lines wrap icon="square-js"
+twttr.widgets.createTimeline(
+  {
+    sourceType: 'profile',
+    screenName: 'xdevelopers'
+  },
+  document.getElementById('timeline'),
+  {
+    width: '450',
+    height: '700',
+    related: 'xdevelopers,api'
+  }).then(function (el) {
+    console.log('Embedded a timeline.')
+  });
+```
+
+#### Fonte de dados
+
+A definição de fonte de dados descreve qual conteúdo hidratará a timeline incorporada. Existem vários tipos de fontes de dados: profile; list; URL; widget configuration.
+
+##### Profile
+
+Para alimentar uma timeline incorporada com Posts de um usuário individual, use uma fonte de dados `profile`. Para isso, defina `sourceType` como `profile` e defina um de `screenName` ou `userId`.
+
+| Opção      | Valores                      |
+|-------------|-----------------------------|
+| `sourceType`| `profile`                   |
+| `screenName`| Username válido do X            |
+| `userId`    | User ID válido do X             |
+
+```javascript
+twttr.widgets.createTimeline(
+  {
+    sourceType: 'profile',
+    screenName: 'xdevelopers'
+  },
+  document.getElementById('container')
+);
+```
+
+##### List
+
+Para alimentar uma timeline incorporada com uma list do X, use uma fonte de dados `list`. Defina `sourceType` como `list` e defina tanto `ownerScreenName` quanto `slug`, ou defina um `id`.
+
+| Opção           | Valores                              | Notas                              |
+|------------------|-------------------------------------|------------------------------------|
+| `sourceType`     | `list`                              |                                    |
+| `ownerScreenName`| Username válido do X                    | Usado com `slug`                   |
+| `slug`           | O identificador string para uma list    | Usado com `ownerScreenName`        |
+| `id`             | ID de list válido do X                     |                                    |
+
+```javascript
+twttr.widgets.createTimeline(
+  {
+    sourceType: 'list',
+    ownerScreenName: 'x',
+    slug: 'official-x-accts'
+  },
+  document.getElementById('container')
+);
+```
+
+##### URL
+
+Para alimentar uma timeline incorporada com conteúdo do X representado por uma URL, use uma fonte de dados `url`. O conteúdo suportado inclui perfis e lists.
+
+| Opção      | Valores                                      |
+|-------------|---------------------------------------------|
+| `sourceType`| `url`                                       |
+| `url`       | URL absoluta de um perfil ou list do X        |
+
+```javascript
+twttr.widgets.createTimeline(
+  {
+    sourceType: 'url',
+    url: 'https://x.com/xdevelopers'
+  },
+  document.getElementById('container')
+);
+```
+
+### Opções
+
+Todos os parâmetros descritos acima para todos os widgets e para Posts incorporados também se aplicam a timelines incorporadas.
+
+| Opção       | Valores                                                                 | Padrão              | Notas                                                                                          |
+|--------------|------------------------------------------------------------------------|----------------------|------------------------------------------------------------------------------------------------|
+| `chrome`     | `noheader`, `nofooter`, `noborders`, `transparent`, `noscrollbar`     | `Undefined`          | Alternar a exibição de elementos de design no widget. Este parâmetro é uma lista de valores separados por espaço. |
+| `height`     | Inteiro positivo                                                       | `600`                | Definir uma altura fixa do widget incorporado                                                      |
+| `tweetLimit` | Intervalo: `1`-`20`                                                        | `Undefined`          | Renderiza uma timeline estaticamente, exibindo apenas n Posts.                               |
+| `borderColor`| Cor hexadecimal                                                      | Varia por tema      | Ajusta a cor das bordas dentro do widget.                                                 |
+| `ariaPolite` | `polite`, `assertive`, `rude`                                          | `polite`             | Aplica o comportamento aria-polite especificado à timeline renderizada. Novos Posts podem ser adicionados ao topo de uma timeline, afetando leitores de tela. |
+
+Para mais informações sobre as opções de personalização de Timelines incorporadas, consulte [Embedded Timelines](/x-for-websites/timelines/overview).
+
+Essas funções tornam possível integrar dinamicamente o conteúdo de usuários do X ao seu site em uma aplicação JavaScript, e integrar interações de usuário à experiência da sua própria aplicação.
+
+Por favor, faça perguntas e compartilhe seu código e exemplos no [fórum de desenvolvedores](https://devcommunity.x.com/). Você também pode consultar a [documentação principal do X for Websites](/x-for-websites/javascript-api/guides/set-up-x-for-websites).

@@ -1,0 +1,258 @@
+---
+title: Quickstart de Full-Archive Search
+sidebarTitle: Full-Archive Search
+description: "Esta guía te muestra cómo hacer tu primera solicitud de full-archive search para encontrar Posts. Referencia del nivel estándar de X API v2 sobre quickstart."
+keywords: ["full archive search", "quickstart de archive search", "búsqueda histórica", "tutorial de full archive", "guía de archive search"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+Esta guía te muestra cómo hacer tu primera solicitud de full-archive search para encontrar Posts del archivo completo de X, que se remonta hasta marzo de 2006.
+
+<Warning>
+Full-archive search requiere acceso [Self-serve](/x-api/getting-started/about-x-api) o [Enterprise](/x-api/getting-started/about-x-api). [Actualiza tu acceso](https://developer.x.com/en/portal/products) para usar este endpoint.
+</Warning>
+
+<Note>
+**Requisitos previos**
+
+Antes de comenzar, necesitarás:
+- Una [cuenta de desarrollador](https://developer.x.com/en/portal/petition/essential/basic-info)
+- El Bearer Token de tu App (que se encuentra en la Developer Console en "Keys and tokens")
+</Note>
+
+---
+
+## Paso 1: Construye una consulta
+
+Full-archive search admite todos los operadores de consulta. Construye consultas de la misma manera que recent search:
+
+```
+from:XDevelopers lang:en
+```
+
+<Tip>
+Full-archive search admite consultas de hasta 1,024 caracteres (4,096 para Enterprise).
+</Tip>
+
+---
+
+## Paso 2: Establece un rango de tiempo
+
+Por defecto, los resultados devuelven Posts de los últimos 30 días. Usa `start_time` y `end_time` para buscar períodos específicos:
+
+| Parameter | Format | Example |
+|:----------|:-------|:--------|
+| `start_time` | ISO 8601 | `2020-01-01T00:00:00Z` |
+| `end_time` | ISO 8601 | `2020-12-31T23:59:59Z` |
+
+---
+
+## Paso 3: Realiza una solicitud
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/all?\
+query=from%3AXDevelopers&\
+start_time=2020-01-01T00%3A00%3A00Z&\
+end_time=2020-12-31T23%3A59%3A59Z&\
+max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Full-archive search con paginación
+for page in client.posts.search_all(
+    query="from:XDevelopers",
+    start_time="2020-01-01T00:00:00Z",
+    end_time="2020-12-31T23:59:59Z",
+    max_results=100
+):
+    for post in page.data:
+        print(post.text)
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Full-archive search con paginación
+const paginator = client.posts.searchAll({
+  query: "from:XDevelopers",
+  startTime: "2020-01-01T00:00:00Z",
+  endTime: "2020-12-31T23:59:59Z",
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(post.text);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Paso 4: Revisa la respuesta
+
+```json title="Ejemplo de respuesta" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "id": "1271111223220809728",
+      "text": "Tune in tonight and watch as @jessicagarson takes us through...",
+      "edit_history_tweet_ids": ["1271111223220809728"]
+    },
+    {
+      "id": "1270799243071062016",
+      "text": "As we work towards building the new Twitter API...",
+      "edit_history_tweet_ids": ["1270799243071062016"]
+    }
+  ],
+  "meta": {
+    "newest_id": "1271111223220809728",
+    "oldest_id": "1270799243071062016",
+    "result_count": 2
+  }
+}
+```
+
+<Note>
+Los Posts creados antes de que se introdujera la función de edición (septiembre de 2022) no incluirán `edit_history_tweet_ids`.
+</Note>
+
+---
+
+## Paso 5: Añade fields y expansions
+
+Solicita datos adicionales con parámetros de consulta:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/all?\
+query=from%3AXDevelopers&\
+start_time=2020-01-01T00%3A00%3A00Z&\
+end_time=2020-12-31T23%3A59%3A59Z&\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id&\
+user.fields=username,description&\
+max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Búsqueda con fields y expansions
+for page in client.posts.search_all(
+    query="from:XDevelopers",
+    start_time="2020-01-01T00:00:00Z",
+    end_time="2020-12-31T23:59:59Z",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username", "description"],
+    max_results=100
+):
+    for post in page.data:
+        print(f"{post.created_at}: {post.text[:50]}...")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Búsqueda con fields y expansions
+const paginator = client.posts.searchAll({
+  query: "from:XDevelopers",
+  startTime: "2020-01-01T00:00:00Z",
+  endTime: "2020-12-31T23:59:59Z",
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username", "description"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.created_at}: ${post.text?.slice(0, 50)}...`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Paso 6: Pagina los resultados
+
+Los SDKs manejan la paginación automáticamente. Para cURL, usa el `next_token` de la respuesta:
+
+```bash
+curl "https://api.x.com/2/tweets/search/all?\
+query=from%3AXDevelopers&\
+max_results=500&\
+next_token=b26v89c19zqg8o3fo7gesq314yb9l2l4ptqy" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+<Card title="Guía de paginación" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/posts/search/integrate/paginate">
+  Aprende más sobre cómo navegar por conjuntos de resultados grandes
+</Card>
+
+---
+
+## Diferencias clave con recent search
+
+| Feature | Recent Search | Full-Archive Search |
+|:--------|:--------------|:--------------------|
+| Rango de tiempo | Últimos 7 días | Marzo de 2006 hasta ahora |
+| Acceso requerido | Todos los desarrolladores | Pay-per-use, Enterprise |
+| Máximo de resultados por solicitud | 100 | 500 |
+| Longitud de consulta | 512 caracteres | 1,024 caracteres |
+| Límite de tasa | 450 / 15 min | 300 / 15 min, 1 / seg |
+| Autenticación | App-Only, User Context | App-Only |
+
+---
+
+## Parámetros comunes
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `query` | Consulta de búsqueda (obligatorio) | — |
+| `max_results` | Posts por página (10-500) | 10 |
+| `start_time` | Timestamp más antiguo del Post | Hace 30 días |
+| `end_time` | Timestamp más reciente del Post | Ahora |
+| `next_token` | Token de paginación | — |
+| `tweet.fields` | Fields adicionales de Post | `id`, `text` |
+| `expansions` | Objetos relacionados a incluir | — |
+
+---
+
+## Próximos pasos
+
+<CardGroup cols={2}>
+  <Card title="Construir una consulta" icon="/icons/xds/icon-search.svg" href="/x-api/posts/search/integrate/build-a-query">
+    Domina la sintaxis y los operadores de consulta
+  </Card>
+  <Card title="Referencia de operadores" icon="list-check" href="/x-api/posts/search/integrate/operators">
+    Consulta todos los operadores disponibles
+  </Card>
+  <Card title="Guía de paginación" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/posts/search/integrate/paginate">
+    Maneja conjuntos de resultados grandes
+  </Card>
+  <Card title="Referencia de la API" icon="/icons/xds/icon-code.svg" href="/x-api/posts/full-archive-search">
+    Documentación completa del endpoint
+  </Card>
+</CardGroup>

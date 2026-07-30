@@ -1,0 +1,340 @@
+---
+title: クイックスタート
+sidebarTitle: クイックスタート
+description: "このガイドでは、ダイレクトメッセージの送信とグループ会話の作成の手順を説明します。manage をカバーする X API v2 standard tier のリファレンスです。"
+keywords: ["manage direct messages quickstart", "send DM quickstart", "DM management quickstart", "create group DM"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+このガイドでは、ダイレクトメッセージの送信とグループ会話の作成の手順を説明します。
+
+<Note>
+**前提条件**
+
+始める前に、以下が必要です。
+- 承認済みの App を持つ [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- User Access Token（`dm.write` と `dm.read` スコープを持つ OAuth 2.0 PKCE）
+</Note>
+
+---
+
+## 1 対 1 のメッセージを送信
+
+<Steps>
+  <Step title="受信者の user ID を取得">
+    メッセージを送りたい相手のユーザー ID が必要です。これは [User lookup endpoint](/x-api/users/lookup/introduction) から取得できます。
+  </Step>
+
+  <Step title="メッセージを送信">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/dm_conversations/with/9876543210/messages" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Hello! This is a message from the API."}'
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# 1 対 1 のメッセージを送信
+response = client.dm.send_message(
+    participant_id="9876543210",
+    text="Hello! This is a message from the API."
+)
+
+print(f"Message sent: {response.data.dm_event_id}")
+print(f"Conversation: {response.data.dm_conversation_id}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// 1 対 1 のメッセージを送信
+const response = await client.dm.sendMessage({
+  participantId: "9876543210",
+  text: "Hello! This is a message from the API.",
+});
+
+console.log(`Message sent: ${response.data?.dm_event_id}`);
+console.log(`Conversation: ${response.data?.dm_conversation_id}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="レスポンスを確認">
+    ```json
+    {
+      "data": {
+        "dm_conversation_id": "1234567890-9876543210",
+        "dm_event_id": "1582103724607971332"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## グループ会話を作成
+
+<Steps>
+  <Step title="参加者を定義">
+    グループに含めたい全員のユーザー ID を集めます（自分は除きます）。
+  </Step>
+
+  <Step title="最初のメッセージ付きでグループを作成">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/dm_conversations" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_type": "Group",
+    "participant_ids": ["944480690", "906948460078698496"],
+    "message": {"text": "Welcome to our new group!"}
+  }'
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# グループ会話を作成
+response = client.dm.create_conversation(
+    conversation_type="Group",
+    participant_ids=["944480690", "906948460078698496"],
+    message={"text": "Welcome to our new group!"}
+)
+
+print(f"Group created: {response.data.dm_conversation_id}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// グループ会話を作成
+const response = await client.dm.createConversation({
+  conversationType: "Group",
+  participantIds: ["944480690", "906948460078698496"],
+  message: { text: "Welcome to our new group!" },
+});
+
+console.log(`Group created: ${response.data?.dm_conversation_id}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="会話 ID を受け取る">
+    ```json
+    {
+      "data": {
+        "dm_conversation_id": "1582103724607971328",
+        "dm_event_id": "1582103724607971332"
+      }
+    }
+    ```
+
+    後でメッセージを追加できるように、`dm_conversation_id` を保存しておきます。
+  </Step>
+</Steps>
+
+---
+
+## 既存の会話にメッセージを追加
+
+自分が既に参加している会話にメッセージを送信します。
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/dm_conversations/1582103724607971328/messages" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Adding another message to the conversation."}'
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# 既存の会話にメッセージを追加
+response = client.dm.send_message_to_conversation(
+    dm_conversation_id="1582103724607971328",
+    text="Adding another message to the conversation."
+)
+
+print(f"Message sent: {response.data.dm_event_id}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// 既存の会話にメッセージを追加
+const response = await client.dm.sendMessageToConversation(
+  "1582103724607971328",
+  { text: "Adding another message to the conversation." }
+);
+
+console.log(`Message sent: ${response.data?.dm_event_id}`);
+```
+
+</CodeGroup>
+
+---
+
+## メディア付きメッセージを送信
+
+<Steps>
+  <Step title="メディアをアップロード">
+    まず、[Media Upload endpoint](/x-api/media/quickstart/media-upload-chunked) を使用してメディアをアップロードします。
+  </Step>
+
+  <Step title="メディア添付付きで送信">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/dm_conversations/with/9876543210/messages" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Check out this image!",
+    "attachments": [{"media_id": "1234567890123456789"}]
+  }'
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# メディア付きメッセージを送信
+response = client.dm.send_message(
+    participant_id="9876543210",
+    text="Check out this image!",
+    attachments=[{"media_id": "1234567890123456789"}]
+)
+
+print(f"Message with media sent: {response.data.dm_event_id}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// メディア付きメッセージを送信
+const response = await client.dm.sendMessage({
+  participantId: "9876543210",
+  text: "Check out this image!",
+  attachments: [{ mediaId: "1234567890123456789" }],
+});
+
+console.log(`Message with media sent: ${response.data?.dm_event_id}`);
+```
+
+</CodeGroup>
+
+  </Step>
+</Steps>
+
+---
+
+## メッセージを削除
+
+自分が送信したメッセージを削除します。
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X DELETE "https://api.x.com/2/dm_events/1582103724607971332" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# メッセージを削除
+response = client.dm.delete_message("1582103724607971332")
+print(f"Deleted: {response.data.deleted}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// メッセージを削除
+const response = await client.dm.deleteMessage("1582103724607971332");
+console.log(`Deleted: ${response.data?.deleted}`);
+```
+
+</CodeGroup>
+
+**レスポンス:**
+
+```json
+{
+  "data": {
+    "deleted": true
+  }
+}
+```
+
+<Warning>
+削除できるのは自分が送信したメッセージのみで、他の参加者のメッセージは削除できません。
+</Warning>
+
+---
+
+## 必要なスコープ
+
+OAuth 2.0 PKCE を使用する場合、Access Token には以下のスコープが必要です。
+
+| Scope | Description |
+|:------|:------------|
+| `dm.write` | メッセージの送信と削除 |
+| `dm.read` | 会話の読み取り（dm.write と併用が必要） |
+| `tweet.read` | 一部の expansions で必要 |
+| `users.read` | user expansions で必要 |
+
+---
+
+## 次のステップ
+
+<CardGroup cols={2}>
+  <Card title="DM lookup" icon="inbox" href="/x-api/direct-messages/lookup/quickstart">
+    DM の会話を取得
+  </Card>
+  <Card title="統合ガイド" icon="/icons/xds/icon-book.svg" href="/x-api/direct-messages/manage/integrate">
+    主要な概念とベストプラクティス
+  </Card>
+  <Card title="API リファレンス" icon="/icons/xds/icon-code.svg" href="/x-api/direct-messages/create-dm-message-by-participant-id">
+    エンドポイントの完全なドキュメント
+  </Card>
+  <Card title="サンプルコード" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    動作するコード例
+  </Card>
+</CardGroup>

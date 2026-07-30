@@ -1,0 +1,258 @@
+---
+title: Full-Archive Search クイックスタート
+sidebarTitle: Full-Archive Search
+description: "このガイドでは、2006 年 3 月までさかのぼる X の完全アーカイブから投稿を検索する初回リクエストの手順を説明します。クイックスタートを扱う X API v2 スタンダードティアのリファレンス。"
+keywords: ["full archive search", "archive search クイックスタート", "履歴 search", "full archive チュートリアル", "archive search ガイド"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+このガイドでは、2006 年 3 月までさかのぼる X の完全アーカイブから投稿を検索する初回リクエストの手順を説明します。
+
+<Warning>
+Full-archive search には [Self-serve](/x-api/getting-started/about-x-api) または [Enterprise](/x-api/getting-started/about-x-api) アクセスが必要です。このエンドポイントを使用するには[アクセスをアップグレード](https://developer.x.com/en/portal/products)してください。
+</Warning>
+
+<Note>
+**前提条件**
+
+始める前に以下が必要です:
+- [開発者アカウント](https://developer.x.com/en/portal/petition/essential/basic-info)
+- App の Bearer Token(Developer Console の「Keys and tokens」で確認できます)
+</Note>
+
+---
+
+## ステップ 1: クエリを組み立てる
+
+Full-archive search はすべてのクエリ演算子をサポートします。recent search と同じ方法でクエリを組み立てます:
+
+```
+from:XDevelopers lang:en
+```
+
+<Tip>
+Full-archive search は最大 1,024 文字までのクエリをサポートします(Enterprise は 4,096 文字)。
+</Tip>
+
+---
+
+## ステップ 2: 期間を設定する
+
+デフォルトでは、直近 30 日間の投稿が返されます。特定期間を検索するには `start_time` と `end_time` を使用します:
+
+| Parameter | Format | Example |
+|:----------|:-------|:--------|
+| `start_time` | ISO 8601 | `2020-01-01T00:00:00Z` |
+| `end_time` | ISO 8601 | `2020-12-31T23:59:59Z` |
+
+---
+
+## ステップ 3: リクエストを実行する
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/all?\
+query=from%3AXDevelopers&\
+start_time=2020-01-01T00%3A00%3A00Z&\
+end_time=2020-12-31T23%3A59%3A59Z&\
+max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# ページネーション付き full-archive search
+for page in client.posts.search_all(
+    query="from:XDevelopers",
+    start_time="2020-01-01T00:00:00Z",
+    end_time="2020-12-31T23:59:59Z",
+    max_results=100
+):
+    for post in page.data:
+        print(post.text)
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// ページネーション付き full-archive search
+const paginator = client.posts.searchAll({
+  query: "from:XDevelopers",
+  startTime: "2020-01-01T00:00:00Z",
+  endTime: "2020-12-31T23:59:59Z",
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(post.text);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## ステップ 4: レスポンスを確認する
+
+```json title="レスポンス例" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "id": "1271111223220809728",
+      "text": "Tune in tonight and watch as @jessicagarson takes us through...",
+      "edit_history_tweet_ids": ["1271111223220809728"]
+    },
+    {
+      "id": "1270799243071062016",
+      "text": "As we work towards building the new Twitter API...",
+      "edit_history_tweet_ids": ["1270799243071062016"]
+    }
+  ],
+  "meta": {
+    "newest_id": "1271111223220809728",
+    "oldest_id": "1270799243071062016",
+    "result_count": 2
+  }
+}
+```
+
+<Note>
+編集機能が導入される前(2022 年 9 月)に作成された投稿には `edit_history_tweet_ids` は含まれません。
+</Note>
+
+---
+
+## ステップ 5: fields と expansions を追加する
+
+クエリパラメーターで追加データをリクエストします:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/all?\
+query=from%3AXDevelopers&\
+start_time=2020-01-01T00%3A00%3A00Z&\
+end_time=2020-12-31T23%3A59%3A59Z&\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id&\
+user.fields=username,description&\
+max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# fields と expansions を指定して検索
+for page in client.posts.search_all(
+    query="from:XDevelopers",
+    start_time="2020-01-01T00:00:00Z",
+    end_time="2020-12-31T23:59:59Z",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username", "description"],
+    max_results=100
+):
+    for post in page.data:
+        print(f"{post.created_at}: {post.text[:50]}...")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// fields と expansions を指定して検索
+const paginator = client.posts.searchAll({
+  query: "from:XDevelopers",
+  startTime: "2020-01-01T00:00:00Z",
+  endTime: "2020-12-31T23:59:59Z",
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username", "description"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.created_at}: ${post.text?.slice(0, 50)}...`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## ステップ 6: 結果をページネーションする
+
+SDK はページネーションを自動的に処理します。cURL の場合、レスポンスの `next_token` を使用します:
+
+```bash
+curl "https://api.x.com/2/tweets/search/all?\
+query=from%3AXDevelopers&\
+max_results=500&\
+next_token=b26v89c19zqg8o3fo7gesq314yb9l2l4ptqy" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+<Card title="ページネーションガイド" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/posts/search/integrate/paginate">
+  大規模な結果セットの移動について詳しく学ぶ
+</Card>
+
+---
+
+## Recent search との主な違い
+
+| Feature | Recent Search | Full-Archive Search |
+|:--------|:--------------|:--------------------|
+| 期間 | 直近 7 日間 | 2006 年 3 月から現在 |
+| 必要なアクセス | すべての開発者 | 従量課金、Enterprise |
+| リクエストあたり最大結果数 | 100 | 500 |
+| クエリ長 | 512 文字 | 1,024 文字 |
+| レート制限 | 15 分あたり 450 | 15 分あたり 300、1 秒あたり 1 |
+| 認証 | App-Only、User Context | App-Only |
+
+---
+
+## 一般的なパラメーター
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `query` | 検索クエリ(必須) | — |
+| `max_results` | ページあたりの投稿数 (10-500) | 10 |
+| `start_time` | 最も古い投稿タイムスタンプ | 30 日前 |
+| `end_time` | 最も新しい投稿タイムスタンプ | 現在 |
+| `next_token` | ページネーショントークン | — |
+| `tweet.fields` | 追加の Post フィールド | `id`, `text` |
+| `expansions` | 含める関連オブジェクト | — |
+
+---
+
+## 次のステップ
+
+<CardGroup cols={2}>
+  <Card title="クエリを組み立てる" icon="/icons/xds/icon-search.svg" href="/x-api/posts/search/integrate/build-a-query">
+    クエリ構文と演算子を習得
+  </Card>
+  <Card title="演算子リファレンス" icon="list-check" href="/x-api/posts/search/integrate/operators">
+    利用可能なすべての演算子を確認
+  </Card>
+  <Card title="ページネーションガイド" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/posts/search/integrate/paginate">
+    大規模な結果セットを処理
+  </Card>
+  <Card title="API リファレンス" icon="/icons/xds/icon-code.svg" href="/x-api/posts/full-archive-search">
+    エンドポイントの完全なドキュメント
+  </Card>
+</CardGroup>

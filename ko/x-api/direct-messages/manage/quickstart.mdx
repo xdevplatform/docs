@@ -1,0 +1,340 @@
+---
+title: 빠른 시작
+sidebarTitle: 빠른 시작
+description: "이 가이드는 Direct Message 전송과 그룹 대화 생성을 안내합니다. 관리 기능을 다루는 X API v2 standard 등급 레퍼런스입니다."
+keywords: ["Direct Message 관리 빠른 시작", "DM 전송 빠른 시작", "DM 관리 빠른 시작", "그룹 DM 생성"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+이 가이드는 Direct Message 전송과 그룹 대화 생성을 안내합니다.
+
+<Note>
+**사전 요구 사항**
+
+시작하기 전에 다음이 필요합니다:
+- 승인된 App이 있는 [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- 사용자 Access Token (`dm.write` 및 `dm.read` scope가 포함된 OAuth 2.0 PKCE)
+</Note>
+
+---
+
+## 1:1 메시지 전송
+
+<Steps>
+  <Step title="수신자의 user ID 확인">
+    메시지를 보낼 사용자의 user ID가 필요합니다. [User lookup endpoint](/x-api/users/lookup/introduction)에서 확인할 수 있습니다.
+  </Step>
+
+  <Step title="메시지 전송">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/dm_conversations/with/9876543210/messages" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Hello! This is a message from the API."}'
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Send a one-to-one message
+response = client.dm.send_message(
+    participant_id="9876543210",
+    text="Hello! This is a message from the API."
+)
+
+print(f"Message sent: {response.data.dm_event_id}")
+print(f"Conversation: {response.data.dm_conversation_id}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Send a one-to-one message
+const response = await client.dm.sendMessage({
+  participantId: "9876543210",
+  text: "Hello! This is a message from the API.",
+});
+
+console.log(`Message sent: ${response.data?.dm_event_id}`);
+console.log(`Conversation: ${response.data?.dm_conversation_id}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="응답 확인">
+    ```json
+    {
+      "data": {
+        "dm_conversation_id": "1234567890-9876543210",
+        "dm_event_id": "1582103724607971332"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## 그룹 대화 생성
+
+<Steps>
+  <Step title="참가자 정의">
+    그룹에 포함할 모든 사용자(본인 제외)의 user ID를 수집합니다.
+  </Step>
+
+  <Step title="첫 메시지와 함께 그룹 생성">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/dm_conversations" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_type": "Group",
+    "participant_ids": ["944480690", "906948460078698496"],
+    "message": {"text": "Welcome to our new group!"}
+  }'
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Create a group conversation
+response = client.dm.create_conversation(
+    conversation_type="Group",
+    participant_ids=["944480690", "906948460078698496"],
+    message={"text": "Welcome to our new group!"}
+)
+
+print(f"Group created: {response.data.dm_conversation_id}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Create a group conversation
+const response = await client.dm.createConversation({
+  conversationType: "Group",
+  participantIds: ["944480690", "906948460078698496"],
+  message: { text: "Welcome to our new group!" },
+});
+
+console.log(`Group created: ${response.data?.dm_conversation_id}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="대화 ID 받기">
+    ```json
+    {
+      "data": {
+        "dm_conversation_id": "1582103724607971328",
+        "dm_event_id": "1582103724607971332"
+      }
+    }
+    ```
+
+    나중에 메시지를 추가하려면 `dm_conversation_id`를 저장해 두세요.
+  </Step>
+</Steps>
+
+---
+
+## 기존 대화에 메시지 추가
+
+이미 참여 중인 대화에 메시지를 보냅니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/dm_conversations/1582103724607971328/messages" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Adding another message to the conversation."}'
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Add message to existing conversation
+response = client.dm.send_message_to_conversation(
+    dm_conversation_id="1582103724607971328",
+    text="Adding another message to the conversation."
+)
+
+print(f"Message sent: {response.data.dm_event_id}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Add message to existing conversation
+const response = await client.dm.sendMessageToConversation(
+  "1582103724607971328",
+  { text: "Adding another message to the conversation." }
+);
+
+console.log(`Message sent: ${response.data?.dm_event_id}`);
+```
+
+</CodeGroup>
+
+---
+
+## 미디어 첨부 메시지 전송
+
+<Steps>
+  <Step title="미디어 업로드">
+    먼저 [Media Upload endpoint](/x-api/media/quickstart/media-upload-chunked)를 사용해 미디어를 업로드합니다.
+  </Step>
+
+  <Step title="미디어 첨부와 함께 전송">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/dm_conversations/with/9876543210/messages" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Check out this image!",
+    "attachments": [{"media_id": "1234567890123456789"}]
+  }'
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Send message with media
+response = client.dm.send_message(
+    participant_id="9876543210",
+    text="Check out this image!",
+    attachments=[{"media_id": "1234567890123456789"}]
+)
+
+print(f"Message with media sent: {response.data.dm_event_id}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Send message with media
+const response = await client.dm.sendMessage({
+  participantId: "9876543210",
+  text: "Check out this image!",
+  attachments: [{ mediaId: "1234567890123456789" }],
+});
+
+console.log(`Message with media sent: ${response.data?.dm_event_id}`);
+```
+
+</CodeGroup>
+
+  </Step>
+</Steps>
+
+---
+
+## 메시지 삭제
+
+전송한 메시지를 삭제합니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X DELETE "https://api.x.com/2/dm_events/1582103724607971332" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Delete a message
+response = client.dm.delete_message("1582103724607971332")
+print(f"Deleted: {response.data.deleted}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Delete a message
+const response = await client.dm.deleteMessage("1582103724607971332");
+console.log(`Deleted: ${response.data?.deleted}`);
+```
+
+</CodeGroup>
+
+**응답:**
+
+```json
+{
+  "data": {
+    "deleted": true
+  }
+}
+```
+
+<Warning>
+본인이 전송한 메시지만 삭제할 수 있으며, 다른 참가자의 메시지는 삭제할 수 없습니다.
+</Warning>
+
+---
+
+## 필수 scope
+
+OAuth 2.0 PKCE를 사용할 때 access token에 다음 scope가 포함되어야 합니다:
+
+| Scope | 설명 |
+|:------|:------------|
+| `dm.write` | 메시지 전송 및 삭제 |
+| `dm.read` | 대화 읽기 (dm.write와 함께 필수) |
+| `tweet.read` | 일부 expansion에 필요 |
+| `users.read` | 사용자 expansion에 필요 |
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="DM 조회" icon="inbox" href="/x-api/direct-messages/lookup/quickstart">
+    DM 대화 조회하기
+  </Card>
+  <Card title="통합 가이드" icon="/icons/xds/icon-book.svg" href="/x-api/direct-messages/manage/integrate">
+    핵심 개념 및 모범 사례
+  </Card>
+  <Card title="API 레퍼런스" icon="/icons/xds/icon-code.svg" href="/x-api/direct-messages/create-dm-message-by-participant-id">
+    전체 endpoint 문서
+  </Card>
+  <Card title="샘플 코드" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    동작하는 코드 예제
+  </Card>
+</CardGroup>

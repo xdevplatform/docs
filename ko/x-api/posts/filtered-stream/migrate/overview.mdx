@@ -1,0 +1,40 @@
+---
+title: Filtered stream 마이그레이션 개요
+description: Standard v1.1 또는 PowerTrack의 filtered stream 컨슈머를 X API v2로 마이그레이션하려면 엔드포인트, 연산자, 규칙, 인증 요구사항을 매핑하세요.
+sidebarTitle: 개요
+keywords: ["filtered stream 마이그레이션", "stream 마이그레이션", "v1.1에서 v2 filtered stream으로", "filtered stream 마이그레이션 가이드", "filtered stream 마이그레이션"]
+---
+
+## X API의 filtered stream 엔드포인트 비교
+
+v2 filtered stream 엔드포인트 그룹은 [standard v1.1 statuses/filter](https://developer.x.com/en/docs/x-api/v1/tweets/filter-realtime/api-reference/post-statuses-filter) 및 [PowerTrack API](/x-api/enterprise-gnip-2.0/powertrack-api)를 대체하고 있습니다. 이전 버전의 filtered stream 엔드포인트를 사용하는 코드, 앱 또는 도구를 새로운 X API v2 엔드포인트로 마이그레이션하는 것을 고려 중이라면, 이 비교표가 시작에 도움이 될 것입니다.
+
+보다 자세한 마이그레이션 가이드는 다음을 참고하세요:
+
+[Standard v1.1과 X API v2 비교 마이그레이션](x-api/posts/filtered-stream#standard-v1-1-compared-to-x-api-v2)
+
+[PowerTrack API에서 X API v2로 마이그레이션](/x-api/enterprise-gnip-2.0/powertrack-api#powertrack-operators)
+
+다음 표는 X가 제공하는 filtered streaming 엔드포인트를 비교합니다:
+ 
+
+| **Description** | **Standard v1.1** | **PowerTrack API** | **X API v2** |
+| :--- | :--- | :--- | :--- |
+| 액세스 | X App | enterprise 계약 및 계정 필요 | developer account([가입](https://developer.x.com/en/portal/petition/essential/basic-info)), [Project](/resources/fundamentals/developer-apps) 내의 [X App](/resources/fundamentals/developer-apps) 필요 |
+| :--- | :--- | :--- | :--- |
+| Host domain | **https://stream.x.com** | **https://gnip-stream.x.com** | **https://api.x.com** |
+| Endpoint path | **1.1/statuses/filter.json** | **/stream/powertrack/accounts/{gnip_account_name}/publishers/twitter/{stream_label}.json**<br/><br/>**/rules/powertrack/accounts/{gnip_account_name}/publishers/twitter/{stream_label}.json **<br/><br/>**/rules/powertrack/accounts/{gnip_account_name}/publishers/twitter/{stream_label}/validation.json** | **/2/tweets/search/stream**<br/><br/>**/2/tweets/search/stream/rules** |
+| [인증](/resources/fundamentals/authentication) | OAuth 1.0a User Context | HTTP Basic Authentication | OAuth 2.0 App-Only |
+| 지원 HTTP 메서드 | POST | GET  <br/>POST | GET  <br/>POST |
+| 필수 파라미터 | 연결 시 파라미터로 규칙 정의, 다음 중 하나 이상 필요:<br/><br/>* **follow**<br/>* **track**<br/>* **locations** | 스트리밍 연결에 필수 파라미터는 없으며, 선택적으로 backfill 파라미터를 사용.<br/><br/>규칙은 별도 관리 | 스트리밍 연결에 필수 파라미터는 없으며, 응답 형식을 정의하는 선택적 파라미터와 Academic Research access용 [backfill recovery 기능](/x-api/fundamentals/recovery-and-redundancy) 사용 가능.<br/><br/>규칙은 별도 관리 |
+| 전달 유형 | Streaming | Streaming<br/><br/>REST (규칙 관리용) | Streaming<br/><br/>REST (규칙 관리용) |
+| 기본 요청 rate limit | 5분당 5회 연결 시도 | 분당 60 요청, POST와 GET 요청 통합<br/><br/>/rules: 특정 스트림의 /rules 엔드포인트 API에 대한 모든 요청(POST 및 GET) 통합 기준 분당 60 요청. | 엔드포인트에 따라 다름. 현재 제한은 [rate limits](/x-api/fundamentals/rate-limits)를 참고하세요. |
+| 최대 허용 연결 수 | 승인된 사용자당 동시 2개 | 계약에 따라 다중/이중화 연결 지원 | Pay-per-use: 1 |
+| [복구 및 이중화 기능](/x-api/fundamentals/recovery-and-redundancy) | 없음 | Backfill, 이중 연결, Replay API | |
+| Keep-alive 신호/하트비트 | 최소 20초마다 빈 줄(\\r\\n 등) | 10초마다 빈 줄(\\r\\n 등) | 최소 20초마다 빈 줄(\\r\\n 등) |
+| Latency | 10초 | 2초<br/><br/>URL unwinding enrichment의 경우 최소 10초 | 10초 |
+| 최대 허용 규칙 수 | 1개 규칙 (엔드포인트 연결 요청 내) | 계약에 따라 최대 250,000개 | Pay-per-use: 1,000개 규칙 |
+| 규칙 필터 제한 | 연결당 쿼리 1개, 다음 중 하나까지:<br/><br/>\- 400개 track 키워드<br/><br/>\- 5000개 follow 사용자 ID<br/><br/>\- 25개 location box | 규칙당 최대 2,048자 | Pay-per-use: 규칙당 1,024자 |
+| [Post JSON 형식](/x-api/fundamentals/data-dictionary) | Standard v1.1 format | [Native Enriched](/x-api/enterprise-gnip-2.0/fundamentals/data-dictionary#native-enriched-tweet-object) 또는 Activity Streams ([console](/x-api/enterprise-gnip-2.0/fundamentals/overview)에서 선택) | [X API v2 format](/x-api/fundamentals/data-dictionary) (**fields**와 **expansions** 요청 파라미터로 결정되며, v1.1 형식과 하위 호환되지 않음)<br/><br/>Standard v1.1 형식에서 X API v2 형식으로 마이그레이션하는 방법은 [data formats 마이그레이션 가이드](/x-api/migrate/data-format-migration)를 참고하세요. Native Enriched 및 Activity Streams에 대한 추가 데이터 형식 마이그레이션 가이드는 곧 출시될 예정입니다. |
+| Post 편집 히스토리 및 메타데이터 제공 | ✔   | ✔   | ✔   |
+| 고유 기능 | 연결 요청의 쿼리 파라미터로 필터링 수행<br/><br/>구성 UI 없음 | 독립 엔드포인트를 통해 생성된 규칙으로 필터링 수행<br/><br/>계약에서 [Enrichment](/x-api/enterprise-gnip-2.0/enterprise-gnip#enrichments) 기능 사용 가능<br/><br/>console.gnip.com UI에서 구성 | 독립 엔드포인트를 통해 생성된 [규칙](/x-api/posts/filtered-stream/integrate/build-a-rule)으로 필터링 수행<br/><br/>[Metrics](/x-api/fundamentals/metrics) 및 URL enrichment 기능 포함<br/><br/>객체 [fields](/x-api/fundamentals/fields) 및 [expansions](/x-api/fundamentals/expansions)를 요청 파라미터로 지정<br/><br/>Post [Annotations](/x-api/fundamentals/post-annotations)<br/><br/>[Conversation ID](/x-api/fundamentals/conversation-id) 연산자 및 필드<br/><br/>[Developer Console](/resources/fundamentals/developer-portal)을 통한 구성 |

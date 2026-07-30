@@ -1,0 +1,140 @@
+---
+title: 빠른 시작
+sidebarTitle: 빠른 시작
+keywords: ["filtered stream webhooks 빠른 시작", "webhook stream 빠른 시작", "stream webhooks 튜토리얼", "webhook stream 가이드"]
+
+description: "v2 filtered stream webhooks API는 [v2 filtered stream와 유사합니다. stream을 다루는 X API v2 표준 계층에 대한 참고 자료입니다."
+---
+
+## filtered stream webhooks API 시작하기
+
+v2 filtered stream webhooks API는 필터링 규칙 설정 측면에서 [v2 filtered stream 엔드포인트](/x-api/posts/filtered-stream/introduction)와 유사합니다. 차이점은 규칙과 일치하는 Post의 전달 메커니즘에 있습니다.
+* v2 filtered stream 엔드포인트의 경우 지속적인 연결을 설정하고 규칙과 일치하는 Post를 청취해야 합니다.
+* 이 filtered stream webhook 엔드포인트의 경우 웹훅을 등록하면 X가 규칙과 일치하는 Post를 웹훅으로 전달합니다.
+
+이 가이드는 filtered stream webhooks 엔드포인트를 사용하여 Post를 필터링하고 수신하는 방법을 설명합니다. 여기에는 3단계가 있습니다.
+
+1. filtered stream 규칙 설정
+2. 웹훅 만들기
+3. Filtered Stream 인스턴스를 웹훅에 연결
+
+Filtered Stream 인스턴스를 웹훅에 연결하면 X는 규칙과 일치하는 Post를 웹훅으로 전송합니다.
+
+### filtered stream 규칙 설정
+
+filtered stream 규칙은 하나 이상의 연산자로 구성되며, 부울 논리와 괄호를 사용하여 결합해 어떤 Post가 웹훅에 전달될지를 정의합니다. filtered stream webhooks API는 규칙을 만들고 관리하기 위해 [v2 filtered stream 엔드포인트](/x-api/posts/filtered-stream/introduction)와 동일한 엔드포인트 집합을 사용합니다. 필터를 어떻게 만드는지 보여주는 [자세한 가이드](/x-api/posts/filtered-stream/integrate/build-a-rule)를 확인하세요.
+
+### 웹훅 만들기
+
+이벤트를 수신할 웹훅을 만들려면 X API에 공개적으로 액세스할 수 있는 HTTPS URL을 등록하세요. 웹훅은 CRC 검증을 위한 GET 요청과 이벤트 페이로드를 위한 POST 요청을 처리해야 합니다. 웹훅을 만들고 관리하는 자세한 단계는 [Webhooks 소개 문서](/x-api/webhooks/introduction)를 따르세요.
+
+**참고:** [Account Activity API (AAA)](/x-api/account-activity/introduction)용 웹훅을 이미 사용하는 경우, 여기서 설정하는 웹훅과 정확히 동일합니다. 실제로 대역폭이 충분하고 이벤트를 분리할 수 있다면 AAA에 사용하는 것과 동일한 웹훅 엔드포인트를 이 API에 사용할 수 있습니다.
+
+### Filtered Stream 인스턴스를 웹훅에 연결
+
+규칙을 설정하고 웹훅을 생성한 후에는 Filtered Stream 인스턴스에 웹훅을 연결하세요. 이렇게 하면 일치하는 post 이벤트가 웹훅 URL로 라우팅됩니다.
+
+엔드포인트 사용: `POST /2/tweets/search/webhooks/:webhook_id`
+
+expansions, fields, media 옵션과 같이 스트리밍 엔드포인트 `/2/tweets/search/stream`에서 사용되는 것과 동일한 쿼리 매개변수를 포함할 수 있습니다. 이렇게 하면 이벤트 페이로드에 포함되는 데이터를 커스터마이즈할 수 있습니다.
+
+**예:**
+
+```bash
+curl --request POST \ 
+  --url 
+'https://api.x.com/2/tweets/search/webhooks/123456789012345678?ex
+pansions=author_id&user.fields=username,name,id' \ 
+  --header 'Authorization: Bearer $BEARER_TOKEN' 
+```
+
+성공 응답 예:
+
+```json
+{ 
+  "data": { 
+    "provisioned": true 
+  } 
+}
+```
+
+**팁:** 이중화를 위해 또는 다른 필드 집합을 수신하기 위해 동일한 스트림에 여러 웹훅을 연결할 수 있습니다. 각 연결은 고유한 매개변수를 지정할 수 있습니다.
+
+Filtered Stream 인스턴스를 웹훅에 연결하면 아래와 같이 규칙과 일치하는 Post를 받기 시작합니다:
+
+```json title="예시 응답" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+    "data": {
+        "id": "1346889436626259968",
+        "text": "Learn how to use the user Post timeline and user mention timeline endpoints in the X API v2 to explore Post… https://t.co/56a0vZUx7i",
+        "created_at": "2021-01-06T18:40:40.000Z",
+        "author_id": "2244994945"
+    },
+    "includes": {
+        "users": [
+            {
+                "id": "2244994945",
+                "name": "Developers",
+                "username": "Xdevelopers",
+                "created_at": "2013-12-14T04:35:55Z",
+                "protected": false
+            }
+        ]
+    },
+    "matching_rules": [
+        {
+            "id": "120897978112909812",
+            "tag": "api-posts"
+        }
+    ]
+}
+```
+
+### Filtered Stream에 연결된 웹훅 조회
+
+현재 Filtered Stream에 연결된 모든 웹훅 목록을 조회합니다:
+
+```bash
+GET /2/tweets/search/stream/webhooks 
+```
+
+응답 예:
+
+```json title="예시 응답" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+    "data": {
+        "links": [
+            {
+                "application_id": "29893711",
+                "business_user_id": "1877374016438091776",
+                "fields": [
+                    "user.fields=username",
+                    "name",
+                    "id",
+                    "expansions=author_id"
+                ],
+                "instance_id": "1877375130462289920",
+                "webhook_id": "1952390923729424384"
+            }
+        ]
+    }
+}
+```
+
+### Filtered Stream에서 웹훅 연결 해제
+
+특정 웹훅에서 이벤트 수신을 중단하려면 다음을 사용해 연결을 해제하세요:
+
+```bash
+DELETE /2/tweets/search/webhooks/:webhook_id
+```
+
+응답은 다음과 같습니다:
+
+```json
+{
+    "data": {
+        "deleted": true
+    }
+}
+```

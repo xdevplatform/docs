@@ -1,0 +1,243 @@
+---
+title: Full-Archive Post Counts
+sidebarTitle: Full-Archive Post Counts
+description: "このガイドでは、2006 年 3 月までさかのぼる履歴投稿数の取得方法を説明します。クイックスタートを扱う X API v2 スタンダードティアのリファレンス。"
+keywords: ["full archive tweet counts クイックスタート", "archive counts クイックスタート", "履歴 counts クイックスタート", "full archive counts"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+このガイドでは、2006 年 3 月までさかのぼる履歴投稿数の取得方法を説明します。
+
+<Warning>
+Full-archive Post counts には [Self-serve](/x-api/getting-started/about-x-api) または [Enterprise](/x-api/getting-started/about-x-api) アクセスが必要です。
+</Warning>
+
+<Note>
+**前提条件**
+
+始める前に以下が必要です:
+- Self-serve または Enterprise アクセスの[開発者アカウント](https://developer.x.com/en/portal/petition/essential/basic-info)
+- App の Bearer Token
+</Note>
+
+---
+
+## Full-archive Post counts を取得する
+
+<Steps>
+  <Step title="クエリを組み立てる">
+    Full-archive search と同じクエリ構文を使用します。たとえば、@XDevelopers からの投稿数を数えるには:
+
+    ```
+    from:XDevelopers
+    ```
+  </Step>
+
+  <Step title="期間を設定する">
+    特定の履歴期間を検索するには、`start_time` と `end_time` を指定します:
+
+    | Parameter | Format | Example |
+    |:----------|:-------|:--------|
+    | `start_time` | ISO 8601 | `2020-01-01T00:00:00Z` |
+    | `end_time` | ISO 8601 | `2020-12-31T23:59:59Z` |
+  </Step>
+
+  <Step title="リクエストを実行する">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/counts/all?\
+query=from%3AXDevelopers&\
+start_time=2020-01-01T00%3A00%3A00Z&\
+end_time=2020-12-31T23%3A59%3A59Z&\
+granularity=day" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Full-archive Post counts を取得
+response = client.posts.count_all(
+    query="from:XDevelopers",
+    start_time="2020-01-01T00:00:00Z",
+    end_time="2020-12-31T23:59:59Z",
+    granularity="day"
+)
+
+for bucket in response.data:
+    print(f"{bucket.start}: {bucket.tweet_count} Posts")
+
+print(f"Total: {response.meta.total_tweet_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Full-archive Post counts を取得
+const response = await client.posts.countAll({
+  query: "from:XDevelopers",
+  startTime: "2020-01-01T00:00:00Z",
+  endTime: "2020-12-31T23:59:59Z",
+  granularity: "day",
+});
+
+response.data?.forEach((bucket) => {
+  console.log(`${bucket.start}: ${bucket.tweet_count} Posts`);
+});
+
+console.log(`Total: ${response.meta?.total_tweet_count}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="レスポンスを確認する">
+    ```json
+    {
+      "data": [
+        {
+          "end": "2020-01-02T00:00:00.000Z",
+          "start": "2020-01-01T00:00:00.000Z",
+          "tweet_count": 3
+        },
+        {
+          "end": "2020-01-03T00:00:00.000Z",
+          "start": "2020-01-02T00:00:00.000Z",
+          "tweet_count": 5
+        }
+      ],
+      "meta": {
+        "total_tweet_count": 8
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Granularity オプション
+
+カウントの集計単位を制御します:
+
+| Granularity | Description |
+|:------------|:------------|
+| `minute` | 1 分ごとのカウント |
+| `hour` | 1 時間ごとのカウント(デフォルト) |
+| `day` | 1 日ごとのカウント |
+
+---
+
+## 結果をページネーションする
+
+長い期間の場合、レスポンスの `next_token` を使用します:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/counts/all?\
+query=from%3AXDevelopers&\
+start_time=2015-01-01T00%3A00%3A00Z&\
+end_time=2020-12-31T23%3A59%3A59Z&\
+granularity=day&\
+next_token=abc123" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# ページネーションで counts を取得
+next_token = None
+
+while True:
+    response = client.posts.count_all(
+        query="from:XDevelopers",
+        start_time="2015-01-01T00:00:00Z",
+        end_time="2020-12-31T23:59:59Z",
+        granularity="day",
+        next_token=next_token
+    )
+    
+    for bucket in response.data:
+        print(f"{bucket.start}: {bucket.tweet_count}")
+    
+    next_token = response.meta.next_token
+    if not next_token:
+        break
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// ページネーションで counts を取得
+let nextToken = undefined;
+
+do {
+  const response = await client.posts.countAll({
+    query: "from:XDevelopers",
+    startTime: "2015-01-01T00:00:00Z",
+    endTime: "2020-12-31T23:59:59Z",
+    granularity: "day",
+    nextToken,
+  });
+
+  response.data?.forEach((bucket) => {
+    console.log(`${bucket.start}: ${bucket.tweet_count}`);
+  });
+
+  nextToken = response.meta?.next_token;
+} while (nextToken);
+```
+
+</CodeGroup>
+
+---
+
+## Recent counts との主な違い
+
+| Feature | Recent Counts | Full-Archive Counts |
+|:--------|:--------------|:--------------------|
+| 期間 | 直近 7 日間 | 2006 年 3 月から現在まで |
+| 必要なアクセス | すべての開発者 | 従量課金、Enterprise |
+| デフォルトの期間 | 直近 7 日間 | 直近 30 日間 |
+
+---
+
+## 一般的なパラメーター
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `query` | 検索クエリ(必須) | — |
+| `granularity` | 時間バケットのサイズ | `hour` |
+| `start_time` | 最も古いタイムスタンプ (ISO 8601) | 30 日前 |
+| `end_time` | 最も新しいタイムスタンプ (ISO 8601) | 現在 |
+| `next_token` | ページネーショントークン | — |
+
+---
+
+## 次のステップ
+
+<CardGroup cols={2}>
+  <Card title="Recent counts" icon="clock" href="/x-api/posts/counts/quickstart/recent-tweet-counts">
+    Recent Post counts を取得
+  </Card>
+  <Card title="クエリを組み立てる" icon="/icons/xds/icon-search.svg" href="/x-api/posts/counts/integrate/build-a-query">
+    クエリ構文を習得
+  </Card>
+  <Card title="API リファレンス" icon="/icons/xds/icon-code.svg" href="/x-api/posts/get-count-of-all-posts">
+    エンドポイントの完全なドキュメント
+  </Card>
+</CardGroup>

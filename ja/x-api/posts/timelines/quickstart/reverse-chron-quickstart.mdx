@@ -1,0 +1,232 @@
+---
+title: Home Timeline クイックスタート
+sidebarTitle: Home Timeline
+description: "このガイドでは、逆時系列ホームタイムラインエンドポイントへの最初のリクエスト手順を説明します。クイックスタートを扱う X API v2 スタンダードティアのリファレンス。"
+keywords: ["home timeline", "逆時系列", "home timeline クイックスタート", "timeline クイックスタート", "home timeline チュートリアル"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+このガイドでは、逆時系列ホームタイムラインエンドポイントへの最初のリクエスト手順を説明します。
+
+<Note>
+**前提条件**
+
+始める前に以下が必要です:
+- 承認済みの App を含む[開発者アカウント](https://developer.x.com/en/portal/petition/essential/basic-info)
+- ユーザーアクセストークン(このエンドポイントにはユーザー認証が必要)
+</Note>
+
+---
+
+## ステップ 1: ユーザー ID を取得する
+
+ホームタイムラインを取得したいアカウントのユーザー ID が必要です。username ルックアップエンドポイントで取得します:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/by/username/XDevelopers" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+response = client.users.get_by_username("XDevelopers")
+print(f"User ID: {response.data.id}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+const response = await client.users.getByUsername("XDevelopers");
+console.log(`User ID: ${response.data?.id}`);
+```
+
+</CodeGroup>
+
+レスポンスにはユーザー ID が含まれます:
+
+```json
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "XDevelopers"
+  }
+}
+```
+
+---
+
+## ステップ 2: ホームタイムラインをリクエストする
+
+ユーザー ID とユーザーアクセストークンを使って GET リクエストを行います:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/timelines/reverse_chronological" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# ページネーション付きでホームタイムラインを取得
+for page in client.posts.get_home_timeline("2244994945"):
+    for post in page.data:
+        print(post.text)
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// ページネーション付きでホームタイムラインを取得
+const paginator = client.posts.getHomeTimeline("2244994945");
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(post.text);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## ステップ 3: レスポンスを確認する
+
+```json title="レスポンス例" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "id": "1524796546306478083",
+      "text": "Today marks the launch of Devs in the Details...",
+      "edit_history_tweet_ids": ["1524796546306478083"]
+    },
+    {
+      "id": "1524468552404668416",
+      "text": "Join us tomorrow for a discussion about bots...",
+      "edit_history_tweet_ids": ["1524468552404668416"]
+    }
+  ],
+  "meta": {
+    "result_count": 2,
+    "newest_id": "1524796546306478083",
+    "oldest_id": "1524468552404668416",
+    "next_token": "7140dibdnow9c7btw421dyz6jism75z99gyxd8egarsc4"
+  }
+}
+```
+
+---
+
+## ステップ 4: fields と expansions を追加する
+
+クエリパラメーターで追加データをリクエストします:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/timelines/reverse_chronological?\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id&\
+user.fields=username,verified&\
+max_results=10" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# fields と expansions 付きでホームタイムラインを取得
+for page in client.posts.get_home_timeline(
+    "2244994945",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username", "verified"],
+    max_results=10
+):
+    for post in page.data:
+        print(f"{post.text[:50]}... - Likes: {post.public_metrics.like_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// fields と expansions 付きでホームタイムラインを取得
+const paginator = client.posts.getHomeTimeline("2244994945", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username", "verified"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text?.slice(0, 50)}... - Likes: ${post.public_metrics?.like_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## ステップ 5: 結果をページネーションする
+
+SDK はページネーションを自動的に処理します。cURL の場合、レスポンスの `next_token` を使用してさらに結果を取得します:
+
+```bash
+curl "https://api.x.com/2/users/2244994945/timelines/reverse_chronological?\
+max_results=10&\
+pagination_token=7140dibdnow9c7btw421dyz6jism75z99gyxd8egarsc4" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+---
+
+## 一般的なパラメーター
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `max_results` | ページあたりの結果数 (1-100) | 10 |
+| `start_time` | 最も古い投稿タイムスタンプ (ISO 8601) | — |
+| `end_time` | 最も新しい投稿タイムスタンプ (ISO 8601) | — |
+| `since_id` | この ID より後の投稿を返す | — |
+| `until_id` | この ID より前の投稿を返す | — |
+| `exclude` | `retweets`、`replies`、または両方を除外 | — |
+
+---
+
+## 次のステップ
+
+<CardGroup cols={2}>
+  <Card title="ユーザーのメンション" icon="at" href="/x-api/posts/timelines/quickstart/user-mention-quickstart">
+    ユーザーをメンションする投稿を取得
+  </Card>
+  <Card title="統合ガイド" icon="/icons/xds/icon-book.svg" href="/x-api/posts/timelines/integrate">
+    主要な概念とベストプラクティス
+  </Card>
+  <Card title="API リファレンス" icon="/icons/xds/icon-code.svg" href="/x-api/users/get-timeline">
+    エンドポイントの完全なドキュメント
+  </Card>
+  <Card title="ページネーションガイド" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/fundamentals/pagination">
+    大規模な結果セットを移動
+  </Card>
+</CardGroup>

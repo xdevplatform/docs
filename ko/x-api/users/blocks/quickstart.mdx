@@ -1,0 +1,261 @@
+---
+title: 퀵스타트
+sidebarTitle: 퀵스타트
+description: "이 가이드는 차단 목록 조회, 사용자 차단 및 차단 해제 과정을 안내합니다. Blocks를 다루는 X API v2 standard 티어 레퍼런스입니다."
+keywords: ["blocks 퀵스타트", "사용자 차단 퀵스타트", "blocks 튜토리얼", "block 가이드"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+이 가이드는 차단 목록 조회, 사용자 차단 및 차단 해제 과정을 안내합니다.
+
+<Callout icon="/icons/xds/icon-key.svg" color="#22C55E" iconType="regular">
+사용자를 차단 및 차단 해제하는 엔드포인트는 Enterprise 플랜에서만 사용할 수 있습니다. Enterprise 관심 양식은 [여기](/forms/enterprise-api-interest)에서 작성할 수 있습니다.
+</Callout>
+
+<Note>
+**사전 요구사항**
+
+시작하기 전에 다음이 필요합니다:
+- 승인된 App이 포함된 [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- User Access Token (OAuth 1.0a 또는 OAuth 2.0 PKCE)
+</Note>
+
+---
+
+## 차단된 사용자 가져오기
+
+<Steps>
+  <Step title="사용자 ID 가져오기">
+    차단 목록을 조회하려면 인증된 사용자의 ID가 필요합니다. `/2/users/me` 엔드포인트에서 얻거나 토큰에 포함된 ID를 사용할 수 있습니다.
+  </Step>
+
+  <Step title="차단 목록 요청하기">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/123456789/blocking?\
+user.fields=username,verified,created_at&\
+max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# 페이지네이션으로 차단된 사용자 가져오기
+for page in client.users.get_blocking(
+    "123456789",
+    user_fields=["username", "verified", "created_at"],
+    max_results=100
+):
+    for user in page.data:
+        print(f"{user.username} - Created: {user.created_at}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// 페이지네이션으로 차단된 사용자 가져오기
+const paginator = client.users.getBlocking("123456789", {
+  userFields: ["username", "verified", "created_at"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Created: ${user.created_at}`);
+  });
+}
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="응답 확인">
+    ```json
+    {
+      "data": [
+        {
+          "id": "17874544",
+          "name": "Example User",
+          "username": "example_user",
+          "verified": false,
+          "created_at": "2008-12-04T18:51:57.000Z"
+        }
+      ],
+      "meta": {
+        "result_count": 1,
+        "next_token": "abc123"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## 사용자 차단하기 (Enterprise 전용)
+
+<Steps>
+  <Step title="대상 사용자 식별">
+    차단하려는 계정의 사용자 ID를 가져옵니다.
+  </Step>
+
+  <Step title="차단 요청 보내기">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/users/123456789/blocking" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"target_user_id": "9876543210"}'
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# 사용자 차단
+response = client.users.block(
+    source_user_id="123456789",
+    target_user_id="9876543210"
+)
+print(f"Blocking: {response.data.blocking}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// 사용자 차단
+const response = await client.users.block("123456789", {
+  targetUserId: "9876543210",
+});
+console.log(`Blocking: ${response.data?.blocking}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="차단 확인">
+    ```json
+    {
+      "data": {
+        "blocking": true
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## 사용자 차단 해제하기 (Enterprise 전용)
+
+<Steps>
+  <Step title="차단 해제 요청 보내기">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X DELETE "https://api.x.com/2/users/123456789/blocking/9876543210" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# 사용자 차단 해제
+response = client.users.unblock(
+    source_user_id="123456789",
+    target_user_id="9876543210"
+)
+print(f"Blocking: {response.data.blocking}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// 사용자 차단 해제
+const response = await client.users.unblock("123456789", "9876543210");
+console.log(`Blocking: ${response.data?.blocking}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="차단 해제 확인">
+    ```json
+    {
+      "data": {
+        "blocking": false
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="Mutes" icon="volume-xmark" href="/x-api/users/mutes/introduction">
+    차단 대신 사용자 뮤트하기
+  </Card>
+  <Card title="Follows" icon="user-plus" href="/x-api/users/follows/introduction">
+    팔로우 관리하기
+  </Card>
+  <Card title="통합 가이드" icon="/icons/xds/icon-book.svg" href="/x-api/users/blocks/integrate">
+    핵심 개념 및 모범 사례
+  </Card>
+  <Card title="API 레퍼런스" icon="/icons/xds/icon-code.svg" href="/x-api/users/get-blocking">
+    전체 엔드포인트 문서
+  </Card>
+</CardGroup>

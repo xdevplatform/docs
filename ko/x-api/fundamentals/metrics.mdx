@@ -1,0 +1,230 @@
+---
+title: 지표
+description: "노출 수, 좋아요, 조회수를 포함하여 X API v2에서 Post 및 비디오 미디어에 대한 공개, 비공개, organic, promoted 참여 지표를 요청하세요."
+sidebarTitle: 지표
+keywords: ["metrics", "engagement metrics", "tweet metrics", "impressions", "likes", "retweets", "video views", "analytics"]
+---
+
+X API는 게시물과 미디어에 대한 참여 지표를 제공합니다. 어떤 인증으로도 공개 지표에 액세스하거나, 사용자 인증으로 자체 콘텐츠의 비공개 지표에 액세스할 수 있습니다.
+
+---
+
+## 지표 유형
+
+| 유형 | 인증 | 설명 |
+|:-----|:---------------|:------------|
+| **Public** | Bearer Token | 모든 사람에게 표시됨(노출 수, 좋아요, 재게시, 답글) |
+| **Non-public** | User context | 비공개 지표(클릭) |
+| **Organic** | User context | 프로모션되지 않은 조회로부터의 지표 |
+| **Promoted** | User context | 광고 조회로부터의 지표 |
+
+<Note>
+**30일 제한**: 비공개, organic, promoted 지표는 지난 30일 이내에 생성된 게시물에 대해서만 사용할 수 있습니다.
+</Note>
+
+---
+
+## 사용 가능한 지표
+
+### Post 지표
+
+| 지표 | 유형 | Field 경로 |
+|:-------|:-----|:-----------|
+| 재게시 | Public | `public_metrics.retweet_count` |
+| 인용 | Public | `public_metrics.quote_count` |
+| 좋아요 | Public | `public_metrics.like_count` |
+| 답글 | Public | `public_metrics.reply_count` |
+| 노출 수 | Public | `public_metrics.impression_count` |
+| 북마크 | Public | `public_metrics.bookmark_count` |
+| URL 클릭 | Non-public | `non_public_metrics.url_link_clicks` |
+| 프로필 클릭 | Non-public | `non_public_metrics.user_profile_clicks` |
+| 참여 | Non-public | `non_public_metrics.engagements` |
+
+### 미디어 지표 (비디오)
+
+| 지표 | 유형 | Field 경로 |
+|:-------|:-----|:-----------|
+| 조회수 | Public | `public_metrics.view_count` |
+| 재생 0% | Non-public | `non_public_metrics.playback_0_count` |
+| 재생 25% | Non-public | `non_public_metrics.playback_25_count` |
+| 재생 50% | Non-public | `non_public_metrics.playback_50_count` |
+| 재생 75% | Non-public | `non_public_metrics.playback_75_count` |
+| 재생 100% | Non-public | `non_public_metrics.playback_100_count` |
+
+---
+
+## 지표 요청
+
+### 공개 지표 (모든 인증)
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?tweet.fields=public_metrics" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+응답:
+
+```json title="Example response" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "public_metrics": {
+      "retweet_count": 50,
+      "reply_count": 12,
+      "like_count": 234,
+      "quote_count": 5,
+      "bookmark_count": 8,
+      "impression_count": 5432
+    }
+  }
+}
+```
+
+### 비공개 지표 (사용자 컨텍스트)
+
+소유한 게시물에 대해 OAuth 1.0a 또는 사용자 컨텍스트를 가진 OAuth 2.0이 필요합니다:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?tweet.fields=non_public_metrics,organic_metrics" \
+  -H "Authorization: OAuth oauth_consumer_key=...,oauth_token=..."
+```
+
+응답:
+
+```json title="Example response" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "non_public_metrics": {
+      "impression_count": 5432,
+      "url_link_clicks": 89,
+      "user_profile_clicks": 156,
+      "engagements": 345
+    },
+    "organic_metrics": {
+      "impression_count": 5432,
+      "like_count": 234,
+      "reply_count": 12,
+      "retweet_count": 50,
+      "url_link_clicks": 89,
+      "user_profile_clicks": 156
+    }
+  }
+}
+```
+
+---
+
+## 비디오 지표
+
+비디오 재생 지표의 경우 media expansion을 사용하세요:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?\
+tweet.fields=attachments&\
+expansions=attachments.media_keys&\
+media.fields=public_metrics,non_public_metrics" \
+  -H "Authorization: OAuth ..."
+```
+
+응답:
+
+```json title="Example response" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Check out this video!",
+    "attachments": {
+      "media_keys": ["13_9876543210"]
+    }
+  },
+  "includes": {
+    "media": [{
+      "media_key": "13_9876543210",
+      "type": "video",
+      "public_metrics": {
+        "view_count": 12543
+      },
+      "non_public_metrics": {
+        "playback_0_count": 12543,
+        "playback_25_count": 9876,
+        "playback_50_count": 7654,
+        "playback_75_count": 5432,
+        "playback_100_count": 3210
+      }
+    }]
+  }
+}
+```
+
+---
+
+## Organic vs. promoted 지표
+
+게시물이 광고로 프로모션된 경우, 지표는 organic 조회와 promoted 조회 사이에 분할됩니다:
+
+| 컨텍스트 | 설명 |
+|:--------|:------------|
+| **Organic** | 일반 타임라인 조회로부터의 지표 |
+| **Promoted** | 유료 광고 노출로부터의 지표 |
+| **Public** | 통합 합계(organic + promoted) |
+
+내역을 보려면 둘 다 요청하세요:
+
+```bash
+tweet.fields=public_metrics,organic_metrics,promoted_metrics
+```
+
+---
+
+## 지표 정의
+
+<Accordion title="노출 수(Impressions)">
+게시물이 사용자의 화면에 나타난 횟수. 고유하지 않으며 동일한 사용자가 두 번 보면 두 번의 노출로 계산됩니다.
+</Accordion>
+
+<Accordion title="재게시 수">
+재게시(retweet) 수. 인용 게시물은 포함되지 않습니다.
+</Accordion>
+
+<Accordion title="인용 수">
+인용 게시물(댓글이 있는 재게시) 수. 항상 organic입니다.
+</Accordion>
+
+<Accordion title="북마크 수">
+사용자가 게시물을 북마크한 횟수.
+</Accordion>
+
+<Accordion title="비디오 조회수">
+비디오가 포함된 모든 게시물에서 집계됩니다. 여러 게시물에서 재게시된 비디오는 하나의 총 조회수를 가집니다.
+</Accordion>
+
+<Accordion title="재생 사분위수">
+비디오의 각 백분율까지 재생한 고유 사용자 수. 이탈률을 이해하는 데 유용합니다.
+</Accordion>
+
+---
+
+## 요구 사항 요약
+
+| 지표 field | 필요한 인증 |
+|:-------------|:-----------------------|
+| `public_metrics` | Bearer Token (모든) |
+| `non_public_metrics` | User context (소유한 게시물만) |
+| `organic_metrics` | User context (소유한 게시물만) |
+| `promoted_metrics` | User context (프로모션된 게시물만) |
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="Data Dictionary" icon="/icons/xds/icon-book.svg" href="/x-api/fundamentals/data-dictionary">
+    전체 field 레퍼런스.
+  </Card>
+  <Card title="인증" icon="/icons/xds/icon-key.svg" href="/resources/fundamentals/authentication/overview">
+    사용자 컨텍스트 인증 설정.
+  </Card>
+</CardGroup>

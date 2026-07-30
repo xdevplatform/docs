@@ -1,0 +1,122 @@
+---
+title: Buenas prácticas de CMS para Posts incrustados
+sidebarTitle: Buenas prácticas de CMS
+description: "Un Post incrustado añade fragmentos de la conversación global que sucede en X a tu sitio, contenido y comentarios. Los sitios impulsados por un CMS o software personalizado pueden."
+---
+
+## Descripción general
+
+Un [Post incrustado](/x-for-websites/embedded-posts/overview) añade fragmentos de la conversación global que sucede en X a tu sitio, contenido y comentarios. Los sitios impulsados por un CMS o software personalizado pueden ofrecer una integración más profunda con el contenido de X mediante preferencias de visualización a nivel de sitio, macros de contenido para publicación multiplataforma, contenido de reserva vía oEmbed y cargadores de JavaScript, tal como se describe en esta guía. Tu esfuerzo adicional eliminará barreras entre autores y contenido citado, integrando nuestro contenido de terceros con los flujos de contenido y el diseño visual de tu sitio.
+
+1. [Definir opciones de tema a nivel de sitio](/x-for-websites/embedded-posts/guides/cms-best-practices.html#theme-options)
+2. [Definir opciones de widget a nivel de sitio](/x-for-websites/embedded-posts/guides/cms-best-practices.html#widget-options)
+3. [Definir un macro de Post incrustado](/x-for-websites/embedded-posts/guides/cms-best-practices.html#macro)
+4. [Solicitar marcado de reserva usando oEmbed](/x-for-websites/embedded-posts/guides/cms-best-practices.html#oembed)
+5. [Cargar el JavaScript del widget usando el gestor de recursos de tu sitio](/x-for-websites/embedded-posts/guides/cms-best-practices.html#js-loading)
+
+## Definir opciones de tema a nivel de sitio
+
+Integra los widgets de X, incluidos los Posts incrustados, con el esquema de color de tu sitio incluyendo elementos HTML `<meta>` `</web/overview/widgets-webpage-properties>` en la sección `<head>` de tu página web. Elige un tema de color claro u oscuro para el texto y el fondo del Post y personaliza el color del borde del iframe añadiendo nuevo marcado a las plantillas de tu sitio.
+
+```html
+<meta name="twitter:widgets:theme" content="light">
+<meta name="twitter:widgets:border-color" content="#55acee">
+```
+
+X for Websites lee los valores meta de la página antes de construir un nuevo widget; estos valores pueden anularse para widgets individuales pasando el parámetro oEmbed apropiado.
+
+Añadir una sección de opciones de widget de X en la interfaz de administración de tu CMS ayuda a los publicadores individuales a personalizar el contenido sin editar los archivos del tema.
+
+## Definir opciones de widget a nivel de sitio
+
+Los Posts incrustados pueden contener imágenes, vídeo, vistas previas de enlaces u otros Posts en conversaciones. Tu sitio puede especificar preferencias globales para la consistencia visual en todas las páginas, anulando las opciones de visualización predeterminadas.
+
+Añadir una sección de opciones de Post incrustado en la interfaz de administración de tu CMS ayuda a los publicadores individuales a establecer sus preferencias para la visualización del contenido del Post en todo el sitio.
+
+## Definir un macro de Post incrustado
+
+Un macro añadido a la interfaz de edición de tu sitio abstrae el detalle de incrustar Posts, permitiendo al autor centrarse en el contenido. En segundo plano, tu macro debe determinar el mejor contenido a mostrar en el entorno de renderizado actual, como HTML y JavaScript en una página web, vistas nativas en iOS y Android, o elementos personalizados en AMP o Apple News Format.
+
+El macro más sencillo es una URL de Post añadida al contenido de tu artículo. Puedes optar por tener un macro más personalizado para capturar opciones adicionales de Post incrustado propias de la visualización del artículo.
+
+```json
+[tweet id="611193269532295168" lang="fr"]
+```
+
+Verifica las entradas del macro contra un conjunto de parámetros conocidos de Post incrustado antes de pasar la opción al endpoint oEmbed de X, para establecer las expectativas del autor y eliminar residuos innecesarios.
+
+## Solicitar marcado de reserva usando oEmbed
+
+Un Post incrustado debe proporcionar el contexto adecuado cuando se ve de manera independiente, antes de las mejoras adicionales aportadas por X para el usuario actual. Solicita y almacena el marcado HTML para los datos del Post solicitados pidiendo el contenido al [endpoint oEmbed API](/x-for-websites/oembed-api). Añade cualquier opción personalizada pasada al macro de tu sitio, o extraída del contexto actual, como parámetros de consulta en la solicitud oEmbed.
+
+Se prefiere un Post ID sobre la URL web de un Post: componentes de la URL, como el screen_name de la cuenta asociada, pueden cambiar; el Post ID es único para el contenido citado y se mantendrá igual.
+
+Puedes optar por omitir las opciones relacionadas con el tema en las solicitudes oEmbed si defines estas preferencias dentro de los elementos de tu página web, tal como se describe arriba.
+
+La respuesta oEmbed de los servidores de X se ajusta a la [especificación oEmbed](https://oembed.com/). La respuesta oEmbed de X es un tipo oEmbed “rich” que contiene marcado HTML adecuado para su uso dentro de código HTML existente.
+
+Los sitios deben cachear el HTML devuelto por la oEmbed API durante el tiempo de caché sugerido especificado por el parámetro de respuesta `cache_age`. Tu método de caché debe incorporar los parámetros de personalización pasados a la oEmbed API, ya que estos parámetros modificarán la respuesta HTML.
+
+## Cargar el JavaScript del widget usando el gestor de recursos de tu sitio
+
+Muchos sitios, frameworks y sistemas CMS disponen de gestores especializados de recursos CSS y JavaScript o cargadores de módulos que rastrean dependencias, carga asíncrona y versiones. Incluye el widgets.js alojado remotamente en el cargador de recursos de tu sitio siempre que el contenido de tu sitio incluya un Post incrustado u otro contenido de widget de X.
+
+Define una nueva definición de módulo para el JavaScript de X for Websites alojado en `https://platform.x.com/widgets.js`. Define un ID de módulo “twitter-wjs” para identificar de forma única el JavaScript de X con el ID común usado por los [fragmentos de carga asíncrona](/x-for-websites/javascript-api/guides/set-up-x-for-websites), por si un JavaScript copiado y pegado termina llegando a la página web.
+
+Incluye un parámetro `omit_script=true` en tu solicitud oEmbed para eliminar el JavaScript de la respuesta de X.
+
+Los sitios que cargan fragmentos de página que contienen un Post incrustado necesitarán solicitar un escaneo de contenido de Post incrustado llamando a la función `twttr.widgets.load` `</web/javascript/initialization>` después de que el nuevo contenido se inserte en la página. Pasa uno o más elementos del DOM a la función load para restringir el escaneo de contenido nuevo únicamente a los nuevos fragmentos de la página y mejorar el rendimiento del sitio.
+
+Los sitios que llamen al JavaScript de X deben configurar una cola de funciones asíncrona que almacene las funciones a ejecutar en un array accesible en `window.twttr._e`. El fragmento de carga asíncrono de X proporciona la configuración de un array de cola de funciones donde se encolan nuevas funciones pasando una función a `window.twttr.ready`. El JavaScript de X for Websites vaciará la cola de funciones mientras ejecuta por primera vez su JavaScript.
+
+## Exportar contenido de Post en formatos sindicados
+
+Una organización de noticias moderna puede publicar versiones alternativas de su contenido formateadas para Apple News, Facebook Instant Articles o clientes AMP. Un Post citado en un artículo deberá describirse en el marcado esperado por cada formato.
+
+### AMP
+
+Un Post debe describirse en una plantilla AMP mediante el elemento personalizado `<amp-twitter>`.
+
+```html
+<amp-twitter
+  data-tweetid="611193269532295168"
+  layout="responsive">
+```
+
+La página web AMP también necesitará añadir el código JavaScript de renderizado del componente `amp-twitter` al `<head>` del documento para transformar el marcado suministrado en un Post incrustado renderizado.
+
+```html
+<script async
+  custom-element="amp-twitter"
+  src="https://cdn.ampproject.org/v0/amp-twitter-0.1.js">
+</script>
+```
+
+### Apple News Format
+
+Describe un Post en tu artículo usando [el componente Post en Apple News Format](https://developer.apple.com/library/ios/documentation/General/Conceptual/Apple_News_Format_Ref/Tweet.html).
+
+```json
+{
+  "role": "tweet",
+  "URL": "https://x.com/interior/status/611193269532295168"
+}
+```
+
+### Facebook Instant Articles Format
+
+Describe un Post contenido en tu contenido con [un elemento `<figure>` op-interactive](https://developers.facebook.com/docs/instant-articles/reference/embeds).
+
+```html
+<figure class="op-social">
+<iframe>
+<blockquote class="twitter-tweet">
+<p lang="en" dir="ltr">Mama knows best! Mother bear teaches cub how to dig for clams <a href="https://x.com/LakeClarkNPS">@LakeClarkNPS</a> by Sally Jewell <a href="https://x.com/hashtag/Alaska?src=hash">#Alaska</a> <a href="https://x.com/hashtag/nature?src=hash">#nature</a> <a href="http://t.co/1n3vYDJcAW">pic.x.com/1n3vYDJcAW</a></p>
+— US Dept of Interior (@Interior) <a href="https://x.com/Interior/status/611193269532295168">June 17, 2015</a>
+</blockquote>
+<script async
+  src="https://platform.x.com/widgets.js">
+</script>
+</iframe>
+<figure>
+```

@@ -1,0 +1,340 @@
+---
+title: Quickstart
+sidebarTitle: Quickstart
+description: "Esta guía te lleva paso a paso a enviar Mensajes Directos y crear conversaciones grupales. Referencia para el nivel estándar de la X API v2 que cubre manage."
+keywords: ["quickstart de gestión de mensajes directos", "quickstart enviar DM", "quickstart de gestión de DM", "crear DM grupal"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+Esta guía te lleva paso a paso a enviar Mensajes Directos y crear conversaciones grupales.
+
+<Note>
+**Requisitos previos**
+
+Antes de comenzar, necesitarás:
+- Una [cuenta de desarrollador](https://developer.x.com/en/portal/petition/essential/basic-info) con una App aprobada
+- Un User Access Token (OAuth 2.0 PKCE con los scopes `dm.write` y `dm.read`)
+</Note>
+
+---
+
+## Enviar un mensaje uno a uno
+
+<Steps>
+  <Step title="Obtén el ID de usuario del destinatario">
+    Necesitas el ID de usuario de la persona a la que quieres enviar el mensaje. Puedes obtenerlo desde el [endpoint de búsqueda de usuario](/x-api/users/lookup/introduction).
+  </Step>
+
+  <Step title="Envía el mensaje">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/dm_conversations/with/9876543210/messages" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Hello! This is a message from the API."}'
+```
+
+```python title="SDK de Python" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Send a one-to-one message
+response = client.dm.send_message(
+    participant_id="9876543210",
+    text="Hello! This is a message from the API."
+)
+
+print(f"Message sent: {response.data.dm_event_id}")
+print(f"Conversation: {response.data.dm_conversation_id}")
+```
+
+```javascript title="SDK de JavaScript" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Send a one-to-one message
+const response = await client.dm.sendMessage({
+  participantId: "9876543210",
+  text: "Hello! This is a message from the API.",
+});
+
+console.log(`Message sent: ${response.data?.dm_event_id}`);
+console.log(`Conversation: ${response.data?.dm_conversation_id}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Revisa la respuesta">
+    ```json
+    {
+      "data": {
+        "dm_conversation_id": "1234567890-9876543210",
+        "dm_event_id": "1582103724607971332"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Crear una conversación grupal
+
+<Steps>
+  <Step title="Define los participantes">
+    Reúne los IDs de usuario de todos los que quieras en el grupo (excluyéndote a ti).
+  </Step>
+
+  <Step title="Crea el grupo con el primer mensaje">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/dm_conversations" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversation_type": "Group",
+    "participant_ids": ["944480690", "906948460078698496"],
+    "message": {"text": "Welcome to our new group!"}
+  }'
+```
+
+```python title="SDK de Python" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Create a group conversation
+response = client.dm.create_conversation(
+    conversation_type="Group",
+    participant_ids=["944480690", "906948460078698496"],
+    message={"text": "Welcome to our new group!"}
+)
+
+print(f"Group created: {response.data.dm_conversation_id}")
+```
+
+```javascript title="SDK de JavaScript" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Create a group conversation
+const response = await client.dm.createConversation({
+  conversationType: "Group",
+  participantIds: ["944480690", "906948460078698496"],
+  message: { text: "Welcome to our new group!" },
+});
+
+console.log(`Group created: ${response.data?.dm_conversation_id}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Recibe el ID de conversación">
+    ```json
+    {
+      "data": {
+        "dm_conversation_id": "1582103724607971328",
+        "dm_event_id": "1582103724607971332"
+      }
+    }
+    ```
+
+    Guarda el `dm_conversation_id` para añadir más mensajes más tarde.
+  </Step>
+</Steps>
+
+---
+
+## Añadir un mensaje a una conversación existente
+
+Envía un mensaje a una conversación de la que ya formas parte:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/dm_conversations/1582103724607971328/messages" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Adding another message to the conversation."}'
+```
+
+```python SDK de Python
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Add message to existing conversation
+response = client.dm.send_message_to_conversation(
+    dm_conversation_id="1582103724607971328",
+    text="Adding another message to the conversation."
+)
+
+print(f"Message sent: {response.data.dm_event_id}")
+```
+
+```javascript SDK de JavaScript
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Add message to existing conversation
+const response = await client.dm.sendMessageToConversation(
+  "1582103724607971328",
+  { text: "Adding another message to the conversation." }
+);
+
+console.log(`Message sent: ${response.data?.dm_event_id}`);
+```
+
+</CodeGroup>
+
+---
+
+## Enviar un mensaje con medios
+
+<Steps>
+  <Step title="Sube el medio">
+    Primero, sube tu medio usando el [endpoint de Media Upload](/x-api/media/quickstart/media-upload-chunked).
+  </Step>
+
+  <Step title="Envía con adjunto de media">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/dm_conversations/with/9876543210/messages" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Check out this image!",
+    "attachments": [{"media_id": "1234567890123456789"}]
+  }'
+```
+
+```python title="SDK de Python" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Send message with media
+response = client.dm.send_message(
+    participant_id="9876543210",
+    text="Check out this image!",
+    attachments=[{"media_id": "1234567890123456789"}]
+)
+
+print(f"Message with media sent: {response.data.dm_event_id}")
+```
+
+```javascript title="SDK de JavaScript" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Send message with media
+const response = await client.dm.sendMessage({
+  participantId: "9876543210",
+  text: "Check out this image!",
+  attachments: [{ mediaId: "1234567890123456789" }],
+});
+
+console.log(`Message with media sent: ${response.data?.dm_event_id}`);
+```
+
+</CodeGroup>
+
+  </Step>
+</Steps>
+
+---
+
+## Eliminar un mensaje
+
+Elimina un mensaje que enviaste:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X DELETE "https://api.x.com/2/dm_events/1582103724607971332" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python SDK de Python
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Delete a message
+response = client.dm.delete_message("1582103724607971332")
+print(f"Deleted: {response.data.deleted}")
+```
+
+```javascript SDK de JavaScript
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Delete a message
+const response = await client.dm.deleteMessage("1582103724607971332");
+console.log(`Deleted: ${response.data?.deleted}`);
+```
+
+</CodeGroup>
+
+**Respuesta:**
+
+```json
+{
+  "data": {
+    "deleted": true
+  }
+}
+```
+
+<Warning>
+Solo puedes eliminar mensajes que hayas enviado tú, no mensajes de otros participantes.
+</Warning>
+
+---
+
+## Scopes requeridos
+
+Al usar OAuth 2.0 PKCE, tu access token debe tener estos scopes:
+
+| Scope | Descripción |
+|:------|:------------|
+| `dm.write` | Enviar y eliminar mensajes |
+| `dm.read` | Leer conversaciones (requerido con dm.write) |
+| `tweet.read` | Requerido para algunas expansions |
+| `users.read` | Requerido para expansions de usuario |
+
+---
+
+## Próximos pasos
+
+<CardGroup cols={2}>
+  <Card title="Búsqueda de DM" icon="inbox" href="/x-api/direct-messages/lookup/quickstart">
+    Recupera conversaciones de DM
+  </Card>
+  <Card title="Guía de integración" icon="/icons/xds/icon-book.svg" href="/x-api/direct-messages/manage/integrate">
+    Conceptos clave y buenas prácticas
+  </Card>
+  <Card title="Referencia de la API" icon="/icons/xds/icon-code.svg" href="/x-api/direct-messages/create-dm-message-by-participant-id">
+    Documentación completa de endpoints
+  </Card>
+  <Card title="Código de ejemplo" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    Ejemplos de código funcional
+  </Card>
+</CardGroup>

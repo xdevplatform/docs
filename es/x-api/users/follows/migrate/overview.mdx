@@ -1,0 +1,74 @@
+---
+title: Resumen de migración de los endpoints de follows
+description: Migra seguidores, seguidos y la gestión de seguimientos desde los endpoints estándar v1.1 friendships a los endpoints v2 de follows de X API con parámetros correlacionados.
+sidebarTitle: Resumen
+keywords: ["migración de follows", "migrar follows", "v1.1 a v2 follows", "guía de migración de follows", "migrar follows"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+## Comparación de los endpoints de follows de X API
+
+### Follows lookup
+
+Los endpoints v2 de follows lookup reemplazarán a los estándar v1.1 [followers/ids](https://developer.x.com/en/docs/twitter-api/v1/accounts-and-users/follow-search-get-users/api-reference/get-followers-ids), v1.1 [followers/list](https://developer.x.com/en/docs/twitter-api/v1/accounts-and-users/follow-search-get-users/api-reference/get-followers-list), v1.1 [friends/ids](https://developer.x.com/en/docs/twitter-api/v1/accounts-and-users/follow-search-get-users/api-reference/get-friends-ids) y v1.1 [friends/list](https://developer.x.com/en/docs/twitter-api/v1/accounts-and-users/follow-search-get-users/api-reference/get-friends-list).
+
+Las siguientes tablas comparan los distintos tipos de endpoints de follows lookup:
+
+|     |     |     |
+| :--- | :--- | :--- |
+| **Descripción** | **Standard v1.1** | **X API v2** |
+| Métodos HTTP admitidos | `GET` | `GET` |
+| Dominio del host | `https://api.x.com` | `https://api.x.com` |
+| Ruta del endpoint | /1.1/friends/ids.json<br/><br/>/1.1/friends/list.json<br/><br/>/1.1/followers/ids.json<br/><br/>/1.1/followers/list.json | /2/users/:id/following<br/><br/>/2/users/:id/followers |
+| [Autenticación](/resources/fundamentals/authentication) | OAuth 1.0a User Context<br/><br/>App only | OAuth 1.0a User Context<br/><br/>OAuth 2.0 Authorization Code with PKCE<br/><br/>App only |
+| [Rate limits](/resources/fundamentals/rate-limits) de solicitudes por defecto | 15 solicitudes por 15 min (por usuario)<br/><br/>15 solicitudes por 15 min (por app) | 15 solicitudes por 15 min (por usuario)<br/><br/>15 solicitudes por 15 min (por app) |
+| Máximo de usuarios por respuesta | GET friends/id y GET followers/id devuelven un máximo de 5000 user IDs por página.<br/><br/>  <br/><br/>GET friends/list y GET followers/list devuelven un máximo de 200 objetos de usuario por página. | 1000 objetos de usuario por página |
+| Paginación | El token se devuelve en un field next_cursor, que luego se puede pasar como valor del parámetro cursor para devolver la siguiente página de resultados. | El token se devuelve en un field next_token, que luego se puede pasar como valor del parámetro token para devolver la siguiente página de resultados.<br/><br/>El payload v2 también entrega un field previous_token, que también se puede pasar con el parámetro pagination_token para devolver la página anterior de resultados. |
+| Formato JSON | Formato Standard v1.1 | [Formato de X API v2](/x-api/fundamentals/data-dictionary) (determinado por los parámetros de solicitud fields y expansions, no compatible con versiones anteriores en formato v1.1)<br/><br/>Para saber más sobre cómo migrar del formato Standard v1.1 al formato X API v2, visita nuestra [guía de migración de formatos de datos](/x-api/migrate/data-format-migration). |
+| Admite seleccionar qué [fields](/x-api/fundamentals/data-dictionary) devolver en el payload |     | ✔   |
+| Admite los fields de [annotations](/x-api/fundamentals/post-annotations) del Post |     | ✔   |
+| Admite solicitar nuevos fields de [metrics](/x-api/fundamentals/metrics) |     | ✔   |
+| Admite el field [conversation_id](/x-api/fundamentals/conversation-id) |     | ✔   |
+| Requiere el uso de credenciales de una [App de desarrollador](/resources/fundamentals/developer-apps) asociada a un [project](/resources/fundamentals/developer-apps) |     | ✔   |
+
+#### Manage follows
+
+Los endpoints v2 de manage follows reemplazarán a los estándar v1.1 [POST friendships/create](https://developer.x.com/en/docs/twitter-api/v1/accounts-and-users/follow-search-get-users/api-reference/post-friendships-create) y [POST friendships/destroy](https://developer.x.com/en/docs/twitter-api/v1/accounts-and-users/follow-search-get-users/api-reference/post-friendships-destroy).
+
+Las siguientes tablas comparan los endpoints estándar v1.1 y de X API v2 para crear seguimiento:
+
+#### Seguir a un usuario
+
+| Descripción | Standard v1.1 | X API v2 |
+| :--- | :--- | :--- |
+| Métodos HTTP admitidos | POST | POST |
+| Dominio del host | https://api.x.com | https://api.x.com |
+| Ruta del endpoint | /1.1/friendships/create.json | /2/users/:id/following |
+| [Autenticación](/resources/fundamentals/authentication) | OAuth 1.0a User Context | OAuth 1.0a User Context<br/><br/>OAuth 2.0 Authorization Code with PKCE |
+| [Rate limits](/resources/fundamentals/rate-limits) de solicitudes por defecto | 50 solicitudes por 15 min | 50 solicitudes por 15 min |
+| Máximo de operaciones diarias por usuario | 400 | 400 |
+| Máximo de operaciones diarias por app | 1000 | 1000 |
+| Requiere el uso de credenciales de una [App de desarrollador](/resources/fundamentals/developer-apps) asociada a un [Project](/resources/fundamentals/developer-apps) |     | ✔️  |
+
+#### Dejar de seguir a un usuario
+
+Las siguientes tablas comparan los endpoints estándar v1.1 y de X API v2 para eliminar seguimiento:
+
+| Descripción | Standard v1.1 | X API v2 |
+| :--- | :--- | :--- |
+| Métodos HTTP admitidos | POST | DELETE |
+| Dominio del host | https://api.x.com | https://api.x.com |
+| Ruta del endpoint | /1.1/friendships/destroy.json | /2/users/:source\_user\_id/following/:target\_user\_id |
+| [Autenticación](/resources/fundamentals/authentication) | OAuth 1.0a User Context | OAuth 1.0a User Context<br/><br/>OAuth 2.0 Authorization Code with PKCE |
+| [Rate limits](/resources/fundamentals/rate-limits) de solicitudes por defecto | 15 solicitudes por 15 min (por usuario) | 50 solicitudes por 15 min (por usuario) |
+| Máximo de operaciones diarias por app | Ninguno | 500 |
+| Requiere el uso de credenciales de una [App de desarrollador](/resources/fundamentals/developer-apps) asociada a un [Project](/resources/fundamentals/developer-apps) |     | ✔️  |
+
+**Otros recursos de migración**
+
+[Follows lookup: Standard v1.1 a X API v2](/x-api/users/follows/migrate/standard-to-twitter-api-v2)
+
+[Manage follows: Standard v1.1 a X API v2](/x-api/users/follows#manage-follows-standard-v1-1-compared-to-x-api-v2)
+
+[Centro de migración de X API](/x-api/migrate/overview)

@@ -1,0 +1,87 @@
+---
+title: 移行ガイド
+sidebarTitle: 移行ガイド
+keywords: ["direct messages migration", "DM migration", "v1.1 to v2 DM lookup", "DM migration guide", "migrate DM lookup"]
+
+description: X API v1.1 から v2 への Direct Message lookup コードの移行ガイド。エンドポイントの変更、リクエストパラメータ、新しいレスポンスペイロードを解説します。
+---
+
+import { Button } from '/snippets/button.mdx';
+
+## v1.1 と v2 の Direct Message イベント lookup エンドポイントの比較
+
+
+Direct Messages エンドポイントには v1.1 と v2 の両方に、Direct Message イベントを取得するためのメソッドが用意されています。このガイドは、両者の違いを理解し、v2 への移行に役立つ情報を提供することを目的としています。
+
+両バージョン間の大きな違いは、v1.1 は 1 対 1 の会話のみをサポートしているのに対し、v2 ではグループ会話のサポートが導入されている点です。この結果として、v1.1 は「message created」イベントのみをサポートしていますが、v2 では会話への参加や退出に関連するイベントもサポートしています。実際、v2 の基本的な更新点として、dm_conversations がコア API オブジェクトとして確立されています。
+
+v1.1 には Direct Messages を取得するための 2 つのエンドポイントがあります（繰り返しになりますが、v1.1 でサポートされるイベントタイプは新規メッセージのみです）。
+
+* GET direct_messages/events/show \- 単一のイベントを ID で取得します。
+
+* GET direct_messages/events/list \- 認証済みユーザーが送受信した 1 対 1 の Direct Messages を最大 30 日分取得します。このメソッドはグループ会話からメッセージを取得できないことに注意してください。
+
+
+この v2 リリースでは、Direct Message 会話のイベントを取得するための GET メソッドが 3 つ用意されています。
+
+* **GET /2/dm\_conversations/with/:participant\_id/dm_events** \- 1 対 1 の会話に関連する Direct Message イベントを取得します。:participant_id パスパラメータは、このリクエストを行う認証済みユーザーと会話している相手のアカウントの User ID です。
+
+* **GET /2/dm\_conversations/:dm\_conversation\_id/dm\_events** \- :dm\_conversation\_id パスパラメータで示される特定の会話 ID に関連する Direct Message イベントを取得します。このメソッドは 1 対 1 とグループの両方の会話をサポートします。
+
+* **GET /2/dm_events** \- 1 対 1 とグループの両方の会話を含む、ユーザーに関連する Direct Message イベントを取得します。過去 30 日までのイベントを取得できます。
+
+
+重要な点として、会話 ID とイベント ID は X Platform の v1.1 と v2 間で共有されます。つまり、両バージョンを併用することが可能です。例えば、Direct Messages v1.1 エンドポイントには単一のイベントを返すメソッドやイベントを削除するメソッド（v2 ではまだ利用不可）が用意されており、ID が v1.1 と v2 で共通のため、v2 が返した ID や X アプリケーションの会話 URL に表示される会話 ID を基に v1.1 リクエストを行うことができます。
+
+次の表は、v1.1 と v2 の Direct Message イベント lookup エンドポイントの基本的な側面を比較したものです。ここで示す X API v2 の特徴は、すべての Direct Message lookup エンドポイントに共通しています。
+
+|     |     |     |
+| :--- | :--- | :--- |
+| **Description** | **Standard v1.1** | **X API v2** |
+| Host domain | https://api.x.com | https://api.x.com |
+| Endpoint root path | [/1.1/direct_messages](https://api.x.com/1.1/direct_messages) | [/2/dm_conversations](https://api.x.com/2/users/:id/dm_conversations)<br/><br/>Direct Messages の会話は基本的な API オブジェクトとして導入されました。   <br/><br/>これらのエンドポイントは MessageCreate、ParticipantsJoin、ParticipantLeave イベントを取得します。 |
+| HTTP methods supported | GET | GET |
+| Supports Group Direct Messages |     | ✔   |
+| Event types supported | message_create | MessageCreate, ParticipantsJoin, ParticipantsLeave |
+| [Authentication](/resources/fundamentals/authentication) | OAuth 1.0a User Context | OAuth 1.0a User Context<br/><br/>OAuth 2 User Context (scopes: dm.read, tweet.read, user.read) |
+| X API v2 の [Project](/resources/fundamentals/developer-apps) に紐づく [developer App](/resources/fundamentals/authentication) の資格情報の使用が必要 |     | ✔   |
+| デフォルトのリクエスト [rate limits](/x-api/fundamentals/rate-limits)*  <br/>*すべてのリクエストで user token が必要 |     | GET requests: 300 requests per 15 mins<br/><br/>Rate limit は 3 つのエンドポイントすべてに適用されます |
+
+以下の表は、v2 の各 GET メソッドを v1.1 と比較したものです。これらの v2 の機能は、グループ会話をサポートすることで利用可能な機能を拡張していることに注意してください。
+
+**特定の 1 対 1 の会話のすべてのメッセージを取得**
+
+--------------------------------------------------------------
+
+Path: GET /2/dm\_conversations/with/:participant\_id/dm_events
+
+|     |     |     |
+| :--- | :--- | :--- |
+| **Description** | **Standard v1.1** | **X API v2** |
+| Endpoint path | GET <br/><br/>/1.1/direct_messages/events/list | GET /2/dm\_conversations/with/:participant\_id/dm_events |
+| 取得可能なイベント履歴 | 30 日 | 制限なし |
+| デフォルトのリクエスト [rate limits](/x-api/fundamentals/rate-limits) | 15 requests per 15 minutes | 300 requests per 15 minutes  <br/>Rate limit は 3 つの GET エンドポイントすべてに適用されます |
+
+**会話 ID ですべてのメッセージを取得**
+
+Path: GET /2/dm\_conversations/:dm\_conversation\_id/dm\_events
+
+|     |     |     |
+| :--- | :--- | :--- |
+| **Description** | **Standard v1.1** | **X API v2** |
+| Endpoint path | サポートされていません。V1.1 は 1 対 1 の会話からのメッセージのみを返せるため、会話 ID によるイベント取得はサポートされていません。 | GET /2/dm\_conversations/:dm\_conversation\_id/dm\_events |
+| 取得可能なイベント履歴 | 30 日 | 制限なし |
+| グループ会話をサポート |     | ✔   |
+| デフォルトのリクエスト [rate limits](/x-api/fundamentals/rate-limits) | 15 requests per 15 minutes | 300 requests per 15 minutes  <br/>Rate limit は 3 つの GET エンドポイントすべてに適用されます |
+
+**認証済みユーザーの 1 対 1 とグループの両方の会話にわたるすべてのイベントを取得**
+
+Path: GET /2/dm_events
+
+|     |     |     |
+| :--- | :--- | :--- |
+| **Description** | **Standard v1.1** | **X API v2** |
+| Endpoint path | GET /1.1/direct_messages/events/list  <br/>  <br/>V1.1 は 1 対 1 の会話からのメッセージのみを返せます。 | GET /2/dm_events |
+| 取得可能なイベント履歴 | 30 日 | 30 日 |
+| グループ会話をサポート |     | ✔   |
+| デフォルトのリクエスト [rate limits](/x-api/fundamentals/rate-limits) | 15 requests per 15 minutes | 300 requests per 15 minutes  <br/>Rate limit は 3 つの GET エンドポイントすべてに適用されます |

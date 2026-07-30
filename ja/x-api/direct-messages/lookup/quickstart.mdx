@@ -1,0 +1,346 @@
+---
+title: クイックスタート
+sidebarTitle: クイックスタート
+description: "このガイドでは、認証済みユーザーの Direct Message イベントを取得する手順を説明します。lookup をカバーする X API v2 standard tier のリファレンスです。"
+keywords: ["DM lookup quickstart", "direct messages quickstart", "get DMs tutorial", "DM lookup guide"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+このガイドでは、認証済みユーザーの Direct Message イベントを取得する手順を説明します。
+
+<Note>
+**前提条件**
+
+始める前に、以下が必要です。
+- 承認済みの App を持つ [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- User Access Token（OAuth 1.0a または OAuth 2.0 PKCE）
+</Note>
+
+---
+
+## すべての DM イベントを取得
+
+認証済みユーザーのすべての DM イベントを取得します。
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/dm_events?\
+dm_event.fields=created_at,sender_id,text&\
+max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# ページネーションを使用してすべての DM イベントを取得
+for page in client.dm_events.list(
+    dm_event_fields=["created_at", "sender_id", "text"],
+    max_results=100
+):
+    for event in page.data:
+        print(f"{event.event_type}: {event.text}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// ページネーションを使用してすべての DM イベントを取得
+const paginator = client.dmEvents.list({
+  dmEventFields: ["created_at", "sender_id", "text"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((event) => {
+    console.log(`${event.event_type}: ${event.text}`);
+  });
+}
+```
+
+</CodeGroup>
+
+### レスポンス
+
+```json title="MessageCreate" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "id": "1234567890",
+      "event_type": "MessageCreate",
+      "text": "Hello! How are you?",
+      "sender_id": "9876543210",
+      "created_at": "2024-01-15T10:30:00.000Z"
+    }
+  ],
+  "meta": {
+    "result_count": 1,
+    "next_token": "abc123"
+  }
+}
+```
+
+---
+
+## 1 対 1 の会話を取得
+
+特定の 1 対 1 の会話から DM イベントを取得します。
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/dm_conversations/with/9876543210/dm_events?\
+dm_event.fields=created_at,sender_id,text" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# 1 対 1 の会話から DM イベントを取得
+for page in client.dm_events.get_by_participant(
+    participant_id="9876543210",
+    dm_event_fields=["created_at", "sender_id", "text"]
+):
+    for event in page.data:
+        print(f"{event.created_at}: {event.text}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// 1 対 1 の会話から DM イベントを取得
+const paginator = client.dmEvents.getByParticipant("9876543210", {
+  dmEventFields: ["created_at", "sender_id", "text"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((event) => {
+    console.log(`${event.created_at}: ${event.text}`);
+  });
+}
+```
+
+</CodeGroup>
+
+`9876543210` を、もう一方の参加者のユーザー ID に置き換えてください。
+
+---
+
+## ID で会話を取得
+
+特定の会話 ID から DM イベントを取得します。
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/dm_conversations/1234567890-9876543210/dm_events?\
+dm_event.fields=created_at,sender_id,text" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# 会話 ID から DM イベントを取得
+for page in client.dm_events.get_by_conversation(
+    dm_conversation_id="1234567890-9876543210",
+    dm_event_fields=["created_at", "sender_id", "text"]
+):
+    for event in page.data:
+        print(f"{event.created_at}: {event.text}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// 会話 ID から DM イベントを取得
+const paginator = client.dmEvents.getByConversation("1234567890-9876543210", {
+  dmEventFields: ["created_at", "sender_id", "text"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((event) => {
+    console.log(`${event.created_at}: ${event.text}`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## イベントタイプでフィルタ
+
+特定のイベントタイプのみを取得します。
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/dm_events?\
+event_types=MessageCreate&\
+dm_event.fields=created_at,sender_id,text" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# MessageCreate イベントのみを取得
+for page in client.dm_events.list(
+    event_types=["MessageCreate"],
+    dm_event_fields=["created_at", "sender_id", "text"]
+):
+    for event in page.data:
+        print(f"{event.text}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// MessageCreate イベントのみを取得
+const paginator = client.dmEvents.list({
+  eventTypes: ["MessageCreate"],
+  dmEventFields: ["created_at", "sender_id", "text"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((event) => {
+    console.log(event.text);
+  });
+}
+```
+
+</CodeGroup>
+
+### イベントタイプ
+
+| Type | Description |
+|:-----|:------------|
+| `MessageCreate` | メッセージが送信された |
+| `ParticipantsJoin` | ユーザーが会話に参加した |
+| `ParticipantsLeave` | ユーザーが会話から退出した |
+
+---
+
+## ユーザーデータを含める
+
+送信者情報を展開します。
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/dm_events?\
+dm_event.fields=created_at,sender_id,text&\
+expansions=sender_id&\
+user.fields=username,profile_image_url" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# 送信者情報を含む DM イベントを取得
+for page in client.dm_events.list(
+    dm_event_fields=["created_at", "sender_id", "text"],
+    expansions=["sender_id"],
+    user_fields=["username", "profile_image_url"]
+):
+    for event in page.data:
+        # includes から送信者を照合
+        print(f"{event.sender_id}: {event.text}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// 送信者情報を含む DM イベントを取得
+const paginator = client.dmEvents.list({
+  dmEventFields: ["created_at", "sender_id", "text"],
+  expansions: ["sender_id"],
+  userFields: ["username", "profile_image_url"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((event) => {
+    console.log(`${event.sender_id}: ${event.text}`);
+  });
+  // 送信者のユーザーオブジェクトは page.includes.users にあります
+}
+```
+
+</CodeGroup>
+
+### expansion を伴うレスポンス
+
+```json title="MessageCreate" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "id": "1234567890",
+      "event_type": "MessageCreate",
+      "text": "Hello!",
+      "sender_id": "9876543210"
+    }
+  ],
+  "includes": {
+    "users": [
+      {
+        "id": "9876543210",
+        "username": "example_user",
+        "profile_image_url": "https://..."
+      }
+    ]
+  }
+}
+```
+
+---
+
+## よく使うパラメータ
+
+| Parameter | Description |
+|:----------|:------------|
+| `max_results` | 1 ページあたりのイベント数（1-100、デフォルト 100） |
+| `pagination_token` | 次ページのトークン |
+| `dm_event.fields` | 返すイベントフィールド |
+| `event_types` | イベントタイプでフィルタ |
+| `expansions` | 含める関連オブジェクト |
+
+---
+
+## 次のステップ
+
+<CardGroup cols={2}>
+  <Card title="DM を送信" icon="paper-plane" href="/x-api/direct-messages/manage/quickstart">
+    ダイレクトメッセージを送信
+  </Card>
+  <Card title="統合ガイド" icon="/icons/xds/icon-book.svg" href="/x-api/direct-messages/lookup/integrate">
+    主要な概念とベストプラクティス
+  </Card>
+  <Card title="API リファレンス" icon="/icons/xds/icon-code.svg" href="/x-api/direct-messages/get-dm-events">
+    エンドポイントの完全なドキュメント
+  </Card>
+</CardGroup>

@@ -1,0 +1,204 @@
+---
+title: Obtener Posts históricos con full-archive search
+description: Tutorial paso a paso para recuperar Posts históricos hasta 2006 utilizando el endpoint full-archive search de la X API v2, operadores de consulta y paginación.
+mode: wide
+keywords: ["búsqueda de archivo completo", "búsqueda histórica", "tweets históricos", "búsqueda de archivo", "tutorial de búsqueda", "datos históricos", "archivo completo"]
+---
+
+## Introducción
+
+Los [endpoints Search Posts](/x-api/posts/search/introduction)
+en el mundo v2 te permiten recibir Posts relacionados con temas de interés,
+basados en una consulta de búsqueda que produzcas. Tenemos dos endpoints distintos
+disponibles con v2 Search Posts: recent search, que está disponible para todos
+los desarrolladores con una cuenta aprobada y puede buscar Posts de hasta siete días
+de antigüedad, y full-archive search, que solo está disponible para
+investigadores aprobados en el
+[track de producto Academic Research](https://developer.x.com/en/products/x-api/early-access/guide#na_2),
+y puede buscar en todo el archivo de Posts hasta marzo de 2006.
+
+Puedes ver nuestra oferta completa de búsqueda en nuestra
+[página de resumen de búsqueda](/x-api/posts/search/introduction).
+
+Estos endpoints Search Posts abordan uno de los casos de uso más comunes para
+los investigadores académicos, que podrían usarlo para estudios longitudinales o para analizar
+un tema o evento pasado.
+
+Este tutorial ofrece una guía paso a paso para investigadores que deseen usar el
+endpoint full-archive search para buscar en el historial completo de datos públicos de X.
+También demostrará las diferentes formas de construir un conjunto de datos, como
+recuperando Posts geoetiquetados, y cómo paginar por los Posts disponibles para
+una consulta.
+
+### Requisitos previos
+
+Actualmente, este endpoint solo está disponible como parte del
+[track de producto Academic Research](https://developer.x.com/en/solutions/academic-research/products-for-researchers).
+Para usar este endpoint, debes
+[solicitar acceso](https://developer.x.com/en/portal/petition/academic/is-it-right-for-you).
+Obtén más información sobre la
+[solicitud y los requisitos de este track](https://developer.x.com/en/solutions/academic-research/application-info).
+
+### Conectar una app al proyecto académico
+
+Una vez que estés aprobado para usar el track de producto Academic Research, verás
+tu [Project](/resources/fundamentals/developer-apps) Académico en la
+[Developer Console](https://developer.x.com/en/portal/dashboard). En la
+sección "Apps", haz clic en "Add App" para conectar tu
+[X App](/resources/fundamentals/developer-apps) al Project.
+
+[](https://res.cloudinary.com/practicaldev/image/fetch/s--gHFOyuDc--/c_limit%2Cf_auto%2Cfl_progressive%2Cq_auto%2Cw_880/https://dev-to-uploads.s3.amazonaws.com/i/gb7aevhqyfvfjznd0pnd.png)
+
+![Esta imagen muestra un Project Académico en la Developer Console al que aún no se le ha añadido una App](https://cdn.cms-twdigitalassets.com/content/dam/developer-twitter/docs/tutorials/getting-historical-tweets-using-the-full-archive-search-endpoint/dev-portal-1.png.twimg.1920.png)
+
+Luego, puedes elegir una App existente y conectarla a tu proyecto (como
+se muestra abajo).
+
+![Esta imagen muestra la página que aparece cuando intentas añadir una App a tu Project Académico](https://cdn.cms-twdigitalassets.com/content/dam/developer-twitter/docs/tutorials/getting-historical-tweets-using-the-full-archive-search-endpoint/dev-portal-2.png.twimg.1920.png)
+
+O puedes crear una nueva App, darle un nombre y hacer clic en completar, para conectar una nueva
+App a tu Project Académico.
+
+![Esta imagen muestra la página en la que introducirás un nombre para tu nueva App, o te permite seleccionar una App existente](https://cdn.cms-twdigitalassets.com/content/dam/developer-twitter/docs/tutorials/getting-historical-tweets-using-the-full-archive-search-endpoint/dev-portal-3.png.twimg.1920.png)
+
+Esto te dará tus API keys y
+[Bearer Token](/resources/fundamentals/authentication#using-and-generating-an-app-only-bearer-token) que luego podrás
+usar para conectarte al endpoint full-archive search.
+
+![Esta imagen muestra la página que se te muestra después de crear una nueva App, donde aparecen tus claves y tokens](https://cdn.cms-twdigitalassets.com/content/dam/developer-twitter/docs/tutorials/getting-historical-tweets-using-the-full-archive-search-endpoint/dev-portal-4.png.twimg.1920.png)
+
+**Ten en cuenta**
+
+Las claves en la captura anterior están ocultas, pero en tu propia Developer Console,
+podrás ver los valores reales de la API Key, la API Secret Key y el
+Bearer Token. Guarda estas claves y el Bearer Token porque los necesitarás
+para llamar al endpoint full-archive search.
+
+### Conectarse al endpoint full-archive search
+
+El comando cURL siguiente muestra cómo puedes obtener Posts históricos del handle @XDevelopers.
+Reemplaza $BEARER_TOKEN por tu propio Bearer Token, pega la solicitud completa
+en tu terminal y presiona "return".
+
+```bash
+curl --request GET 'https://api.x.com/2/tweets/search/all?query=from:xdevelopers' --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+Verás la respuesta JSON.
+
+Por defecto, solo se devolverán los 10 Posts más recientes. Si quieres más
+de 10 Posts por solicitud, puedes usar el parámetro max_results y establecerlo en
+un máximo de 500 Posts por solicitud, como se muestra abajo:
+
+```bash
+curl --request GET 'https://api.x.com/2/tweets/search/all?query=from:xdevelopers&max_results=500' --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+### Construir consultas
+
+Como puedes ver en las llamadas de ejemplo anteriores, usando el parámetro query, puedes
+especificar los datos que quieres buscar. Como ejemplo, si quisieras
+obtener todos los Posts que contengan la palabra _covid_ o la palabra _coronavirus_, puedes
+usar el operador OR dentro de paréntesis, y tu consulta puede ser
+`(covid OR coronavirus)` y así tu llamada a la API se verá como lo siguiente:
+
+```bash
+curl --request GET 'https://api.x.com/2/tweets/search/all?query=(covid%20OR%20coronavirus)&max_results=500' --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+De manera similar, si quieres todos los Posts que contengan las palabras _covid19_ y que no
+sean reposts, puedes usar el operador is:retweet con el NOT lógico (representado
+por \-), por lo que tu consulta puede ser covid19 -is:retweet y tu llamada a la API será:
+
+```bash
+curl --request GET 'https://api.x.com/2/tweets/search/all?query=covid19%20-is:retweet&max_results=500' --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+Consulta
+[esta guía para ver una lista completa de operadores](/x-api/posts/search/integrate/build-a-query)
+que están soportados en el endpoint full-archive search.
+
+### Usar los parámetros start_time y end_time para obtener Posts históricos
+
+Al usar el endpoint full-archive search, por defecto se devolverán Posts de los últimos 30
+días. Si quieres obtener Posts que tengan más de 30 días de antigüedad,
+puedes usar los parámetros start_time y end_time en tu llamada a la API. Estos
+parámetros deben estar en un formato de fecha-hora RFC3339 válido, por ejemplo
+2020-12-21T13:00:00.00Z. Así, si quieres obtener todos los Posts de la cuenta XDevelopers
+durante el mes de diciembre de 2020, tu llamada a la API será:
+
+```bash
+curl --request GET 'https://api.x.com/2/tweets/search/all?query=from:XDevelopers&start_time=2020-12-01T00:00:00.00Z&end_time=2021-01-01T00:00:00.00Z' --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+### Obtener Posts históricos geoetiquetados
+
+Los Posts geoetiquetados son Posts que tienen información geográfica asociada
+como ciudad, estado, país, etc.
+
+#### Usar el operador has:geo
+
+Si quieres obtener Posts que tengan datos geográficos, puedes usar el operador has:geo.
+Por ejemplo, la siguiente solicitud cURL obtendrá solo los Posts del
+handle @XDevelopers que tengan datos geográficos:
+
+```bash
+curl --request GET
+'https://api.x.com/2/tweets/search/all?query=from:xdevelopers%20has:geo' --header
+'Aubashthorization: Bearer $BEARER_TOKEN'
+```
+
+#### Usar el operador place_country
+
+De igual manera, puedes limitar los Posts que tengan datos geográficos a un país específico, usando
+el operador place_country. El siguiente comando cURL obtendrá todos los Posts del
+handle @XDevelopers desde Estados Unidos:
+
+```bash
+curl --request GET
+'https://api.x.com/2/tweets/search/all?query=from:xdevelopers%20place_country:US'
+--hbasheader 'Authorization: Bearer XXXXX'
+```
+
+El país se especifica arriba usando el código de caracteres ISO alpha-2. Los códigos ISO
+válidos se pueden encontrar [aquí](http://en.wikipedia.org/wiki/ISO_3166-1_alpha-2).
+
+### Obtener más de 500 Posts históricos usando el next_token
+
+Como se mencionó anteriormente, por defecto solo puedes obtener hasta 500 Posts por solicitud para
+una consulta al endpoint full-archive search. Si hay más de 500 Posts
+disponibles para tu consulta, tu respuesta JSON incluirá un next_token que
+puedes añadir a tu llamada a la API para obtener los siguientes Posts disponibles para esta
+consulta. Este next_token está disponible en el objeto meta de tu respuesta JSON,
+que se ve algo así:
+
+```json
+{ "newest_id": "12345678...", "oldest_id": "12345678...", "result_count": 500,
+"nebashxt_token": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" }
+```
+
+Por lo tanto, para obtener los siguientes Posts disponibles, usa el valor de next_token de este objeto meta
+y úsalo como valor para next_token en tu llamada a la API al
+endpoint full-archive search como se muestra abajo (usarás tu propio Bearer Token
+y el valor que obtengas para el Next Token de tu llamada anterior a la API).
+
+```bash
+curl --request GET
+'https://api.x.com/2/tweets/search/all?max_results=500&query=covid&next_token=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
+--header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+De esta manera, puedes seguir comprobando si hay un next_token disponible y si no has
+alcanzado tu número deseado de Posts a recopilar, puedes seguir llamando al
+endpoint full-archive con el nuevo next_token para cada solicitud.
+
+A continuación se muestran algunos recursos que pueden ayudarte al usar el endpoint full-archive search.
+Nos encantaría escuchar tus comentarios. Contáctanos en
+[@XDevelopers](https://x.com/XDevelopers) o en nuestros
+[foros de la comunidad](https://devcommunity.x.com/) con preguntas sobre este
+endpoint.
+
+### Recursos adicionales
+
+- [Referencia de la API del endpoint full-archive search](/x-api/posts/full-archive-search)
+- [Aprende los fundamentos de construir una consulta de búsqueda](/x-api/posts/search/integrate/build-a-query)

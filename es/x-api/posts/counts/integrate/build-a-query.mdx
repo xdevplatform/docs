@@ -1,0 +1,190 @@
+---
+title: Construir una consulta
+sidebarTitle: Construir una consulta
+keywords: ["construir consulta counts", "consulta counts", "constructor de consultas counts", "sintaxis de consulta counts", "construir consulta de counts"]
+description: "Tus consultas estarán limitadas dependiendo del nivel de acceso que estés utilizando. Referencia del nivel estándar de X API v2 sobre integración."
+---
+
+#### Construir una consulta
+
+**¡Limitaciones de consulta!**
+
+Tus consultas estarán limitadas dependiendo del [nivel de acceso](/x-api/getting-started/about-x-api) que estés utilizando. 
+
+Tu consulta puede tener 512 caracteres para clientes pay-per-use, o hasta 4,096 caracteres para clientes Enterprise.
+
+Si tienes acceso Enterprise, comunícate con tu account manager. 
+
+
+**Disponibilidad de operadores**
+
+Aunque la mayoría de los operadores están disponibles para cualquier desarrollador, hay varios que están reservados para quienes han sido aprobados para acceso Enterprise. Indicamos qué nivel de acceso está disponible para cada operador en la tabla de la [lista de operadores](/x-api/posts/search/integrate/build-a-query) usando las siguientes etiquetas:
+
+* Operadores Core: disponibles al usar cualquier [Project](/resources/fundamentals/developer-apps).
+* Operadores Advanced: disponibles al usar un Project con acceso Enterprise 
+     
+
+#### Tipos de operadores: independientes y que requieren conjunción
+
+Los **operadores independientes** pueden usarse solos o junto con cualquier otro operador (incluidos aquellos que requieren conjunción).
+
+Por ejemplo, la siguiente consulta funcionará porque usa el operador #hashtag, que es independiente:
+
+#xapiv2
+
+Los operadores **que requieren conjunción** no pueden usarse por sí solos en una consulta; solo pueden usarse cuando al menos un operador independiente está incluido en la consulta. Esto se debe a que usar estos operadores solos sería demasiado general y coincidiría con un volumen extremadamente alto de Posts.
+
+Por ejemplo, las siguientes consultas no son compatibles porque contienen solo operadores que requieren conjunción:
+
+has:media
+has:links OR is:retweet
+
+Si añadimos un operador independiente, como la frase "X data", la consulta funcionaría correctamente. 
+
+"X data" has:mentions (has:media OR has:links)
+
+#### Operadores booleanos y agrupación
+
+Si deseas combinar varios operadores en una sola consulta, tienes las siguientes herramientas a tu disposición:
+
+|     |     |
+| :--- | :--- |
+| **Lógica AND** | Los operadores sucesivos con un espacio entre ellos resultarán en lógica booleana "AND", lo que significa que los Posts coincidirán solo si se cumplen ambas condiciones. Por ejemplo, snow day #NoSchool coincidirá con Posts que contengan los términos snow y day y el hashtag #NoSchool. |
+| **Lógica OR** | Los operadores sucesivos con OR entre ellos resultarán en lógica OR, lo que significa que los Posts coincidirán si se cumple cualquiera de las condiciones. Por ejemplo, especificar grumpy OR cat OR #meme coincidirá con cualquier Post que contenga al menos los términos grumpy o cat, o el hashtag #meme. |
+| **Lógica NOT, negación** | Antepone un guion (-) a una palabra clave (o a cualquier operador) para negarlo (NOT). Por ejemplo, cat #meme -grumpy coincidirá con Posts que contengan el hashtag #meme y el término cat, pero solo si no contienen el término grumpy. Una cláusula de consulta común es -is:retweet, que no coincidirá con Retweets, coincidiendo así solo con Posts originales, Quote Tweets y respuestas. Todos los operadores pueden negarse, pero los operadores negados no pueden usarse solos. |
+| **Agrupación** | Puedes usar paréntesis para agrupar operadores. Por ejemplo, (grumpy cat) OR (#meme has:images) devolverá Posts que contengan los términos grumpy y cat, o Posts con imágenes que contengan el hashtag #meme. Ten en cuenta que primero se aplican los AND y luego los OR. |
+
+**Una nota sobre las negaciones**
+
+Los operadores -is:nullcast siempre deben negarse.
+
+Los operadores negados no pueden usarse solos.
+
+No niegues un conjunto de operadores agrupados en un conjunto de paréntesis. En su lugar, niega cada operador individualmente. Por ejemplo, en lugar de usar skiing -(snow OR day OR noschool), sugerimos que uses skiing -snow -day -noschool. 
+
+**Orden de las operaciones**
+
+Al combinar la funcionalidad AND y OR, el siguiente orden de operaciones dictará cómo se evalúa tu consulta.
+
+1.  Los operadores conectados por lógica AND se combinan primero
+2.  Luego se aplican los operadores conectados con lógica OR
+
+
+
+Por ejemplo:
+
+* apple OR iphone ipad se evaluará como apple OR (iphone ipad)
+* ipad iphone OR android se evaluará como (iphone ipad) OR android
+
+
+
+Para eliminar la incertidumbre y asegurar que tu consulta se evalúe como esperas, agrupa los términos con paréntesis cuando sea apropiado. 
+
+Por ejemplo:
+
+* (apple OR iphone) ipad
+* iphone (ipad OR android)
+     
+
+**Puntuación, diacríticos y sensibilidad a mayúsculas**
+
+Si especificas una palabra clave o consulta de hashtag con acentos o diacríticos, coincidirá con texto de Post que contenga tanto el término con acentos y diacríticos como los términos con caracteres normales. Por ejemplo, las consultas con la palabra clave Diacrítica o el hashtag #cumpleaños coincidirán con _Diacrítica_ o _#cumpleaños_, así como con _Diacritica_ o _#cumpleanos_ sin la tilde í o la eñe.
+
+Los caracteres con acentos o diacríticos se tratan igual que los caracteres normales y no se tratan como límites de palabra. Por ejemplo, una consulta con la palabra clave cumpleaños solo coincidiría con actividades que contengan la palabra _cumpleaños_ y no coincidiría con actividades que contengan _cumplea_, _cumplean_ u _os_.
+
+Todos los operadores se evalúan sin distinción entre mayúsculas y minúsculas. Por ejemplo, la consulta cat coincidirá con Posts que incluyan: _cat_, _CAT_, _Cat_.
+
+El comportamiento de coincidencia de [filtered stream](/x-api/posts/filtered-stream) es diferente al de Post counts. Al [construir una regla de filtered stream](/x-api/posts/filtered-stream/integrate/build-a-rule), ten en cuenta que las palabras clave y hashtags que incluyen acentos y diacríticos solo coincidirán con términos que también incluyan el acento y el diacrítico, y no coincidirán con términos que usen caracteres normales. 
+
+Por ejemplo, las reglas de filtered stream que incluyen una palabra clave Diacrítica o hashtag #cumpleaños solo coincidirán con los términos _Diacrítica_ y _#cumpleaños_, y no coincidirán con _Diacritica_ o _#cumpleanos_ sin la tilde í o la eñe.
+
+**Especificidad y eficiencia**
+
+Cuando comienzas a construir tu consulta, es importante tener en cuenta algunas cosas.
+
+* Usar operadores independientes amplios para tu consulta como una sola palabra clave o #hashtag generalmente no se recomienda, ya que probablemente coincidirá con un volumen masivo de Posts. Crear una consulta más robusta dará como resultado un conjunto más específico de Posts coincidentes, y con suerte aumentará la precisión de tus Post counts para ayudarte a encontrar información más valiosa. 
+    * Por ejemplo, si tu consulta fuera solo la palabra clave happy, probablemente obtendrías entre 200,000 y 300,000 Posts por día.
+    * Añadir más operadores condicionales reduce tus resultados, por ejemplo (happy OR happiness) place_country:GB -birthday -is:retweet
+* Escribir consultas eficientes también es beneficioso para mantenerse dentro de la restricción de longitud de caracteres. El recuento de caracteres incluye toda la cadena de la consulta, incluidos los espacios y los operadores.
+    * Por ejemplo, la siguiente consulta tiene 59 caracteres: (happy OR happiness) place_country:GB -birthday -is:retweet
+
+
+**Comportamiento de coincidencia de Quote Tweet**
+
+Al utilizar los endpoints de Post counts, los operadores no coincidirán con el contenido del Post original que se citó, pero sí coincidirán con el contenido incluido en el Quote Tweet.
+
+Sin embargo, ten en cuenta que [filtered stream](/x-api/posts/filtered-stream) coincidirá tanto con el contenido del Post original que se citó como con el contenido del Quote Tweet.
+ 
+
+**Construir una consulta de forma iterativa**
+
+**Prueba tu consulta pronto y con frecuencia**
+
+Obtener una consulta que devuelva los resultados "correctos" en el primer intento es raro. Hay tanto contenido en X que puede o no ser obvio al principio, y la sintaxis de consulta descrita anteriormente puede ser difícil de adaptar a tu consulta deseada.
+
+A medida que construyas una consulta, es importante que la pruebes periódicamente usando uno de los endpoints de [Search Post](/x-api/posts/search/introduction) para asegurar que los Posts que coinciden con tu consulta son relevantes para tu caso de uso.
+
+Para esta sección, vamos a comenzar con la siguiente consulta y ajustarla según los resultados que recibamos durante nuestra prueba: 
+
+happy OR happiness
+
+**Usa los resultados para reducir la consulta**
+
+A medida que pruebas la consulta con Search Posts, debes revisar los Posts devueltos para ver si incluyen los datos que esperas y deseas recibir. Comenzar con una consulta amplia y un superconjunto de coincidencias de Posts te permite revisar el resultado y reducir la consulta para filtrar los resultados no deseados.  
+
+Cuando probamos la consulta de ejemplo, notamos que estábamos obteniendo Posts en una variedad de idiomas diferentes. En esta situación, solo queremos recibir Posts en inglés, así que vamos a añadir el operador lang::
+
+(happy OR happiness) lang:en
+
+La prueba entregó varios Posts deseando a las personas un feliz cumpleaños, así que vamos a agregar -birthday como operador de palabra clave negado. También queremos recibir solo Posts originales, así que hemos añadido el operador negado -is:retweet:
+
+(happy OR happiness) lang:en -birthday -is:retweet
+
+**Ajusta para inclusión cuando sea necesario**
+
+Si notas que no estás recibiendo datos a través de Search Posts que esperas y sabes que hay Posts existentes que deberían devolverse, es posible que necesites ampliar tu consulta eliminando operadores que puedan estar filtrando los datos deseados. 
+
+Para nuestro ejemplo, notamos que había otros Posts en nuestro timeline personal que expresaban la emoción que buscamos y no se incluyeron en los resultados de la prueba. Para asegurar una mayor cobertura, vamos a añadir las palabras clave, excited y elated.
+
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet
+
+**Ajusta para tendencias/picos populares durante el período de tiempo**
+
+Las tendencias van y vienen rápidamente en X. Mantener tu consulta debe ser un proceso activo. Si planeas usar una consulta durante un tiempo, sugerimos que revises periódicamente los datos que estás recibiendo para ver si necesitas hacer ajustes.
+
+En nuestro ejemplo, notamos que comenzamos a recibir algunos Posts que desean a las personas "happy holidays". Como no queremos incluir estos Posts en nuestros resultados, vamos a añadir una palabra clave negada -holidays.
+
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet -holidays 
+
+Una vez que hayas probado e iterado adecuadamente tu consulta, puedes comenzar a enviarla con los endpoints de Post counts para recibir solo el volumen de Posts en lugar de los payloads completos de los Posts.
+
+#### Añadir una consulta a tu solicitud
+
+Para añadir tu consulta a tu solicitud, debes usar el parámetro query. Como con cualquier parámetro de consulta, debes asegurarte de codificar en HTTP la consulta que desarrollaste.
+
+Aquí hay un ejemplo de cómo podría verse usando un comando cURL. Si deseas usar este comando, asegúrate de reemplazar $BEARER_TOKEN con tu propio [Bearer Token](/resources/fundamentals/authentication#oauth-2-0):
+
+      ```
+      curl https://api.x.com/2/tweets/counts/recent?query=cat%20has%3Amedia%20-grumpy&tweet.fields=created_at&max_results=100 -H "Authorization: Bearer $BEARER_TOKEN"
+      ```
+
+
+
+#### Ejemplos de consultas
+
+**Seguimiento de un desastre natural**
+
+La siguiente consulta coincidió con Posts originales provenientes de agencias meteorológicas y estaciones de medición que hablan sobre el huracán Harvey, que golpeó Houston en 2017.
+
+Así se vería la consulta sin la codificación HTTP:
+
+has:geo (from:NWSNHC OR from:NHC\_Atlantic OR from:NWSHouston OR from:NWSSanAntonio OR from:USGS\_TexasRain OR from:USGS_TexasFlood OR from:JeffLindner1) -is:retweet
+
+
+Y así se vería la consulta con la codificación HTTP, el parámetro query y la URI de recent Post counts:
+
+https://api.x.com/2/tweets/counts/recent?query=-is%3Aretweet%20has%3Ageo%20(from%3ANWSNHC%20OR%20from%3ANHC\_Atlantic%20OR%20from%3ANWSHouston%20OR%20from%3ANWSSanAntonio%20OR%20from%3AUSGS\_TexasRain%20OR%20from%3AUSGS_TexasFlood%20OR%20from%3AJeffLindner1)
+
+**Revisar el sentimiento de una conversación**
+
+La siguiente regla podría usarse para comprender mejor el sentimiento de la conversación que se desarrolla alrededor del hashtag _#nowplaying_, pero limitada solo a Posts publicados dentro

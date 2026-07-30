@@ -1,0 +1,190 @@
+---
+title: 쿼리 작성
+sidebarTitle: 쿼리 작성
+keywords: ["counts 쿼리 작성", "counts 쿼리", "counts 쿼리 빌더", "counts 쿼리 구문", "counts 쿼리 빌드"]
+description: "쿼리는 사용 중인 접근 등급에 따라 제한됩니다. integrate를 다루는 X API v2 standard 티어 레퍼런스입니다."
+---
+
+#### 쿼리 작성하기
+
+**쿼리 제한 사항!**
+
+쿼리는 사용 중인 [access level](/x-api/getting-started/about-x-api)에 따라 제한됩니다.
+
+Pay-per-use 고객은 쿼리를 최대 512자, Enterprise 고객은 최대 4,096자까지 작성할 수 있습니다.
+
+Enterprise 액세스 권한이 있는 경우 담당 계정 매니저에게 문의하세요.
+
+
+**연산자 사용 가능 여부**
+
+대부분의 연산자는 모든 개발자가 사용할 수 있지만, 일부는 Enterprise 액세스 승인을 받은 사용자만 사용할 수 있습니다. 각 연산자가 어떤 access level에서 사용 가능한지는 [연산자 목록](/x-api/posts/search/integrate/build-a-query) 표에서 다음과 같은 레이블로 표시됩니다:
+
+* Core operators: 모든 [Project](/resources/fundamentals/developer-apps) 사용 시 이용 가능.
+* Advanced operators: Enterprise 액세스가 포함된 Project 사용 시 이용 가능
+     
+
+#### 연산자 유형: standalone 및 conjunction-required
+
+**Standalone 연산자**는 단독으로 사용하거나, conjunction이 필요한 연산자를 포함한 다른 연산자들과 함께 사용할 수 있습니다.
+
+예를 들어, 다음 쿼리는 #hashtag 연산자가 standalone이므로 정상적으로 동작합니다:
+
+#xapiv2
+
+**Conjunction-required** 연산자는 쿼리에서 단독으로 사용할 수 없으며, 최소 하나 이상의 standalone 연산자가 쿼리에 포함되어 있을 때만 사용할 수 있습니다. 이는 이러한 연산자를 단독으로 사용할 경우 지나치게 광범위하여 매우 많은 양의 게시물이 매칭되기 때문입니다.
+
+예를 들어, 다음 쿼리들은 conjunction-required 연산자만 포함하고 있으므로 지원되지 않습니다:
+
+has:media
+has:links OR is:retweet
+
+여기에 "X data"와 같은 standalone 연산자를 추가하면 쿼리가 정상적으로 동작합니다.
+
+"X data" has:mentions (has:media OR has:links)
+
+#### Boolean 연산자와 그룹화
+
+하나의 쿼리에 여러 연산자를 조합하고자 한다면 다음과 같은 도구를 활용할 수 있습니다:
+
+|     |     |
+| :--- | :--- |
+| **AND 로직** | 연산자들을 공백으로 구분하여 나열하면 boolean "AND" 로직이 적용됩니다. 즉, 두 조건이 모두 충족되는 경우에만 게시물이 매칭됩니다. 예를 들어 snow day #NoSchool은 snow와 day라는 용어, 그리고 #NoSchool 해시태그가 모두 포함된 게시물에 매칭됩니다. |
+| **OR 로직** | 연산자들을 OR로 구분하여 나열하면 OR 로직이 적용됩니다. 즉, 두 조건 중 어느 하나라도 충족되면 게시물이 매칭됩니다. 예를 들어 grumpy OR cat OR #meme으로 지정하면 grumpy나 cat이라는 용어 또는 #meme 해시태그가 포함된 모든 게시물이 매칭됩니다. |
+| **NOT 로직, 부정** | 키워드(또는 모든 연산자) 앞에 대시(-)를 붙이면 부정(NOT)이 됩니다. 예를 들어 cat #meme -grumpy는 #meme 해시태그와 cat이라는 용어를 포함하되 grumpy가 포함되지 않은 게시물에 매칭됩니다. 자주 사용하는 쿼리 조건 중 하나는 -is:retweet로, 리트윗은 매칭에서 제외하고 원본 게시물, Quote Tweet, 답글만 매칭됩니다. 모든 연산자를 부정할 수 있지만, 부정된 연산자를 단독으로 사용할 수는 없습니다. |
+| **그룹화** | 괄호를 사용하여 연산자들을 그룹으로 묶을 수 있습니다. 예를 들어 (grumpy cat) OR (#meme has:images)는 grumpy와 cat이 모두 포함된 게시물이나, 이미지가 포함되고 #meme 해시태그가 포함된 게시물을 반환합니다. AND가 먼저 적용된 후 OR가 적용된다는 점을 유의하세요. |
+
+**부정 관련 참고 사항**
+
+-is:nullcast 연산자는 반드시 부정된 형태로만 사용해야 합니다.
+
+부정된 연산자는 단독으로 사용할 수 없습니다.
+
+괄호로 묶인 연산자 세트 전체를 부정하지 마세요. 대신 각 개별 연산자를 부정하세요. 예를 들어 skiing -(snow OR day OR noschool) 대신 skiing -snow -day -noschool을 사용하는 것을 권장합니다.
+
+**연산 우선순위**
+
+AND와 OR를 함께 사용할 때, 다음 우선순위에 따라 쿼리가 평가됩니다.
+
+1.  AND 로직으로 연결된 연산자가 먼저 결합됩니다
+2.  그 다음 OR 로직으로 연결된 연산자가 적용됩니다
+
+
+
+예를 들어:
+
+* apple OR iphone ipad는 apple OR (iphone ipad)로 평가됩니다
+* ipad iphone OR android는 (iphone ipad) OR android로 평가됩니다
+
+
+
+모호함을 없애고 의도한 대로 쿼리가 평가되도록, 필요한 경우 괄호로 용어를 그룹화하세요.
+
+예를 들어:
+
+* (apple OR iphone) ipad
+* iphone (ipad OR android)
+     
+
+**구두점, 발음 구별 부호, 대소문자 구분**
+
+키워드 또는 해시태그 쿼리에 악센트나 발음 구별 부호가 포함된 문자를 지정하면, 악센트/발음 구별 부호가 포함된 용어뿐 아니라 일반 문자로 된 동일 용어를 포함한 게시물 텍스트도 매칭됩니다. 예를 들어 Diacrítica 키워드나 #cumpleaños 해시태그 쿼리는 _Diacrítica_ 또는 _#cumpleaños_뿐만 아니라, 물결(í)이나 (eñe) 없이 표기된 _Diacritica_ 또는 _#cumpleanos_에도 매칭됩니다.
+
+악센트나 발음 구별 부호가 포함된 문자는 일반 문자와 동일하게 취급되며 단어 경계로 처리되지 않습니다. 예를 들어 cumpleaños 키워드 쿼리는 단어 _cumpleaños_를 포함한 액티비티만 매칭하며, _cumplea_, _cumplean_, _os_를 포함한 액티비티는 매칭하지 않습니다.
+
+모든 연산자는 대소문자를 구분하지 않고 평가됩니다. 예를 들어 cat 쿼리는 _cat_, _CAT_, _Cat_이 포함된 게시물에 모두 매칭됩니다.
+
+[filtered stream](/x-api/posts/filtered-stream) 매칭 동작은 Post counts와 다르게 동작합니다. [filtered stream 규칙을 작성할 때](/x-api/posts/filtered-stream/integrate/build-a-rule)는 악센트와 발음 구별 부호가 포함된 키워드와 해시태그가 동일한 악센트와 발음 구별 부호가 포함된 용어에만 매칭되고, 일반 문자만 사용한 용어에는 매칭되지 않는다는 점을 유의하세요.
+
+예를 들어, Diacrítica 키워드나 #cumpleaños 해시태그가 포함된 filtered stream 규칙은 _Diacrítica_와 _#cumpleaños_에만 매칭되고, 물결(í)이나 (eñe) 없이 표기된 _Diacritica_ 또는 _#cumpleanos_에는 매칭되지 않습니다.
+
+**구체성 및 효율성**
+
+쿼리 작성을 시작할 때 다음 몇 가지 사항을 염두에 두는 것이 중요합니다.
+
+* 단일 키워드나 #hashtag와 같은 광범위한 standalone 연산자를 쿼리에 사용하는 것은 대체로 권장되지 않습니다. 매우 많은 양의 게시물에 매칭될 가능성이 크기 때문입니다. 보다 견고한 쿼리를 작성하면 더 구체적인 매칭 게시물 집합을 얻을 수 있고, Post counts의 정확도를 높여 더 가치 있는 인사이트를 발견하는 데 도움이 됩니다.
+    * 예를 들어 쿼리가 단순히 happy 키워드일 경우 하루에 200,000 - 300,000개 정도의 게시물이 매칭될 가능성이 큽니다.
+    * 조건부 연산자를 더 추가하면 결과의 범위가 좁아집니다. 예: (happy OR happiness) place_country:GB -birthday -is:retweet
+* 효율적인 쿼리를 작성하는 것은 쿼리 길이 제한을 지키는 데도 도움이 됩니다. 문자 수는 공백과 연산자를 포함한 전체 쿼리 문자열을 기준으로 계산됩니다.
+    * 예를 들어 다음 쿼리는 59자입니다: (happy OR happiness) place_country:GB -birthday -is:retweet
+
+
+**Quote Tweet 매칭 동작**
+
+Post counts 엔드포인트를 사용할 때, 연산자는 인용된 원본 게시물의 콘텐츠에는 매칭되지 않고, Quote Tweet에 포함된 콘텐츠에만 매칭됩니다.
+
+단, [filtered stream](/x-api/posts/filtered-stream)은 인용된 원본 게시물과 Quote Tweet의 콘텐츠 모두에 매칭된다는 점을 유의하세요.
+ 
+
+**반복적으로 쿼리 다듬기**
+
+**쿼리를 조기에, 자주 테스트하세요**
+
+처음에 "올바른" 결과를 반환하는 쿼리를 만들어내는 경우는 드뭅니다. X에는 처음에는 명확하지 않을 수 있는 것들이 많고, 위에서 설명한 쿼리 구문을 원하는 쿼리에 맞추기 어려울 수 있습니다.
+
+쿼리를 작성하면서 [Search Post](/x-api/posts/search/introduction) 엔드포인트 중 하나를 사용해 주기적으로 테스트하여, 매칭되는 게시물이 실제 사용 사례에 부합하는지 확인하는 것이 중요합니다.
+
+이 섹션에서는 다음 쿼리로 시작해, 테스트 중 받은 결과를 기반으로 조정해 나갈 것입니다:
+
+happy OR happiness
+
+**결과를 이용해 쿼리 범위 좁히기**
+
+Search Posts로 쿼리를 테스트하면서, 반환된 게시물을 훑어보며 원하고 기대한 데이터가 포함되어 있는지 확인해야 합니다. 광범위한 쿼리로 상위 집합의 게시물 매치를 얻고 시작하면, 결과를 검토한 뒤 쿼리를 좁혀 원치 않는 결과를 걸러낼 수 있습니다.
+
+예시 쿼리를 테스트했을 때 다양한 언어의 게시물이 반환되는 것을 확인했습니다. 이 경우에는 영어 게시물만 받고 싶으므로, lang: 연산자를 추가하겠습니다:
+
+(happy OR happiness) lang:en
+
+테스트 결과 생일을 축하하는 게시물이 많이 반환되었으므로, -birthday를 부정 키워드 연산자로 추가하겠습니다. 원본 게시물만 받고 싶으므로 부정된 -is:retweet 연산자도 추가했습니다:
+
+(happy OR happiness) lang:en -birthday -is:retweet
+
+**필요에 따라 포함 범위를 조정하기**
+
+Search Posts를 통해 기대한 데이터가 반환되지 않고, 반환되어야 할 기존 게시물이 있다는 것을 알고 있다면, 원하는 데이터를 걸러내고 있는 연산자를 제거하여 쿼리를 넓혀야 할 수 있습니다.
+
+예시에서, 개인 타임라인에 우리가 찾고자 하는 감정을 표현한 다른 게시물이 있었지만 테스트 결과에는 포함되지 않았음을 확인했습니다. 커버리지를 넓히기 위해 excited와 elated 키워드를 추가하겠습니다.
+
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet
+
+**해당 기간의 인기 트렌드/급증 반영하기**
+
+X에서는 트렌드가 빠르게 등장하고 사라집니다. 쿼리 유지 관리는 능동적인 과정이어야 합니다. 쿼리를 일정 기간 동안 사용할 계획이라면, 수신하는 데이터를 주기적으로 점검하여 조정이 필요한지 확인하는 것이 좋습니다.
+
+예시에서, "happy holidays"를 기원하는 게시물이 반환되기 시작한 것을 발견했습니다. 이러한 게시물을 결과에 포함하고 싶지 않으므로, 부정된 -holidays 키워드를 추가하겠습니다.
+
+(happy OR happiness OR excited OR elated) lang:en -birthday -is:retweet -holidays 
+
+쿼리를 적절히 테스트하고 반복적으로 개선한 후, Post counts 엔드포인트에 이 쿼리를 전송하여 전체 게시물 페이로드 대신 게시물 볼륨만 수신할 수 있습니다.
+
+#### 요청에 쿼리 추가하기
+
+요청에 쿼리를 추가하려면 query 파라미터를 사용해야 합니다. 다른 쿼리 파라미터와 마찬가지로, 작성한 쿼리는 반드시 HTTP 인코딩해야 합니다.
+
+다음은 cURL 명령을 사용한 예시입니다. 이 명령을 사용하려면 $BEARER_TOKEN을 자신의 [Bearer Token](/resources/fundamentals/authentication#oauth-2-0)으로 반드시 교체하세요:
+
+      ```
+      curl https://api.x.com/2/tweets/counts/recent?query=cat%20has%3Amedia%20-grumpy&tweet.fields=created_at&max_results=100 -H "Authorization: Bearer $BEARER_TOKEN"
+      ```
+
+
+
+#### 쿼리 예시
+
+**자연재해 추적**
+
+다음 쿼리는 2017년 휴스턴을 강타한 허리케인 Harvey를 논의하는 기상 기관과 관측소가 게시한 원본 게시물에 매칭됩니다.
+
+HTTP 인코딩 없이 표시한 쿼리는 다음과 같습니다:
+
+has:geo (from:NWSNHC OR from:NHC\_Atlantic OR from:NWSHouston OR from:NWSSanAntonio OR from:USGS\_TexasRain OR from:USGS_TexasFlood OR from:JeffLindner1) -is:retweet
+
+
+HTTP 인코딩이 적용되고 query 파라미터, recent Post counts URI가 포함된 쿼리는 다음과 같습니다:
+
+https://api.x.com/2/tweets/counts/recent?query=-is%3Aretweet%20has%3Ageo%20(from%3ANWSNHC%20OR%20from%3ANHC\_Atlantic%20OR%20from%3ANWSHouston%20OR%20from%3ANWSSanAntonio%20OR%20from%3AUSGS\_TexasRain%20OR%20from%3AUSGS_TexasFlood%20OR%20from%3AJeffLindner1)
+
+**대화의 감성 검토**
+
+다음 규칙은 _#nowplaying_ 해시태그 주변에서 형성되는 대화의 감성을 더 잘 이해하기 위해 사용할 수 있지만, 게시된 게시물만 포함하도록 범위가 좁혀져

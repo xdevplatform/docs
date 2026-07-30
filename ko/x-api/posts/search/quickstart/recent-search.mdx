@@ -1,0 +1,275 @@
+---
+title: Recent Search 퀵스타트
+sidebarTitle: Recent Search
+description: "이 가이드에서는 게시물을 찾기 위한 첫 recent search 요청을 만드는 방법을 안내합니다. 퀵스타트를 다루는 X API v2 standard 티어 레퍼런스입니다."
+keywords: ["recent search", "search 퀵스타트", "recent search 튜토리얼", "search tweets", "recent search 가이드", "search 예제"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+이 가이드에서는 최근 7일간의 게시물을 찾기 위한 첫 recent search 요청을 만드는 방법을 안내합니다.
+
+<Note>
+**사전 요구사항**
+
+시작하기 전에 다음이 필요합니다:
+- 승인된 App이 있는 [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- App의 Bearer Token(Developer Console의 "Keys and tokens"에서 확인)
+</Note>
+
+---
+
+<Steps>
+  <Step title="쿼리 작성" icon="/icons/xds/icon-search.svg">
+    검색 쿼리는 게시물을 매칭하는 연산자를 사용합니다. 간단한 키워드로 시작하세요:
+
+    ```
+    python
+    ```
+
+    또는 여러 연산자를 조합하세요:
+
+    ```
+    python lang:en -is:retweet
+    ```
+
+    이 쿼리는 리트윗을 제외하고, 영어로 "python"이 포함된 게시물에 매칭됩니다.
+
+    <Tip>
+    사용 가능한 모든 옵션은 [전체 연산자 레퍼런스](/x-api/posts/search/integrate/operators)를 참고하세요.
+    </Tip>
+  </Step>
+
+  <Step title="요청 만들기" icon="terminal">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/recent?query=python%20lang%3Aen%20-is%3Aretweet" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Search recent Posts
+for page in client.posts.search_recent(
+    query="python lang:en -is:retweet"
+):
+    for post in page.data:
+        print(post.text)
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Search recent Posts
+const paginator = client.posts.searchRecent({
+  query: "python lang:en -is:retweet",
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(post.text);
+  });
+}
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="응답 확인" icon="eye">
+    기본 응답에는 `id`, `text`, `edit_history_tweet_ids`가 포함됩니다:
+
+    ```json
+    {
+      "data": [
+        {
+          "id": "1234567890123456789",
+          "text": "Just started learning Python and loving it!",
+          "edit_history_tweet_ids": ["1234567890123456789"]
+        },
+        {
+          "id": "1234567890123456788",
+          "text": "Python tip: use list comprehensions for cleaner code",
+          "edit_history_tweet_ids": ["1234567890123456788"]
+        }
+      ],
+      "meta": {
+        "newest_id": "1234567890123456789",
+        "oldest_id": "1234567890123456788",
+        "result_count": 2
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="fields 및 expansions 추가" icon="sliders">
+    쿼리 파라미터로 추가 데이터를 요청합니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/search/recent?\
+query=python%20lang%3Aen%20-is%3Aretweet&\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id&\
+user.fields=username,verified&\
+max_results=10" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Search with fields and expansions
+for page in client.posts.search_recent(
+    query="python lang:en -is:retweet",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username", "verified"],
+    max_results=10
+):
+    for post in page.data:
+        print(f"{post.text[:50]}... - Likes: {post.public_metrics.like_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Search with fields and expansions
+const paginator = client.posts.searchRecent({
+  query: "python lang:en -is:retweet",
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username", "verified"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text?.slice(0, 50)}... - Likes: ${post.public_metrics?.like_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+**응답:**
+
+```json title="예시 응답" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "id": "1234567890123456789",
+      "text": "Just started learning Python and loving it!",
+      "created_at": "2024-01-15T10:30:00.000Z",
+      "author_id": "9876543210",
+      "public_metrics": {
+        "retweet_count": 5,
+        "reply_count": 2,
+        "like_count": 42,
+        "quote_count": 1
+      },
+      "edit_history_tweet_ids": ["1234567890123456789"]
+    }
+  ],
+  "includes": {
+    "users": [
+      {
+        "id": "9876543210",
+        "username": "pythondev",
+        "verified": false
+      }
+    ]
+  },
+  "meta": {
+    "newest_id": "1234567890123456789",
+    "oldest_id": "1234567890123456789",
+    "result_count": 1
+  }
+}
+```
+
+  </Step>
+
+  <Step title="결과 페이지네이션" icon="/icons/xds/icon-arrow-right.svg">
+    SDK는 페이지네이션을 자동으로 처리합니다. cURL의 경우 응답의 `next_token`을 사용합니다:
+
+    ```bash
+    curl "https://api.x.com/2/tweets/search/recent?\
+    query=python&\
+    max_results=100&\
+    next_token=b26v89c19zqg8o3fo7gesq314yb9l2l4ptqy" \
+      -H "Authorization: Bearer $BEARER_TOKEN"
+    ```
+
+    <Card title="페이지네이션 가이드" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/posts/search/integrate/paginate">
+      큰 결과 집합 탐색에 대해 자세히 알아보기
+    </Card>
+  </Step>
+</Steps>
+
+---
+
+## 예시 쿼리
+
+<AccordionGroup>
+  <Accordion title="특정 사용자의 게시물">
+    ```
+    from:XDevelopers
+    ```
+  </Accordion>
+
+  <Accordion title="해시태그가 있는 게시물">
+    ```
+    #Python -is:retweet
+    ```
+  </Accordion>
+
+  <Accordion title="이미지가 있는 게시물">
+    ```
+    "machine learning" has:images lang:en
+    ```
+  </Accordion>
+
+  <Accordion title="사용자를 멘션한 게시물">
+    ```
+    @elonmusk -is:retweet -is:reply
+    ```
+  </Accordion>
+
+  <Accordion title="특정 도메인의 링크가 있는 게시물">
+    ```
+    url:github.com lang:en
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="쿼리 작성" icon="/icons/xds/icon-search.svg" href="/x-api/posts/search/integrate/build-a-query">
+    쿼리 구문 및 연산자 마스터하기
+  </Card>
+  <Card title="연산자 레퍼런스" icon="list-check" href="/x-api/posts/search/integrate/operators">
+    사용 가능한 모든 연산자 보기
+  </Card>
+  <Card title="Full-archive search" icon="vault" href="/x-api/posts/search/quickstart/full-archive-search">
+    전체 게시물 아카이브 검색
+  </Card>
+  <Card title="API 레퍼런스" icon="/icons/xds/icon-code.svg" href="/x-api/posts/search-recent-posts">
+    전체 엔드포인트 문서
+  </Card>
+</CardGroup>

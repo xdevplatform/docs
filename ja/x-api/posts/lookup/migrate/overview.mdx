@@ -1,0 +1,154 @@
+---
+title: 概要
+sidebarTitle: 概要
+keywords: ["post lookup 移行", "lookup 移行", "v1.1 から v2 lookup", "lookup 移行ガイド", "lookup 移行"]
+description: "v2 の Posts lookup エンドポイントは、standard v1.1 の GET statuses/lookup と GET statuses/show を置き換えます。migrate を扱う X API v2 スタンダードティアのリファレンス。"
+---
+
+## X API の Posts lookup エンドポイントを比較する
+
+v2 の Posts lookup エンドポイントは、standard v1.1 の [GET statuses/lookup](https://developer.x.com/en/docs/twitter-api/v1/tweets/post-and-engage/api-reference/get-statuses-lookup) と [GET statuses/show](https://developer.x.com/en/docs/twitter-api/v1/tweets/post-and-engage/api-reference/get-statuses-show-id) エンドポイントを置き換えます。本ガイドは、これらの旧バージョンから X API v2 に移行する開発者向けです。
+
+## エンドポイント比較表
+
+| Description | Standard v1.1 | X API v2 |
+|:-------------|:---------------|:----------|
+| **サポートする HTTP メソッド** | `GET` | `GET` |
+| **Host domain** | `https://api.x.com` | `https://api.x.com` |
+| **Endpoint path** | `/1.1/statuses/show.json`, `/1.1/statuses/lookup.json` | `/2/tweets` |
+| **[認証](resources/fundamentals/authentication)** | OAuth 1.0a User Context | OAuth 1.0a User Context、OAuth 2.0 App-Only、OAuth 2.0 Authorization Code with PKCE |
+| **Post [JSON フォーマット](/x-api/fundamentals/data-dictionary)** | Standard v1.1 フォーマット | [X API v2 フォーマット](/x-api/fundamentals/data-dictionary)、`fields` と `expansions` パラメーターで決定(v1.1 との後方互換性なし) |
+| **特定の[フィールド](/x-api/fundamentals/data-dictionary)選択をサポート** |  | ✔ |
+| **[annotations](/x-api/fundamentals/post-annotations) フィールドをサポート** |  | ✔ |
+| **新しい[メトリクス](/x-api/fundamentals/metrics)フィールドをサポート** |  | ✔ |
+| **`conversation_id` フィールドをサポート** |  | ✔ |
+| **投稿の編集履歴を提供** | ✔ | ✔ |
+| **Project に紐づく[開発者 App](/fundamentals/developer-apps) の認証情報が必要** |  | ✔ |
+
+---
+
+## Standard v1.1 と X API v2 の比較
+
+standard v1.1 の GET statuses/show と GET statuses/lookup を利用してきた方向けに、本ガイドは standard と X API v2 の Posts lookup エンドポイント間の類似点と相違点の理解を助けます。
+
+[X API v1.1 データフォーマット](/x-api/fundamentals/data-dictionary)と [X API v2 フォーマット](/x-api/fundamentals/data-dictionary)の違いを素早く確認できる[ビジュアルデータフォーマット移行ツール](/x-api/migrate/data-format-migration)も役立ちます。
+
+- **類似点**
+  - OAuth 1.0a User Context
+  - リクエストごとの投稿数制限
+  - 投稿の編集履歴とメタデータのサポート
+
+- **相違点**
+  - エンドポイント URL
+  - App と Project の要件
+  - レスポンスデータ形式
+  - リクエストパラメーター
+
+### 類似点
+
+#### OAuth 1.0a User Context 認証方式
+
+standard エンドポイントは [OAuth 1.0a User Context](/resources/fundamentals/authentication) をサポートし、新しい X API v2 Post lookup エンドポイントは OAuth 1.0a User Context と [OAuth 2.0 App-Only](/resources/fundamentals/authentication) の両方をサポートします。したがって、これまで standard v1.1 の Post lookup エンドポイントを使用していた場合、X API v2 版に移行しても同じ認証方式を引き続き使用できます。
+
+App-Only 認証は最も簡単に始められる方法です。App Access Token の生成方法については、[この OAuth 2.0 App-only ガイド](/resources/fundamentals/authentication)を参照してください。
+
+#### リクエストごとの投稿数制限
+
+v1.1 の [GET statuses/lookup](https://developer.x.com/en/docs/twitter-api/v1/tweets/post-and-engage/api-reference/get-statuses-lookup) エンドポイントは、リクエストごとに最大 100 件の投稿を指定できます。これは GET /tweets エンドポイントにも当てはまります。100 件をフルに指定するには、`ids` パラメーターをクエリパラメーターとして、カンマ区切りの [Post ID](/resources/fundamentals/x-ids) リストで渡します。
+
+**投稿の編集履歴とメタデータのサポート**
+
+両バージョンとも、編集履歴を記述するメタデータを提供します。詳細は Post lookup API リファレンスと [Edit Posts fundamentals ページ](/x-api/fundamentals/edit-posts)を参照してください。
+
+### 相違点
+
+#### エンドポイント URL
+
+- **Standard v1.1 エンドポイント:**
+  - `https://api.x.com/1.1/statuses/show`
+  - `https://api.x.com/1.1/statuses/lookup`
+  
+- **X API v2 エンドポイント:**
+  - `https://api.x.com/2/tweets`
+  - `https://api.x.com/2/tweets/:id`
+
+#### App と Project の要件
+
+X API v2 エンドポイントでは、認証に [Project](/resources/fundamentals/developer-apps) に紐づく[開発者 App](/resources/fundamentals/developer-apps) の認証情報が必要です。X API v1.1 エンドポイントは、App または App に紐づく App の認証情報を使用できます。
+
+#### レスポンスデータ形式
+
+standard v1.1 と X API v2 エンドポイント間の重要な違いは、ペイロード内でフィールドをどう選択するかです。
+
+standard エンドポイントでは、多くのレスポンスフィールドがデフォルトで含まれ、パラメーターを使って追加フィールドを指定するオプションがあります。
+
+X API v2 は、デフォルトで投稿の `id` と `text` フィールドのみを配信します。追加のフィールドやオブジェクトには [fields](/x-api/fundamentals/fields) と [expansions](/x-api/fundamentals/expansions) パラメーターの使用が必要です。展開されたフィールドはレスポンス内の `includes` オブジェクトに返され、ID を照合することでプライマリの Post オブジェクトに対応付けられます。
+
+fields と expansions の使い方の詳細は、[fields と expansions の使い方のガイド](/x-api/fundamentals/data-dictionary)を参照してください。standard v1.1 フィールドを新しい v2 フィールドに対応付ける[データフォーマット移行ガイド](/x-api/fundamentals/fields)もあります。
+
+さらに、X API v2 は Post や [user](/x-api/fundamentals/fields) オブジェクトを含むオブジェクトに新しい JSON 設計を導入しています:
+
+- standard エンドポイントは Post オブジェクトを `statuses` 配列で返しますが、X API v2 は `data` 配列を使います。
+- X API v2 では Retweeted と Quoted Tweets が "statuses" の用語を置き換えます。
+- `favorites` や `favourites` のような用語は `like` などの新しい用語に置き換えられます。
+- 値のない (例: `null`) 属性は X API v2 ペイロードに含まれません。
+
+X API v2 の Post オブジェクトには以下の新しいフィールドが含まれます:
+- `conversation_id`
+- 2 つの新しい [annotations](/x-api/fundamentals/post-annotations) フィールド (`context` と `entities`)
+- 新しい[メトリクス](/x-api/fundamentals/metrics)フィールド
+- 誰が指定の投稿に返信できるかを示す `reply_setting` フィールド
+
+#### リクエストパラメーター
+
+以下の standard v1.1 リクエストパラメーターには X API v2 での相当物があります:
+
+| Standard | X API v2 |
+|:----------|:----------|
+| `id`     | `ids`    |
+
+一部の standard v1.1 パラメーターは X API v2 では**サポートされていません**:
+
+| Standard            | Comment                                                                                                                      |
+|:---------------------|:------------------------------------------------------------------------------------------------------------------------------|
+| `tweet_mode`        | fields と expansions 機能で置き換えられました。                                                                             |
+| `trim_user`         | fields と expansions で置き換えられました。ユーザーデータには `author_id` expansion と `user.fields` を使用します。                               |
+| `include_my_retweet`| 認証ユーザーが Retweet した投稿のソース Post の ID を提供します。                                          |
+| `include_entities`  | fields と expansions を使ってペイロード内のエンティティを制御します。                                                               |
+| `include_ext_alt_text` | 代替テキストがある場合、media entity に `ext_alt_text` フィールドを追加します。                                                         |
+| `include_card_uri`  | 広告カードが添付されている場合、`card_uri` を追加します。                                                                               |
+| `map`               | X API v2 では利用不可の投稿に対して Post ID とエラーメッセージが返されます(v1.1 では null 化されるフィールドの代わり)。            |
+
+### cURL リクエスト
+
+以下の cURL リクエストは、standard v1.1 エンドポイントと v2 で対応するものを示しています。ヘッダーの `ACCESS_TOKEN` を自分の App アクセストークンに置き換えてください。v2 エンドポイントでは、そのトークンは Project 内の[開発者 App](/fundamentals/developer-apps) のものである必要があります。
+
+v1.1 からのレスポンスペイロードは v2 と異なります。v2 では [fields](/x-api/fundamentals/fields) と [expansions](/x-api/fundamentals/expansions) パラメーターを使って異なるフィールドをリクエストできます。
+
+**Standard v1.1 `GET statuses/lookup` と v2 `GET /tweets` エンドポイント**
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/1.1/statuses/lookup.json?id=1460323737035677698%2C1460323743339741184' \
+  --header 'Authorization: Bearer $ACCESS_TOKEN'
+```
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/2/tweets?ids=1460323737035677698%2C1460323743339741184&tweet.fields=created_at&expansions=author_id&user.fields=created_at' \
+  --header 'Authorization: Bearer $ACCESS_TOKEN'
+```
+
+
+**Standard v1.1 `GET statuses/show/:id` と v2 `GET /tweets/:id` エンドポイント**
+```bash
+curl --request GET \
+  --url 'https://api.x.com/1.1/statuses/show.json?id=1460323737035677698' \
+  --header 'Authorization: Bearer $ACCESS_TOKEN'
+```
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/2/tweets/1460323737035677698?tweet.fields=created_at&expansions=author_id&user.fields=created_at' \
+  --header 'Authorization: Bearer $ACCESS_TOKEN'
+```

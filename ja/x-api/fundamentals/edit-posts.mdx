@@ -1,0 +1,206 @@
+---
+title: Post の編集
+description: "X 上の Post を 30 分以内、最大 5 回まで編集し、v2 API が返す編集履歴、edit_controls、編集メタデータを読み取ることができます。"
+sidebarTitle: Post の編集
+keywords: ["edit posts", "edit tweets", "edit history", "post edits", "edit metadata", "edit window"]
+---
+
+X 上の Post は、投稿後 30 分以内に最大 5 回まで編集できます。X API では、編集履歴とメタデータへ完全にアクセスできます。
+
+---
+
+## 編集のルール
+
+| Rule | Details |
+|:-----|:--------|
+| **タイムウィンドウ** | 元の post から 30 分間 |
+| **編集回数の上限** | 最大 5 回 |
+| **ID の挙動** | 各編集で新しい post ID が作成される |
+| **削除** | いずれかのバージョンを削除するとチェーン全体が削除される |
+
+---
+
+## 編集できないもの
+
+一部の post タイプは編集できません。
+
+- Promoted posts（広告）
+- 投票を含む post
+- 他のユーザーへの返信（セルフスレッドではないもの）
+- Repost（Quote post は編集可能）
+- Community posts
+- Collaborative posts
+- Scheduled posts
+
+---
+
+## レスポンス内の編集データ
+
+### デフォルトフィールド
+
+すべての post レスポンスにはデフォルトで `edit_history_tweet_ids` が含まれます。
+
+```json
+{
+  "data": {
+    "id": "1234567891",
+    "text": "Updated text (edited)",
+    "edit_history_tweet_ids": ["1234567890", "1234567891"]
+  }
+}
+```
+
+- ID が 1 つ = 未編集
+- ID が複数 = 編集履歴（古いものが最初）
+
+### Edit controls
+
+編集ステータスを取得するには `edit_controls` をリクエストします。
+
+```bash
+curl "https://api.x.com/2/tweets/1234567891?tweet.fields=edit_controls" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json title="Example response" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567891",
+    "text": "Updated text (edited)",
+    "edit_history_tweet_ids": ["1234567890", "1234567891"],
+    "edit_controls": {
+      "is_edit_eligible": true,
+      "editable_until": "2024-01-15T12:30:00.000Z",
+      "edits_remaining": 3
+    }
+  }
+}
+```
+
+| Field | Description |
+|:------|:------------|
+| `is_edit_eligible` | post を編集可能かどうか |
+| `editable_until` | 編集期間が終了するタイムスタンプ |
+| `edits_remaining` | 残りの編集回数（0-5） |
+
+---
+
+## 編集履歴の取得
+
+すべてのバージョンの完全な post オブジェクトを取得するには、`edit_history_tweet_ids` expansion を使用します。
+
+```bash
+curl "https://api.x.com/2/tweets/1234567891?\
+tweet.fields=edit_controls&\
+expansions=edit_history_tweet_ids" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json title="Example response" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567891",
+    "text": "Updated text (edited)",
+    "edit_history_tweet_ids": ["1234567890", "1234567891"],
+    "edit_controls": {
+      "is_edit_eligible": true,
+      "editable_until": "2024-01-15T12:30:00.000Z",
+      "edits_remaining": 3
+    }
+  },
+  "includes": {
+    "tweets": [{
+      "id": "1234567890",
+      "text": "Original text (with typo)",
+      "edit_history_tweet_ids": ["1234567890", "1234567891"],
+      "edit_controls": {
+        "is_edit_eligible": true,
+        "editable_until": "2024-01-15T12:30:00.000Z",
+        "edits_remaining": 3
+      }
+    }]
+  }
+}
+```
+
+---
+
+## どのバージョンが返されるか
+
+デフォルトでは、API は編集済み post の **最新バージョン** を返します。
+
+特定のバージョンを取得するには、その post ID で直接リクエストします。
+
+```bash
+# オリジナルバージョンを取得
+curl "https://api.x.com/2/tweets/1234567890" -H "Authorization: Bearer $TOKEN"
+
+# 編集済みバージョンを取得
+curl "https://api.x.com/2/tweets/1234567891" -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## 編集された post の metrics
+
+編集された post の各バージョンには独自のエンゲージメント metrics があります。metrics は、エンゲージメントが発生した際に表示されていたバージョンに帰属します。
+
+---
+
+## 利用可能性
+
+編集メタデータは以下で利用可能です。
+
+- 2022 年 9 月 29 日以降に作成されたすべての post
+- post を返すすべての v2 エンドポイント
+- search、timelines、stream、lookup を含む
+
+この日付より前に作成された post には編集メタデータはありません。
+
+---
+
+## ユースケース
+
+<Tabs>
+  <Tab title="変更を追跡">
+post の編集を監視し、差分を記録します。
+
+```python
+def check_for_edits(post):
+    history = post.get("edit_history_tweet_ids", [])
+    if len(history) > 1:
+        print(f"Post {post['id']} has been edited {len(history) - 1} times")
+```
+  </Tab>
+  <Tab title="編集インジケータの表示">
+UI に "edited" バッジを表示します。
+
+```javascript
+const isEdited = post.edit_history_tweet_ids?.length > 1;
+if (isEdited) {
+  showEditedBadge();
+}
+```
+  </Tab>
+  <Tab title="オリジナルコンテンツの取得">
+編集された post の元のバージョンを取得します。
+
+```python
+original_id = post["edit_history_tweet_ids"][0]
+original = api.get_tweet(original_id)
+```
+  </Tab>
+</Tabs>
+
+---
+
+## 次のステップ
+
+<CardGroup cols={2}>
+  <Card title="Post lookup" icon="/icons/xds/icon-search.svg" href="/x-api/posts/lookup/introduction">
+    編集履歴付きで post を取得。
+  </Card>
+  <Card title="Data dictionary" icon="/icons/xds/icon-book.svg" href="/x-api/fundamentals/data-dictionary">
+    post オブジェクトの完全なリファレンス。
+  </Card>
+</CardGroup>

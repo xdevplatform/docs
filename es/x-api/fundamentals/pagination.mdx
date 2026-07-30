@@ -1,0 +1,197 @@
+---
+title: Paginación
+description: "Pagina los resultados de la X API v2 usando los cursores next_token y previous_token en el objeto meta para recuperar todos los resultados a través de varias solicitudes."
+sidebarTitle: Paginación
+keywords: ["paginación", "tokens de paginación", "next token", "paginar resultados", "paginación con cursor"]
+---
+
+Cuando una respuesta de la API contiene más resultados de los que se pueden devolver a la vez, usa la paginación para recuperar todas las páginas de datos.
+
+---
+
+## Cómo funciona la paginación
+
+1. Realiza tu solicitud inicial con `max_results`
+2. Verifica en la respuesta si hay un `next_token` en el objeto `meta`
+3. Si está presente, realiza otra solicitud con ese token como `pagination_token`
+4. Repite hasta que no se devuelva ningún `next_token`
+
+```bash
+# Initial request
+curl "https://api.x.com/2/users/12345/tweets?max_results=100" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Response includes next_token
+# {"data": [...], "meta": {"next_token": "abc123", ...}}
+
+# Next page
+curl "https://api.x.com/2/users/12345/tweets?max_results=100&pagination_token=abc123" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## Tokens de paginación
+
+| Token | Descripción |
+|:------|:------------|
+| `next_token` | En el `meta` de la respuesta. Úsalo para obtener la siguiente página. |
+| `previous_token` | En el `meta` de la respuesta. Úsalo para retroceder una página. |
+| `pagination_token` | Parámetro de solicitud. Establece con el valor de `next_token` o `previous_token`. |
+
+---
+
+## Estructura de respuesta
+
+```json
+{
+  "data": [
+    {"id": "1234", "text": "..."},
+    {"id": "1235", "text": "..."}
+  ],
+  "meta": {
+    "result_count": 100,
+    "next_token": "7140w9gefhslx3",
+    "previous_token": "77qp89slxjd"
+  }
+}
+```
+
+Cuando no hay más resultados, se omite `next_token`:
+
+```json
+{
+  "data": [...],
+  "meta": {
+    "result_count": 42,
+    "previous_token": "77qp89abc"
+  }
+}
+```
+
+---
+
+## Parámetros de paginación
+
+| Parámetro | Descripción | Valor predeterminado |
+|:----------|:------------|:--------|
+| `max_results` | Resultados por página | Específico de cada endpoint |
+| `pagination_token` | Token de la respuesta anterior | Ninguno |
+
+Consulta la referencia de la API de cada endpoint para los límites específicos de `max_results`.
+
+---
+
+## Ejemplo: Paginar por todos los resultados
+
+<Tabs>
+  <Tab title="Python">
+```python title="Ejemplo" lines wrap icon="python"
+import requests
+
+def get_all_tweets(user_id, bearer_token):
+    url = f"https://api.x.com/2/users/{user_id}/tweets"
+    headers = {"Authorization": f"Bearer {bearer_token}"}
+    params = {"max_results": 100}
+    
+    all_tweets = []
+    
+    while True:
+        response = requests.get(url, headers=headers, params=params)
+        data = response.json()
+        
+        if "data" in data:
+            all_tweets.extend(data["data"])
+        
+        # Check for next page
+        next_token = data.get("meta", {}).get("next_token")
+        if not next_token:
+            break
+            
+        params["pagination_token"] = next_token
+    
+    return all_tweets
+```
+  </Tab>
+  <Tab title="JavaScript">
+```javascript title="Ejemplo" expandable lines wrap icon="square-js"
+async function getAllTweets(userId, bearerToken) {
+  const url = `https://api.x.com/2/users/${userId}/tweets`;
+  const headers = { Authorization: `Bearer ${bearerToken}` };
+  
+  let allTweets = [];
+  let paginationToken = null;
+  
+  do {
+    const params = new URLSearchParams({ max_results: 100 });
+    if (paginationToken) {
+      params.set("pagination_token", paginationToken);
+    }
+    
+    const response = await fetch(`${url}?${params}`, { headers });
+    const data = await response.json();
+    
+    if (data.data) {
+      allTweets.push(...data.data);
+    }
+    
+    paginationToken = data.meta?.next_token;
+  } while (paginationToken);
+  
+  return allTweets;
+}
+```
+  </Tab>
+</Tabs>
+
+---
+
+## Buenas prácticas
+
+<CardGroup cols={2}>
+  <Card title="Usa max results" icon="arrow-up-1-9">
+    Solicita el `max_results` máximo permitido para minimizar las llamadas a la API.
+  </Card>
+  <Card title="Gestiona páginas parciales" icon="square-check">
+    La última página puede tener menos resultados que `max_results`.
+  </Card>
+  <Card title="Almacena tokens" icon="database">
+    Guarda `next_token` si necesitas reanudar la paginación más tarde.
+  </Card>
+  <Card title="No hagas polling con paginación" icon="clock">
+    Para nuevos datos, usa `since_id` en lugar de paginar repetidamente.
+  </Card>
+</CardGroup>
+
+---
+
+## Orden de los resultados
+
+Los resultados se devuelven en **orden cronológico inverso**:
+
+- Primer resultado en la primera página = el más reciente
+- Último resultado en la última página = el más antiguo
+
+Esto se aplica dentro y entre páginas.
+
+---
+
+## Notas
+
+- Los tokens de paginación son cadenas opacas — no los parsees ni modifiques
+- Los tokens pueden expirar después de un tiempo
+- Si obtienes menos resultados que `max_results`, aún puede haber más (continúa hasta que no haya `next_token`)
+- Usa [SDKs](/tools-and-libraries) para la gestión automática de la paginación
+
+---
+
+## Próximos pasos
+
+<CardGroup cols={2}>
+  <Card title="Rate limits" icon="gauge-high" href="/x-api/fundamentals/rate-limits">
+    Comprende los límites de solicitudes al paginar.
+  </Card>
+  <Card title="SDKs" icon="cube" href="/tools-and-libraries">
+    Librerías con paginación integrada.
+  </Card>
+</CardGroup>

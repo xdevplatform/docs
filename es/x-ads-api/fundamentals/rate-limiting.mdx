@@ -1,0 +1,67 @@
+---
+title: Rate limiting
+keywords: ["rate limits de Ads API", "rate limiting", "throttling de Ads API", "rate limits", "límites de solicitudes", "límites de Ads API"]
+
+description: "La Advertiser API tiene rate limiting similar al de REST API v1.1, como se documenta aquí: REST API Rate Limiting in v1.1. A diferencia de REST API v1.1, no hay."
+---
+
+La Advertiser API tiene rate limiting similar al de REST API v1.1, como se documenta aquí: [REST API Rate Limiting in v1.1](https://developer.x.com/content/developer-twitter/en/docs/basics/rate-limits). A diferencia de REST API v1.1, no hay un índice programático de los límites por endpoint. Los rate limits del endpoint y las ventanas de reinicio se comunican a través de las cabeceras de respuesta HTTP. Todo el rate limiting en la Ads API utiliza OAuth 1.0A.
+
+## Límites a nivel de usuario y a nivel de cuenta de anuncios
+
+Hay dos tipos de rate limits: nivel de user token y nivel de cuenta de anuncios. Un subconjunto de endpoints está habilitado para usar rate limiting a nivel de cuenta de anuncios. Un user token es el [OAuth access token](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow) que usas para autenticarte y llamar a la Ads API. Cada user token puede tener acceso a una o más cuentas de anuncios.
+
+Los desarrolladores deben utilizar el rate limit a nivel de cuenta de anuncios cuando se devuelve en las cabeceras de respuesta y solo utilizar el límite a nivel de usuario cuando no se encuentre el límite de la cuenta de anuncios.
+
+Los rate limits a nivel de usuario se expresan mediante estas cabeceras: **x-rate-limit-limit**, **x-rate-limit-remaining** y **x-rate-limit-reset**
+
+Para los endpoints con rate limiting habilitado a nivel de cuenta de anuncios, los rate limits se expresan mediante estas cabeceras: **x-account-rate-limit-limit**, **x-account-rate-limit-remaining** y **x-account-rate-limit-reset**.
+
+Los rate limits a nivel de cuenta de anuncios se proporcionan solo para endpoints GET para permitir que las aplicaciones sincronicen datos de entidades (como objetos campaign o line item) desde un único user token que accede a múltiples cuentas de anuncios. No se garantiza que las acciones de escritura utilicen los mismos rate limits a nivel de cuenta de anuncios.
+
+Para los endpoints con rate limits a nivel de cuenta de anuncios, el rate limit a nivel de usuario está establecido en un valor alto que representa una cuota global para toda tu aplicación. Cuando esté disponible, el rate limit a nivel de cuenta de anuncios debe tener prioridad al controlar tu volumen de solicitudes.
+
+## Mejores prácticas
+
+1) Guarda un timestamp en tu base de datos con el último timestamp sincronizado, y cuando solicites datos, cuando sea aplicable, solicítalos con la opción `sort_by=updated_at-desc` para poder detener tu proceso de sincronización tras alcanzar datos más antiguos que tu último timestamp sincronizado. Esto evitará sincronizar los mismos datos de forma redundante.
+
+2) Solicita múltiples entidades en una sola solicitud: algunos endpoints te permiten especificar una lista separada por comas de valores para recuperar múltiples piezas de datos similares. Esto puede reducir el número total de llamadas que haces y así aprovechar el rate limit de forma más eficiente.
+
+3) Solicita el "count" máximo en tus solicitudes: se recomienda encarecidamente llamar a algunos endpoints como [GET accounts/:account\_id/targeting\_criteria](/x-ads-api/campaign-management/reference#targeting-criteria) con el valor máximo de count para devolver 1000 objetos en lugar del predeterminado de 200.
+
+## Sincronización de Analytics
+
+Consulta la [guía de rate limiting de Analytics](/x-ads-api/analytics#best-practices) para más información sobre los rate limits de los endpoints de analytics.
+
+## Preguntas frecuentes
+
+_¿Es posible aumentar los rate limits para una cuenta de anuncios en particular o para nuestra aplicación?_
+
+En general, no podemos aumentar los rate limits y están configurados para soportar las cuentas de anuncios más grandes. Por favor, implementa las mejores prácticas listadas en este documento como primer paso, y si los rate limits siguen afectando tu capacidad de escalar o de alcanzar objetivos de negocio, ponte en contacto con tus contactos de X Ads API con todos los detalles sobre el caso de uso y las solicitudes involucradas.
+
+## Alcances del rate limiting
+
+### Alcances para este documento
+
+* Categoría: todos los endpoints que caen en la categoría dada tienen rate limit desde un único límite asignado por ventana.
+* Endpoint: cada endpoint tiene su propio límite distinto asignado por ventana.
+
+## Tabla de rate limits de la Ads API
+
+### Rate limits de la Ads API
+
+| Tipo de endpoint | Alcance por endpoint o categoría | Rate limit por ventana de 1 minuto |
+| :--- | :--- | :--- |
+| Escrituras (POST, PUT, DELETE) | Categoría | 450 |
+| Audience | Endpoint | 1500 |
+
+| Tipo de endpoint | Alcance por endpoint o categoría | Rate limit por ventana de 15 minutos |
+| :--- | :--- | :--- |
+| Analytics (síncrono) | Categoría | 250 |
+| Lecturas de entidades principales (Line Items, Campaigns, etc.)<br/><br/>Otras lecturas de cuenta (otros endpoints GET con :account_id) | Endpoint (nivel de cuenta de anuncios)<br/><br/>Endpoint (nivel parcial de cuenta de anuncios) | 10.000<br/><br/>2000 |
+| Targeting Criteria (excepto los siguientes) | Categoría | 400 |
+| Targeting Criteria (tv\_markets, tv\_shows) | Endpoint | 2000 |
+| Audience Insights | Categoría | 400 |
+| Keyword Insights | Categoría | 500 |
+| Lecturas globales (endpoints GET sin :account_id) | Endpoint | 5   |
+| Conversions | Endpoint | 60.000 |

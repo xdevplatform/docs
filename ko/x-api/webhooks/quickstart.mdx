@@ -1,0 +1,412 @@
+---
+title: 빠른 시작
+sidebarTitle: 빠른 시작
+description: "이 가이드는 웹훅 컨슈머 앱을 설정하고 구현하는 과정을 안내합니다. webhooks를 다루는 X API v2 표준 계층에 대한 참고 자료입니다."
+keywords: ["webhook 빠른 시작", "webhook 설정", "CRC 확인", "challenge response check", "웹훅 보안", "웹훅 컨슈머 앱"]
+---
+
+이 가이드는 웹훅 컨슈머 앱을 설정하고, Challenge-Response Check (CRC)를 구현하며, 수신 이벤트의 보안을 강화하고, X에 웹훅을 등록하는 과정을 안내합니다.
+
+## 1. 웹훅 컨슈머 앱 개발
+
+X 앱에 웹훅을 등록하려면 X 웹훅 이벤트를 수신하고 CRC 보안 요청에 응답하는 웹 앱을 개발, 배포, 호스팅해야 합니다.
+
+### URL 요구 사항
+
+이벤트를 수신할 웹훅 엔드포인트 역할을 할 공개 접근 가능한 HTTPS URL로 웹 앱을 만드세요:
+
+- URI **경로**는 자유롭게 선택할 수 있습니다. 다음 예시는 모두 유효합니다:
+  - `https://mydomain.com/service/listen`
+  - `https://mydomain.com/webhook/twitter`
+- URL에는 포트 지정을 포함할 수 **없습니다** (예: `https://mydomain.com:5000/webhook`은 **작동하지 않음**)
+
+### 앱이 처리해야 하는 것
+
+웹훅 엔드포인트는 두 가지 유형의 HTTP 요청을 처리해야 합니다:
+
+| 요청 유형 | 목적 |
+|:-------------|:--------|
+| **GET** | [CRC 검증](#2-the-crc-check) — X가 여러분이 엔드포인트를 제어하고 있는지 확인 |
+| **POST** | 이벤트 전달 — X가 JSON 이벤트 페이로드 전송 |
+
+---
+
+## 2. CRC 검사
+
+Challenge-Response Check (CRC)는 여러분이 제공한 콜백 URL이 유효하며 **여러분이 이를 제어하고 있음**을 X가 검증하는 방법입니다. 웹훅을 등록하고 유지하려면 웹 앱이 CRC 요청에 올바르게 응답해야 합니다.
+
+### CRC가 트리거되는 시점
+
+| 트리거 | 설명 |
+|:--------|:------------|
+| **초기 등록** | `POST /2/webhooks`를 호출할 때 |
+| **시간별 검증** | X가 매시간 자동으로 웹훅을 검증 |
+| **수동 재검증** | `PUT /2/webhooks/:webhook_id`를 호출할 때 |
+
+웹훅이 CRC 검사에 실패하면 `invalid`로 표시되며, 다시 통과할 때까지 **이벤트를 받지 못하게** 됩니다.
+
+### CRC 작동 방식
+
+X가 CRC를 보낼 때 `crc_token` 쿼리 매개변수와 함께 웹훅 URL에 **GET 요청**을 합니다:
+
+```
+GET https://your-webhook-url.com/webhook?crc_token=challenge_string
+```
+
+애플리케이션은 `response_token`을 포함한 JSON 본문으로 응답해야 합니다:
+
+```json
+{
+  "response_token": "sha256=<base64_encoded_hmac_hash>"
+}
+```
+
+### CRC 응답 만드는 방법
+
+1. 쿼리 매개변수의 `crc_token` 값을 **메시지**로 사용
+2. 앱의 **consumer secret** (API secret key)을 **키**로 사용
+3. **HMAC SHA-256** 해시 생성
+4. 결과를 **Base64 인코딩**
+5. 인코딩된 문자열 앞에 `sha256=`을 추가
+
+<Warning>
+**중요:** 웹 앱은 CRC 암호화에 앱의 **consumer secret** (API secret key)을 사용해야 하며, bearer token이나 access token을 사용해서는 안 됩니다.
+</Warning>
+
+### 예시: Python
+
+```python title="예제" lines wrap icon="python"
+import hmac
+import hashlib
+import base64
+
+def handle_crc(crc_token, consumer_secret):
+    """
+    Respond to a Twitter CRC check.
+    
+    Args:
+        crc_token: The crc_token query parameter from the GET request
+        consumer_secret: Your app's consumer secret (API secret key)
+    
+    Returns:
+        dict with the response_token
+    """
+    sha256_hash = hmac.new(
+        consumer_secret.encode('utf-8'),
+        crc_token.encode('utf-8'),
+        hashlib.sha256
+    ).digest()
+
+    return {
+        "response_token": "sha256=" + base64.b64encode(sha256_hash).decode('utf-8')
+    }
+```
+
+### 예시: Node.js
+
+```javascript title="예제" lines wrap icon="square-js"
+const crypto = require('crypto');
+
+function handleCrc(crcToken, consumerSecret) {
+  const hmac = crypto
+    .createHmac('sha256', consumerSecret)
+    .update(crcToken)
+    .digest('base64');
+
+  return {
+    response_token: `sha256=${hmac}`
+  };
+}
+```
+
+### 예시: Flask (전체 엔드포인트)
+
+이 예시는 CRC 검증(GET)과 이벤트 전달(POST)을 모두 처리하는 완전한 웹훅 엔드포인트를 보여줍니다:
+
+```python title="예제" expandable lines wrap icon="python"
+from flask import Flask, request, jsonify
+import hmac
+import hashlib
+import base64
+
+app = Flask(__name__)
+
+CONSUMER_SECRET = "your_consumer_secret_here"
+
+@app.route("/webhook", methods=["GET", "POST"])
+def webhook():
+    if request.method == "GET":
+        # Handle CRC check
+        crc_token = request.args.get("crc_token")
+        if crc_token:
+            sha256_hash = hmac.new(
+                CONSUMER_SECRET.encode("utf-8"),
+                crc_token.encode("utf-8"),
+                hashlib.sha256,
+            ).digest()
+            response_token = "sha256=" + base64.b64encode(sha256_hash).decode("utf-8")
+            return jsonify({"response_token": response_token}), 200
+        return "Missing crc_token", 400
+
+    elif request.method == "POST":
+        # Handle incoming webhook events
+        event = request.get_json()
+        print("Received event:", event)
+        return "", 200
+```
+
+---
+
+## 3. 웹훅 보안 강화
+
+X의 웹훅 기반 API는 웹훅 서버의 보안을 확인하는 두 가지 방법을 제공합니다:
+
+### Challenge-Response Check (CRC)
+
+CRC는 X가 웹훅 이벤트를 수신하는 웹 앱의 소유권을 확인할 수 있게 합니다. 전체 구현 세부 사항은 위의 [2단계](#2-the-crc-check)를 참조하세요.
+
+### 서명 검증
+
+X의 각 POST 요청에는 `x-twitter-webhooks-signature` 헤더가 포함되어 있어, 들어오는 웹훅의 출처가 X임을 확인할 수 있습니다.
+
+서명을 확인하려면:
+
+1. 들어오는 요청에서 `x-twitter-webhooks-signature` 헤더 값을 가져옵니다
+2. **consumer secret**을 키로, **원시 요청 본문**을 메시지로 사용하여 HMAC SHA-256 해시를 생성합니다
+3. 해시를 Base64 인코딩하고 앞에 `sha256=`을 추가합니다
+4. 계산한 값을 헤더 값과 비교합니다 — 일치해야 합니다
+
+```python title="예제" expandable lines wrap icon="python"
+import hmac
+import hashlib
+import base64
+
+def verify_signature(payload, signature_header, consumer_secret):
+    """
+    Verify that a webhook POST request actually came from X.
+    
+    Args:
+        payload: The raw request body (bytes)
+        signature_header: The x-twitter-webhooks-signature header value
+        consumer_secret: Your app's consumer secret
+    
+    Returns:
+        True if the signature is valid
+    """
+    expected = "sha256=" + base64.b64encode(
+        hmac.new(
+            consumer_secret.encode("utf-8"),
+            payload,
+            hashlib.sha256
+        ).digest()
+    ).decode("utf-8")
+    
+    return hmac.compare_digest(expected, signature_header)
+```
+
+---
+
+## 4. 웹훅 등록
+
+앱이 CRC 확인을 처리할 수 있게 되면 `POST /2/webhooks` 요청으로 웹훅 URL을 등록하세요. 이 요청을 하면 X는 즉시 여러분의 웹 앱에 CRC 요청을 보내 소유권을 확인합니다.
+
+모든 웹훅 관리 엔드포인트에는 **OAuth2 App Only Bearer Token** 인증이 필요합니다.
+
+### 웹훅 생성
+
+**`POST /2/webhooks`** — [API 참조](/x-api/webhooks/create-webhook)
+
+```bash
+curl --request POST \
+  --url 'https://api.x.com/2/webhooks' \
+  --header 'Authorization: Bearer $BEARER_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "url": "https://yourdomain.com/webhooks/twitter"
+  }'
+```
+
+**성공 응답 (200 OK):**
+
+성공적인 응답은 웹훅이 생성되었고 초기 CRC 확인이 통과되었음을 나타냅니다.
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "url": "https://yourdomain.com/webhooks/twitter",
+    "valid": true,
+    "created_at": "2025-01-15T12:00:00.000Z"
+  }
+}
+```
+
+웹훅이 성공적으로 등록되면 응답에 **webhook ID**가 포함됩니다. 이 ID는 웹훅을 지원하는 제품에 요청을 할 때 필요합니다 (예: Filtered Stream 연결, Account Activity 구독 생성).
+
+**일반적인 실패 이유:**
+
+| 이유 | 설명 |
+|:-------|:------------|
+| `CrcValidationFailed` | 콜백 URL이 CRC 확인에 올바르게 응답하지 않음 (예: 시간 초과, 잘못된 응답) |
+| `UrlValidationFailed` | 콜백 URL이 요구 사항을 충족하지 않음 (예: `https`가 아님, 잘못된 형식) |
+| `DuplicateUrlFailed` | 이 URL에 대한 웹훅이 이미 애플리케이션에 등록되어 있음 |
+| `WebhookLimitExceeded` | 애플리케이션이 허용된 최대 웹훅 수에 도달함 |
+
+### 웹훅 보기
+
+**`GET /2/webhooks`** — [API 참조](/x-api/webhooks/get-webhook)
+
+애플리케이션과 연결된 모든 웹훅 구성을 가져옵니다.
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/2/webhooks' \
+  --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+**응답 (웹훅 하나 있음):**
+
+```json title="예시 응답" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "created_at": "2025-01-15T12:00:00.000Z",
+      "id": "1234567890",
+      "url": "https://yourdomain.com/webhooks/twitter",
+      "valid": true
+    }
+  ],
+  "meta": {
+    "result_count": 1
+  }
+}
+```
+
+**응답 (웹훅 없음):**
+
+```json
+{
+  "data": [],
+  "meta": {
+    "result_count": 0
+  }
+}
+```
+
+### 웹훅 삭제
+
+**`DELETE /2/webhooks/:webhook_id`** — [API 참조](/x-api/webhooks/delete-webhook)
+
+`webhook_id`(생성 또는 목록 응답에서 얻음)를 사용하여 웹훅을 삭제합니다.
+
+```bash
+curl --request DELETE \
+  --url 'https://api.x.com/2/webhooks/1234567890' \
+  --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+**응답:**
+
+```json
+{
+  "data": {
+    "deleted": true
+  }
+}
+```
+
+| 실패 이유 | 설명 |
+|:---------------|:------------|
+| `WebhookIdInvalid` | 제공된 `webhook_id`가 찾을 수 없거나 앱과 연결되어 있지 않음 |
+
+### 웹훅 검증 및 재활성화
+
+**`PUT /2/webhooks/:webhook_id`** — [API 참조](/x-api/webhooks/validate-webhook)
+
+지정된 웹훅에 대한 CRC 확인을 트리거합니다. 확인이 성공하면 웹훅이 `valid: true`로 재활성화됩니다.
+
+```bash
+curl --request PUT \
+  --url 'https://api.x.com/2/webhooks/1234567890' \
+  --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+**응답:**
+
+200 OK 응답은 CRC 확인이 시작되었음을 나타냅니다. `valid` 필드는 확인 시도 후 상태를 반영합니다. `GET /2/webhooks`를 사용하여 현재 상태를 확인할 수 있습니다.
+
+```json
+{
+  "data": {
+    "valid": true
+  }
+}
+```
+
+| 실패 이유 | 설명 |
+|:---------------|:------------|
+| `WebhookIdInvalid` | 제공된 `webhook_id`가 찾을 수 없거나 앱과 연결되어 있지 않음 |
+| `CrcValidationFailed` | 콜백 URL이 CRC 확인에 올바르게 응답하지 않음 |
+
+---
+
+## xurl로 테스트하기
+
+테스트 목적으로 `xurl` 도구는 임시 웹훅을 지원합니다. GitHub에서 최신 버전의 [`xurl` 프로젝트](https://github.com/xdevplatform/xurl)를 설치하고 인증을 구성한 다음 실행하세요:
+
+```bash
+xurl webhook start
+```
+
+이 명령은 임시 공개 웹훅 URL을 생성하고 모든 CRC 확인을 자동으로 처리하며 수신되는 구독 이벤트를 기록합니다. 배포 전에 설정을 확인하는 좋은 방법입니다. 예시 출력:
+
+```
+Starting webhook server with ngrok...
+Enter your ngrok authtoken (leave empty to try NGROK_AUTHTOKEN env var):
+
+Attempting to use NGROK_AUTHTOKEN environment variable for ngrok authentication.
+Configuring ngrok to forward to local port: 8080
+Ngrok tunnel established!
+  Forwarding URL: https://<your-ngrok-subdomain>.ngrok-free.app -> localhost:8080
+
+Use this URL for your X API webhook registration: https://<your-ngrok-subdomain>.ngrok-free.app/webhook
+
+Starting local HTTP server to handle requests from ngrok tunnel...
+```
+
+---
+
+## 중요 참고 사항
+
+<Warning>
+- **모든 수신 Direct Messages**는 웹훅을 통해 전달됩니다. [POST /2/dm_conversations/with/:participant_id/messages](/x-api/direct-messages/send-a-new-message-to-a-user)를 통해 보낸 DM도 전달되므로, 앱은 다른 클라이언트에서 보낸 DM을 추적할 수 있습니다.
+
+- 동일한 웹훅 URL을 공유하는 **웹 앱이 두 개 이상**이고 각 앱에 매핑된 동일한 사용자가 있는 경우 동일한 이벤트가 웹훅에 **여러 번** (웹 앱당 한 번씩) 전송됩니다.
+
+- 경우에 따라 웹훅이 **중복 이벤트**를 받을 수 있습니다. 웹훅 앱은 이를 허용하고 **이벤트 ID로 중복 제거**해야 합니다.
+
+- X는 이벤트를 JSON 페이로드가 있는 **POST 요청**으로 전송합니다. 예제 페이로드는 [Account Activity 데이터 객체 구조](/x-api/account-activity/introduction#account-activity-data-object-structure)를 참조하세요.
+</Warning>
+
+---
+
+## 샘플 앱
+
+| 앱 | 설명 |
+|:----|:------------|
+| [Simple webhook server](https://github.com/m-rosinsky/XWebhookTest/blob/main/app.py) | CRC 확인에 응답하고 POST 이벤트를 수용하는 방법을 보여주는 단일 Python 스크립트 |
+| [Account Activity API dashboard](https://github.com/xdevplatform/account-activity-dashboard-enterprise/tree/master) | 웹훅, 구독을 관리하고 실시간 이벤트를 수신할 수 있는 [bun.sh](https://bun.sh)로 작성된 웹 앱 |
+| [xurl testing tool](https://github.com/xdevplatform/xurl) | 임시 웹훅 테스트를 위한 CLI 도구 — CRC 확인을 자동 처리하고 이벤트를 기록 |
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="Filtered Stream Webhooks" icon="/icons/xds/icon-filter.svg" href="/x-api/webhooks/stream/introduction">
+    웹훅을 통해 필터링된 Post 수신
+  </Card>
+  <Card title="Account Activity API" icon="/icons/xds/icon-bell.svg" href="/x-api/account-activity/introduction">
+    웹훅을 통해 계정 이벤트 수신
+  </Card>
+</CardGroup>

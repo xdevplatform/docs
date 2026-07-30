@@ -1,0 +1,108 @@
+---
+title: Gerenciamento de campanhas
+sidebarTitle: Visão geral
+description: Crie, gerencie e otimize campanhas publicitárias no X. Defina orçamentos, segmentação, criativos e estratégias de lance usando a Ads API.
+keywords: ["gerenciamento de campanhas", "ads api", "line items", "ad groups", "promoted ads", "campanhas publicitárias", "x ads", "campaign api"]
+---
+
+import { BlueprintMark } from "/snippets/blueprint-mark.mdx";
+
+<BlueprintMark name="targeting" />
+
+import { Button } from '/snippets/button.mdx';
+
+**Crie, agende e gerencie campanhas de anúncios no X programaticamente.**
+
+Campanhas definem o orçamento e a agenda. Line items (também chamados ad groups) controlam segmentação, lances e os criativos que rodam dentro de uma campanha.
+
+<Note>
+  <strong>Procurando documentação detalhada de endpoints?</strong><br />
+  A referência completa da API (todos os endpoints, exemplos de requisição/resposta e tabelas de parâmetros para Accounts, Campaigns, Line Items, Funding Instruments, Targeting, etc.) foi movida para a página dedicada{" "}
+  <a href="/x-ads-api/campaign-management/reference">Referência da API de Gerenciamento de Campanhas</a>.
+  Links profundos antigos (por exemplo, <code>#get-accounts-account-id-campaigns</code>) redirecionarão automaticamente para lá.
+</Note>
+
+## Links rápidos
+
+- [O que você pode promover?](#what-can-you-promote)
+- [Criando uma campanha – Passo a passo](#creating-a-campaign---step-by-step)
+- [Guias](#guides)
+- [Referência completa da API](/x-ads-api/campaign-management/reference) — Todos os endpoints, parâmetros e exemplos para Accounts, Campaigns, Line Items, Funding Instruments, Targeting e mais.
+
+## Advertiser API
+
+Agende campanhas e gerencie anúncios no X programaticamente através deste conjunto de APIs.
+
+## O que você pode promover
+
+### [Promoted Ads](https://business.x.com/help/what-are-promoted-tweets)
+
+- Promoted Ads são anúncios comuns adquiridos por anunciantes que desejam atingir um grupo mais amplo de usuários ou gerar engajamento de seus seguidores existentes.
+- Promoted Ads são claramente rotulados como Promoted quando um anunciante paga pela posição no X. Em todos os outros aspectos, os Promoted Ads agem como anúncios normais e podem ser repostados, respondidos, curtidos e mais. Eles têm regras de entrega típicas e são criados usando [POST statuses/update](/x-api/posts/creation-of-a-post).
+- **Tweets "Promoted-only"**, criados via [POST accounts/:account_id/tweet](/x-ads-api/creatives/reference#post-accounts-account-id-tweet), podem ser usados em campanhas de Promoted Tweets, mas não serão exibidos para seguidores nem aparecerão na timeline pública. Para obter uma lista de tweets promoted-only para uma determinada conta, use [GET accounts/:account_id/scoped_timeline](/x-ads-api/creatives).
+
+### [Promoted Accounts](https://business.x.com/help/what-are-promoted-accounts)
+
+- Promoted Accounts fazem parte do Who to Follow, que sugere contas que as pessoas não seguem atualmente e podem achar interessantes. Promoted Accounts ajudam a apresentar uma variedade ainda maior de contas de que as pessoas podem gostar.
+- Promoted Accounts for Timeline associam um Promoted Tweet a uma campanha de Promoted Account e serão exibidos nas timelines dos usuários.
+
+Promoted Trends não estão disponíveis na Ads API.
+
+## Campanhas e Ad Groups (Line Items)
+
+Campanhas definem o cronograma e o orçamento de um anúncio. O anunciante especifica um orçamento diário e um orçamento total. A campanha pode ser vinculada a um horário específico de início e fim ou rodar continuamente até que o orçamento seja gasto. O orçamento vem de um dos Funding Instruments da conta de anúncios. Os identificadores de campanha (:campaign_id) são a representação base-36 do valor base-10 que apresentamos na UI do X Ads.
+
+Contas de anúncios são limitadas a um máximo de 200 campanhas ativas. Este limite pode ser aumentado manualmente para 4.000 campanhas ativas pelo X Account Manager do anunciante mediante solicitação. Uma campanha é considerada ativa até atingir seu horário de término ou ser excluída. Campanhas pausadas são consideradas ativas até seu horário de término designado.
+
+Line items gastam o orçamento definido por uma campanha. Line items reúnem o lance por engajamento, o Tweet ou conta a ser promovida e as regras de segmentação.
+
+## Analytics
+
+A X Ads API oferece um conjunto de endpoints de analytics para acompanhar e otimizar o desempenho dos anúncios. Consulte Analytics e Analytics Best Practices para mais informações.
+
+Para a métrica de faturamento, os dados podem não estar finalizados até três dias após o evento. Antes desse ponto, os dados devem ser considerados especulativos. O número final faturável sempre será menor que o valor especulativo. O número faturável é corrigido para spam e tráfego de baixa qualidade relacionado. Consulte Timezones para outras considerações sobre tempo.
+
+## Criando uma campanha - Passo a passo
+
+O exemplo abaixo assume que você instalou, configurou e autorizou seu app e usuário usando [twurl](https://github.com/twitter/twurl). twurl é uma ferramenta de linha de comando no espírito do cURL que lida elegantemente com a autenticação OAuth do X. twurl é uma ótima ferramenta para testar e depurar rapidamente a funcionalidade da Ads API (e da REST API). Para ver os headers completos da requisição e resposta, use `-t` para rastrear a chamada, aproximadamente equivalente à opção `-v` do cURL.
+
+**Para este exemplo, criaremos uma campanha de Promoted Ads segmentada por keyword.**
+
+1. **Recuperar o account id.**
+
+```
+twurl -H ads-api.x.com /9/accounts/
+```
+
+```json title="Exemplo de resposta" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "request": {
+    "params": {
+    }
+  },
+  "data": [
+    {
+      "name": "Test account for @AdsAPI",
+      "timezone": "America/Los_Angeles",
+      "timezone_switch_at": null,
+      "id": "xxxxxx",
+      "created_at": "2014-03-09T00:41:49Z",
+      "salt": "f9f9d5a5f23075c618da5eb1d1a9df57",
+      "updated_at": "2015-01-29T00:41:49Z",
+      "approval_status": "ACCEPTED",
+      "deleted": false
+    }
+  ],
+  "data_type": "account",
+  "total_count": 1,
+  "next_cursor": null
+}
+```
+
+Para o restante deste guia detalhado passo a passo (incluindo criação de line items, targeting, budget pacing, target bidding, country targeting, Partner Managed Funding Instruments, placements, Ad Groups FAQ e Video Views Preroll Objective), consulte a documentação em inglês em [/x-ads-api/campaign-management](/x-ads-api/campaign-management). Os exemplos de código, valores de parâmetros e estruturas JSON permanecem os mesmos.
+
+---
+
+## Referência completa da API
+
+Para a lista completa de endpoints com exemplos de requisição/resposta e tabelas de atributos, consulte a página **[Referência da API de Gerenciamento de Campanhas](/x-ads-api/campaign-management/reference)**.

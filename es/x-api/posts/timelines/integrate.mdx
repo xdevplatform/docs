@@ -1,0 +1,340 @@
+---
+title: Guía de integración
+sidebarTitle: Guía de integración
+keywords: ["integración de timeline", "guía de timeline", "implementación de timeline", "integración de home timeline", "integración de user timeline"]
+description: "Esta guía cubre los conceptos clave que necesitas para integrar los endpoints de Timelines en tu. Referencia del nivel estándar de X API v2 sobre timelines."
+---
+
+Esta guía cubre los conceptos clave que necesitas para integrar los endpoints de Timelines en tu aplicación.
+
+---
+
+## Autenticación
+
+### Requisitos del endpoint
+
+| Endpoint | App-Only | User Context |
+|:---------|:---------|:-------------|
+| Timeline de Posts de usuario | ✓ | ✓ |
+| Timeline de menciones de usuario | ✓ | ✓ |
+| Home timeline | — | ✓ (requerido) |
+
+### Métricas privadas
+
+Para acceder a métricas privadas, debes autenticarte en nombre del autor del Post:
+
+<Warning>
+Estos campos requieren autenticación User Context:
+- `tweet.fields.non_public_metrics`
+- `tweet.fields.promoted_metrics`
+- `tweet.fields.organic_metrics`
+- `media.fields.non_public_metrics`
+- `media.fields.promoted_metrics`
+- `media.fields.organic_metrics`
+</Warning>
+
+---
+
+## Fields y expansions
+
+Por defecto, las respuestas incluyen solo `id`, `text` y `edit_history_tweet_ids`. Solicita datos adicionales:
+
+### Ejemplo de solicitud
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/123/tweets?\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id,attachments.media_keys&\
+user.fields=username,verified&\
+media.fields=url,type" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Obtén el timeline de Posts del usuario
+for page in client.posts.get_user_posts(
+    user_id="123",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id", "attachments.media_keys"],
+    user_fields=["username", "verified"],
+    media_fields=["url", "type"],
+    max_results=100
+):
+    for post in page.data:
+        print(f"{post.text} - {post.public_metrics}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Obtén el timeline de Posts del usuario con paginación
+const paginator = client.posts.getUserPosts("123", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id", "attachments.media_keys"],
+  userFields: ["username", "verified"],
+  mediaFields: ["url", "type"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text} - ${JSON.stringify(post.public_metrics)}`);
+  });
+}
+```
+
+</CodeGroup>
+
+### Fields clave
+
+| Field | Description |
+|:------|:------------|
+| `created_at` | Timestamp de creación del Post |
+| `public_metrics` | Recuentos de interacción |
+| `conversation_id` | Identificador del hilo |
+| `context_annotations` | Clasificaciones de tema |
+| `entities` | Hashtags, menciones, URLs |
+
+<Card title="Guía de fields y expansions" icon="sliders" href="/x-api/fundamentals/fields">
+  Aprende más sobre cómo personalizar las respuestas
+</Card>
+
+---
+
+## Paginación
+
+Los timelines devuelven hasta 100 Posts por solicitud. Usa la paginación para conjuntos de resultados más grandes.
+
+### Cómo funciona
+
+1. Haz la solicitud inicial con `max_results`
+2. Obtén el `next_token` del objeto `meta`
+3. Incluye `pagination_token` en la siguiente solicitud
+4. Repite hasta que no se devuelva ningún `next_token`
+
+### Ejemplo
+
+<CodeGroup dropdown>
+
+```bash cURL
+# Primera solicitud
+curl "https://api.x.com/2/users/123/tweets?max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+
+# Solicitud posterior con token de paginación
+curl "https://api.x.com/2/users/123/tweets?max_results=100&pagination_token=NEXT_TOKEN" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# El SDK maneja la paginación automáticamente
+all_posts = []
+
+for page in client.posts.get_user_posts(user_id="123", max_results=100):
+    if page.data:
+        all_posts.extend(page.data)
+
+print(f"Found {len(all_posts)} posts")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+async function getAllTimelinePosts(userId) {
+  const allPosts = [];
+
+  // El SDK maneja la paginación automáticamente con iteración async
+  const paginator = client.posts.getUserPosts(userId, { maxResults: 100 });
+
+  for await (const page of paginator) {
+    if (page.data) {
+      allPosts.push(...page.data);
+    }
+  }
+
+  return allPosts;
+}
+
+// Uso
+const posts = await getAllTimelinePosts("123");
+console.log(`Found ${posts.length} posts`);
+```
+
+</CodeGroup>
+
+<Card title="Guía de paginación" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/fundamentals/pagination">
+  Aprende más sobre paginación
+</Card>
+
+---
+
+## Filtrar resultados
+
+### Filtrado basado en tiempo
+
+| Parameter | Description |
+|:----------|:------------|
+| `start_time` | Timestamp más antiguo del Post (ISO 8601) |
+| `end_time` | Timestamp más reciente del Post (ISO 8601) |
+| `since_id` | Devuelve Posts posteriores a este ID |
+| `until_id` | Devuelve Posts anteriores a este ID |
+
+### Parámetro exclude
+
+Elimina tipos específicos de Post de los resultados:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/123/tweets?exclude=retweets,replies" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Excluir retweets y respuestas
+for page in client.posts.get_user_posts(
+    user_id="123",
+    exclude=["retweets", "replies"]
+):
+    for post in page.data:
+        print(post.text)
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Excluir retweets y respuestas
+const paginator = client.posts.getUserPosts("123", {
+  exclude: ["retweets", "replies"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => console.log(post.text));
+}
+```
+
+</CodeGroup>
+
+| Value | Effect |
+|:------|:-------|
+| `retweets` | Excluir retweets |
+| `replies` | Excluir respuestas |
+
+---
+
+## Límites de volumen
+
+Cada timeline tiene límites máximos de recuperación:
+
+| Endpoint | Maximum Posts |
+|:---------|:--------------|
+| Timeline de Posts de usuario | 3,200 más recientes |
+| Posts de usuario (exclude=replies) | 800 más recientes |
+| Timeline de menciones de usuario | 800 más recientes |
+| Home timeline | 3,200 o 7 días |
+
+<Note>
+Solicitar Posts más allá de estos límites devuelve una respuesta exitosa sin datos.
+</Note>
+
+---
+
+## Ediciones de Post
+
+Los Posts pueden editarse hasta 5 veces dentro de los 30 minutos. Los endpoints de timeline siempre devuelven la versión más reciente.
+
+### Consideraciones
+
+- Los Posts anteriores a 30 minutos representan su versión final
+- Los casos de uso casi en tiempo real deben tener en cuenta posibles ediciones
+- Usa Post lookup para verificar el estado final si es necesario
+
+<Card title="Fundamentos de edición de Post" icon="/icons/xds/icon-history.svg" href="/x-api/fundamentals/edit-posts">
+  Aprende más sobre las ediciones de Post
+</Card>
+
+---
+
+## Métricas de Post
+
+### Métricas públicas
+
+Disponibles para todos los Posts con autenticación App-Only o User Context:
+
+```json
+{
+  "public_metrics": {
+    "retweet_count": 156,
+    "reply_count": 23,
+    "like_count": 892,
+    "quote_count": 12,
+    "bookmark_count": 34,
+    "impression_count": 15200
+  }
+}
+```
+
+### Métricas privadas
+
+Requiere autenticación User Context del autor del Post:
+
+- Solo disponible para Posts de los últimos 30 días
+- Solo se devuelve para Posts creados por el usuario autenticado
+- Devuelve error para los Posts de otros usuarios
+
+---
+
+## Casos extremos
+
+<Accordion title="Métricas no públicas y paginación">
+Al solicitar métricas no públicas para Posts de más de 30 días, puedes recibir un `next_token` con `result_count: 0`. Para evitar esto:
+- Mantén las solicitudes dentro de los últimos 30 días
+- Usa un `max_results` de al menos 10
+</Accordion>
+
+<Accordion title="Métricas promocionadas para Posts no promocionados">
+Solicitar métricas promocionadas para Posts que no fueron promocionados devuelve una respuesta vacía. Este es un problema conocido.
+</Accordion>
+
+<Accordion title="Texto truncado de Retweet">
+Para los Retweets con texto de más de 140 caracteres, el campo text se trunca. Usa la expansion `referenced_tweets.id` para obtener el texto completo.
+</Accordion>
+
+---
+
+## Próximos pasos
+
+<CardGroup cols={2}>
+  <Card title="Quickstart del home timeline" icon="house" href="/x-api/posts/timelines/quickstart/reverse-chron-quickstart">
+    Obtén el home feed de un usuario
+  </Card>
+  <Card title="Quickstart de menciones" icon="at" href="/x-api/posts/timelines/quickstart/user-mention-quickstart">
+    Obtén las menciones de un usuario
+  </Card>
+  <Card title="Referencia de la API" icon="/icons/xds/icon-code.svg" href="/x-api/users/get-posts">
+    Documentación completa del endpoint
+  </Card>
+  <Card title="Paginación" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/fundamentals/pagination">
+    Maneja conjuntos de resultados grandes
+  </Card>
+</CardGroup>

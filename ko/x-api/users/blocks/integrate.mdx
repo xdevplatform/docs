@@ -1,0 +1,198 @@
+---
+title: 통합 가이드
+sidebarTitle: 통합 가이드
+keywords: ["blocks 통합", "사용자 차단 통합", "blocks 가이드"]
+description: "이 가이드는 애플리케이션에 blocks 엔드포인트를 통합할 때 필요한 핵심 개념을 다룹니다. Blocks를 다루는 X API v2 standard 티어 레퍼런스입니다."
+---
+
+import { Button } from '/snippets/button.mdx';
+
+이 가이드는 애플리케이션에 blocks 엔드포인트를 통합할 때 필요한 핵심 개념을 다룹니다.
+
+<Callout icon="/icons/xds/icon-key.svg" color="#22C55E" iconType="regular">
+사용자를 차단 및 차단 해제하는 엔드포인트는 Enterprise 플랜에서만 사용할 수 있습니다. Enterprise 관심 양식은 [여기](/forms/enterprise-api-interest)에서 작성할 수 있습니다.
+</Callout>
+
+---
+
+## 인증
+
+Blocks 엔드포인트는 사용자 인증이 필요합니다:
+
+| Method | Description |
+|:-------|:------------|
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | 새 애플리케이션에 권장 |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | 레거시 지원 |
+
+<Warning>
+App-Only 인증은 지원되지 않습니다. 사용자를 대신하여 인증해야 합니다.
+</Warning>
+
+### 필수 scope (OAuth 2.0)
+
+| Scope | Required for |
+|:------|:-------------|
+| `block.read` | 차단된 계정 조회 |
+| `block.write` | 계정 차단 및 차단 해제 |
+| `users.read` | block scope와 함께 필요 |
+
+---
+
+## 엔드포인트 개요
+
+| Method | Endpoint | Description | Availability |
+|:-------|:---------|:------------|:-------------|
+| GET | `/2/users/:id/blocking` | 차단된 계정 목록 가져오기 | <div className="flex items-center gap-1 flex-nowrap whitespace-nowrap"><Badge color="blue" size="xs">Pay-per-use</Badge><Badge color="green" size="xs">Enterprise</Badge></div> |
+| POST | `/2/users/:id/blocking` | 계정 차단하기 | <Badge color="green" size="xs">Enterprise</Badge> |
+| DELETE | `/2/users/:source_user_id/blocking/:target_user_id` | 계정 차단 해제하기 | <Badge color="green" size="xs">Enterprise</Badge> |
+
+---
+
+## 필드 및 확장
+
+### 기본 응답
+
+```json
+{
+  "data": [
+    {
+      "id": "1234567890",
+      "name": "Example User",
+      "username": "example"
+    }
+  ]
+}
+```
+
+### 사용 가능한 필드
+
+<Accordion title="user.fields">
+| Field | Description |
+|:------|:------------|
+| `created_at` | 계정 생성 날짜 |
+| `description` | 사용자 소개 |
+| `profile_image_url` | 아바타 URL |
+| `public_metrics` | 팔로워/팔로잉 수 |
+| `verified` | 인증 상태 |
+</Accordion>
+
+<Accordion title="expansions">
+| Expansion | Description |
+|:----------|:------------|
+| `pinned_tweet_id` | 사용자의 고정된 Post |
+</Accordion>
+
+---
+
+## 차단 시 동작
+
+<CardGroup cols={2}>
+  <Card title="상대방이 할 수 없는 일" icon="xmark">
+    - 당신의 Post 보기 (로그아웃하지 않은 이상)
+    - 당신을 팔로우
+    - 당신에게 DM 보내기
+    - 당신을 List에 추가
+    - 사진에 당신 태그
+  </Card>
+  <Card title="당신이 할 수 없는 일" icon="xmark">
+    - 상대방의 Post 보기
+    - 상대방 팔로우
+    - 상대방에게 DM 보내기
+  </Card>
+</CardGroup>
+
+<Note>
+당신을 팔로우하는 사용자를 차단하면 해당 사용자는 자동으로 팔로우가 해제됩니다.
+</Note>
+
+---
+
+## 페이지네이션
+
+차단 목록이 많은 사용자의 경우 결과가 페이지네이션됩니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+# 첫 번째 요청
+curl "https://api.x.com/2/users/123/blocking?max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+
+# 페이지네이션 토큰을 사용한 다음 요청
+curl "https://api.x.com/2/users/123/blocking?max_results=100&pagination_token=NEXT_TOKEN" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+# OAuth 2.0 user access token 사용
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# SDK가 페이지네이션을 자동으로 처리
+all_blocked = []
+
+for page in client.users.get_blocking(user_id="123", max_results=100):
+    if page.data:
+        all_blocked.extend(page.data)
+
+print(f"Blocked {len(all_blocked)} users")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+async function getAllBlockedUsers(userId) {
+  const allBlocked = [];
+
+  // SDK가 페이지네이션을 자동으로 처리
+  const paginator = client.users.getBlocking(userId, { maxResults: 100 });
+
+  for await (const page of paginator) {
+    if (page.data) {
+      allBlocked.push(...page.data);
+    }
+  }
+
+  return allBlocked;
+}
+
+// 사용 예시
+const blocked = await getAllBlockedUsers("123");
+console.log(`Blocked ${blocked.length} users`);
+```
+
+</CodeGroup>
+
+---
+
+## 오류 처리
+
+| Status | Error | Solution |
+|:-------|:------|:---------|
+| 400 | Invalid request | 사용자 ID 형식 확인 |
+| 401 | Unauthorized | access token 확인 |
+| 403 | Forbidden | scope 및 권한 확인. 차단/차단 해제는 [Enterprise](/forms/enterprise-api-interest) 필요 |
+| 404 | Not Found | 사용자가 존재하지 않음 |
+| 429 | Too Many Requests | 잠시 후 재시도 |
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="퀵스타트" icon="/icons/xds/icon-rocket.svg" href="/x-api/users/blocks/quickstart">
+    첫 blocks 요청 만들기
+  </Card>
+  <Card title="Mutes" icon="volume-xmark" href="/x-api/users/mutes/introduction">
+    차단 대신 사용자 뮤트하기
+  </Card>
+  <Card title="API 레퍼런스" icon="/icons/xds/icon-code.svg" href="/x-api/users/get-blocking">
+    전체 엔드포인트 문서
+  </Card>
+  <Card title="예제 코드" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    동작하는 코드 예제
+  </Card>
+</CardGroup>
