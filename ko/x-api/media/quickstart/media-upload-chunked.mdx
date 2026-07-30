@@ -1,0 +1,360 @@
+---
+title: 청크형 미디어 업로드
+sidebarTitle: 빠른 시작
+description: "이 가이드는 청크형 업로드를 사용해 비디오 및 대용량 미디어 파일을 업로드하는 방법을 안내합니다. 빠른 시작을 다루는 X API v2 standard 등급 레퍼런스."
+keywords: ["청크형 업로드", "미디어 업로드", "청크형 미디어", "비디오 업로드", "대용량 파일 업로드", "청크형 업로드 가이드"]
+---
+
+이 가이드는 청크형 업로드 워크플로를 사용해 비디오 및 대용량 미디어 파일을 업로드하는 방법을 안내합니다.
+
+비디오 또는 대용량 미디어 업로드의 경우 다음을 수행해야 합니다:
+1. **INIT** — 업로드를 초기화하고 `media_id`를 가져옵니다
+2. **APPEND** — 파일의 각 청크를 업로드합니다
+3. **FINALIZE** — 업로드를 완료합니다
+4. **STATUS** — (필요한 경우) 처리 완료를 기다립니다
+
+<Note>
+전체 Python 예제는 [이 샘플 코드](https://github.com/xdevplatform/large-video-upload-python)를 참조하세요.
+</Note>
+
+---
+
+## 1단계: 업로드 초기화 (INIT)
+
+`media_id`를 가져오기 위해 업로드 세션을 시작합니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/media/upload" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: multipart/form-data" \
+  -F "command=INIT" \
+  -F "media_type=video/mp4" \
+  -F "total_bytes=1048576" \
+  -F "media_category=amplify_video"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Initialize chunked upload
+response = client.media.init_upload(
+    media_type="video/mp4",
+    total_bytes=1048576,
+    media_category="amplify_video"
+)
+
+media_id = response.data.id
+print(f"Media ID: {media_id}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Initialize chunked upload
+const response = await client.media.initUpload({
+  mediaType: "video/mp4",
+  totalBytes: 1048576,
+  mediaCategory: "amplify_video",
+});
+
+const mediaId = response.data?.id;
+console.log(`Media ID: ${mediaId}`);
+```
+
+</CodeGroup>
+
+**응답:**
+
+```json
+{
+  "data": {
+    "id": "1880028106020515840",
+    "media_key": "13_1880028106020515840",
+    "expires_after_secs": 1295999
+  }
+}
+```
+
+---
+
+## 2단계: 청크 업로드 (APPEND)
+
+파일의 각 청크를 업로드합니다. 예를 들어 3MB 파일을 3개의 청크로 분할하면 다음과 같습니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/media/upload" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: multipart/form-data" \
+  -F "command=APPEND" \
+  -F "media_id=1880028106020515840" \
+  -F "segment_index=0" \
+  -F "media=@/path/to/chunk1.mp4"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Upload chunks
+chunk_size = 1024 * 1024  # 1 MB chunks
+
+with open("video.mp4", "rb") as f:
+    segment_index = 0
+    while True:
+        chunk = f.read(chunk_size)
+        if not chunk:
+            break
+        
+        client.media.append_upload(
+            media_id=media_id,
+            segment_index=segment_index,
+            media=chunk
+        )
+        segment_index += 1
+        print(f"Uploaded chunk {segment_index}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+import fs from "fs";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Upload chunks
+const chunkSize = 1024 * 1024; // 1 MB chunks
+const fileBuffer = fs.readFileSync("video.mp4");
+
+let segmentIndex = 0;
+for (let offset = 0; offset < fileBuffer.length; offset += chunkSize) {
+  const chunk = fileBuffer.slice(offset, offset + chunkSize);
+  
+  await client.media.appendUpload({
+    mediaId,
+    segmentIndex,
+    media: chunk,
+  });
+  
+  console.log(`Uploaded chunk ${segmentIndex + 1}`);
+  segmentIndex++;
+}
+```
+
+</CodeGroup>
+
+<Info>
+**청크의 장점:**
+- 느린 네트워크에서 향상된 안정성
+- 업로드를 일시 중지 및 재개할 수 있음
+- 실패한 청크를 개별적으로 재시도할 수 있음
+</Info>
+
+---
+
+## 3단계: 업로드 완료 (FINALIZE)
+
+모든 청크가 전송된 후 업로드를 완료합니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/media/upload" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: multipart/form-data" \
+  -F "command=FINALIZE" \
+  -F "media_id=1880028106020515840"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Finalize upload
+response = client.media.finalize_upload(media_id=media_id)
+
+print(f"Processing state: {response.data.processing_info.state}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Finalize upload
+const response = await client.media.finalizeUpload({ mediaId });
+
+console.log(`Processing state: ${response.data?.processing_info?.state}`);
+```
+
+</CodeGroup>
+
+**응답:**
+
+```json title="Example response" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1880028106020515840",
+    "media_key": "13_1880028106020515840",
+    "size": 1048576,
+    "expires_after_secs": 86400,
+    "processing_info": {
+      "state": "pending",
+      "check_after_secs": 1
+    }
+  }
+}
+```
+
+<Note>
+`processing_info`가 반환되면 처리를 기다리기 위해 4단계로 진행하세요. 반환되지 않으면 미디어를 사용할 준비가 된 것입니다.
+</Note>
+
+---
+
+## 4단계: 상태 확인 (STATUS)
+
+`processing_info`가 반환된 경우 처리 완료를 폴링합니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/media/upload?command=STATUS&media_id=1880028106020515840" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+import time
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Wait for processing to complete
+while True:
+    response = client.media.get_status(media_id=media_id)
+    state = response.data.processing_info.state
+    
+    if state == "succeeded":
+        print("Media ready!")
+        break
+    elif state == "failed":
+        print("Processing failed")
+        break
+    else:
+        check_after = response.data.processing_info.check_after_secs
+        print(f"Processing... checking again in {check_after}s")
+        time.sleep(check_after)
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Wait for processing to complete
+while (true) {
+  const response = await client.media.getStatus({ mediaId });
+  const state = response.data?.processing_info?.state;
+  
+  if (state === "succeeded") {
+    console.log("Media ready!");
+    break;
+  } else if (state === "failed") {
+    console.log("Processing failed");
+    break;
+  } else {
+    const checkAfter = response.data?.processing_info?.check_after_secs ?? 1;
+    console.log(`Processing... checking again in ${checkAfter}s`);
+    await new Promise((r) => setTimeout(r, checkAfter * 1000));
+  }
+}
+```
+
+</CodeGroup>
+
+**처리 상태:** `pending` → `in_progress` → `succeeded` 또는 `failed`
+
+---
+
+## 5단계: 미디어로 Post 생성
+
+처리가 완료되면 미디어로 Post를 생성합니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/tweets" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Check out this video!",
+    "media": {
+      "media_ids": ["1880028106020515840"]
+    }
+  }'
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Create Post with media
+response = client.posts.create(
+    text="Check out this video!",
+    media={"media_ids": [media_id]}
+)
+
+print(f"Posted: {response.data.id}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Create Post with media
+const response = await client.posts.create({
+  text: "Check out this video!",
+  media: { mediaIds: [mediaId] },
+});
+
+console.log(`Posted: ${response.data?.id}`);
+```
+
+</CodeGroup>
+
+---
+
+## 미디어 카테고리
+
+| 카테고리 | 설명 |
+|:---------|:------------|
+| `tweet_image` | Post용 이미지 |
+| `tweet_gif` | Post용 애니메이션 GIF |
+| `tweet_video` | Post용 비디오 |
+| `amplify_video` | Amplify 비디오 |
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="모범 사례" icon="/icons/xds/icon-book.svg" href="/x-api/media/quickstart/best-practices">
+    파일 제약 조건 및 요구 사항
+  </Card>
+  <Card title="Post 생성" icon="/icons/xds/icon-chat.svg" href="/x-api/posts/manage-tweets/quickstart">
+    미디어와 함께 게시
+  </Card>
+  <Card title="API 레퍼런스" icon="/icons/xds/icon-code.svg" href="/x-api/media/initialize-media-upload">
+    전체 endpoint 문서
+  </Card>
+</CardGroup>

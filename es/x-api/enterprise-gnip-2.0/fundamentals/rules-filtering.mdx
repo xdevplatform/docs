@@ -1,0 +1,197 @@
+---
+title: "Reglas y filtrado: Enterprise"
+description: "Construye reglas de PowerTrack y Search enterprise usando operadores de palabra clave, frase, proximidad y booleanos con agrupación para un filtrado preciso de datos de X."
+keywords: ["reglas enterprise", "GNIP rules", "filtrado enterprise", "reglas de PowerTrack", "consultas enterprise", "reglas de filtrado enterprise"]
+---
+
+## Primeros pasos con reglas y consultas enterprise
+
+
+Los productos que utilizan operadores enterprise te entregan datos sociales según las reglas de filtrado que configures. Las reglas están compuestas por una o más 'cláusulas', donde una cláusula es una palabra clave, una frase exacta o uno de los muchos operadores enterprise. Antes de comenzar a construir reglas con operadores enterprise, asegúrate de revisar la sintaxis descrita a continuación, mirar la lista de operadores disponibles y comprender las restricciones sobre la construcción de reglas. También debes asegurarte de comprender los matices de cómo se evalúan lógicamente las reglas, en la sección "[Orden de operaciones](#orderofoperations)".
+
+Se pueden combinar varias cláusulas con lógica "and" y "or".
+
+**Ten en cuenta:** La lógica "And" se especifica con un espacio entre cláusulas, mientras que la lógica or se especifica con un `OR` en mayúsculas.
+
+Cada regla puede tener hasta 2.048 caracteres de longitud sin límites en el número de cláusulas positivas (cosas con las que quieres coincidir o filtrar) y cláusulas negativas (cosas que quieres excluir y no coincidir).
+ 
+
+### Construcción de reglas y consultas 
+
+**Coincidencia de palabra clave**
+
+Las coincidencias de palabras clave son similares a las consultas en una interfaz de búsqueda. Por ejemplo, la siguiente regla con operador enterprise coincidiría con actividades que contengan el término "social" en el cuerpo del texto.
+
+`social`
+
+**Combinar términos con AND usando espacios en blanco**
+
+Añadir otra palabra clave es lo mismo que añadir otro requisito para encontrar coincidencias. Por ejemplo, esta regla solo coincidiría con actividades donde tanto "social" como "media" estén presentes en el texto, en cualquier orden — _tener un espacio entre términos funciona como lógica booleana AND_. Si incluyes un AND explícito en tu regla, será rechazada por el endpoint de rules.
+
+`social media`
+
+**Combinar términos con OR usando OR en mayúsculas**
+
+Muchas situaciones en realidad requieren lógica booleana OR. Esto también se logra fácilmente. _Ten en cuenta que el operador OR debe estar en mayúsculas y un 'or' en minúsculas será tratado como una palabra clave regular._
+
+`social OR data`
+
+**Negar términos**
+
+Otros escenarios pueden requerir excluir resultados con ciertas palabras clave (lógica booleana NOT). Por ejemplo, actividades con 'happy', pero excluyendo cualquiera con 'birthday' en el texto.
+
+`social -personality`
+
+**Agrupación con paréntesis**
+
+Estos tipos de lógica se pueden combinar usando agrupación con paréntesis, y expandir a consultas mucho más complejas.
+
+`(social OR data) (academic OR research) -personality -information -university`
+
+Esto es solo el comienzo — mientras que los ejemplos anteriores dependen simplemente de la coincidencia tokenizada de palabras clave, los productos enterprise también ofrecen operadores para realizar diferentes tipos de coincidencia en el texto.
+
+**Coincidencia exacta**
+
+`"social media research"`
+
+**Coincidencia de subcadena**
+
+`contains:info`
+
+**Coincidencia de proximidad**
+
+`"social media research"~3`
+
+
+Además, otros operadores te permiten filtrar por aspectos únicos de los datos sociales, más allá del texto.
+
+**El usuario que está publicando un Post**
+
+`from:XDevelopers`
+
+**Tweets geoetiquetados dentro de 10 millas de Pearl St. en Boulder, CO, Estados Unidos**
+
+`point_radius:[-105.27346517 40.01924738 10.0mi]`
+
+**Juntándolo todo**
+
+Estos pueden combinarse con filtros de texto usando los mismos tipos de lógica descritos anteriormente.
+
+`(social OR data) (academic OR research OR "social media research") point_radius:[-105.27346517 40.01924738 10.0mi] lang:en -personality -information -university`
+
+### Sintaxis booleana
+
+Los ejemplos de la sección anterior utilizaron varios tipos de lógica y agrupación booleana. Consulta la tabla siguiente para más detalles sobre la sintaxis y los requisitos de cada uno.
+
+|     |     |     |
+| :--- | :--- | :--- |
+| **Tipo de lógica** | **Sintaxis del operador** | Descripción |
+| AND | social data | Un espacio en blanco entre dos operadores resulta en lógica AND entre ellos  <br/>  <br/>Coincide con actividades que contengan ambas palabras clave ("social", "data").  <br/>  <br/>**No uses AND explícitamente en tu regla. Usa solo espacios en blanco. Un AND explícito se tratará como una palabra clave regular.** |
+| OR  | social OR data | Para combinar con OR dos operadores, inserta un OR en mayúsculas, rodeado de espacios en blanco entre ellos  <br/>  <br/>Coincide con actividades con CUALQUIERA de las palabras clave ("social" OR "data")  <br/>  <br/>Ten en cuenta que si combinas la funcionalidad OR y AND en una única regla, debes comprender el orden de operaciones descrito en nuestra sección "[Orden de operaciones](#OrderOfOperations)", y considera agrupar operadores no negados usando paréntesis como se describe a continuación para asegurar que tu regla se comporte como esperas.  <br/>  <br/>Debes usar "OR" en mayúsculas en tu regla. Un 'or' en minúsculas será tratado como una palabra clave regular. |
+| NOT | social data  <br/>-apple -android -phone | Inserta un carácter `-` inmediatamente antes del operador o grupo de operadores.  <br/>  <br/>La regla de ejemplo mostrada coincide con actividades que contengan la palabra clave "social", pero excluye aquellas que contengan la palabra clave "data".  <br/>  <br/>Los OR negados no están permitidos cuando la regla solicitaría "todo en el firehose excepto la negación". Por ejemplo, `apple OR -ipad` no es válido porque coincidiría con todas las actividades excepto las que mencionan "ipad". |
+| Agrupación | (social OR data) -XDevelopers -api | Los paréntesis alrededor de múltiples operadores crean un "grupo" funcional.<br/><br/>Los grupos pueden conectarse a cláusulas de la misma manera que una cláusula individual mediante espacios en blanco (AND) u ORs. Sin embargo, ten en cuenta que es una buena práctica no agrupar negaciones aplicando el - de negación a todo el grupo. En su lugar, debes negar cada operador individual, encadenándolos mediante espacios en blanco (AND). <br/><br/>Por ejemplo, en lugar de usar -(iphone OR imac OR macbook), usa lo siguiente: -iphone -imac -macbook  <br/>  <br/>La agrupación es especialmente importante cuando una única regla combina la funcionalidad AND y OR, debido al orden de operaciones utilizado para evaluar la regla. Consulta a continuación para más detalles. |
+
+**Ten en cuenta:** que los operadores pueden ser positivos o negativos.
+
+**Operadores positivos** definen lo que quieres **incluir** en los resultados. Por ejemplo, el operador `has:hashtags` dice "Quiero actividades que contengan hashtags".
+
+**Operadores negativos** definen lo que quieres **excluir** de los resultados, y se crean usando la lógica booleana NOT descrita anteriormente. Por ejemplo, `-has:hashtags` dice "Excluye cualquier actividad que contenga hashtags, aunque de otro modo coincida con mi regla".
+
+Los productos con operadores Premium no tienen restricción en el número de cláusulas positivas y negativas, sujetos a una longitud máxima de 2.048 caracteres.
+ 
+
+#### Orden de operaciones
+
+Al combinar la funcionalidad AND y OR en una única regla, el siguiente orden de operaciones dictará cómo se evalúa tu regla.
+
+1.  Los operadores conectados por lógica AND se combinan primero
+2.  Luego, se aplican los operadores conectados con lógica OR
+
+**Ejemplo:**
+
+* `apple OR iphone ipad` se evaluaría como `apple OR (iphone ipad)`
+* `ipad iphone OR android` se evaluaría como `(iphone ipad) OR android`
+
+Para eliminar la incertidumbre y asegurar que tus reglas se evalúen como se pretendía, agrupa términos con paréntesis donde sea apropiado. Por ejemplo:
+
+* `(apple OR iphone) ipad`
+* `iphone (ipad OR android)`
+
+#### Puntuación, diacríticos y sensibilidad a mayúsculas
+
+Si especificas una regla de palabra clave o hashtag con acentos o diacríticos para operadores enterprise, coincidirá con el texto del Post respetando los diacríticos (hashtags o palabras clave). Una regla con la palabra clave `Diacr**í**tica` o el hashtag `#cumplea**ñ**os` coincidirá con "Diacr**í**tica" o "#cumplea**ñ**os" pero no con "Diacritica" o "#cumpleanos" sin la tilde **í** o **eñe**.
+
+Los caracteres con acentos o diacríticos se tratan igual que los caracteres normales y no se tratan como límites de palabra. Por ejemplo, una regla de cumplea**ñ**os solo coincidiría con actividades que contengan la palabra cumpleaños y no coincidiría con actividades que contengan cumplea, cumplean, ni os.
+
+Todos los operadores se evalúan de forma insensible a mayúsculas. Por ejemplo, la regla `Cat` coincidirá con todos los siguientes: "cat", "CAT", "Cat".
+
+#### Tags de reglas de PowerTrack
+
+Como se describe en nuestra página "[Reglas coincidentes](/x-api/enterprise-gnip-2.0/fundamentals/data-enrichments#matching-rules)", cada regla puede crearse con una etiqueta. Estas etiquetas no tienen efecto en el filtrado, pero pueden usarse para crear agrupaciones lógicas de reglas dentro de tu app. Cada regla solo puede tener una etiqueta, con un máximo de 255 caracteres. Las etiquetas se incluyen con la regla en formato JSON en el momento de la creación a través de la API, como se describe en nuestra página "Reglas coincidentes".
+
+#### Poner las reglas en formato JSON
+
+Para agregar o eliminar una regla de un stream a través de la API, las reglas deben usar formato JSON. Esencialmente, esto requiere poner cada regla en la siguiente estructura:
+
+`{"value":"insert_rule_here"}`
+
+**Reglas con comillas dobles**
+
+Si la regla contiene caracteres de comilla doble (`"`) asociados con coincidencia exacta u otros operadores, deben escaparse usando una barra invertida para distinguirlos de la estructura del formato JSON.
+
+`"social data" @XDevelopers`
+
+La regla en formato JSON sería:
+
+`{"value":"\"social data\" @XDevelopers"}`
+
+**Reglas con literales de cadena con comillas dobles**
+
+Para incluir un carácter de comilla doble como literal de cadena dentro de una coincidencia exacta, debe estar doblemente escapado. Por ejemplo, para una regla que coincide con la frase exacta "Toys "R" Us", incluyendo las comillas dobles alrededor de "R", la representación en texto plano se vería así:
+
+`"Toys \"R\" Us"`
+
+Traduciendo esto a formato JSON, debes usar la siguiente estructura:
+
+`{"value":"\"Toys \\\"R\\\" Us\""}`
+
+**Reglas con tags**
+
+Para incluir un tag opcional con tu regla, como se describe anteriormente, simplemente incluye un campo `tag` adicional con el valor de la regla.
+
+`{"value":"\"social data\" @XDevelopers","tag":"RULE-TAG-01"}`
+
+**Formato para solicitudes de API**
+
+Al agregar o eliminar reglas del stream a través de la API, las múltiples reglas en formato JSON deben delimitarse por comas y envolverse en un array JSON "rules", como se muestra a continuación:
+
+`{"rules":[{"value":"from:XDevelopers"},{"value":"\social data\" @XDevelopers","tag":"RULE-TAG-01"}]}`
+
+#### Operadores que coinciden con Quote Tweets
+
+Al usar la [PowerTrack API](/x-api/enterprise-gnip-2.0/powertrack-api) y la Historical PowerTrack API, los operadores a continuación coincidirán con contenido tanto del Post original que fue citado como del nuevo Quote Tweet.
+
+Sin embargo, si estás usando la [Search API](/x-api/enterprise-gnip-2.0/fundamentals/search-api), estos operadores solo coincidirán con el contenido del Quote Tweet, y no coincidirán con ningún contenido del Post original que fue citado.
+
+* `Keywords`
+* `Phrases`
+* `Proximity`
+* `#hashtags`
+* `@mentions`
+* `$cashtags`
+* `url:`
+* `url_contains:`
+* `has:links`
+* `has:mentions`
+* `has:hashtags`
+* `has:media`
+* `has:symbols`
+* `is:quote`
+* `is:reply`
+
+## Operadores enterprise
+
+A continuación se encuentran los operadores disponibles con PowerTrack y Historical PowerTrack. Un subconjunto de estos está disponible con las search APIs 30-Day y Full-Archive. Consulta [esta tabla](/x-api/enterprise-gnip-2.0/fundamentals/rules-filtering#operators-by-product) para una lista producto por producto de los operadores disponibles.
+
+| Operador                  | Descripción                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+|:---------------------------|:-------------------------------------------------------------------------------------------------------------------------------------

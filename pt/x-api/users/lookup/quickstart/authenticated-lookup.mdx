@@ -1,0 +1,215 @@
+---
+title: Guia rápido do usuário autenticado
+sidebarTitle: Usuário autenticado
+description: "Este guia mostra como recuperar o perfil do usuário atualmente autenticado usando o. Referência para o nível standard da X API v2 sobre quickstart."
+keywords: ["usuário autenticado", "endpoint me", "usuário atual", "consulta autenticada"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+Este guia mostra como recuperar o perfil do usuário atualmente autenticado usando o endpoint `/me`.
+
+<Note>
+**Pré-requisitos**
+
+Antes de começar, você precisará de:
+- Uma [conta de desenvolvedor](https://developer.x.com/en/portal/petition/essential/basic-info) com um App aprovado
+- User Access Token (OAuth 1.0a ou OAuth 2.0 PKCE)
+</Note>
+
+---
+
+## Obter o usuário autenticado
+
+Faça uma requisição ao endpoint `/me` com um User Access Token:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/me?\
+user.fields=created_at,description,verified,public_metrics,profile_image_url" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Obter o usuário autenticado
+response = client.users.get_me(
+    user_fields=["created_at", "description", "verified", "public_metrics", "profile_image_url"]
+)
+
+print(f"Username: {response.data.username}")
+print(f"ID: {response.data.id}")
+print(f"Followers: {response.data.public_metrics.followers_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Obter o usuário autenticado
+const response = await client.users.getMe({
+  userFields: ["created_at", "description", "verified", "public_metrics", "profile_image_url"],
+});
+
+console.log(`Username: ${response.data?.username}`);
+console.log(`ID: ${response.data?.id}`);
+console.log(`Followers: ${response.data?.public_metrics?.followers_count}`);
+```
+
+</CodeGroup>
+
+---
+
+## Resposta
+
+```json title="Exemplo de resposta" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "XDevelopers",
+    "created_at": "2013-12-14T04:35:55.000Z",
+    "description": "The voice of the X developer community",
+    "verified": true,
+    "profile_image_url": "https://pbs.twimg.com/profile_images/...",
+    "public_metrics": {
+      "followers_count": 583423,
+      "following_count": 2048,
+      "tweet_count": 14052,
+      "listed_count": 1672
+    }
+  }
+}
+```
+
+---
+
+## Caso de uso
+
+O endpoint `/me` é essencial ao:
+
+- **Verificar a autenticação** — Confirme se o usuário está autenticado corretamente
+- **Obter o user ID** — Recupere o ID do usuário autenticado para outras chamadas à API
+- **Personalizar experiências** — Exiba o perfil do usuário no seu app
+- **Requisições em nome de** — Saiba em nome de quem você está fazendo as requisições
+
+---
+
+## Incluir o Post fixado
+
+Solicite o Post fixado do usuário:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/me?\
+user.fields=pinned_tweet_id&\
+expansions=pinned_tweet_id&\
+tweet.fields=created_at,text" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Obter usuário autenticado com o Post fixado
+response = client.users.get_me(
+    user_fields=["pinned_tweet_id"],
+    expansions=["pinned_tweet_id"],
+    tweet_fields=["created_at", "text"]
+)
+
+print(f"Username: {response.data.username}")
+# O Post fixado está em response.includes.tweets
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Obter usuário autenticado com o Post fixado
+const response = await client.users.getMe({
+  userFields: ["pinned_tweet_id"],
+  expansions: ["pinned_tweet_id"],
+  tweetFields: ["created_at", "text"],
+});
+
+console.log(`Username: ${response.data?.username}`);
+// O Post fixado está em response.includes?.tweets
+```
+
+</CodeGroup>
+
+### Resposta com expansion
+
+```json title="Exemplo de resposta" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "XDevelopers",
+    "pinned_tweet_id": "1234567890"
+  },
+  "includes": {
+    "tweets": [
+      {
+        "id": "1234567890",
+        "text": "Welcome to my profile!",
+        "created_at": "2024-01-01T00:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Fields disponíveis
+
+| Field | Descrição |
+|:------|:------------|
+| `created_at` | Data de criação da conta |
+| `description` | Bio do usuário |
+| `profile_image_url` | URL do avatar |
+| `verified` | Status de verificação |
+| `public_metrics` | Contagens de seguidores/seguindo |
+| `location` | Localização definida pelo usuário |
+| `url` | Site do usuário |
+| `protected` | Status de conta protegida |
+| `pinned_tweet_id` | ID do Post fixado |
+
+---
+
+## Requisito de autenticação
+
+<Warning>
+O endpoint `/me` exige autenticação User Context. Autenticação App-Only (Bearer Token) não é suportada.
+</Warning>
+
+Use um destes:
+- [OAuth 1.0a User Context](/resources/fundamentals/authentication)
+- [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2)
+
+---
+
+## Próximos passos
+
+<CardGroup cols={2}>
+  <Card title="Consulta de usuário" icon="/icons/xds/icon-people.svg" href="/x-api/users/lookup/quickstart/user-lookup">
+    Consulte outros usuários
+  </Card>
+  <Card title="Guia de integração" icon="/icons/xds/icon-book.svg" href="/x-api/users/lookup/integrate">
+    Conceitos-chave e melhores práticas
+  </Card>
+  <Card title="Referência da API" icon="/icons/xds/icon-code.svg" href="/x-api/users/get-my-user">
+    Documentação completa do endpoint
+  </Card>
+</CardGroup>

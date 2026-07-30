@@ -1,0 +1,236 @@
+---
+title: 마이그레이션 가이드
+sidebarTitle: 마이그레이션 가이드
+keywords: ["blocks 마이그레이션", "blocks migrate", "v1.1에서 v2로 blocks", "blocks 마이그레이션 가이드", "migrate blocks"]
+description: "사용자 차단 및 차단 해제 엔드포인트는 Enterprise 플랜에서만 사용할 수 있습니다. Blocks를 다루는 X API v2 standard 티어 레퍼런스입니다."
+---
+
+
+import { Button } from '/snippets/button.mdx';
+
+<Callout icon="/icons/xds/icon-key.svg" color="#22C55E" iconType="regular">
+사용자를 차단 및 차단 해제하는 엔드포인트는 Enterprise 플랜에서만 사용할 수 있습니다. Enterprise 관심 양식은 [여기](/forms/enterprise-api-interest)에서 작성할 수 있습니다.
+</Callout>
+
+### Blocks lookup: standard v1.1과 X API v2 비교
+
+standard v1.1의 [GET blocks/ids](https://developer.x.com/en/docs/twitter-api/v1/accounts-and-users/mute-block-report-users/api-reference/get-blocks-ids) 및 [GET blocks/list](https://developer.x.com/en/docs/twitter-api/v1/accounts-and-users/mute-block-report-users/api-reference/get-blocks-list) 엔드포인트를 사용해 왔다면, 이 가이드는 standard v1.1과 X API v2의 blocks lookup 엔드포인트 사이의 유사점과 차이점을 이해하는 데 도움이 될 것입니다.
+
+* **유사점**
+    * 인증
+* **차이점**
+    * 엔드포인트 URL
+
+    * 요청당 사용자 수 제한
+    * App 및 Project 요구사항
+    * 응답 데이터 형식
+    * 요청 매개변수
+
+#### 유사점
+
+**인증**
+
+standard v1.1과 X API v2의 blocks lookup 엔드포인트는 모두 [OAuth 1.0a User Context](/resources/fundamentals/authentication#oauth-1-0a-2)를 사용합니다. 따라서 이전에 standard v1.1 blocks lookup 엔드포인트 중 하나를 사용했다면 X API v2 버전으로 마이그레이션할 때도 동일한 인증 방식을 계속 사용할 수 있습니다.
+
+#### 차이점
+**엔드포인트 URL**
+
+* standard v1.1 엔드포인트:
+    * GET https://api.x.com/1.1/blocks/ids.json
+        (지정된 사용자가 차단한 사용자 ID 목록)
+    * GET https://api.x.com/1.1/blocks/lists.json
+        (지정된 사용자가 차단한 사용자 목록)
+* X API v2 엔드포인트:
+    * GET https://api.x.com/2/users/:id/blocking
+        (지정된 사용자 ID가 차단한 사용자 목록)
+
+
+**요청당 사용자 수 제한**
+
+standard v1.1 엔드포인트는 요청당 최대 5000명의 사용자를 반환할 수 있습니다. 새로운 v2 엔드포인트는 요청당 최대 1000명의 사용자를 반환할 수 있습니다. 1000명을 모두 반환하려면 쿼리 매개변수로 max_results=1000을 전달해야 하며, 이후 응답 페이로드에 반환된 next_token을 다음 요청의 pagination_token 쿼리 매개변수에 전달할 수 있습니다.
+
+
+**App 및 Project 요구사항**
+
+X API v2 엔드포인트는 요청을 인증할 때 [Project](/resources/fundamentals/developer-apps)와 연결된 [developer App](/resources/fundamentals/developer-apps)의 자격 증명을 사용해야 합니다. 모든 X API v1.1 엔드포인트는 App 또는 Project와 연결된 App의 자격 증명을 사용할 수 있습니다.
+
+
+**응답 데이터 형식**
+
+standard v1.1과 X API v2 엔드포인트 버전의 가장 큰 차이 중 하나는 페이로드에 반환될 필드를 선택하는 방식입니다.
+
+standard 엔드포인트에서는 많은 응답 필드가 기본적으로 반환되며, 매개변수를 사용해 페이로드에서 어떤 필드 또는 필드 세트가 반환될지 지정할 수 있습니다.
+
+X API v2 버전은 기본적으로 사용자 id, name, username 필드만 제공합니다. 추가 필드나 객체를 요청하려면 [fields](/x-api/fundamentals/fields) 및 [expansions](/x-api/fundamentals/expansions) 매개변수를 사용해야 합니다. 이 엔드포인트에서 요청한 모든 user 필드는 기본 user 객체에 반환됩니다. 확장된 Post 객체와 필드는 응답 내 includes 객체에 반환됩니다. 이후 user 객체와 확장된 Post 객체 양쪽에 있는 ID를 매칭하여 확장 객체를 user 객체에 다시 연결할 수 있습니다.
+
+이 새로운 매개변수에 대한 자세한 내용은 각 가이드나 [fields와 expansions 사용법](/x-api/fundamentals/data-dictionary/reference#how-to-use-fields-and-expansions) 가이드를 읽어보시기 바랍니다.
+
+또한 standard v1.1의 필드를 새로운 v2 필드에 매핑하는 데 도움을 주는 [데이터 형식 마이그레이션 가이드](/x-api/migrate/data-format-migration#migrating-from-standard-v1-1s-data-format-to-v2)도 준비되어 있습니다. 이 가이드는 v2 요청과 함께 특정 필드를 반환하기 위해 전달해야 하는 구체적인 expansion 및 field 매개변수도 제공합니다.
+
+
+필드 요청 방식의 변경 외에도, X API v2는 [P](/x-api/fundamentals/data-dictionary/reference#tweet)ost 및 [user](/x-api/fundamentals/data-dictionary/reference#user) 객체를 포함하여 API가 반환하는 객체에 대한 새로운 JSON 설계를 도입하고 있습니다.
+
+* JSON 루트 레벨에서 standard 엔드포인트는 statuses 배열에 Post 객체를 반환하지만, X API v2는 data 배열을 반환합니다.
+* Retweeted 및 Quoted "statuses"라는 표현 대신 X API v2 JSON은 Retweeted 및 Quoted Tweet이라는 표현을 사용합니다. contributors 및 user.translator_type과 같은 많은 레거시 및 폐기 예정 필드가 제거되고 있습니다.
+* favorites (Post 객체 내) 및 favourites (user 객체 내)를 함께 사용하는 대신, X API v2는 like라는 용어를 사용합니다.
+* X는 값이 없는 JSON 값(예: null)은 페이로드에 기록하지 않는 규칙을 채택하고 있습니다. Post와 user 속성은 non-null 값을 가진 경우에만 포함됩니다.
+
+
+또한 [Post 객체](/x-api/fundamentals/data-dictionary/reference#tweet)에 다음과 같은 새로운 필드 세트를 도입했습니다:
+
+* [conversation_id](/x-api/fundamentals/conversation-id) 필드
+* context 및 entities를 포함한 두 개의 새로운 [annotations](/x-api/fundamentals/post-annotations) 필드
+* 여러 새로운 [metrics](/x-api/fundamentals/metrics) 필드
+* 특정 Post에 대해 누가 답장할 수 있는지 표시하는 새로운 reply_setting 필드
+
+**요청 매개변수**
+
+다음의 standard v1.1 요청 매개변수는 두 개의 요청 쿼리 매개변수(user_id 또는 screen_name)를 허용했습니다. X API v2는 숫자 형식의 사용자 ID만 허용하며, 이는 엔드포인트 경로의 일부로 전달되어야 합니다.
+
+---
+
+## 코드 예제
+
+### 차단된 사용자 가져오기 (v2)
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/123456789/blocking?user.fields=username,verified&max_results=100" \
+  -H "Authorization: OAuth ..."
+```
+
+```python title="Python" lines wrap icon="python"
+# OAuth 1.0a User Context 인증 필요
+import requests
+from requests_oauthlib import OAuth1
+
+auth = OAuth1(
+    "API_KEY", "API_SECRET",
+    "ACCESS_TOKEN", "ACCESS_TOKEN_SECRET"
+)
+
+url = "https://api.x.com/2/users/123456789/blocking"
+params = {"user.fields": "username,verified", "max_results": 100}
+
+response = requests.get(url, auth=auth, params=params)
+print(response.json())
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# 페이지네이션으로 차단된 사용자 가져오기
+for page in client.users.get_blocking(
+    "123456789",
+    user_fields=["username", "verified"],
+    max_results=100
+):
+    for user in page.data:
+        print(f"{user.username} - Verified: {user.verified}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// 페이지네이션으로 차단된 사용자 가져오기
+const paginator = client.users.getBlocking("123456789", {
+  userFields: ["username", "verified"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Verified: ${user.verified}`);
+  });
+}
+```
+
+</CodeGroup>
+
+### 사용자 차단하기 (v2) — Enterprise 전용
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/users/123456789/blocking" \
+  -H "Authorization: OAuth ..." \
+  -H "Content-Type: application/json" \
+  -d '{"target_user_id": "2244994945"}'
+```
+
+```python title="Python" lines wrap icon="python"
+# OAuth 1.0a User Context 인증 필요
+import requests
+from requests_oauthlib import OAuth1
+
+auth = OAuth1(
+    "API_KEY", "API_SECRET",
+    "ACCESS_TOKEN", "ACCESS_TOKEN_SECRET"
+)
+
+url = "https://api.x.com/2/users/123456789/blocking"
+response = requests.post(url, auth=auth, json={"target_user_id": "2244994945"})
+print(response.json())
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# 사용자 차단
+response = client.users.block(
+    source_user_id="123456789",
+    target_user_id="2244994945"
+)
+print(f"Blocking: {response.data.blocking}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// 사용자 차단
+const response = await client.users.block("123456789", {
+  targetUserId: "2244994945",
+});
+console.log(`Blocking: ${response.data?.blocking}`);
+```
+
+</CodeGroup>

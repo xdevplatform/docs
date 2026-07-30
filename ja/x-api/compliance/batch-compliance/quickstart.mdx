@@ -1,0 +1,189 @@
+---
+title: クイックスタート
+sidebarTitle: クイックスタート
+description: "このガイドでは、Post またはユーザーのコンプライアンス状態を確認するためのバッチコンプライアンスジョブの作成手順を説明します。X API v2 standard tier の batch compliance に関するリファレンスです。"
+keywords: ["compliance quickstart", "batch compliance tutorial", "compliance job guide"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+このガイドでは、Post またはユーザーのコンプライアンス状態を確認するためのバッチコンプライアンスジョブの作成手順を説明します。
+
+<Note>
+**前提条件**
+
+始める前に、次のものが必要です:
+- 承認済みアプリを持つ[開発者アカウント](https://developer.x.com/en/portal/petition/essential/basic-info)
+- アプリの Bearer Token
+</Note>
+
+---
+
+<Steps>
+  <Step title="ジョブを作成" icon="plus">
+    タイプ (tweets または users) を指定して新規コンプライアンスジョブを作成します:
+
+    <Tabs>
+      <Tab title="cURL">
+    ```bash
+    curl -X POST "https://api.x.com/2/compliance/jobs" \
+      -H "Authorization: Bearer $BEARER_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "type": "tweets",
+        "name": "my-compliance-job"
+      }'
+    ```
+      </Tab>
+      <Tab title="Python">
+    ```python
+    import requests
+
+    bearer_token = "YOUR_BEARER_TOKEN"
+
+    url = "https://api.x.com/2/compliance/jobs"
+    headers = {
+        "Authorization": f"Bearer {bearer_token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "type": "tweets",
+        "name": "my-compliance-job"
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+    print(response.json())
+    ```
+      </Tab>
+    </Tabs>
+
+    **レスポンス:**
+
+    ```json
+    {
+      "data": {
+        "id": "1234567890",
+        "type": "tweets",
+        "name": "my-compliance-job",
+        "status": "created",
+        "upload_url": "https://storage.googleapis.com/...",
+        "download_url": "https://storage.googleapis.com/...",
+        "created_at": "2024-01-15T10:00:00.000Z"
+      }
+    }
+    ```
+
+    次のステップのために `upload_url` と `download_url` を保存してください。
+  </Step>
+
+  <Step title="データファイルを準備" icon="file">
+    1 行に 1 つの ID を含むテキストファイルを作成します:
+
+    ```
+    1234567890
+    1234567891
+    1234567892
+    1234567893
+    ```
+
+    `ids.txt` として保存します。
+  </Step>
+
+  <Step title="データをアップロード" icon="upload">
+    提供された `upload_url` にファイルをアップロードします:
+
+    ```bash
+    curl -X PUT "UPLOAD_URL_FROM_RESPONSE" \
+      -H "Content-Type: text/plain" \
+      --data-binary @ids.txt
+    ```
+  </Step>
+
+  <Step title="ジョブステータスを確認" icon="clock">
+    完了するまでジョブのステータスをポーリングします:
+
+    ```bash
+    curl "https://api.x.com/2/compliance/jobs/1234567890" \
+      -H "Authorization: Bearer $BEARER_TOKEN"
+    ```
+
+    **ジョブステータス:**
+
+    | Status | 説明 |
+    |:-------|:------------|
+    | `created` | ジョブ作成済み、アップロード待ち |
+    | `in_progress` | データ処理中 |
+    | `complete` | 結果をダウンロード可能 |
+    | `failed` | ジョブ失敗 |
+    | `expired` | 完了前にジョブが期限切れ |
+  </Step>
+
+  <Step title="結果をダウンロード" icon="download">
+    ステータスが `complete` になったら、`download_url` からダウンロードします:
+
+    ```bash
+    curl "DOWNLOAD_URL_FROM_RESPONSE" -o results.json
+    ```
+
+    **結果フォーマット** (1 行 1 つの JSON オブジェクト):
+
+    ```json
+    {"id": "1234567890", "action": "delete", "created_at": "2024-01-10T12:00:00.000Z", "redacted_at": "2024-01-12T08:30:00.000Z", "reason": "deleted"}
+    {"id": "1234567891", "action": "delete", "created_at": "2024-01-10T12:00:00.000Z", "redacted_at": "2024-01-13T14:20:00.000Z", "reason": "suspended"}
+    ```
+
+    コンプライアンスイベントがある ID のみが結果に表示されます。結果に含まれない ID は依然として有効です。
+  </Step>
+</Steps>
+
+---
+
+## コンプライアンスアクション
+
+<AccordionGroup>
+  <Accordion title="Post コンプライアンスイベント">
+    | Action | Reason | 説明 |
+    |:-------|:-------|:------------|
+    | `delete` | `deleted` | Post が削除された |
+    | `delete` | `bounced` | Post がコンプライアンスチェックに失敗した |
+    | `delete` | `protected` | アカウントが非公開になった |
+    | `delete` | `suspended` | アカウントが凍結された |
+    | `delete` | `scrub_geo` | 位置情報データが削除された |
+  </Accordion>
+
+  <Accordion title="ユーザーコンプライアンスイベント">
+    | Action | Reason | 説明 |
+    |:-------|:-------|:------------|
+    | `delete` | `deleted` | アカウントが削除された |
+    | `delete` | `suspended` | アカウントが凍結された |
+    | `delete` | `protected` | アカウントが非公開になった |
+    | `delete` | `deactivated` | アカウントが無効化された |
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## すべてのジョブを一覧表示
+
+アプリのすべてのコンプライアンスジョブを取得します:
+
+```bash
+curl "https://api.x.com/2/compliance/jobs?type=tweets" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+---
+
+## 次のステップ
+
+<CardGroup cols={2}>
+  <Card title="統合ガイド" icon="/icons/xds/icon-book.svg" href="/x-api/compliance/batch-compliance/integrate">
+    主要な概念とベストプラクティス
+  </Card>
+  <Card title="Compliance ストリーム" icon="stream" href="/x-api/compliance/streams/introduction">
+    リアルタイムのコンプライアンスイベント
+  </Card>
+  <Card title="API リファレンス" icon="/icons/xds/icon-code.svg" href="/x-api/compliance/create-compliance-job">
+    完全なエンドポイントドキュメント
+  </Card>
+</CardGroup>

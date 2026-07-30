@@ -1,0 +1,87 @@
+---
+title: 마이그레이션 가이드
+sidebarTitle: 마이그레이션 가이드
+keywords: ["Direct Message 마이그레이션", "DM 마이그레이션", "v1.1에서 v2 DM 조회로 마이그레이션", "DM 마이그레이션 가이드", "DM 조회 마이그레이션"]
+
+description: X API v1.1에서 v2로 Direct Message 조회 코드를 마이그레이션하기 위한 가이드. endpoint 변경, 요청 파라미터, 새로운 응답 페이로드를 다룹니다.
+---
+
+import { Button } from '/snippets/button.mdx';
+
+## v1.1과 v2 Direct Message 이벤트 조회 endpoint 비교
+
+
+Direct Message endpoint의 v1.1과 v2 버전 모두 Direct Message 이벤트를 조회하는 방법을 제공합니다. 이 가이드는 두 버전의 차이점을 이해하고 v2로 마이그레이션하는 데 필요한 정보를 제공하기 위한 것입니다.
+
+두 버전의 주요 차이점은 v1.1이 1:1 대화만 지원하는 반면, v2에서는 그룹 대화 지원이 추가되었다는 점입니다. 이로 인해 v1.1은 "메시지 생성" 이벤트만 지원하지만, v2에서는 대화 참여 및 나가기 관련 이벤트도 지원합니다. 실제로 v2의 근본적인 업데이트는 dm_conversations를 핵심 API 객체로 정립한 것입니다.
+
+v1.1에는 Direct Message를 조회하는 두 개의 endpoint가 있습니다(v1.1에서 지원되는 유일한 이벤트 유형은 새 메시지입니다):
+
+* GET direct_messages/events/show \- ID로 단일 이벤트를 조회합니다.
+
+* GET direct_messages/events/list \- 인증된 사용자가 주고받은 1:1 Direct Message를 최대 30일까지 조회합니다. 이 메서드는 그룹 대화의 메시지를 조회할 수 없습니다.
+
+
+이번 v2 릴리스에서는 Direct Message 대화 이벤트를 조회하기 위한 세 개의 GET 메서드가 있습니다:
+
+* **GET /2/dm\_conversations/with/:participant\_id/dm_events** \- 1:1 대화와 관련된 Direct Message 이벤트를 조회합니다. :participant_id 경로 파라미터는 이 요청을 하는 인증된 사용자와 대화 중인 계정의 User ID입니다.
+
+* **GET /2/dm\_conversations/:dm\_conversation\_id/dm\_events** \- :dm\_conversation\_id 경로 파라미터로 지정된 특정 대화 ID와 관련된 Direct Message 이벤트를 조회합니다. 이 메서드는 1:1 대화와 그룹 대화 모두를 지원합니다.
+
+* **GET /2/dm_events** \- 사용자와 관련된 Direct Message 이벤트를 조회합니다. 1:1 대화와 그룹 대화가 모두 포함됩니다. 최대 30일 전까지의 이벤트를 사용할 수 있습니다.
+
+
+중요한 점은 대화 ID와 이벤트 ID가 X Platform의 v1.1과 v2 버전 간에 공유된다는 것입니다. 즉, 두 버전을 함께 사용할 수 있습니다. 예를 들어, Direct Message v1.1 endpoint는 단일 이벤트 반환 및 이벤트 삭제 메서드를 제공하며, 이 메서드는 아직 v2에서 사용할 수 없습니다. ID가 v1.1과 v2에서 공통이기 때문에, v2가 제공한 ID를 기반으로 v1.1 요청을 하거나, X 애플리케이션의 대화 URL에 표시된 대화 ID를 참조할 수 있습니다.
+
+다음 표는 v1.1과 v2 Direct Message 이벤트 조회 endpoint의 기본적인 측면을 비교합니다. 여기 공유된 X API v2 특성은 모든 Direct Message 조회 endpoint에 공통으로 적용됩니다.
+
+|     |     |     |
+| :--- | :--- | :--- |
+| **설명** | **Standard v1.1** | **X API v2** |
+| 호스트 도메인 | https://api.x.com | https://api.x.com |
+| Endpoint 루트 경로 | [/1.1/direct_messages](https://api.x.com/1.1/direct_messages) | [/2/dm_conversations](https://api.x.com/2/users/:id/dm_conversations)<br/><br/>Direct Message 대화가 기본 API 객체로 도입되었습니다.   <br/><br/>이 endpoint는 MessageCreate, ParticipantsJoin, ParticipantLeave 이벤트를 조회합니다. |
+| 지원되는 HTTP 메서드 | GET | GET |
+| Group Direct Message 지원 |     | ✔   |
+| 지원되는 이벤트 유형 | message_create | MessageCreate, ParticipantsJoin, ParticipantsLeave |
+| [인증](/resources/fundamentals/authentication) | OAuth 1.0a User Context | OAuth 1.0a User Context<br/><br/>OAuth 2 User Context (scopes: dm.read, tweet.read, user.read) |
+| X API v2 [Project](/resources/fundamentals/developer-apps)와 연결된 [developer App](/resources/fundamentals/authentication)의 자격 증명 필요 |     | ✔   |
+| 기본 요청 [rate limit](/x-api/fundamentals/rate-limits)*  <br/>*모든 요청에 사용자 토큰 필요 |     | GET 요청: 15분당 300 요청<br/><br/>Rate limit은 세 endpoint 전체에 적용됩니다 |
+
+다음 표는 v2 GET 메서드와 v1.1을 비교합니다. 이러한 v2 제공 기능은 그룹 대화를 지원함으로써 사용 가능한 기능을 확장합니다.
+
+**특정 1:1 대화의 모든 메시지 가져오기**
+
+--------------------------------------------------------------
+
+Path: GET /2/dm\_conversations/with/:participant\_id/dm_events
+
+|     |     |     |
+| :--- | :--- | :--- |
+| **설명** | **Standard v1.1** | **X API v2** |
+| Endpoint 경로 | GET <br/><br/>/1.1/direct_messages/events/list | GET /2/dm\_conversations/with/:participant\_id/dm_events |
+| 사용 가능한 이벤트 이력 | 30일 | 제한 없음 |
+| 기본 요청 [rate limit](/x-api/fundamentals/rate-limits) | 15분당 15 요청 | 15분당 300 요청  <br/>Rate limit은 세 GET endpoint 전체에 적용됩니다 |
+
+**대화 ID로 모든 메시지 가져오기**
+
+Path: GET /2/dm\_conversations/:dm\_conversation\_id/dm\_events
+
+|     |     |     |
+| :--- | :--- | :--- |
+| **설명** | **Standard v1.1** | **X API v2** |
+| Endpoint 경로 | 지원되지 않음. V1.1은 1:1 대화의 메시지만 반환할 수 있으며 대화 ID로 이벤트를 조회하는 기능은 지원되지 않습니다. | GET /2/dm\_conversations/:dm\_conversation\_id/dm\_events |
+| 사용 가능한 이벤트 이력 | 30일 | 제한 없음 |
+| 그룹 대화 지원 |     | ✔   |
+| 기본 요청 [rate limit](/x-api/fundamentals/rate-limits) | 15분당 15 요청 | 15분당 300 요청  <br/>Rate limit은 세 GET endpoint 전체에 적용됩니다 |
+
+**인증된 사용자의 1:1 대화와 그룹 대화 모두를 아우르는 모든 이벤트 가져오기**
+
+Path: GET /2/dm_events
+
+|     |     |     |
+| :--- | :--- | :--- |
+| **설명** | **Standard v1.1** | **X API v2** |
+| Endpoint 경로 | GET /1.1/direct_messages/events/list  <br/>  <br/>V1.1은 1:1 대화의 메시지만 반환할 수 있습니다. | GET /2/dm_events |
+| 사용 가능한 이벤트 이력 | 30일 | 30일 |
+| 그룹 대화 지원 |     | ✔   |
+| 기본 요청 [rate limit](/x-api/fundamentals/rate-limits) | 15분당 15 요청 | 15분당 300 요청  <br/>Rate limit은 세 GET endpoint 전체에 적용됩니다 |

@@ -1,0 +1,52 @@
+---
+title: Fusos horários
+description: "Como a X Ads API lida com fusos horários para contas e faturamento, incluindo formatos de datetime ISO 8601, offsets UTC e implicações de analytics do timezone_switch_at."
+keywords: ["fusos horários", "time zones", "manipulação de fuso horário", "formato de fuso horário", "conversão de fuso horário", "configurações de fuso horário"]
+---
+
+## Fusos horários, contas e faturamento
+
+Valores datetime são sempre retornados em horário UTC (como indicado pelo Z no final do valor datetime). Datetimes podem ser especificados em qualquer fuso horário em um comando POST ou PUT usando o formato padrão ISO 8601 para fuso horário. O tempo é representado usando um subconjunto de [ISO-8601](http://en.wikipedia.org/wiki/ISO_8601). Mais especificamente, a string strptime para nosso formato de data é `%Y-%m-%dT%l:%M:%S%z`. O fuso horário da conta do anunciante determina o horário real em que os números oficiais de faturamento são congelados.
+
+Ao consultar a API em nível de conta ([GET accounts](/x-ads-api/campaign-management/reference#accounts)), você obterá informações de fuso horário como esta:
+
+```json title="Exemplo de resposta" lines wrap icon="/icons/xds/icon-brackets.svg"
+    {
+      "request": {
+        "params": {
+          "account_id": "18ce54d4x5t"
+        }
+      },
+      "data": {
+        "name": "API McTestface",
+        "business_name": null,
+        "timezone": "America/Los_Angeles",
+        "timezone_switch_at": "2016-07-21T07:00:00Z",
+        "id": "18ce54d4x5t",
+        "created_at": "2016-07-21T22:42:09Z",
+        "salt": "54cb7b5a34183f77d82dd6d0f4329691",
+        "updated_at": "2017-09-09T06:42:14Z",
+        "business_id": null,
+        "approval_status": "ACCEPTED",
+        "deleted": false
+      }
+    }
+```
+
+Isso inclui dois valores de fuso horário: `timezone` (consulte [fusos horários na wikipedia](https://en.wikipedia.org/wiki/Tz_database#Names_of_time_zones) para uma visão geral) e `timezone_switch_at`. Note que `timezone_switch_at` é dado no fuso horário UTC (+00:00), mas sempre representará meia-noite no fuso horário fornecido.
+
+O fuso horário do anunciante não é editável via API. Este atributo é definido em nível contratual/de faturamento pelo account manager do X do anunciante.
+
+Esteja ciente do valor de `timezone_switch_at` ao criar relatórios e consultar nossos endpoints de analytics, pois haverá um intervalo no dia em que a conta muda do fuso horário America/Los_Angeles para o novo valor local.
+
+### Especificando valores Datetime com fuso horário
+
+Valores datetime são sempre retornados em horário UTC (como indicado pelo `Z` no final do valor datetime). Datetimes podem ser especificados em qualquer fuso horário em um comando POST ou PUT usando o formato padrão [ISO 8601](http://en.wikipedia.org/wiki/ISO_8601) para fuso horário. Por exemplo, `2017-07-10T08:00:00-0800` é um valor de entrada aceitável e será traduzido automaticamente para o valor UTC de `2017-07-10T16:00:00Z`.
+
+Ao usar os endpoints de analytics com `granularity` de `DAY` ou `TOTAL`, o valor de `start_time` deve ser especificado à meia-noite do dia desejado no fuso horário local do titular da conta. O offset de fuso horário a ser usado será o offset do dia atual, não o offset do dia em questão. Por exemplo, para uma conta ads em America/Los_Angeles durante o horário de verão do Pacífico, o offset UTC é -0700. Assim, em uma requisição de analytics, o horário deve ser especificado como: `start_time=2017-05-21T07:00:00Z` ou `start_time=2017-05-21T00:00:00-0700`. Se a conta ads estivesse em Asia/Tokyo, onde o offset é sempre +09:00, os valores seriam especificados como: `start_time=2017-05-20T15:00:00Z` ou `start_time=2017-05-21T00:00:00+0900`.
+
+### Formatos de Offset UTC aceitos
+
+Consulte [Time zone designators ISO 8601](http://en.wikipedia.org/wiki/ISO_8601#Time_zone_designators).
+
+Suportado: `Z`, `-HHMM`, `+HHMM`, `-HH:MM`, `+HH:MM`, `-HH`, `+HH`

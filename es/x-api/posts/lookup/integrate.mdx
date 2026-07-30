@@ -1,0 +1,283 @@
+---
+title: Guía de integración
+sidebarTitle: Guía de integración
+keywords: ["integración de post lookup", "guía de integración de lookup", "implementación de lookup", "configuración de lookup", "integración de tweet lookup"]
+description: "Esta guía cubre los conceptos clave que necesitas para integrar los endpoints de Post lookup en tu aplicación. Referencia del nivel estándar de X API v2 sobre lookup."
+---
+
+import { Button } from "/snippets/button.mdx"
+
+Esta guía cubre los conceptos clave que necesitas para integrar los endpoints de Post lookup en tu aplicación.
+
+---
+
+## Autenticación
+
+Todos los endpoints de X API v2 requieren autenticación. Elige el método que se ajuste a tu caso de uso:
+
+| Method | Best for | Can access private metrics? |
+|:-------|:---------|:---------------------------|
+| [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) | Servidor a servidor, datos públicos | No |
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | Apps orientadas al usuario | Sí (para los Posts del usuario autorizado) |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | Integraciones heredadas | Sí (para los Posts del usuario autorizado) |
+
+### Autenticación App-Only
+
+Para datos públicos de Posts, usa un Bearer Token:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/1234567890" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Obtén un solo Post por ID
+response = client.posts.get("1234567890")
+print(response.data)
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+const response = await client.posts.get("1234567890");
+console.log(response.data);
+```
+
+</CodeGroup>
+
+### Autenticación User Context
+
+Para acceder a métricas privadas, autentícate en nombre del autor del Post:
+
+<Warning>
+Los siguientes campos requieren autenticación User Context:
+- `tweet.fields.non_public_metrics`
+- `tweet.fields.promoted_metrics`
+- `tweet.fields.organic_metrics`
+- `media.fields.non_public_metrics`
+- `media.fields.promoted_metrics`
+- `media.fields.organic_metrics`
+</Warning>
+
+---
+
+## Fields y expansions
+
+La X API v2 devuelve datos mínimos por defecto. Usa `fields` y `expansions` para solicitar exactamente lo que necesitas.
+
+### Respuesta predeterminada
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "edit_history_tweet_ids": ["1234567890"]
+  }
+}
+```
+
+### Fields disponibles
+
+<Accordion title="tweet.fields">
+| Field | Description |
+|:------|:------------|
+| `created_at` | Timestamp de creación del Post |
+| `author_id` | ID de usuario del autor |
+| `public_metrics` | Recuentos de likes, retweets, respuestas, citas |
+| `entities` | Hashtags, menciones, URLs, cashtags |
+| `attachments` | Media keys, poll IDs |
+| `conversation_id` | Identificador del hilo |
+| `context_annotations` | Clasificaciones de tema/entidad |
+| `in_reply_to_user_id` | Usuario al que se responde |
+| `lang` | Idioma detectado |
+| `source` | Cliente de publicación |
+| `possibly_sensitive` | Marcador de contenido sensible |
+| `reply_settings` | Quién puede responder |
+</Accordion>
+
+<Accordion title="user.fields (requiere expansion author_id)">
+| Field | Description |
+|:------|:------------|
+| `username` | @handle |
+| `name` | Nombre para mostrar |
+| `profile_image_url` | URL del avatar |
+| `verified` | Estado de verificación |
+| `description` | Bio |
+| `public_metrics` | Recuentos de followers/following |
+| `created_at` | Fecha de creación de la cuenta |
+</Accordion>
+
+<Accordion title="media.fields (requiere expansion attachments.media_keys)">
+| Field | Description |
+|:------|:------------|
+| `url` | URL de media |
+| `preview_image_url` | URL de miniatura |
+| `type` | photo, video, animated_gif |
+| `duration_ms` | Duración del video |
+| `height`, `width` | Dimensiones |
+| `alt_text` | Texto de accesibilidad |
+</Accordion>
+
+### Ejemplo con fields
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/1234567890?\
+tweet.fields=created_at,public_metrics,entities&\
+expansions=author_id,attachments.media_keys&\
+user.fields=username,verified&\
+media.fields=url,type" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Obtén un Post con fields y expansions adicionales
+response = client.posts.get(
+    "1234567890",
+    tweet_fields=["created_at", "public_metrics", "entities"],
+    expansions=["author_id", "attachments.media_keys"],
+    user_fields=["username", "verified"],
+    media_fields=["url", "type"]
+)
+
+print(response.data)
+print(response.includes)  # Contiene los objetos de usuario y media expandidos
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+const response = await client.posts.get("1234567890", {
+  tweetFields: ["created_at", "public_metrics", "entities"],
+  expansions: ["author_id", "attachments.media_keys"],
+  userFields: ["username", "verified"],
+  mediaFields: ["url", "type"],
+});
+
+console.log(response.data);
+console.log(response.includes); // Contiene los objetos de usuario y media expandidos
+```
+
+</CodeGroup>
+
+---
+
+## Ediciones de Post
+
+Los Posts pueden editarse hasta 5 veces dentro de los 30 minutos posteriores a su creación.
+
+### Cómo funciona
+
+- Cada edición crea un nuevo ID de Post
+- `edit_history_tweet_ids` contiene todas las versiones (más antiguas primero)
+- El endpoint siempre devuelve la versión más reciente
+
+### Ejemplo de respuesta
+
+```json
+{
+  "data": {
+    "id": "1234567893",
+    "text": "Hello world! (edited twice)",
+    "edit_history_tweet_ids": [
+      "1234567890",
+      "1234567891",
+      "1234567893"
+    ]
+  }
+}
+```
+
+<Tip>
+Los Posts recuperados después de su ventana de edición de 30 minutos representan la versión final. Para casos de uso en tiempo real, ten en cuenta que los Posts publicados recientemente aún pueden editarse.
+</Tip>
+
+---
+
+## Manejo de errores
+
+### Errores comunes
+
+| Status | Error | Solution |
+|:-------|:------|:---------|
+| 400 | Invalid request | Verifica el formato del parámetro |
+| 401 | Unauthorized | Verifica las credenciales de autenticación |
+| 403 | Forbidden | Verifica los permisos de la App |
+| 404 | Not Found | El Post fue eliminado o no existe |
+| 429 | Too Many Requests | Espera y vuelve a intentarlo (consulta los límites de tasa) |
+
+### Posts eliminados o protegidos
+
+Si un Post se elimina o pertenece a una cuenta protegida a la que no sigues:
+- Post lookup individual devuelve `404`
+- Post lookup múltiple omite el Post de los resultados con un array `errors`
+
+```json title="Ejemplo de respuesta" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    { "id": "1234567890", "text": "Available post" }
+  ],
+  "errors": [
+    {
+      "resource_id": "1234567891",
+      "resource_type": "tweet",
+      "title": "Not Found Error",
+      "detail": "Could not find tweet with id: [1234567891]."
+    }
+  ]
+}
+```
+
+---
+
+## Mejores prácticas
+
+<CardGroup cols={2}>
+  <Card title="Solicitudes por lotes" icon="layer-group">
+    Utiliza el endpoint de múltiples Posts para obtener hasta 100 Posts a la vez, reduciendo las llamadas a la API.
+  </Card>
+  <Card title="Solicita solo los fields necesarios" icon="/icons/xds/icon-filter.svg">
+    Especifica solo los fields que necesitas para minimizar el tamaño de la respuesta y el tiempo de procesamiento.
+  </Card>
+  <Card title="Cachea las respuestas" icon="database">
+    Cachea los datos de los Posts localmente para reducir las solicitudes repetidas del mismo contenido.
+  </Card>
+  <Card title="Maneja las ediciones" icon="/icons/xds/icon-history.svg">
+    Para apps en tiempo real, considera volver a obtener los Posts después de la ventana de edición de 30 minutos.
+  </Card>
+</CardGroup>
+
+---
+
+## Próximos pasos
+
+<CardGroup cols={2}>
+  <Card title="Referencia de la API" icon="/icons/xds/icon-code.svg" href="/x-api/posts/post-lookup-by-post-id">
+    Documentación completa del endpoint
+  </Card>
+  <Card title="Diccionario de datos" icon="/icons/xds/icon-book.svg" href="/x-api/fundamentals/data-dictionary">
+    Todos los objetos y campos disponibles
+  </Card>
+  <Card title="Código de ejemplo" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    Ejemplos de código funcional
+  </Card>
+  <Card title="Manejo de errores" icon="/icons/xds/icon-warning.svg" href="/x-api/fundamentals/response-codes-and-errors">
+    Maneja los errores de forma controlada
+  </Card>
+</CardGroup>

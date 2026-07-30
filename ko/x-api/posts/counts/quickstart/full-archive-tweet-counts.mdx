@@ -1,0 +1,243 @@
+---
+title: Full-Archive Post Counts
+sidebarTitle: Full-Archive Post Counts
+description: "이 가이드에서는 2006년 3월까지 거슬러 올라가 과거 Post counts를 가져오는 방법을 안내합니다. 퀵스타트를 다루는 X API v2 standard 티어 레퍼런스입니다."
+keywords: ["full archive tweet counts 퀵스타트", "archive counts 퀵스타트", "historical counts 퀵스타트", "full archive counts"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+이 가이드에서는 2006년 3월까지 거슬러 올라가 과거 Post counts를 가져오는 방법을 안내합니다.
+
+<Warning>
+Full-archive Post counts는 [Self-serve](/x-api/getting-started/about-x-api) 또는 [Enterprise](/x-api/getting-started/about-x-api) 액세스가 필요합니다.
+</Warning>
+
+<Note>
+**사전 요구사항**
+
+시작하기 전에 다음이 필요합니다:
+- Self-serve 또는 Enterprise 액세스가 있는 [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- App의 Bearer Token
+</Note>
+
+---
+
+## Full-archive Post counts 가져오기
+
+<Steps>
+  <Step title="쿼리 작성">
+    full-archive search와 동일한 쿼리 구문을 사용합니다. 예를 들어 @XDevelopers의 게시물 수를 세려면:
+
+    ```
+    from:XDevelopers
+    ```
+  </Step>
+
+  <Step title="시간 범위 설정">
+    특정 과거 기간을 검색하기 위해 `start_time`과 `end_time`을 지정합니다:
+
+    | Parameter | Format | Example |
+    |:----------|:-------|:--------|
+    | `start_time` | ISO 8601 | `2020-01-01T00:00:00Z` |
+    | `end_time` | ISO 8601 | `2020-12-31T23:59:59Z` |
+  </Step>
+
+  <Step title="요청 보내기">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/counts/all?\
+query=from%3AXDevelopers&\
+start_time=2020-01-01T00%3A00%3A00Z&\
+end_time=2020-12-31T23%3A59%3A59Z&\
+granularity=day" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get full-archive Post counts
+response = client.posts.count_all(
+    query="from:XDevelopers",
+    start_time="2020-01-01T00:00:00Z",
+    end_time="2020-12-31T23:59:59Z",
+    granularity="day"
+)
+
+for bucket in response.data:
+    print(f"{bucket.start}: {bucket.tweet_count} Posts")
+
+print(f"Total: {response.meta.total_tweet_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get full-archive Post counts
+const response = await client.posts.countAll({
+  query: "from:XDevelopers",
+  startTime: "2020-01-01T00:00:00Z",
+  endTime: "2020-12-31T23:59:59Z",
+  granularity: "day",
+});
+
+response.data?.forEach((bucket) => {
+  console.log(`${bucket.start}: ${bucket.tweet_count} Posts`);
+});
+
+console.log(`Total: ${response.meta?.total_tweet_count}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="응답 확인">
+    ```json
+    {
+      "data": [
+        {
+          "end": "2020-01-02T00:00:00.000Z",
+          "start": "2020-01-01T00:00:00.000Z",
+          "tweet_count": 3
+        },
+        {
+          "end": "2020-01-03T00:00:00.000Z",
+          "start": "2020-01-02T00:00:00.000Z",
+          "tweet_count": 5
+        }
+      ],
+      "meta": {
+        "total_tweet_count": 8
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Granularity 옵션
+
+카운트가 어떻게 그룹화되는지 제어합니다:
+
+| Granularity | Description |
+|:------------|:------------|
+| `minute` | 분 단위 카운트 |
+| `hour` | 시간 단위 카운트 (기본값) |
+| `day` | 일 단위 카운트 |
+
+---
+
+## 결과 페이지네이션
+
+큰 시간 범위의 경우 응답의 `next_token`을 사용합니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/counts/all?\
+query=from%3AXDevelopers&\
+start_time=2015-01-01T00%3A00%3A00Z&\
+end_time=2020-12-31T23%3A59%3A59Z&\
+granularity=day&\
+next_token=abc123" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Get counts with pagination
+next_token = None
+
+while True:
+    response = client.posts.count_all(
+        query="from:XDevelopers",
+        start_time="2015-01-01T00:00:00Z",
+        end_time="2020-12-31T23:59:59Z",
+        granularity="day",
+        next_token=next_token
+    )
+    
+    for bucket in response.data:
+        print(f"{bucket.start}: {bucket.tweet_count}")
+    
+    next_token = response.meta.next_token
+    if not next_token:
+        break
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Get counts with pagination
+let nextToken = undefined;
+
+do {
+  const response = await client.posts.countAll({
+    query: "from:XDevelopers",
+    startTime: "2015-01-01T00:00:00Z",
+    endTime: "2020-12-31T23:59:59Z",
+    granularity: "day",
+    nextToken,
+  });
+
+  response.data?.forEach((bucket) => {
+    console.log(`${bucket.start}: ${bucket.tweet_count}`);
+  });
+
+  nextToken = response.meta?.next_token;
+} while (nextToken);
+```
+
+</CodeGroup>
+
+---
+
+## Recent counts와의 주요 차이점
+
+| Feature | Recent Counts | Full-Archive Counts |
+|:--------|:--------------|:--------------------|
+| 시간 범위 | 최근 7일 | 2006년 3월부터 현재까지 |
+| 필요한 액세스 | 모든 개발자 | Pay-per-use, Enterprise |
+| 기본 시간 범위 | 최근 7일 | 최근 30일 |
+
+---
+
+## 공통 파라미터
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `query` | 검색 쿼리 (필수) | — |
+| `granularity` | 시간 버킷 크기 | `hour` |
+| `start_time` | 가장 오래된 타임스탬프 (ISO 8601) | 30일 전 |
+| `end_time` | 가장 최근 타임스탬프 (ISO 8601) | 현재 |
+| `next_token` | 페이지네이션 토큰 | — |
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="Recent counts" icon="clock" href="/x-api/posts/counts/quickstart/recent-tweet-counts">
+    최근 Post counts 가져오기
+  </Card>
+  <Card title="쿼리 작성" icon="/icons/xds/icon-search.svg" href="/x-api/posts/counts/integrate/build-a-query">
+    쿼리 구문 마스터하기
+  </Card>
+  <Card title="API 레퍼런스" icon="/icons/xds/icon-code.svg" href="/x-api/posts/get-count-of-all-posts">
+    전체 엔드포인트 문서
+  </Card>
+</CardGroup>

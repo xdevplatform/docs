@@ -1,0 +1,308 @@
+---
+title: Inicio rápido
+sidebarTitle: Inicio rápido
+description: "Esta guía te guía en la recuperación de listas de seguidores y seguidos, y en la gestión de seguimientos. Referencia del nivel estándar de X API v2 sobre follows."
+keywords: ["inicio rápido de follows", "inicio rápido de followers", "tutorial de following", "guía de follows"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+Esta guía te guía en la recuperación de listas de seguidores y seguidos, y en la gestión de seguimientos.
+
+<Note>
+**Requisitos previos**
+
+Antes de comenzar, necesitarás:
+- Una [cuenta de desarrollador](https://developer.x.com/en/portal/petition/essential/basic-info) con una App aprobada
+- El Bearer Token de tu App (para lookups)
+- User Access Token (para gestionar seguimientos)
+</Note>
+
+---
+
+## Obtener los seguidores de un usuario
+
+Recupera la lista de usuarios que siguen a un usuario específico:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/followers?\
+user.fields=username,verified,public_metrics&\
+max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Obtener los seguidores de un usuario con paginación
+for page in client.users.get_followers(
+    "2244994945",
+    user_fields=["username", "verified", "public_metrics"],
+    max_results=100
+):
+    for user in page.data:
+        print(f"{user.username} - Followers: {user.public_metrics.followers_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Obtener los seguidores de un usuario con paginación
+const paginator = client.users.getFollowers("2244994945", {
+  userFields: ["username", "verified", "public_metrics"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Followers: ${user.public_metrics?.followers_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+### Respuesta
+
+```json title="Example response" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "id": "1234567890",
+      "name": "Developer",
+      "username": "dev_user",
+      "verified": false,
+      "public_metrics": {
+        "followers_count": 500,
+        "following_count": 200,
+        "tweet_count": 1500
+      }
+    }
+  ],
+  "meta": {
+    "result_count": 1,
+    "next_token": "abc123"
+  }
+}
+```
+
+---
+
+## Obtener a quién sigue un usuario
+
+Recupera la lista de usuarios a los que sigue un usuario específico:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/following?\
+user.fields=username,verified&\
+max_results=100" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Obtener los usuarios a los que sigue un usuario
+for page in client.users.get_following(
+    "2244994945",
+    user_fields=["username", "verified"],
+    max_results=100
+):
+    for user in page.data:
+        print(f"{user.username} - Verified: {user.verified}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Obtener los usuarios a los que sigue un usuario
+const paginator = client.users.getFollowing("2244994945", {
+  userFields: ["username", "verified"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Verified: ${user.verified}`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Seguir a un usuario
+
+Sigue a un usuario en nombre del usuario autenticado:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X POST "https://api.x.com/2/users/123456789/following" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"target_user_id": "2244994945"}'
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# Seguir a un usuario
+response = client.users.follow(
+    source_user_id="123456789",
+    target_user_id="2244994945"
+)
+print(f"Following: {response.data.following}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// Seguir a un usuario
+const response = await client.users.follow("123456789", {
+  targetUserId: "2244994945",
+});
+console.log(`Following: ${response.data?.following}`);
+```
+
+</CodeGroup>
+
+### Respuesta
+
+```json
+{
+  "data": {
+    "following": true,
+    "pending_follow": false
+  }
+}
+```
+
+<Note>
+Si la cuenta objetivo está protegida, `pending_follow` será `true` hasta que se apruebe la solicitud de seguimiento.
+</Note>
+
+---
+
+## Dejar de seguir a un usuario
+
+Deja de seguir a un usuario en nombre del usuario autenticado:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl -X DELETE "https://api.x.com/2/users/123456789/following/2244994945" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+from xdk.oauth1_auth import OAuth1
+
+oauth1 = OAuth1(
+    api_key="YOUR_API_KEY",
+    api_secret="YOUR_API_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+client = Client(auth=oauth1)
+
+# Dejar de seguir a un usuario
+response = client.users.unfollow(
+    source_user_id="123456789",
+    target_user_id="2244994945"
+)
+print(f"Following: {response.data.following}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client, OAuth1 } from "@xdevplatform/xdk";
+
+const oauth1 = new OAuth1({
+  apiKey: "YOUR_API_KEY",
+  apiSecret: "YOUR_API_SECRET",
+  accessToken: "YOUR_ACCESS_TOKEN",
+  accessTokenSecret: "YOUR_ACCESS_TOKEN_SECRET",
+});
+
+const client = new Client({ oauth1 });
+
+// Dejar de seguir a un usuario
+const response = await client.users.unfollow("123456789", "2244994945");
+console.log(`Following: ${response.data?.following}`);
+```
+
+</CodeGroup>
+
+### Respuesta
+
+```json
+{
+  "data": {
+    "following": false
+  }
+}
+```
+
+---
+
+## Parámetros comunes
+
+| Parámetro | Descripción |
+|:----------|:------------|
+| `max_results` | Resultados por página (1-1000, por defecto 100) |
+| `pagination_token` | Token para la página siguiente |
+| `user.fields` | Fields de usuario adicionales |
+| `expansions` | Objetos relacionados a incluir |
+
+---
+
+## Próximos pasos
+
+<CardGroup cols={2}>
+  <Card title="User lookup" icon="/icons/xds/icon-person.svg" href="/x-api/users/lookup/introduction">
+    Consulta perfiles de usuario
+  </Card>
+  <Card title="Bloqueos" icon="/icons/xds/icon-block.svg" href="/x-api/users/blocks/introduction">
+    Bloquea y desbloquea usuarios
+  </Card>
+  <Card title="Silencios" icon="volume-xmark" href="/x-api/users/mutes/introduction">
+    Silencia y deja de silenciar usuarios
+  </Card>
+  <Card title="Referencia de la API" icon="/icons/xds/icon-code.svg" href="/x-api/users/get-followers">
+    Documentación completa del endpoint
+  </Card>
+</CardGroup>

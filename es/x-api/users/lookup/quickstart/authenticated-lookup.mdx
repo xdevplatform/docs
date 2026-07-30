@@ -1,0 +1,215 @@
+---
+title: Inicio rápido de usuario autenticado
+sidebarTitle: Usuario autenticado
+description: "Esta guía te guía en la recuperación del perfil del usuario autenticado actualmente usando el. Referencia del nivel estándar de X API v2 sobre inicio rápido."
+keywords: ["usuario autenticado", "endpoint me", "usuario actual", "autenticated lookup"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+Esta guía te guía en la recuperación del perfil del usuario autenticado actualmente usando el endpoint `/me`.
+
+<Note>
+**Requisitos previos**
+
+Antes de comenzar, necesitarás:
+- Una [cuenta de desarrollador](https://developer.x.com/en/portal/petition/essential/basic-info) con una App aprobada
+- User Access Token (OAuth 1.0a u OAuth 2.0 PKCE)
+</Note>
+
+---
+
+## Obtener el usuario autenticado
+
+Realiza una solicitud al endpoint `/me` con un User Access Token:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/me?\
+user.fields=created_at,description,verified,public_metrics,profile_image_url" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Obtener el usuario autenticado
+response = client.users.get_me(
+    user_fields=["created_at", "description", "verified", "public_metrics", "profile_image_url"]
+)
+
+print(f"Username: {response.data.username}")
+print(f"ID: {response.data.id}")
+print(f"Followers: {response.data.public_metrics.followers_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Obtener el usuario autenticado
+const response = await client.users.getMe({
+  userFields: ["created_at", "description", "verified", "public_metrics", "profile_image_url"],
+});
+
+console.log(`Username: ${response.data?.username}`);
+console.log(`ID: ${response.data?.id}`);
+console.log(`Followers: ${response.data?.public_metrics?.followers_count}`);
+```
+
+</CodeGroup>
+
+---
+
+## Respuesta
+
+```json title="Example response" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "XDevelopers",
+    "created_at": "2013-12-14T04:35:55.000Z",
+    "description": "The voice of the X developer community",
+    "verified": true,
+    "profile_image_url": "https://pbs.twimg.com/profile_images/...",
+    "public_metrics": {
+      "followers_count": 583423,
+      "following_count": 2048,
+      "tweet_count": 14052,
+      "listed_count": 1672
+    }
+  }
+}
+```
+
+---
+
+## Caso de uso
+
+El endpoint `/me` es esencial cuando:
+
+- **Verificas autenticación** — Confirma que el usuario está autenticado correctamente
+- **Obtienes el user ID** — Recupera el ID del usuario autenticado para otras llamadas a la API
+- **Personalizas experiencias** — Muestra el perfil del usuario en tu app
+- **Solicitudes en su nombre** — Sabes en nombre de quién estás haciendo las solicitudes
+
+---
+
+## Incluir Post fijado
+
+Solicita el Post fijado del usuario:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/me?\
+user.fields=pinned_tweet_id&\
+expansions=pinned_tweet_id&\
+tweet.fields=created_at,text" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Obtener usuario autenticado con Post fijado
+response = client.users.get_me(
+    user_fields=["pinned_tweet_id"],
+    expansions=["pinned_tweet_id"],
+    tweet_fields=["created_at", "text"]
+)
+
+print(f"Username: {response.data.username}")
+# El Post fijado está en response.includes.tweets
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Obtener usuario autenticado con Post fijado
+const response = await client.users.getMe({
+  userFields: ["pinned_tweet_id"],
+  expansions: ["pinned_tweet_id"],
+  tweetFields: ["created_at", "text"],
+});
+
+console.log(`Username: ${response.data?.username}`);
+// El Post fijado está en response.includes?.tweets
+```
+
+</CodeGroup>
+
+### Respuesta con expansion
+
+```json title="Example response" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "XDevelopers",
+    "pinned_tweet_id": "1234567890"
+  },
+  "includes": {
+    "tweets": [
+      {
+        "id": "1234567890",
+        "text": "Welcome to my profile!",
+        "created_at": "2024-01-01T00:00:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Fields disponibles
+
+| Field | Descripción |
+|:------|:------------|
+| `created_at` | Fecha de creación de la cuenta |
+| `description` | Bio del usuario |
+| `profile_image_url` | URL del avatar |
+| `verified` | Estado de verificación |
+| `public_metrics` | Recuentos de seguidores/seguidos |
+| `location` | Ubicación definida por el usuario |
+| `url` | Sitio web del usuario |
+| `protected` | Estado de cuenta protegida |
+| `pinned_tweet_id` | ID del Post fijado |
+
+---
+
+## Requisito de autenticación
+
+<Warning>
+El endpoint `/me` requiere autenticación con contexto de usuario. La autenticación App-Only (Bearer Token) no es compatible.
+</Warning>
+
+Usa uno de estos:
+- [OAuth 1.0a User Context](/resources/fundamentals/authentication)
+- [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2)
+
+---
+
+## Próximos pasos
+
+<CardGroup cols={2}>
+  <Card title="User lookup" icon="/icons/xds/icon-people.svg" href="/x-api/users/lookup/quickstart/user-lookup">
+    Consulta otros usuarios
+  </Card>
+  <Card title="Guía de integración" icon="/icons/xds/icon-book.svg" href="/x-api/users/lookup/integrate">
+    Conceptos clave y mejores prácticas
+  </Card>
+  <Card title="Referencia de la API" icon="/icons/xds/icon-code.svg" href="/x-api/users/get-my-user">
+    Documentación completa del endpoint
+  </Card>
+</CardGroup>

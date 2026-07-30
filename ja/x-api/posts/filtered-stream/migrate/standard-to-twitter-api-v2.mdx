@@ -1,0 +1,138 @@
+---
+title: v1 to v2
+sidebarTitle: v1 to v2
+keywords: ["v1.1 から v2 移行", "filtered stream 移行", "filtered stream 移行", "standard から v2 filtered stream", "v1 から v2 filtered stream", "移行ガイド"]
+description: "v1.1 statuses/filter エンドポイントを使用してきた方にとって、本ガイドが役立ちます。migrate を扱う X API v2 スタンダードティアのリファレンス。"
+
+
+---
+
+### Standard v1.1 と X API v2 の比較
+
+v1.1 [statuses/filter](https://developer.x.com/en/docs/x-api/v1/tweets/filter-realtime/api-reference/post-statuses-filter) エンドポイントを使用してきた方にとって、本ガイドは standard と X API v2 の filtered stream エンドポイント間の類似点と相違点を理解するのに役立ちます。
+
+* **類似点**
+    * リクエストパラメーターと演算子
+    * 投稿の編集履歴とメタデータのサポート
+* **相違点**
+    * エンドポイント URL
+    * App と Project の要件
+    * 認証方式
+    * ルール数と永続ストリーム
+    * レスポンスデータ形式
+    * リクエストパラメーター
+    * リカバリと冗長性機能の可用性
+    * クエリ演算子
+
+#### 類似点
+
+**リクエストパラメーターと演算子**
+
+standard v1.1 の statuses/filter エンドポイントには、リクエストと共に渡してストリームをフィルタリングできるパラメーターがいくつかあります。v2 filtered stream では、ブールロジックで組み合わせて目的の投稿を絞り込める[演算子](/x-api/posts/filtered-stream/integrate/operators)セットを代わりに使用します。利用可能な演算子には、既存の standard v1.1 パラメーターの直接の置き換えとなるものが含まれています。
+
+以下の standard v1.1 リクエストパラメーターには X API v2 に相当する演算子があります:
+
+
+| **Standard** | **X API v2** |
+| :--- | :--- |
+| follow - カンマ区切りのユーザー ID のリスト。ストリームに配信される投稿のユーザーを指定します。 | 特定ユーザーに関連する投稿を検索する複数の演算子:<br/><br/>* @<br/>* from:<br/>* to:<br/>* など |
+| track - カンマ区切りのフレーズのリスト。ストリームで配信される投稿を決定するために使用されます。 | 特定キーワードに関連する投稿を検索する複数の演算子:<br/><br/>* keyword<br/>* "exact phrase match"<br/>* #<br/>* など |
+
+**投稿の編集履歴とメタデータのサポート**
+
+両バージョンとも、編集履歴を記述するメタデータを提供します。詳細は [filtered stream API リファレンス](/x-api/posts/filtered-stream/introduction)と [Post edits fundamentals ページ](/x-api/fundamentals/edit-posts)を参照してください。
+
+#### 相違点
+
+**エンドポイント URL**
+
+* Standard v1.1 エンドポイント:
+    * https://stream.x.com/1.1/statuses/filter.json
+* X API v2 エンドポイント:
+    * https://api.x.com/2/tweets/search/stream
+    * https://api.x.com/2/tweets/search/stream/rule
+
+**App と Project の要件**
+
+X API v2 エンドポイントでは、リクエストの認証に [Project](/resources/fundamentals/developer-apps) に紐づく[開発者 App](/resources/fundamentals/developer-apps) の認証情報を使用する必要があります。すべての X API v1.1 エンドポイントは、App または App に紐づく App の認証情報を使用できます。
+
+**認証方式**
+
+standard エンドポイントは [OAuth 1.0a User Context](/resources/fundamentals/authentication) をサポートしますが、X API v2 filtered stream エンドポイントは [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0)(Application-only 認証とも呼ばれます)をサポートします。X API v2 版へのリクエストを行うには、App Access Token を使用してリクエストを認証する必要があります。
+
+App と App を Developer Console で作成した際に提示された App Access Token がもうない場合は、Developer Console の App の「Keys and tokens」ページに移動して新しく生成できます。App Access Token をプログラム的に生成したい場合は、[OAuth 2.0 App-Only ガイド](/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token)を参照してください。
+
+**ルール数と永続ストリーム**
+
+standard v1.1 エンドポイントは、ストリーミング接続をフィルタリングする単一のルールをサポートします。ルールを変更するには、ストリームを切断し、修正したフィルタリングルールをパラメーターとして新しいリクエストを送信する必要があります。
+
+X API v2 filtered stream エンドポイントでは、単一のストリームに複数のルールを適用でき、ストリーム接続を維持したままルールの追加や削除ができます。
+
+**レスポンスデータ形式**
+
+standard v1.1 と X API v2 エンドポイント間の最大の違いのひとつは、ペイロードに返すフィールドの選択方法です。
+
+standard エンドポイントでは、多くのレスポンスフィールドがデフォルトで返され、パラメーターを使用してペイロードに返すフィールドやフィールドセットを指定するオプションがあります。
+
+X API v2 版では、デフォルトで投稿の id と text フィールドのみを配信します。追加のフィールドやオブジェクトをリクエストするには、[fields](/x-api/fundamentals/fields) と [expansions](/x-api/fundamentals/expansions) パラメーターを使用する必要があります。これらのエンドポイントにリクエストした投稿フィールドはプライマリの Post オブジェクトに返されます。展開された user、media、poll、または place オブジェクトとフィールドはレスポンス内の includes オブジェクトに返されます。展開されたオブジェクトは、Post と展開オブジェクトの両方に含まれる ID を照合することで、Post オブジェクトに戻して対応付けられます。
+
+これらの新しいパラメーターについては、各ガイド、または [fields と expansions の使い方](/x-api/fundamentals/data-dictionary/reference#how-to-use-fields-and-expansions) のガイドで詳しく読むことをお勧めします。
+
+[データフォーマット移行ガイド](/x-api/migrate/data-format-migration#migrating-from-standard-v1-1s-data-format-to-v2)もまとめており、standard v1.1 フィールドをより新しい v2 フィールドに対応付けるのに役立ちます。このガイドでは、特定のフィールドを返すために v2 リクエストと共に渡す必要のある expansion とフィールドパラメーターも示しています。
+
+
+特定フィールドをリクエストする方法の変化に加え、X API v2 は Post や [user](/x-api/fundamentals/data-dictionary/reference#user) オブジェクトを含む、API が返すオブジェクトに新しい JSON 設計を導入しています。
+
+* JSON のルートレベルで、standard エンドポイントは Post オブジェクトを statuses 配列に返しますが、X API v2 は data 配列に返します。
+* Retweeted と Quoted の "statuses" と呼ぶ代わりに、X API v2 の JSON では Retweeted と Quoted Tweets と呼びます。contributors や user.translator_type のような多くの旧式で非推奨のフィールドが削除されています。
+* Post オブジェクト内の favorites と user オブジェクト内の favourites を両方使う代わりに、X API v2 では like という用語を使用します。
+* X は、値のない (例: null) JSON 値をペイロードに書き込まないという慣習を採用しています。Post と user 属性は、null でない値を持つ場合にのみ含まれます。
+
+
+また、[Post オブジェクト](/x-api/fundamentals/data-dictionary/reference#tweet)に以下を含む新しいフィールドセットを導入しました:
+
+* [conversation_id](/x-api/fundamentals/conversation-id) フィールド
+* context と entities を含む 2 つの新しい [annotations](/x-api/fundamentals/post-annotations) フィールド
+* いくつかの新しい[メトリクス](/x-api/fundamentals/metrics)フィールド
+* 誰が指定の投稿に返信できるかを示す新しい reply_setting フィールド
+
+**リクエストパラメーター**
+
+X API v2 で**サポートされていない** standard filtered stream リクエストパラメーターもあります:
+
+| Standard v1.1 parameter | Details |
+| :--- | :--- |
+| locations - 経度・緯度のペアをカンマ区切りで指定し、投稿をフィルタリングするバウンディングボックスのセットを指定します。 | X API v2 では位置ベースの演算子はまだリリースされていません。 |
+| Delimited | v1.1 エンドポイントでは、これを文字列の長さに設定すると、statuses がストリーム内で区切られるため、クライアントは status メッセージの終わりまでに何バイト読むかを把握できます。<br/><br/>この機能は X API v2 では利用できません。 |
+| Stall_warnings | v1.1 エンドポイントでは、このパラメーターを true に設定すると、クライアントが切断される危険がある場合に定期的なメッセージが配信されます。<br/><br/>X API v2 では、定期的に送信される改行によりストール警告がデフォルトで送信されます。 |
+
+**リカバリと冗長性機能の可用性**
+
+X API v2 版の filtered stream には、ストリーミングの稼働時間を最大化し、5 分以下の切断で見逃された可能性のある投稿を回復するのに役立つリカバリと冗長性機能が導入されています。
+
+冗長接続では、指定のストリームに最大 2 回接続でき、いずれかの接続が失敗しても常にストリームへの接続を維持できます。
+
+backfill_minutes パラメーターを使用すると、最大 5 分間の見逃したデータを回復できます。
+
+これらの機能はどちらも [Academic Research アクセス](/x-api/getting-started/about-x-api)経由でのみ利用可能です。この機能の詳細は、[リカバリと冗長性機能](/x-api/fundamentals/recovery-and-redundancy)の統合ガイドを参照してください。
+
+**新しいクエリ演算子**
+
+X API v2 では、2 つの新機能をサポートする新しい演算子を導入しています:
+
+* **[Conversation ID](/x-api/fundamentals/conversation-id)** - X 上で会話が展開されるにつれ、会話の一部である投稿をマークするために conversation ID が利用可能になります。会話内のすべての投稿の conversation_id は、その会話を始めた投稿の Post ID に設定されます。
+    * conversation_id:
+* **[X Annotations](/x-api/fundamentals/post-annotations)** は投稿に関する文脈情報を提供し、entity と context annotation を含みます。エンティティは人、場所、製品、組織で構成されます。コンテキストは、抽出されたエンティティが属するドメイン、つまりトピックです。たとえば、投稿で言及された人物には、その人がアスリート、俳優、政治家であるかを示すコンテキストが付く場合があります。
+    * context: - 関心のあるコンテキストで注釈された投稿に一致します。
+    * entity: - 関心のあるエンティティで注釈された投稿に一致します。
+
+---
+
+## コード例
+
+### filtered stream にルールを追加する (v2)
+
+
+**Standard v1.1 と v2 の例**
+
+完全な移行例は公式の X API ドキュメントを参照してください。

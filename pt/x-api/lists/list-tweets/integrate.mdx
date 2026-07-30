@@ -1,0 +1,82 @@
+---
+title: Guia de integração
+sidebarTitle: Guia de integração
+keywords: ["integração de list tweets", "integração de timeline da list", "guia de list tweets", "configuração de timeline da list"]
+description: "Esta página cobre ferramentas e conceitos-chave para integrar o endpoint de consulta de Posts da List. Referência para o nível standard da X API v2 sobre list tweets."
+
+
+---
+
+import { Button } from '/snippets/button.mdx';
+
+Esta página cobre ferramentas e conceitos-chave para integrar o endpoint de consulta de Posts da List.
+
+## Ferramentas úteis
+
+Antes de mergulharmos em alguns conceitos-chave que irão ajudar você a integrar este endpoint, recomendamos que você se familiarize com:
+
+### Postman
+
+Postman é uma ótima ferramenta que você pode usar para testar um endpoint. Cada requisição do Postman inclui todos os parâmetros de caminho e de corpo para ajudá-lo a entender rapidamente o que está disponível. Para saber mais sobre nossas coleções do Postman, visite nossa página ["Usando o Postman"](/tutorials/postman-getting-started).
+
+### Exemplos de código
+
+Está interessado em começar a usar este endpoint com código na sua linguagem de programação preferida? Temos vários exemplos de código diferentes que você pode usar como ponto de partida na nossa [página do Github](https://github.com/xdevplatform/Twitter-API-v2-sample-code).
+
+### Bibliotecas de terceiros
+
+Aproveite uma das [bibliotecas de terceiros](/tools-and-libraries) da nossa comunidade para ajudar você a começar. Você pode encontrar uma biblioteca que funcione com os endpoints v2 procurando pela tag de versão correta.
+
+---
+
+## Conceitos-chave
+
+### Autenticação
+
+Todos os endpoints da X API v2 exigem que você autentique suas requisições com um conjunto de credenciais, também conhecidas como chaves e tokens. Você pode usar OAuth 1.0a User Context, App only ou OAuth 2.0 Authorization Code with PKCE para autenticar suas requisições neste endpoint.
+
+[OAuth 1.0a User Context](/resources/fundamentals/authentication#oauth-1-0a-2), o que significa que você deve usar um conjunto de API Keys e user Access Tokens para fazer uma requisição bem-sucedida. Os access tokens devem estar associados ao usuário em nome de quem você está fazendo a requisição. Se quiser gerar um conjunto de Access Tokens para outro usuário, ele deve autorizar seu App usando o [fluxo 3-legged OAuth](/resources/fundamentals/authentication#obtaining-access-tokens-using-3-legged-oauth-flow).
+
+Observe que o OAuth 1.0a pode ser difícil de usar. Se você não estiver familiarizado com esse método de autenticação, recomendamos que use uma [biblioteca](/tools-and-libraries), uma ferramenta como o Postman, ou use OAuth 2.0 ou App only para autenticar suas requisições.
+
+[OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) permite maior controle sobre o escopo de uma aplicação e fluxos de autorização em vários dispositivos. O OAuth 2.0 permite escolher escopos específicos de granularidade fina que concedem permissões específicas em nome de um usuário.
+
+Para habilitar o OAuth 2.0 no seu App, você deve ativá-lo nas configurações de autenticação do App, encontradas na seção de configurações do App no Developer Console.
+
+[App only](/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token) exige apenas que você passe um [Access Token App only](/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token) com sua requisição. Você pode gerar um Access Token App only diretamente em um App de desenvolvedor ou gerá-lo usando o endpoint [POST oauth2/token](/resources/fundamentals/authentication#post-oauth2-token).
+
+### Developer Console, Projects e developer Apps
+
+Para obter um conjunto de credenciais de autenticação que funcione com os endpoints da X API v2, você precisa [criar uma conta de desenvolvedor](https://developer.x.com/en/portal/petition/essential/basic-info), configurar um [Project](/resources/fundamentals/developer-apps) dentro dessa conta e criar um [App de desenvolvedor](/resources/fundamentals/developer-apps) dentro desse Project. Você poderá então encontrar suas chaves e tokens dentro do seu App de desenvolvedor.
+
+### Rate limits
+
+Todos os dias, milhares de desenvolvedores fazem requisições à X API. Para ajudar a gerenciar o grande volume dessas requisições, [rate limits](https://developer.x.com/x-api/fundamentals/rate-limits) são aplicados a cada endpoint, limitando o número de requisições que você pode fazer em nome do seu app ou em nome de um usuário autenticado.
+
+Este endpoint tem rate limit tanto no nível do App quanto do usuário. O rate limit do app significa que você, o desenvolvedor, só pode fazer um certo número de requisições a este endpoint em um determinado período a partir de qualquer App (assumido pelo uso da API Key e API Secret Key, ou pelo Bearer Token). O rate limit do usuário significa que o usuário autenticado em nome de quem você está fazendo a requisição só pode realizar uma consulta de Posts da List um certo número de vezes em qualquer App de desenvolvedor.
+
+A tabela abaixo mostra os rate limits para cada endpoint.
+
+| Endpoint | Método HTTP | Rate limit |
+| :--- | :--- | :--- |
+| /2/lists/:id/tweets | GET | 900 requisições por 15 minutos |
+
+### Fields e expansions
+
+O endpoint GET da X API v2 permite que os usuários selecionem exatamente quais dados desejam que sejam retornados da API usando um conjunto de ferramentas chamado `fields` e `expansions`. O parâmetro `expansions` permite expandir objetos referenciados no payload. Por exemplo, ao consultar Posts da List, você pode obter as seguintes [expansions](/x-api/fundamentals/expansions):
+
+* `author_id`
+
+O parâmetro `fields` permite selecionar exatamente quais [fields](/x-api/fundamentals/fields) dentro dos diferentes objetos de dados você deseja receber. Este endpoint entrega principalmente objetos de Post. Por padrão, o objeto Post retorna os fields `id` e `text`. Para receber fields adicionais como `tweet.created_at` ou `tweet.lang`, você terá que solicitá-los especificamente usando um parâmetro fields.
+
+Adicionamos ao nosso [dicionário de dados da X API v2](/x-api/fundamentals/data-dictionary) um guia sobre como usar [fields e expansions](/x-api/fundamentals/data-dictionary/reference#how-to-use-fields-and-expansions) em conjunto.
+
+A tabela abaixo mostra os fields e expansions disponíveis para o endpoint de consulta:
+
+| Endpoint | Fields | Expansions |
+| :--- | :--- | :--- |
+| /2/lists/:id/tweets | `tweet.fields`, `user.fields` | `author_id` |
+
+### Paginação
+
+Consultar Posts da List pode retornar muitos dados. Para garantir que estamos retornando resultados consistentes e de alto desempenho a qualquer momento, usamos paginação. A paginação é um recurso dos endpoints da X API v2 que retornam mais resultados do que podem caber em uma única resposta. Quando isso acontece, os dados são retornados em uma série de "páginas". Saiba mais sobre como [paginar pelos resultados.](/x-api/fundamentals/pagination)

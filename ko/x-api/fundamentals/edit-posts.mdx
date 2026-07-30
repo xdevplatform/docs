@@ -1,0 +1,206 @@
+---
+title: Post 편집
+description: "게시 후 30분 이내에 최대 5회까지 X의 Post를 편집하고, v2 API가 반환하는 edit history, edit_controls, 편집 가능 메타데이터를 확인합니다."
+sidebarTitle: Post 편집
+keywords: ["Post 편집", "Tweet 편집", "편집 이력", "post edits", "편집 메타데이터", "편집 시간대"]
+---
+
+X의 Post는 게시 후 30분 이내에 최대 5회까지 편집할 수 있습니다. X API는 편집 이력과 메타데이터에 대한 완전한 액세스를 제공합니다.
+
+---
+
+## 편집 규칙
+
+| 규칙 | 세부 정보 |
+|:-----|:--------|
+| **시간 범위** | 원본 게시로부터 30분 |
+| **편집 제한** | 최대 5회 편집 |
+| **ID 동작** | 각 편집은 새로운 post ID를 만듭니다 |
+| **삭제** | 어떤 버전을 삭제해도 전체 체인이 삭제됩니다 |
+
+---
+
+## 편집할 수 없는 항목
+
+편집할 수 없는 일부 게시물 유형:
+
+- 프로모션된 게시물(광고)
+- 투표가 포함된 게시물
+- 다른 사람에 대한 답글(자기 스레드가 아닌 경우)
+- Repost (Quote 게시물은 편집 *가능*)
+- Community 게시물
+- 협업 게시물
+- 예약된 게시물
+
+---
+
+## 응답의 편집 데이터
+
+### 기본 field
+
+모든 게시물 응답에는 기본적으로 `edit_history_tweet_ids`가 포함됩니다:
+
+```json
+{
+  "data": {
+    "id": "1234567891",
+    "text": "Updated text (edited)",
+    "edit_history_tweet_ids": ["1234567890", "1234567891"]
+  }
+}
+```
+
+- 단일 ID = 편집된 적 없음
+- 여러 ID = 편집 이력 (오래된 순)
+
+### 편집 제어
+
+편집 상태를 확인하려면 `edit_controls`를 요청하세요:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567891?tweet.fields=edit_controls" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json title="Example response" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567891",
+    "text": "Updated text (edited)",
+    "edit_history_tweet_ids": ["1234567890", "1234567891"],
+    "edit_controls": {
+      "is_edit_eligible": true,
+      "editable_until": "2024-01-15T12:30:00.000Z",
+      "edits_remaining": 3
+    }
+  }
+}
+```
+
+| Field | 설명 |
+|:------|:------------|
+| `is_edit_eligible` | 게시물을 편집할 수 있는지 여부 |
+| `editable_until` | 편집 시간대가 종료되는 타임스탬프 |
+| `edits_remaining` | 남은 편집 횟수 (0-5) |
+
+---
+
+## 편집 이력 가져오기
+
+모든 버전의 전체 게시물 객체를 가져오려면 `edit_history_tweet_ids` expansion을 사용하세요:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567891?\
+tweet.fields=edit_controls&\
+expansions=edit_history_tweet_ids" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json title="Example response" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567891",
+    "text": "Updated text (edited)",
+    "edit_history_tweet_ids": ["1234567890", "1234567891"],
+    "edit_controls": {
+      "is_edit_eligible": true,
+      "editable_until": "2024-01-15T12:30:00.000Z",
+      "edits_remaining": 3
+    }
+  },
+  "includes": {
+    "tweets": [{
+      "id": "1234567890",
+      "text": "Original text (with typo)",
+      "edit_history_tweet_ids": ["1234567890", "1234567891"],
+      "edit_controls": {
+        "is_edit_eligible": true,
+        "editable_until": "2024-01-15T12:30:00.000Z",
+        "edits_remaining": 3
+      }
+    }]
+  }
+}
+```
+
+---
+
+## 어떤 버전이 반환되나요?
+
+기본적으로 API는 편집된 게시물의 **가장 최근 버전**을 반환합니다.
+
+특정 버전을 가져오려면 해당 post ID로 직접 요청하세요:
+
+```bash
+# Get original version
+curl "https://api.x.com/2/tweets/1234567890" -H "Authorization: Bearer $TOKEN"
+
+# Get edited version  
+curl "https://api.x.com/2/tweets/1234567891" -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## 편집된 게시물의 지표
+
+편집된 게시물의 각 버전은 자체 참여 지표를 가집니다. 지표는 참여가 발생했을 당시에 표시된 버전에 귀속됩니다.
+
+---
+
+## 가용성
+
+편집 메타데이터는 다음에서 사용 가능합니다:
+
+- 2022년 9월 29일 이후 생성된 모든 게시물
+- 게시물을 반환하는 모든 v2 endpoint
+- 검색, 타임라인, 스트림, 조회 포함
+
+이 날짜 이전에 생성된 게시물에는 편집 메타데이터가 없습니다.
+
+---
+
+## 사용 사례
+
+<Tabs>
+  <Tab title="변경사항 추적">
+편집을 위해 게시물을 모니터링하고 차이점을 기록합니다:
+
+```python
+def check_for_edits(post):
+    history = post.get("edit_history_tweet_ids", [])
+    if len(history) > 1:
+        print(f"Post {post['id']} has been edited {len(history) - 1} times")
+```
+  </Tab>
+  <Tab title="편집 표시 보이기">
+UI에 "편집됨" 배지를 표시합니다:
+
+```javascript
+const isEdited = post.edit_history_tweet_ids?.length > 1;
+if (isEdited) {
+  showEditedBadge();
+}
+```
+  </Tab>
+  <Tab title="원본 콘텐츠 가져오기">
+편집된 게시물의 원본 버전을 가져옵니다:
+
+```python
+original_id = post["edit_history_tweet_ids"][0]
+original = api.get_tweet(original_id)
+```
+  </Tab>
+</Tabs>
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="Post 조회" icon="/icons/xds/icon-search.svg" href="/x-api/posts/lookup/introduction">
+    편집 이력이 포함된 게시물 조회.
+  </Card>
+  <Card title="Data dictionary" icon="/icons/xds/icon-book.svg" href="/x-api/fundamentals/data-dictionary">
+    전체 post 객체 레퍼런스.
+  </Card>
+</CardGroup>

@@ -1,0 +1,52 @@
+---
+title: タイムゾーン
+description: "X Ads API がアカウントおよび請求のタイムゾーンをどのように扱うかを解説します。ISO 8601 日時形式、UTC オフセット、timezone_switch_at の分析上の意味合いを含みます。"
+keywords: ["タイムゾーン", "time zones", "タイムゾーン処理", "タイムゾーン形式", "タイムゾーン変換", "タイムゾーン設定"]
+---
+
+## タイムゾーン、アカウント、請求
+
+日時値は常に UTC で返されます(日時値の末尾の Z で示されます)。POST または PUT コマンドで日時を指定する際は、タイムゾーンについて ISO 8601 標準形式を用いて任意のタイムゾーンで指定できます。時刻は [ISO-8601](http://en.wikipedia.org/wiki/ISO_8601) のサブセットで表現されます。より具体的には、この日付形式に対する strptime 文字列は `%Y-%m-%dT%l:%M:%S%z` です。広告主アカウントのタイムゾーンは、公式請求数値が確定する実際の時刻を決定します。
+
+アカウントレベルで API に問い合わせる([GET accounts](/x-ads-api/campaign-management/reference#accounts))と、以下のようなタイムゾーン情報が得られます。
+
+```json title="Example response" lines wrap icon="/icons/xds/icon-brackets.svg"
+    {
+      "request": {
+        "params": {
+          "account_id": "18ce54d4x5t"
+        }
+      },
+      "data": {
+        "name": "API McTestface",
+        "business_name": null,
+        "timezone": "America/Los_Angeles",
+        "timezone_switch_at": "2016-07-21T07:00:00Z",
+        "id": "18ce54d4x5t",
+        "created_at": "2016-07-21T22:42:09Z",
+        "salt": "54cb7b5a34183f77d82dd6d0f4329691",
+        "updated_at": "2017-09-09T06:42:14Z",
+        "business_id": null,
+        "approval_status": "ACCEPTED",
+        "deleted": false
+      }
+    }
+```
+
+これには 2 つのタイムゾーン値が含まれます: `timezone`([Wikipedia のタイムゾーン](https://en.wikipedia.org/wiki/Tz_database#Names_of_time_zones)を参照)および `timezone_switch_at` です。`timezone_switch_at` は UTC タイムゾーン(+00:00)で表されますが、常に指定タイムゾーンの深夜 0 時を表します。
+
+広告主のタイムゾーンは API から編集できません。この属性は、契約/請求レベルで X の広告主のアカウントマネージャーにより設定されます。
+
+レポート作成や analytics エンドポイントへの問い合わせを行う際は、`timezone_switch_at` の値に注意してください。アカウントが America/Los_Angeles タイムゾーンから新しいローカル値に切り替わる日にはギャップが生じます。
+
+### タイムゾーン付きの日時値の指定
+
+日時値は常に UTC で返されます(日時値の末尾の `Z` で示されます)。POST または PUT コマンドで日時を指定する際は、タイムゾーンについて [ISO 8601 標準](http://en.wikipedia.org/wiki/ISO_8601)形式を用いて任意のタイムゾーンで指定できます。たとえば `2017-07-10T08:00:00-0800` は受け付けられる入力値であり、自動的に UTC の値 `2017-07-10T16:00:00Z` に変換されます。
+
+analytics エンドポイントを `granularity` が `DAY` または `TOTAL` で使用する場合、`start_time` の値は、アカウント保有者のローカルタイムゾーンにおける対象日の深夜 0 時で指定する必要があります。使用するタイムゾーンオフセットは、対象日のオフセットではなく、現在の日のオフセットです。たとえば、Pacific Daylight Savings 期間中の America/Los_Angeles の広告アカウントの場合、UTC オフセットは -0700 です。したがって、analytics リクエストでは時刻を次のように指定します: `start_time=2017-05-21T07:00:00Z` または `start_time=2017-05-21T00:00:00-0700`。広告アカウントが Asia/Tokyo(オフセットは常に +09:00)であれば、値は次のように指定します: `start_time=2017-05-20T15:00:00Z` または `start_time=2017-05-21T00:00:00+0900`。
+
+### 受け付けられる UTC オフセット形式
+
+[ISO 8601 Time zone designators](http://en.wikipedia.org/wiki/ISO_8601#Time_zone_designators) を参照してください。
+
+サポート形式: `Z`, `-HHMM`, `+HHMM`, `-HH:MM`, `+HH:MM`, `-HH`, `+HH`

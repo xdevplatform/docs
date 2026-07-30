@@ -1,0 +1,184 @@
+---
+title: API の一貫性
+description: "すべての X API v2 エンドポイントで使用される一貫した URL、レスポンス、ID パターンについて学び、統合するどこにでも同じ規約を適用できるようにします。"
+sidebarTitle: 一貫性
+keywords: ["consistency", "API consistency", "uniform API", "consistent endpoints", "API design"]
+---
+
+X API v2 は、すべてのエンドポイントで一貫したパターンになるように設計されています。1 つのエンドポイントの動作を理解すれば、同じパターンをどこでも適用できます。
+
+---
+
+## 一貫したパターン
+
+### URL の構造
+
+すべての v2 エンドポイントは予測可能なパターンに従います。
+
+```
+/version/resource/{id}?parameters
+/version/resource/verb?parameters
+```
+
+例:
+
+```
+/2/tweets/1234567890                    # 特定の post を取得
+/2/tweets/search/recent                 # 最近の posts を検索
+/2/users/by/username/xdevelopers        # username でユーザーを取得
+/2/users/1234/followers                 # ユーザーのフォロワーを取得
+```
+
+### レスポンスの構造
+
+すべてのレスポンスは同じトップレベル構造を使用します。
+
+```json
+{
+  "data": { ... },       // 主要オブジェクト
+  "includes": { ... },   // 展開されたオブジェクト
+  "meta": { ... },       // ページネーション、カウント
+  "errors": [ ... ]      // 部分的なエラー（該当する場合）
+}
+```
+
+### ID の形式
+
+すべての ID は言語互換性を確保するため文字列として返されます。
+
+```json
+{
+  "id": "1234567890123456789",
+  "author_id": "2244994945"
+}
+```
+
+---
+
+## Fields と expansions
+
+同じ [fields](/x-api/fundamentals/fields) と [expansions](/x-api/fundamentals/expansions) パラメータが一貫して機能します。
+
+| Object | Fields parameter | Works across |
+|:-------|:-----------------|:-------------|
+| Post | `tweet.fields` | posts を返すすべてのエンドポイント |
+| User | `user.fields` | users を返すすべてのエンドポイント |
+| Media | `media.fields` | media expansions を持つすべてのエンドポイント |
+| Poll | `poll.fields` | poll expansions を持つすべてのエンドポイント |
+| Place | `place.fields` | place expansions を持つすべてのエンドポイント |
+
+---
+
+## オブジェクトのスキーマ
+
+同じオブジェクトタイプは、どのエンドポイントが返しても同じフィールドを持ちます。
+
+- 検索から返される Post は、lookup から返される Post と同じフィールドを持ちます
+- followers から返される User は、search から返される User と同じフィールドを持ちます
+- 展開されたオブジェクトは、単独で取得したものと一致します
+
+---
+
+## 認証
+
+すべてのエンドポイントは同じ認証メソッドを使用します。
+
+| Method | Header format |
+|:-------|:--------------|
+| Bearer Token | `Authorization: Bearer {token}` |
+| OAuth 1.0a | `Authorization: OAuth {parameters}` |
+| OAuth 2.0 | `Authorization: Bearer {user_token}` |
+
+---
+
+## エラー処理
+
+エラーは一貫した形式に従います。
+
+```json
+{
+  "title": "Invalid Request",
+  "detail": "The query parameter is missing",
+  "type": "https://api.x.com/2/problems/invalid-request"
+}
+```
+
+[すべてのエラータイプを見る →](/x-api/fundamentals/response-codes-and-errors)
+
+---
+
+## ページネーション
+
+すべてのページネーション対応エンドポイントは同じトークンシステムを使用します。
+
+| Parameter | Description |
+|:----------|:------------|
+| `max_results` | 1 ページあたりの結果数 |
+| `pagination_token` | `next_token` または `previous_token` の値 |
+
+[ページネーションの詳細を見る →](/x-api/fundamentals/pagination)
+
+---
+
+## 命名規則
+
+- アメリカ英語のスペル（`favorites`、`favourites` ではない）
+- フィールド名は snake_case（`author_id`、`created_at`）
+- 一貫した用語（fields では `retweet_count`、`repost_count` ではない）
+
+---
+
+## 空の値
+
+値がないフィールドは、`null` として返されるのではなく省略されます。
+
+```json
+// bio がないユーザー
+{
+  "id": "1234",
+  "name": "Example User",
+  "username": "example"
+  // "description" は null ではなく省略される
+}
+```
+
+---
+
+## Entity の一貫性
+
+`entities` オブジェクトには、テキストから解析された entity のみが含まれます。
+
+- `urls`
+- `hashtags`
+- `mentions`
+- `cashtags`
+
+Media と poll は `entities` ではなく `attachments` にあります。
+
+---
+
+## これがあなたにとって意味するもの
+
+<CardGroup cols={2}>
+  <Card title="一度学べば、どこでも使える" icon="graduation-cap">
+    1 つのエンドポイントで学んだパターンは、すべてのエンドポイントに適用されます。
+  </Card>
+  <Card title="予測可能なレスポンス" icon="square-check">
+    同じオブジェクトタイプは API 全体で同じ構造を持ちます。
+  </Card>
+  <Card title="シンプルなコード" icon="/icons/xds/icon-code.svg">
+    共通パターン向けの再利用可能な関数を構築できます。
+  </Card>
+  <Card title="デバッグが容易" icon="bug">
+    一貫したエラー形式でトラブルシューティングが簡単になります。
+  </Card>
+</CardGroup>
+
+---
+
+## 不一致の報告
+
+不一致を見つけましたか？お知らせください。
+
+- [Developer Forum](https://devcommunity.x.com)
+- [Developer Feedback](https://t.co/devfeedback)

@@ -1,0 +1,125 @@
+---
+title: "Search API: Enterprise"
+sidebarTitle: Search API
+keywords: ["búsqueda enterprise", "GNIP search", "API de búsqueda enterprise", "search API enterprise", "endpoints de búsqueda enterprise"]
+
+description: ">Ten en cuenta: > >Hemos lanzado una nueva versión de la búsqueda de Posts y los conteos de Posts en la X API v2. Te animamos a revisar las novedades de la X API v2."
+---
+
+>**Ten en cuenta:**
+>
+>Hemos lanzado una nueva versión de [búsqueda de Posts](/x-api/posts/search/introduction) y [conteos de Posts](/x-api/posts/counts/introduction) en la [X API v2](/x-api/getting-started/about-x-api). Te animamos a [revisar las novedades](/x-api/migrate/overview) de la X API v2.
+>
+>Estos endpoints se han actualizado para incluir metadatos de edición de Posts. Aprende más sobre estos metadatos en la [página de fundamentos "Editar Posts"](/x-api/enterprise-gnip-2.0/fundamentals/edit-tweets).
+
+## Descripción general
+
+`Enterprise`
+
+_Las APIs enterprise están disponibles únicamente dentro de nuestros niveles de acceso gestionado. Para usar estas APIs, primero debes configurar una cuenta con nuestro equipo de ventas enterprise. Para saber más, consulta [AQUÍ](https://developer.x.com/en/products/x-api/enterprise)._
+
+_Puedes ver todas las ofertas de búsqueda de Posts de la X API [AQUÍ](/x-api/enterprise-gnip-2.0/fundamentals/search-api)._
+
+Existen dos APIs de búsqueda enterprise:
+
+1.  La 30-Day Search API proporciona datos de los últimos 30 días.
+2.  La Full-Archive Search API proporciona acceso completo e instantáneo al corpus completo de datos de X, remontándose hasta el primer Post en marzo de 2006.
+
+Estas APIs RESTful admiten una única consulta de hasta 2.048 caracteres por solicitud. Las consultas se escriben con la sintaxis de reglas de PowerTrack; consulta [Reglas y filtrado](/x-api/enterprise-gnip-2.0/fundamentals/rules-filtering#getting-started-with-enterprise-rules-and-queries) para más detalles. Los usuarios pueden especificar cualquier período de tiempo, con granularidad de minuto. Sin embargo, las respuestas estarán limitadas al menor entre tu maxResults especificado O 31 días e incluyen un next token para paginar el siguiente conjunto de resultados. Si no se especifican parámetros de tiempo, la API devolverá los datos coincidentes de los 30 días más recientes.
+
+Las APIs de búsqueda enterprise proporcionan acceso de baja latencia, alta fidelidad y basado en consultas al archivo de Posts con granularidad de minuto. Los datos de Posts se sirven en orden cronológico inverso, comenzando por el Post más reciente que coincide con tu consulta. Los Posts están disponibles desde la search API aproximadamente 30 segundos después de haber sido publicados.
+
+Estos endpoints de búsqueda proporcionan metadatos de Posts editados. Todos los objetos para Posts creados desde el 29 de septiembre de 2022 incluyen metadatos de edición de Posts, incluso si el Post nunca se editó. Cada vez que se edita un Post, se crea un nuevo ID de Post. El historial de edición de un Post se documenta mediante un array de IDs de Posts, comenzando con el ID original.
+
+Estos endpoints siempre devolverán la edición más reciente, junto con cualquier historial de edición. Cualquier Post recopilado después de su ventana de edición de 30 minutos representará su versión final. Para saber más sobre los metadatos de Edición de Posts, consulta la página de [fundamentos de Editar Posts](/x-api/fundamentals/edit-posts).
+
+Las solicitudes incluyen un parámetro maxResults que especifica el número máximo de Posts que se devuelven por respuesta de la API. Si hay más Posts asociados a la consulta que este número máximo de resultados por respuesta, se incluye un next token en la respuesta. Estos next tokens se usan en solicitudes posteriores para paginar por todo el conjunto de Posts asociados a la consulta.
+
+Estas APIs de búsqueda enterprise proporcionan un endpoint _counts_ que permite a los usuarios solicitar el volumen de datos asociado a su consulta.
+
+### Tipos de solicitudes
+
+Las APIs de búsqueda enterprise admiten dos tipos de solicitudes:
+
+#### Solicitudes de búsqueda (data)
+
+Las solicitudes de búsqueda a las APIs de búsqueda enterprise te permiten recuperar hasta 500 resultados por respuesta para un período de tiempo dado, con la capacidad de paginar para obtener datos adicionales. Usando el parámetro maxResults, puedes especificar tamaños de página más pequeños para casos de uso de visualización (permitiendo que tu usuario solicite más resultados según sea necesario) o tamaños de página más grandes (hasta 500) para extracciones de datos más grandes. Los datos se entregan en orden cronológico inverso y cumplen la normativa en el momento de la entrega.
+
+#### Solicitudes de counts (Post count)
+
+Las solicitudes de counts proporcionan la capacidad de recuperar conteos históricos de actividad, que reflejan el número de actividades que ocurrieron y que coinciden con una consulta dada durante el período de tiempo solicitado. La respuesta te proporcionará esencialmente un histograma de conteos, agrupado por día, hora o minuto (el bucket predeterminado es _hora_). Es importante señalar que los resultados de counts no siempre reflejan eventos de cumplimiento (por ejemplo, eliminaciones de Posts) que suceden mucho después (7+ días) de que se publique un Post; por lo tanto, es esperable que la métrica de counts no siempre coincida con la de una solicitud de datos para la misma consulta.
+
+**Nota de facturación:** cada solicitud – _incluidas las solicitudes de paginación_ – realizada contra los endpoints de datos y counts se cuenta como una solicitud facturada. Por lo tanto, si hay varias páginas de resultados para una única consulta, paginar a través de X páginas de resultados equivale a X solicitudes para la facturación.
+
+### Operadores disponibles
+
+Las APIs de búsqueda enterprise admiten reglas con hasta 2.048 caracteres. Las APIs de búsqueda enterprise admiten los operadores enumerados a continuación. Para descripciones detalladas, consulta [AQUÍ](/x-api/enterprise-gnip-2.0/fundamentals/search-api#enterprise-operators).
+
+|     |     |     |     |
+| :--- | :--- | :--- | :--- |
+| **Coincidencia con el contenido del Post:** | **Coincidencia con cuentas de interés:** | **Atributos del Post:** | **Operadores geoespaciales:** |
+| * keyword<br/>* "quoted phrase"<br/>* "keyword1 keyword2"~N<br/>* #<br/>* @<br/>* $<br/>* url:<br/>* lang: | * from:<br/>* to:<br/>* retweets_of: | * is:retweet  <br/>    <br/>* has:mentions<br/>* has:hashtags<br/>* has:media<br/>* has:videos<br/>* has:images<br/>* has:links<br/>* has:symbols<br/>* is:verified  <br/>    <br/>* -is:nullcast (operador solo de negación) | * bounding\_box:\[west\_long south\_lat east\_long north_lat\]<br/>* point_radius:\[lon lat radius\]<br/>* has:geo<br/>* place:<br/>* place_country:<br/>* has:profile_geo<br/>* profile_country:<br/>* profile_region:<br/>* profile_locality: |
+
+
+Notas: No incrustes/anides operadores ("#cats") se resolverá como cats con las search APIs.   El operador 'lang:' y todos los operadores 'is:' y 'has:' no se pueden usar como operadores independientes y deben combinarse con otra cláusula (por ejemplo, @XDevelopers has:links).    
+
+Las search APIs usan un conjunto limitado de operadores debido a la funcionalidad de tokenización/coincidencia. Las APIs enterprise en tiempo real e históricas por lotes proporcionan operadores adicionales. Consulta [AQUÍ](/x-api/enterprise-gnip-2.0/fundamentals/rules-filtering#operators-by-product) para más detalles.
+
+Para más detalles, consulta la guía [Introducción a los operadores](/x-api/enterprise-gnip-2.0/fundamentals/rules-filtering#building-rules-and-queries).
+
+### Disponibilidad de datos / fecha importante
+
+Al usar la Full-Archive search API, ten en cuenta que la plataforma X ha seguido evolucionando desde 2006. A medida que se añadieron nuevas funciones, a los objetos JSON subyacentes se les añadieron nuevos metadatos. Por esa razón, es importante entender cuándo se añadieron los atributos de Post con los que coinciden los operadores de búsqueda. A continuación, algunas de las fechas 'born on' más fundamentales de grupos importantes de metadatos. Para saber más sobre cuándo se introdujeron por primera vez los atributos de Post, consulta [esta guía](/x-api/enterprise-gnip-2.0/fundamentals/search-api#full-archive-search-metadata-timeline).  
+
+* Primer Post: 21/3/2006
+* Primeros Native Retweets: 6/11/2009
+* Primer Post geoetiquetado: 19/11/2009
+* URLs indexadas por primera vez para filtrado: 27/8/2011
+* Metadatos de expansión de URL mejorados (títulos y descripciones de sitios web): 1/12/2014
+* Metadatos y filtrado de Profile Geo enrichment: 17/2/2015
+
+### Actualizaciones de datos y mutabilidad
+
+Con las APIs de búsqueda enterprise, algunos de los datos dentro de un Post son mutables, es decir, pueden actualizarse o cambiar después del archivo inicial.
+
+Estos datos mutables se dividen en dos categorías:
+
+* Metadatos del objeto User:
+    * @handle del usuario (el ID numérico nunca cambia)
+    * Descripción de la bio
+    * Conteos: statuses, followers, friends, favorites, lists
+    * Ubicación del perfil
+    * Otros detalles como zona horaria e idioma
+* Estadísticas del Post — es decir, cualquier cosa que pueda ser cambiada en la plataforma por acciones del usuario (ejemplos a continuación):
+    * Conteo de favorites
+    * Conteo de retweets
+
+En la mayoría de estos casos, las search APIs devolverán los datos tal como existen en la plataforma en el _momento de la consulta_, en lugar de en el momento de generación del Post. Sin embargo, en el caso de consultas que usan operadores selectos (por ejemplo, from, to, @, is:verified), esto puede no ser así. Los datos se actualizan en nuestro índice de forma regular, con una frecuencia mayor para los períodos de tiempo más recientes. Como resultado, en algunos casos, los datos devueltos pueden no coincidir exactamente con los datos actuales tal como se muestran en X.com, sino que coinciden con los datos en el momento en que se indexaron por última vez.
+
+Ten en cuenta que este problema de inconsistencia solo se aplica a consultas en las que el operador se aplica a datos mutables. Un ejemplo es filtrar por nombres de usuario, y la mejor solución sería usar IDs numéricos de usuario en lugar de @handles para estas consultas.
+
+### Solicitudes de un solo hilo vs. multihilo
+
+Cada cliente tiene un rate limit definido para su endpoint de búsqueda. El rate limit por minuto por defecto para Full-Archive search es de 120 solicitudes por minuto, para un promedio de 2 consultas por segundo (QPS). Este QPS promedio significa que, en teoría, se pueden hacer 2 solicitudes a la API cada segundo. Dada la característica de paginación del producto, si una consulta de un año tiene un millón de Posts asociados, distribuidos uniformemente a lo largo del año, se requerirían más de 2.000 solicitudes (asumiendo un 'maxResults' de 500) para recibir todos los datos. Asumiendo que se tardan dos segundos por respuesta, eso son 4.000 segundos (o poco más de una hora) para extraer todos esos datos en serie/secuencialmente a través de un único hilo (1 solicitud por segundo usando el token "next" de la respuesta anterior). ¡Nada mal!
+
+Ahora considera la situación en la que se usan doce hilos paralelos para recibir datos. Suponiendo una distribución uniforme del millón de Posts durante el período de un año, podrías dividir las solicitudes en doce hilos paralelos (multihilo) y utilizar más del rate limit por segundo para el mismo "job". En otras palabras, podrías ejecutar un hilo por cada mes que te interese y, al hacerlo, los datos podrían recuperarse 12 veces más rápido (o ~6 minutos).
+
+Este ejemplo multihilo se aplica igualmente bien al endpoint counts. Por ejemplo, si quisieras recibir conteos de Posts para un período de dos años, podrías hacer una solicitud de un solo hilo y paginar por los counts 31 días a la vez. Asumiendo que se tardan 2 segundos por respuesta, se tardarían aproximadamente 48 segundos en realizar las 24 solicitudes de API y recuperar todo el conjunto de counts. Sin embargo, también tienes la opción de hacer varias solicitudes de un mes a la vez. Al hacer 12 solicitudes por segundo, todo el conjunto de counts podría recuperarse en aproximadamente 2 segundos.
+
+### Lógica de reintento
+
+Si experimentas un error 503 con las APIs de búsqueda enterprise, es probable que sea un error transitorio y se pueda resolver reintentando la solicitud poco después.
+
+Si la solicitud falla 4 veces seguidas y has esperado al menos 10 minutos entre fallos, sigue estos pasos para solucionar el problema:
+
+* Reintenta la solicitud después de reducir la cantidad de tiempo que cubre. Repite esto hasta una ventana de tiempo de 6 horas si no tiene éxito.
+* Si estás combinando con OR un gran número de términos, divídelos en reglas separadas y reintenta cada una individualmente.
+* Si estás usando un gran número de exclusiones en tu regla, reduce el número de términos negados en la regla y reintenta.
+
+## Quick start
+
+### Primeros pasos con enterprise Search Posts: 30-Day API
+
+La API enterprise Search Posts: 30-Day te proporciona los Posts publicados en los últimos 30 días. Los Posts se emparejan y se te envían de vuelta según la consulta que especifiques en tu solicitud. Una consulta es una regla en la que defines lo que debe contener el Post que obtienes de vuelta. En este tutorial, buscaremos Posts que provengan de la cuenta X @XDevelopers en inglés.
+
+Los Posts que obtienes de vuelta en tu carga útil pueden estar en un formato data, que te proporciona la carga útil completa del Post, o pueden estar en un formato counts que te da datos de conteo numérico de Posts coincidentes. Estaremos u

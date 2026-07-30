@@ -1,0 +1,232 @@
+---
+title: Home Timeline 퀵스타트
+sidebarTitle: Home Timeline
+description: "이 가이드에서는 역시간순 홈 타임라인 엔드포인트에 대한 첫 요청을 만드는 방법을 안내합니다. 퀵스타트를 다루는 X API v2 standard 티어 레퍼런스입니다."
+keywords: ["home timeline", "역시간순", "home timeline 퀵스타트", "timeline 퀵스타트", "home timeline 튜토리얼"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+이 가이드에서는 역시간순 홈 타임라인 엔드포인트에 대한 첫 요청을 만드는 방법을 안내합니다.
+
+<Note>
+**사전 요구사항**
+
+시작하기 전에 다음이 필요합니다:
+- 승인된 App이 있는 [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- User Access Token (이 엔드포인트는 사용자 인증이 필요합니다)
+</Note>
+
+---
+
+## 1단계: 사용자 ID 확인
+
+홈 타임라인을 조회할 계정의 user ID가 필요합니다. username lookup 엔드포인트를 사용해 찾으세요:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/by/username/XDevelopers" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+response = client.users.get_by_username("XDevelopers")
+print(f"User ID: {response.data.id}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+const response = await client.users.getByUsername("XDevelopers");
+console.log(`User ID: ${response.data?.id}`);
+```
+
+</CodeGroup>
+
+응답에는 user ID가 포함됩니다:
+
+```json
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "XDevelopers"
+  }
+}
+```
+
+---
+
+## 2단계: 홈 타임라인 요청
+
+user ID와 User Access Token으로 GET 요청을 만듭니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/timelines/reverse_chronological" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get home timeline with pagination
+for page in client.posts.get_home_timeline("2244994945"):
+    for post in page.data:
+        print(post.text)
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get home timeline with pagination
+const paginator = client.posts.getHomeTimeline("2244994945");
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(post.text);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## 3단계: 응답 확인
+
+```json title="예시 응답" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "id": "1524796546306478083",
+      "text": "Today marks the launch of Devs in the Details...",
+      "edit_history_tweet_ids": ["1524796546306478083"]
+    },
+    {
+      "id": "1524468552404668416",
+      "text": "Join us tomorrow for a discussion about bots...",
+      "edit_history_tweet_ids": ["1524468552404668416"]
+    }
+  ],
+  "meta": {
+    "result_count": 2,
+    "newest_id": "1524796546306478083",
+    "oldest_id": "1524468552404668416",
+    "next_token": "7140dibdnow9c7btw421dyz6jism75z99gyxd8egarsc4"
+  }
+}
+```
+
+---
+
+## 4단계: fields 및 expansions 추가
+
+쿼리 파라미터로 추가 데이터를 요청합니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/timelines/reverse_chronological?\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id&\
+user.fields=username,verified&\
+max_results=10" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get home timeline with fields and expansions
+for page in client.posts.get_home_timeline(
+    "2244994945",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username", "verified"],
+    max_results=10
+):
+    for post in page.data:
+        print(f"{post.text[:50]}... - Likes: {post.public_metrics.like_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get home timeline with fields and expansions
+const paginator = client.posts.getHomeTimeline("2244994945", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username", "verified"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text?.slice(0, 50)}... - Likes: ${post.public_metrics?.like_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## 5단계: 결과 페이지네이션
+
+SDK는 페이지네이션을 자동으로 처리합니다. cURL의 경우 응답의 `next_token`을 사용해 추가 결과를 가져옵니다:
+
+```bash
+curl "https://api.x.com/2/users/2244994945/timelines/reverse_chronological?\
+max_results=10&\
+pagination_token=7140dibdnow9c7btw421dyz6jism75z99gyxd8egarsc4" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+---
+
+## 공통 파라미터
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `max_results` | 페이지당 결과 수 (1-100) | 10 |
+| `start_time` | 가장 오래된 게시물 타임스탬프 (ISO 8601) | — |
+| `end_time` | 가장 최근 게시물 타임스탬프 (ISO 8601) | — |
+| `since_id` | 이 ID 이후의 게시물 반환 | — |
+| `until_id` | 이 ID 이전의 게시물 반환 | — |
+| `exclude` | `retweets`, `replies` 또는 둘 다 제외 | — |
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="User mentions" icon="at" href="/x-api/posts/timelines/quickstart/user-mention-quickstart">
+    사용자를 멘션한 게시물 가져오기
+  </Card>
+  <Card title="통합 가이드" icon="/icons/xds/icon-book.svg" href="/x-api/posts/timelines/integrate">
+    핵심 개념 및 모범 사례
+  </Card>
+  <Card title="API 레퍼런스" icon="/icons/xds/icon-code.svg" href="/x-api/users/get-timeline">
+    전체 엔드포인트 문서
+  </Card>
+  <Card title="페이지네이션 가이드" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/fundamentals/pagination">
+    큰 결과 집합 탐색
+  </Card>
+</CardGroup>

@@ -1,0 +1,230 @@
+---
+title: Métricas
+description: "Solicite métricas de engajamento públicas, não públicas, orgânicas e promovidas para Posts e mídia de vídeo na API do X v2, incluindo impressions, likes e views."
+sidebarTitle: Métricas
+keywords: ["métricas", "métricas de engajamento", "métricas de tweet", "impressions", "likes", "reposts", "views de vídeo", "análise"]
+---
+
+A API do X fornece métricas de engajamento para posts e mídia. Acesse métricas públicas com qualquer autenticação ou métricas privadas para seu próprio conteúdo com autenticação de usuário.
+
+---
+
+## Tipos de métricas
+
+| Tipo | Autenticação | Descrição |
+|:-----|:---------------|:------------|
+| **Public** | Bearer Token | Visível para qualquer pessoa (impressions, likes, reposts, replies) |
+| **Non-public** | User context | Métricas privadas (clicks) |
+| **Organic** | User context | Métricas de visualizações não promovidas |
+| **Promoted** | User context | Métricas de visualizações de anúncios |
+
+<Note>
+**Limite de 30 dias**: Métricas non-public, organic e promoted só estão disponíveis para posts criados nos últimos 30 dias.
+</Note>
+
+---
+
+## Métricas disponíveis
+
+### Métricas de Post
+
+| Métrica | Tipo | Caminho do field |
+|:-------|:-----|:-----------|
+| Reposts | Public | `public_metrics.retweet_count` |
+| Quotes | Public | `public_metrics.quote_count` |
+| Likes | Public | `public_metrics.like_count` |
+| Replies | Public | `public_metrics.reply_count` |
+| Impressions | Public | `public_metrics.impression_count` |
+| Bookmarks | Public | `public_metrics.bookmark_count` |
+| URL clicks | Non-public | `non_public_metrics.url_link_clicks` |
+| Profile clicks | Non-public | `non_public_metrics.user_profile_clicks` |
+| Engagements | Non-public | `non_public_metrics.engagements` |
+
+### Métricas de mídia (vídeos)
+
+| Métrica | Tipo | Caminho do field |
+|:-------|:-----|:-----------|
+| Views | Public | `public_metrics.view_count` |
+| Playback 0% | Non-public | `non_public_metrics.playback_0_count` |
+| Playback 25% | Non-public | `non_public_metrics.playback_25_count` |
+| Playback 50% | Non-public | `non_public_metrics.playback_50_count` |
+| Playback 75% | Non-public | `non_public_metrics.playback_75_count` |
+| Playback 100% | Non-public | `non_public_metrics.playback_100_count` |
+
+---
+
+## Solicitando métricas
+
+### Métricas públicas (qualquer autenticação)
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?tweet.fields=public_metrics" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Resposta:
+
+```json title="Exemplo de resposta" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "public_metrics": {
+      "retweet_count": 50,
+      "reply_count": 12,
+      "like_count": 234,
+      "quote_count": 5,
+      "bookmark_count": 8,
+      "impression_count": 5432
+    }
+  }
+}
+```
+
+### Métricas privadas (user context)
+
+Requer OAuth 1.0a ou OAuth 2.0 com user context para posts que você possui:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?tweet.fields=non_public_metrics,organic_metrics" \
+  -H "Authorization: OAuth oauth_consumer_key=...,oauth_token=..."
+```
+
+Resposta:
+
+```json title="Exemplo de resposta" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "non_public_metrics": {
+      "impression_count": 5432,
+      "url_link_clicks": 89,
+      "user_profile_clicks": 156,
+      "engagements": 345
+    },
+    "organic_metrics": {
+      "impression_count": 5432,
+      "like_count": 234,
+      "reply_count": 12,
+      "retweet_count": 50,
+      "url_link_clicks": 89,
+      "user_profile_clicks": 156
+    }
+  }
+}
+```
+
+---
+
+## Métricas de vídeo
+
+Para métricas de playback de vídeo, use a expansion de mídia:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?\
+tweet.fields=attachments&\
+expansions=attachments.media_keys&\
+media.fields=public_metrics,non_public_metrics" \
+  -H "Authorization: OAuth ..."
+```
+
+Resposta:
+
+```json title="Exemplo de resposta" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Check out this video!",
+    "attachments": {
+      "media_keys": ["13_9876543210"]
+    }
+  },
+  "includes": {
+    "media": [{
+      "media_key": "13_9876543210",
+      "type": "video",
+      "public_metrics": {
+        "view_count": 12543
+      },
+      "non_public_metrics": {
+        "playback_0_count": 12543,
+        "playback_25_count": 9876,
+        "playback_50_count": 7654,
+        "playback_75_count": 5432,
+        "playback_100_count": 3210
+      }
+    }]
+  }
+}
+```
+
+---
+
+## Métricas orgânicas vs. promovidas
+
+Se um post foi promovido como anúncio, as métricas se dividem entre visualizações orgânicas e promovidas:
+
+| Contexto | Descrição |
+|:--------|:------------|
+| **Organic** | Métricas de visualizações normais da timeline |
+| **Promoted** | Métricas de impressions pagas de anúncios |
+| **Public** | Total combinado (organic + promoted) |
+
+Solicite ambos para ver a divisão:
+
+```bash
+tweet.fields=public_metrics,organic_metrics,promoted_metrics
+```
+
+---
+
+## Definições das métricas
+
+<Accordion title="Impressions">
+Contagem de vezes que o post apareceu na tela de um usuário. Não é única — o mesmo usuário visualizando duas vezes conta como duas impressions.
+</Accordion>
+
+<Accordion title="Repost count">
+Número de reposts (retweets). Não inclui quote posts.
+</Accordion>
+
+<Accordion title="Quote count">
+Número de quote posts (reposts com comentário). Estes são sempre orgânicos.
+</Accordion>
+
+<Accordion title="Bookmark count">
+Número de vezes que o post foi salvo como bookmark por usuários.
+</Accordion>
+
+<Accordion title="Video views">
+Agregado em todos os posts que contêm o vídeo. Um vídeo republicado em vários posts tem uma contagem total de views.
+</Accordion>
+
+<Accordion title="Playback quartiles">
+Número de usuários únicos que reproduziram até cada porcentagem do vídeo. Útil para entender taxas de drop-off.
+</Accordion>
+
+---
+
+## Resumo dos requisitos
+
+| Field de métrica | Autenticação exigida |
+|:-------------|:-----------------------|
+| `public_metrics` | Bearer Token (qualquer) |
+| `non_public_metrics` | User context (apenas posts próprios) |
+| `organic_metrics` | User context (apenas posts próprios) |
+| `promoted_metrics` | User context (apenas posts promovidos) |
+
+---
+
+## Próximos passos
+
+<CardGroup cols={2}>
+  <Card title="Dicionário de dados" icon="/icons/xds/icon-book.svg" href="/x-api/fundamentals/data-dictionary">
+    Referência completa de fields.
+  </Card>
+  <Card title="Autenticação" icon="/icons/xds/icon-key.svg" href="/resources/fundamentals/authentication/overview">
+    Configure user context auth.
+  </Card>
+</CardGroup>

@@ -1,0 +1,278 @@
+---
+title: Compliance Firehose API
+description: "Transmite eventos de cumplimiento de usuario en tiempo real, como eliminaciones, ediciones, retenciones y scrubs, con la Compliance Firehose API enterprise para datos almacenados."
+keywords: ["compliance firehose", "firehose API", "compliance API", "firehose enterprise", "compliance stream", "firehose"]
+---
+
+>**Ten en cuenta**
+>
+>Hemos lanzado una nueva herramienta de cumplimiento para la X API v2 llamada [batch compliance](/x-api/compliance/batch-compliance). Esta nueva herramienta te permite subir grandes conjuntos de datos de IDs de Posts o de usuarios para recuperar su estado de cumplimiento con el fin de determinar qué datos requieren acción para que tus conjuntos de datos cumplan con la normativa.
+
+>Además, tanto batch compliance como el compliance firehose se han actualizado para admitir ediciones de Posts. Para el compliance firehose, se ha añadido un nuevo evento 'tweet_edit'. Consulta la documentación de [Objetos de datos de cumplimiento](/x-api/enterprise-gnip-2.0/fundamentals/firehouse#compliance-data-objects) para más detalles. Aprende más sobre cómo funcionan los metadatos de edición de Posts en la página [Fundamentos de Editar Posts](/x-api/fundamentals/edit-posts).
+
+## Descripción general
+
+`Enterprise`
+
+Uno de los valores fundamentales de X es defender y respetar la voz del usuario. Esto incluye respetar sus expectativas e intención cuando eliminan, modifican o editan el contenido que eligen compartir en X. Creemos que esto es fundamentalmente importante para la salud a largo plazo de una de las mayores plataformas de información pública y en tiempo real del mundo. X pone los controles en manos de sus usuarios, dando a los individuos la capacidad de controlar su propia experiencia de X. Creemos que los consumidores empresariales que reciben datos de X tienen la responsabilidad de honrar las expectativas e intención de los usuarios finales.
+
+Para más información sobre los tipos de eventos de cumplimiento que son posibles en la plataforma X, consulta nuestro artículo, [Honrar la intención del usuario en X](/x-api/enterprise-gnip-2.0/fundamentals/firehouse#honoring-user-intent-on-twitter).
+
+Cualquier desarrollador o empresa que consuma datos de X a través de una API tiene la obligación de usar todos los esfuerzos razonables para honrar los cambios en el contenido del usuario. Esta obligación se extiende a eventos de usuario como eliminaciones, modificaciones y cambios en las opciones de compartición (por ejemplo, cuando el contenido se vuelve protegido o retenido). También incluye cuando los usuarios editan sus Posts. Consulta el lenguaje específico en la [Developer Policy](https://developer.x.com/en/developer-terms/policy) y/o tu Acuerdo de Datos de X para comprender cómo esta obligación afecta a tu uso de los datos de X.
+
+X ofrece las siguientes soluciones que entregan información sobre estos eventos de cumplimiento de usuario y si un Post o Usuario específico está públicamente disponible o no. Una breve descripción general de las soluciones y sus patrones generales de integración se detalla a continuación:
+
+#### GET statuses/lookup y GET users/lookup
+
+* Formato: APIs REST. Consulta: [GET statuses/lookup](https://developer.x.com/en/docs/x-api/v1/tweets/post-and-engage/api-reference/get-statuses-lookup) y [GET users/lookup](https://developer.x.com/en/docs/x-api/v1/accounts-and-users/follow-search-get-users/api-reference/get-users-lookup).
+* Estos endpoints siempre devuelven la última versión de cualquier edición de Post. Todos los objetos Post que describen Posts creados después de que se introdujera la funcionalidad de edición incluirán metadatos de edición de Posts. Esto es cierto incluso para Posts que no fueron editados.
+* Para todos los Posts, las solicitudes de Posts más de 30 minutos después de su creación representarán el estado final de todos los Posts.
+
+* Entregan información de disponibilidad para Posts o Usuarios específicos según los defina el llamante como parte de la solicitud de la API.
+* Pueden usarse para comprobaciones ad-hoc del estado actual de disponibilidad de un grupo específico de Posts / Usuarios.
+* Ideal para clientes que necesitan una forma de verificar el estado actual de un Post o Usuario específico en un momento dado.
+* Estas APIs proporcionan un mecanismo útil que puede ser usado por clientes que necesitan verificar la disponibilidad de una pieza de contenido, por ejemplo cuando:
+    1.  Muestran Posts
+    2.  Interactúan con un Post(s) o Usuario(s) de forma 1:1
+    3.  Distribuyen contenido de X a un tercero a través de una descarga de archivo permitida
+    4.  Almacenan Posts durante períodos prolongados de tiempo
+
+#### Compliance Firehose (solo enterprise)
+
+* Formato: API de streaming. Consulta: [Compliance Firehose](/x-api/enterprise-gnip-2.0/fundamentals/firehouse#api-reference).
+* Entrega un stream en tiempo real de [actividades de cumplimiento](/x-api/enterprise-gnip-2.0/fundamentals/firehouse#compliance-data-objects) en X. Estas actividades incluyen cuando los Posts son editados.
+* Puede usarse para mantener el estado de cumplimiento en un conjunto de datos almacenados a medida que ocurren nuevos eventos de cumplimiento en la plataforma.
+* Ideal para clientes que consumen y almacenan grandes cantidades de datos de X durante períodos prolongados de tiempo.
+
+## Guías
+
+### **Buenas prácticas de cumplimiento**
+
+#### **Recomendaciones y buenas prácticas**
+
+*   **Construye esquemas de almacenamiento de datos que almacenen el Post ID y User ID numéricos**: Los mensajes de usuario requieren que se tome acción en todos los Posts de ese usuario. Por lo tanto, dado que todos los mensajes de cumplimiento se entregan solo por ID numérico, es importante diseñar esquemas de almacenamiento que mantengan la relación entre Post y Usuario basándose en IDs numéricos. Los consumidores de datos necesitarán monitorizar eventos de cumplimiento tanto por Post ID como por User ID y ser capaces de actualizar el almacén de datos local apropiadamente.
+
+*   **Construye esquemas que aborden todos los estados de cumplimiento**: Dependiendo de cómo se aborden las actividades de cumplimiento en varias aplicaciones, puede ser necesario agregar otros metadatos al almacén de datos. Por ejemplo, los consumidores de datos pueden decidir agregar metadatos a una base de datos existente para facilitar la restricción de la visualización de contenido en los países afectados por un mensaje status\_withheld.
+
+*   **Manejo de eliminaciones de Retweets**: Los Retweets son un tipo especial de Post donde el mensaje original está anidado en un objeto dentro del Retweet. En este caso, hay dos Post IDs referenciados en un Retweet — el ID del Retweet y el ID del mensaje original (incluido en el objeto anidado). Cuando se elimina un mensaje original, se emite un mensaje de eliminación de Post para el ID original. Los eventos de eliminación de Post normalmente activan eventos de eliminación para todos los Retweets. Sin embargo, en algunos casos no se envían todos y los sistemas cliente deben tolerar eliminaciones incompletas de Retweets. La eliminación del ID original debería ser suficiente para eliminar todos los Retweets subsiguientes. Es una buena práctica referenciar el Post ID original al almacenar Retweets, y eliminar todos los Retweets referenciados al recibir eventos de eliminación de Post.
+
+### Objetos de datos de cumplimiento
+
+#### **Compliance Firehose API**
+
+Los posibles tipos de eventos de cumplimiento incluirán eventos de Post (o "status") y eventos de User, para los cuales hay múltiples tipos descritos a continuación.
+
+Ten en cuenta:
+
+* Lee más sobre los statuses de User [aquí](https://support.x.com/articles/14016) y nuestra política de desarrollador sobre Posts eliminados [aquí](https://dev.x.com/overview/terms/policy#3.Update_Respect_Users_Control_and_Privacy).
+* El Compliance Firehose se ha actualizado para proporcionar eventos 'tweet_edit'.
+* Varios eventos de user delete, protect y suspend no son necesariamente permanentes y pueden alternar entre estados infinitamente. Estos incluyen: user\_delete, user\_undelete, user\_protect, user\_unprotect y user\_suspend, user\_unsuspend.
+* Los user\_deletes son seguidos por status\_deletes 30 días después solo si el usuario no ha seleccionado hacer user\_undelete de su cuenta. Es posible que un user\_delete sea revertido por el usuario y los deletes para todos sus Posts 30 días después no ocurran.
+* User\_suspend es una acción que permanece verdadera a menos que el usuario esté sujeto a un evento user\_unsuspend. Estos no están sujetos a ningún cambio en un período de tiempo de 30 días.
+
+Consulta la columna 'Acción recomendada' para entender cómo procesar cada tipo de evento con el fin de respetar la privacidad e intención del usuario final.
+
+
+| Tipo de mensaje original | Objeto | Permanente (Sí/No) | Acción recomendada |
+| :--- | :--- | :--- | :--- |
+| delete | Status | Sí | Eliminar el Post asociado. |
+| status_withheld | Status | Sí | Suprimir el Post asociado en los países específicos listados en el mensaje status_withheld. |
+| drop | Status | No  | Retirar el Post de la vista pública. |
+| undrop | Status | No  | El status puede volver a mostrarse y tratarse como público. |
+| tweet_edit | Status | Sí | Honrar y, cuando sea relevante, mostrar la nueva edición. |
+| user_delete | User | No  | Suprimir o eliminar todos los Posts del usuario asociado. |
+| user_undelete | User | No  | Todos los Posts del usuario asociado pueden volver a mostrarse y tratarse como públicos. |
+| user_protect | User | No  | Suprimir o eliminar todos los Posts del usuario asociado. |
+| user_unprotect | User | No  | Todos los Posts del usuario asociado pueden volver a mostrarse y tratarse como públicos. |
+| user_suspend | User | No  | Suprimir o eliminar todos los Posts del usuario asociado. |
+| user_unsuspend | User | No  | Todos los Posts del usuario asociado pueden volver a mostrarse y tratarse como públicos. |
+| scrub_geo | User | Sí | Eliminar todos los geodatos proporcionados por X para todos los Posts del usuario anteriores al Post especificado en el mensaje scrub_geo. Ten en cuenta que los Posts posteriores de un usuario pueden contener geodatos que se pueden usar. |
+| user_withheld | User | Sí | Suprimir los Posts del usuario asociado en los países específicos listados en el mensaje user_withheld. |
+| delete | Favorite | Sí | Eliminar el like/favorite asociado. |
+
+#### **Ejemplos de carga útil**
+
+Consulta los ejemplos de carga útil a continuación para cada evento de cumplimiento descrito en la tabla anterior.
+
+**Edición de Post**
+
+```json
+{"tweet_edit":
+   {
+     "id": "1557445923210514432"
+     "initial_tweet_id": "1557433858676740098",
+     "edit_tweet_ids": ["1557433858676740098", "1557445923210514432"],
+     "timestamp_ms": "1660155761384"
+   }
+ }
+```
+
+##### Eliminación de Post
+
+```json
+{
+  "delete": {
+    "status": {
+      "id": 601430178305220600,
+      "id_str": "601430178305220608",
+      "user_id": 3198576760,
+      "user_id_str": "3198576760"
+    },
+    "timestamp_ms": "1432228155593"
+  }
+}
+```
+
+##### Post retenido
+
+```json title="Ejemplo de respuesta" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "status_withheld": {
+    "status": {
+      "id": 601430178305220600,
+      "id_str": "601430178305220608",
+      "user_id": 3198576760,
+      "user_id_str": "3198576760"
+    },
+    "withheld_in_countries": [
+      "XY"
+    ],
+    "timestamp_ms": "1432228155593"
+  }
+}
+```
+
+
+##### Drop
+
+```json
+{
+  "drop": {
+    "status": {
+      "id": 601430178305220600,
+      "id_str": "601430178305220600",
+      "user_id": 3198576760,
+      "user_id_str": "3198576760"
+    },
+    "timestamp_ms": "1432228155593"
+  }
+}
+```
+
+
+##### Undrop
+
+```json
+{
+  "undrop": {
+    "status": {
+      "id": 601430178305220600,
+      "id_str": "601430178305220600",
+      "user_id": 3198576760,
+      "user_id_str": "3198576760"
+    },
+    "timestamp_ms": "1432228155593"
+  }
+}
+```
+
+
+#### Scrub geo
+```json
+{
+  "scrub_geo": {
+    "user_id": 519761961,
+    "up_to_status_id": 411552403083628540,
+    "up_to_status_id_str": "411552403083628544",
+    "user_id_str": "519761961",
+    "timestamp_ms": "1432228180345"
+  }
+}
+```
+
+
+##### User delete
+
+```json
+{
+  "user_delete": {
+    "id": 771136850,
+    "timestamp_ms": "1432228153548"
+  }
+}
+```
+
+##### User undelete
+```json
+{
+  "user_undelete": {
+    "id": 796250066,
+    "timestamp_ms": "1432228149062"
+  }
+}
+```
+
+
+##### User withheld
+
+```json title="Ejemplo de respuesta" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "user_withheld": {
+    "user": {
+      "id": 1375036644,
+      "id_str": "1375036644"
+    },
+    "withheld_in_countries": [
+      "XY"
+    ],
+    "timestampMs": "2014-08-27T23:49:41.839+00:00"
+  }
+}
+```
+
+##### User protect
+
+```json
+{
+  "user_protect": {
+    "id": 3182003550,
+    "timestamp_ms": "1432228177137"
+  }
+}
+```
+
+
+##### User unprotect
+```json
+{
+  "user_unprotect": {
+    "id": 2911076065,
+    "timestamp_ms": "1432228180113"
+  }
+}
+```
+
+##### User suspend
+
+```json
+{
+  "user_suspend": {
+    "id": 3120539094,
+    "timestamp_ms": "1432228194217"
+  }
+}
+```
+
+
+##### User unsuspend
+```json
+{
+  "user_unsuspend": {
+    "id": 3293130873,
+    "timestamp_ms": "1432228193828"
+  }
+}
+```
+### Integración del Compliance Firehose
+
+El Compliance Firehose es una API de streaming en tiempo real que entrega eventos de cumplimiento que ocurren en la plataforma X. Para comprender los eventos de cumplimiento y cómo se generan en X, consulta nuestro artículo, [Honrar la intención del usuario en X](/x-api/enterprise-gnip-2.0/fundamentals/firehouse#honoring-user-intent-on-twitter).

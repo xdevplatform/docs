@@ -1,0 +1,229 @@
+---
+title: Post Annotations
+description: "Use as anotações de entidade e contexto da API do X v2 para identificar pessoas, lugares, produtos, organizações e domínios de tópicos semanticamente dentro do texto de Posts."
+sidebarTitle: Anotações
+keywords: ["anotações", "post annotations", "entity annotations", "context annotations", "NER", "reconhecimento de entidade nomeada", "tópicos"]
+---
+
+Anotações fornecem metadados semânticos sobre o conteúdo do post. O X analisa posts para identificar entidades (pessoas, lugares, produtos) e contexto (tópicos, domínios) para ajudá-lo a entender e filtrar conteúdo.
+
+---
+
+## Tipos de anotações
+
+### Entity annotations
+
+Reconhecimento de entidade nomeada (NER) identifica menções específicas no texto do post:
+
+| Tipo | Exemplos |
+|:-----|:---------|
+| **Person** | Barack Obama, Elon Musk |
+| **Place** | San Francisco, Japan |
+| **Product** | iPhone, ChatGPT |
+| **Organization** | NASA, Google |
+| **Other** | Super Bowl, Diabetes |
+
+Entity annotations incluem uma pontuação de confiança e a posição no texto.
+
+### Context annotations
+
+Análise semântica que classifica posts por tópico e domínio:
+
+- **Domain**: Categoria ampla (Sports, Entertainment, Technology)
+- **Entity**: Tópico específico dentro do domínio (NBA, Marvel Movies, AI)
+
+Context annotations ajudam a filtrar e categorizar posts sem depender de palavras-chave.
+
+---
+
+## Solicitando anotações
+
+Adicione `context_annotations` e `entities` ao seu `tweet.fields`:
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?tweet.fields=context_annotations,entities" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## Estrutura da resposta
+
+```json title="Exemplo de resposta" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Just saw the new Marvel movie - it was amazing!",
+    "entities": {
+      "annotations": [
+        {
+          "start": 17,
+          "end": 22,
+          "probability": 0.9234,
+          "type": "Organization",
+          "normalized_text": "Marvel"
+        }
+      ]
+    },
+    "context_annotations": [
+      {
+        "domain": {
+          "id": "86",
+          "name": "Movie",
+          "description": "A film"
+        },
+        "entity": {
+          "id": "1234567890",
+          "name": "Marvel Cinematic Universe"
+        }
+      },
+      {
+        "domain": {
+          "id": "65",
+          "name": "Interests and Hobbies Vertical"
+        },
+        "entity": {
+          "id": "781974596752842752",
+          "name": "Entertainment"
+        }
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Fields de entity annotation
+
+| Field | Descrição |
+|:------|:------------|
+| `start` | Posição de início no texto |
+| `end` | Posição de fim no texto |
+| `probability` | Pontuação de confiança (0-1) |
+| `type` | Tipo de entidade (Person, Place, etc.) |
+| `normalized_text` | Nome padronizado da entidade |
+
+---
+
+## Domínios de contexto
+
+O X usa mais de 80 domínios para categorizar posts. Domínios comuns incluem:
+
+<Tabs>
+  <Tab title="Entertainment">
+| ID | Domain |
+|:---|:-------|
+| 3 | TV Shows |
+| 4 | TV Episodes |
+| 54 | Musician |
+| 56 | Actor |
+| 86 | Movie |
+| 91 | Podcast |
+  </Tab>
+  <Tab title="Sports">
+| ID | Domain |
+|:---|:-------|
+| 6 | Sports Events |
+| 11 | Sport |
+| 12 | Sports Team |
+| 26 | Sports League |
+| 60 | Athlete |
+| 93 | Coach |
+  </Tab>
+  <Tab title="Business & Tech">
+| ID | Domain |
+|:---|:-------|
+| 45 | Brand Vertical |
+| 46 | Brand Category |
+| 47 | Brand |
+| 48 | Product |
+| 165 | Technology |
+| 166 | Stocks |
+  </Tab>
+  <Tab title="Other">
+| ID | Domain |
+|:---|:-------|
+| 10 | Person |
+| 13 | Place |
+| 29 | Events |
+| 35 | Politicians |
+| 119 | Holiday |
+| 131 | Unified Twitter Taxonomy |
+  </Tab>
+</Tabs>
+
+<Note>
+O domínio 131 (Unified Twitter Taxonomy) alimenta o recurso Topics do X visível para os usuários na plataforma.
+</Note>
+
+---
+
+## Usando anotações em filtros
+
+### Search e filtered stream
+
+Filtre posts pelo entity ID de context annotation:
+
+```bash
+# Posts about a specific entity
+context:86.1234567890
+
+# Posts in a specific domain
+context:86.*
+```
+
+### Exemplos práticos
+
+```bash
+# Posts about the NBA
+query=context:26.852137520
+
+# Posts about Apple products
+query=context:47.10026792024
+
+# Posts about movies
+query=context:86.*
+```
+
+---
+
+## Suporte a idiomas
+
+As anotações estão disponíveis para vários idiomas:
+
+| Idioma | Cobertura |
+|:---------|:---------|
+| Inglês | Máxima |
+| Japonês | Alta |
+| Espanhol | Alta |
+| Português | Média |
+| Francês | Média |
+| Hindi | Média |
+
+A cobertura varia por domínio e mercado.
+
+---
+
+## Observações importantes
+
+<Warning>
+**Nem todos os posts são anotados.** A cobertura de anotações depende de:
+- Suporte ao idioma
+- Cobertura de tópicos na taxonomia do X
+- Riqueza semântica do texto do post
+</Warning>
+
+- As anotações não são retroativas — só são aplicadas quando as entidades são rastreadas
+- A mesma entidade pode aparecer em vários domínios (ex.: uma celebridade é tanto Person quanto Actor)
+- Os entity IDs são estáveis entre domínios
+
+---
+
+## Recursos
+
+<CardGroup cols={2}>
+  <Card title="Lista de Context Entity" icon="github" href="https://github.com/xdevplatform/twitter-context-annotations">
+    CSV das entidades de context annotation disponíveis.
+  </Card>
+</CardGroup>

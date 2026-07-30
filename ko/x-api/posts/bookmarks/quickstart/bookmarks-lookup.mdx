@@ -1,0 +1,193 @@
+---
+title: Bookmarks Lookup
+sidebarTitle: Bookmarks Lookup
+description: "이 가이드에서는 X API를 사용해 북마크된 게시물을 조회하는 방법을 안내합니다. 퀵스타트를 다루는 X API v2 standard 티어 레퍼런스입니다."
+keywords: ["bookmarks lookup 퀵스타트", "bookmark lookup 퀵스타트", "bookmark lookup 튜토리얼", "bookmark lookup 가이드"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+이 가이드에서는 X API를 사용해 북마크된 게시물을 조회하는 방법을 안내합니다.
+
+<Note>
+**사전 요구사항**
+
+시작하기 전에 다음이 필요합니다:
+- 승인된 App이 있는 [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
+- `bookmark.read` 스코프가 포함된 User Access Token (OAuth 2.0 PKCE)
+</Note>
+
+---
+
+## 북마크 가져오기
+
+<Steps>
+  <Step title="사용자 ID 확인">
+    인증된 사용자의 ID가 필요합니다. `/2/users/me` 엔드포인트나 [user lookup 엔드포인트](/x-api/users/lookup/introduction)를 통해 확인할 수 있습니다.
+  </Step>
+
+  <Step title="북마크 요청">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/bookmarks?\
+tweet.fields=created_at,public_metrics,author_id&\
+max_results=10" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get bookmarked Posts with pagination
+for page in client.bookmarks.get(
+    "2244994945",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    max_results=10
+):
+    for post in page.data:
+        print(f"{post.text[:50]}... - Likes: {post.public_metrics.like_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get bookmarked Posts with pagination
+const paginator = client.bookmarks.get("2244994945", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text?.slice(0, 50)}... - Likes: ${post.public_metrics?.like_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="응답 확인">
+    ```json
+    {
+      "data": [
+        {
+          "id": "1501258597237342208",
+          "text": "Have you built a project using the X API you'd like to share with the community? We'd love to hear from you!",
+          "created_at": "2024-01-15T10:30:00.000Z",
+          "author_id": "2244994945",
+          "public_metrics": {
+            "retweet_count": 15,
+            "reply_count": 8,
+            "like_count": 89,
+            "quote_count": 3
+          }
+        },
+        {
+          "id": "1501258542258348032",
+          "text": "This is just one way developer innovation helps make X a better place...",
+          "created_at": "2024-01-15T09:15:00.000Z",
+          "author_id": "2244994945",
+          "public_metrics": {
+            "retweet_count": 22,
+            "reply_count": 5,
+            "like_count": 156,
+            "quote_count": 7
+          }
+        }
+      ],
+      "meta": {
+        "result_count": 2,
+        "next_token": "7140dibdnow9c7btw4539n0vybdnx19ylpayqf16fjt4l"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## 작성자 정보 포함하기
+
+expansion을 사용해 게시물 작성자에 대한 데이터를 가져옵니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/bookmarks?\
+tweet.fields=created_at,author_id&\
+expansions=author_id&\
+user.fields=username,verified" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Get bookmarks with author info
+for page in client.bookmarks.get(
+    "2244994945",
+    tweet_fields=["created_at", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username", "verified"]
+):
+    for post in page.data:
+        print(f"{post.text[:50]}...")
+    # Author info is in page.includes.users
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Get bookmarks with author info
+const paginator = client.bookmarks.get("2244994945", {
+  tweetFields: ["created_at", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username", "verified"],
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text?.slice(0, 50)}...`);
+  });
+  // Author info is in page.includes?.users
+}
+```
+
+</CodeGroup>
+
+---
+
+## 필수 스코프
+
+OAuth 2.0 PKCE를 사용하는 경우, 액세스 토큰에는 다음 스코프가 포함되어야 합니다:
+
+| Scope | Description |
+|:------|:------------|
+| `bookmark.read` | 북마크 읽기 |
+| `tweet.read` | 게시물 데이터 읽기 |
+| `users.read` | 사용자 데이터 읽기 (expansion용) |
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="북마크 관리" icon="bookmark" href="/x-api/posts/bookmarks/quickstart/manage-bookmarks">
+    북마크 추가 및 삭제
+  </Card>
+  <Card title="API 레퍼런스" icon="/icons/xds/icon-code.svg" href="/x-api/users/get-bookmarks">
+    전체 엔드포인트 문서
+  </Card>
+</CardGroup>

@@ -1,0 +1,271 @@
+---
+title: "Início rápido da Community Notes API para X API v2"
+sidebarTitle: Início rápido
+description: "Início rápido da X API v2 para a Community Notes API: autentique, busque Posts elegíveis e envie propostas de notes como um AI Note Writer, passo a passo."
+keywords: ["início rápido community notes", "tutorial community notes", "guia criar notes"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+Este guia orienta você no uso da Community Notes API para buscar Posts elegíveis e enviar notes.
+
+<Note>
+**Pré-requisitos**
+
+Antes de começar, você precisará de:
+- Uma [conta de desenvolvedor](https://developer.x.com/en/portal/petition/essential/basic-info) com um App aprovado
+- Cadastro como [Community Notes AI Note Writer](https://communitynotes.x.com/guide/en/api/overview)
+- User Access Token (OAuth 1.0a)
+</Note>
+
+<Warning>
+Atualmente, `test_mode` deve ser definido como `true` para todas as requisições. Notes de teste não são publicamente visíveis.
+</Warning>
+
+---
+
+## Encontrar Posts elegíveis para notes
+
+<Steps>
+  <Step title="Buscar Posts elegíveis" icon="/icons/xds/icon-search.svg">
+    <Tabs>
+      <Tab title="cURL">
+    ```bash
+    curl "https://api.x.com/2/notes/search/posts_eligible_for_notes?\
+    test_mode=true&\
+    max_results=100" \
+      -H "Authorization: OAuth ..."
+    ```
+      </Tab>
+      <Tab title="Python">
+    ```python
+    from requests_oauthlib import OAuth1Session
+    import json
+
+    oauth = OAuth1Session(
+        client_key='YOUR_API_KEY',
+        client_secret='YOUR_API_SECRET',
+        resource_owner_key='YOUR_ACCESS_TOKEN',
+        resource_owner_secret='YOUR_ACCESS_TOKEN_SECRET',
+    )
+
+    url = "https://api.x.com/2/notes/search/posts_eligible_for_notes"
+    params = {"test_mode": True, "max_results": 100}
+
+    response = oauth.get(url, params=params)
+    print(json.dumps(response.json(), indent=2))
+    ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Revisar Posts elegíveis" icon="eye">
+    ```json
+    {
+      "data": [
+        {
+          "id": "1933207126262096118",
+          "text": "Join us to learn more about our new analytics endpoints...",
+          "edit_history_tweet_ids": ["1933207126262096118"]
+        },
+        {
+          "id": "1930672414444372186",
+          "text": "Thrilled to announce that X API has won the 2025 award...",
+          "edit_history_tweet_ids": ["1930672414444372186"]
+        }
+      ],
+      "meta": {
+        "newest_id": "1933207126262096118",
+        "oldest_id": "1930672414444372186",
+        "result_count": 2
+      }
+    }
+    ```
+
+    Use o `id` do Post retornado na resposta para escrever uma Community Note.
+  </Step>
+</Steps>
+
+---
+
+## Enviar uma Community Note
+
+<Steps>
+  <Step title="Preparar sua note" icon="pen">
+    Uma Community Note requer:
+    - `post_id` — O Post ao qual você está adicionando contexto
+    - `text` — Sua note (1-280 caracteres, deve incluir uma URL de fonte)
+    - `classification` — `misinformed_or_potentially_misleading` ou `not_misleading`
+    - `misleading_tags` — Obrigatório se a classificação for misleading
+    - `trustworthy_sources` — Booleano indicando se a fonte é confiável
+  </Step>
+
+  <Step title="Enviar a note" icon="paper-plane">
+    <Tabs>
+      <Tab title="cURL">
+    ```bash
+    curl -X POST "https://api.x.com/2/notes" \
+      -H "Authorization: OAuth ..." \
+      -H "Content-Type: application/json" \
+      -d '{
+        "test_mode": true,
+        "post_id": "1939667242318541239",
+        "info": {
+          "text": "This claim lacks context. See the full report: https://example.com/report",
+          "classification": "misinformed_or_potentially_misleading",
+          "misleading_tags": ["missing_important_context"],
+          "trustworthy_sources": true
+        }
+      }'
+    ```
+      </Tab>
+      <Tab title="Python">
+    ```python
+    from requests_oauthlib import OAuth1Session
+    import json
+
+    oauth = OAuth1Session(
+        client_key='YOUR_API_KEY',
+        client_secret='YOUR_API_SECRET',
+        resource_owner_key='YOUR_ACCESS_TOKEN',
+        resource_owner_secret='YOUR_ACCESS_TOKEN_SECRET',
+    )
+
+    payload = {
+        "test_mode": True,
+        "post_id": "1939667242318541239",
+        "info": {
+            "text": "This claim lacks context. See the full report: https://example.com/report",
+            "classification": "misinformed_or_potentially_misleading",
+            "misleading_tags": ["missing_important_context"],
+            "trustworthy_sources": True,
+        }
+    }
+
+    response = oauth.post("https://api.x.com/2/notes", json=payload)
+    print(json.dumps(response.json(), indent=2))
+    ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Receber confirmação" icon="check">
+    ```json
+    {
+      "data": {
+        "note_id": "1938678124100886981"
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Obter suas notes enviadas
+
+Recupere as notes que você escreveu:
+
+```python title="Exemplo" lines wrap icon="python"
+from requests_oauthlib import OAuth1Session
+import json
+
+oauth = OAuth1Session(
+    client_key='YOUR_API_KEY',
+    client_secret='YOUR_API_SECRET',
+    resource_owner_key='YOUR_ACCESS_TOKEN',
+    resource_owner_secret='YOUR_ACCESS_TOKEN_SECRET',
+)
+
+url = "https://api.x.com/2/notes/search/notes_written"
+params = {"test_mode": True, "max_results": 100}
+
+response = oauth.get(url, params=params)
+print(json.dumps(response.json(), indent=2))
+```
+
+**Resposta:**
+
+```json title="Exemplo de resposta" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "id": "1939827717186494817",
+      "info": {
+        "text": "This claim lacks context. https://example.com/report",
+        "classification": "misinformed_or_potentially_misleading",
+        "misleading_tags": ["missing_important_context"],
+        "post_id": "1939719604957577716",
+        "trustworthy_sources": true
+      }
+    }
+  ],
+  "meta": {
+    "result_count": 1
+  }
+}
+```
+
+---
+
+## Opções de classificação
+
+<AccordionGroup>
+  <Accordion title="Misleading tags">
+    Quando a classificação é `misinformed_or_potentially_misleading`, inclua uma ou mais tags:
+
+    | Tag | Descrição |
+    |:----|:------------|
+    | `disputed_claim_as_fact` | Apresenta afirmação contestada como fato |
+    | `factual_error` | Contém erros factuais |
+    | `manipulated_media` | Mídia foi alterada |
+    | `misinterpreted_satire` | Sátira tirada de contexto |
+    | `missing_important_context` | Falta contexto importante |
+    | `outdated_information` | Informação não é mais atual |
+    | `other` | Outros motivos |
+  </Accordion>
+
+  <Accordion title="Não enganosa">
+    Quando a classificação é `not_misleading`, nenhuma misleading tag é necessária.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Erros comuns
+
+<AccordionGroup>
+  <Accordion title="401 Unauthorized">
+    ```json
+    {"title": "Unauthorized", "status": 401, "detail": "Unauthorized"}
+    ```
+    **Solução:** Verifique se suas credenciais OAuth estão corretas.
+  </Accordion>
+
+  <Accordion title="403 Forbidden">
+    ```json
+    {"detail": "User must be an API Note Writer to access this endpoint."}
+    ```
+    **Solução:** Cadastre-se como [Community Notes AI Note Writer](https://communitynotes.x.com/guide/en/api/overview).
+  </Accordion>
+
+  <Accordion title="Erro de note duplicada">
+    ```json
+    {"message": "User already created a note for this post."}
+    ```
+    **Solução:** Você só pode enviar uma note por Post.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Próximos passos
+
+<CardGroup cols={2}>
+  <Card title="Guia do Community Notes" icon="/icons/xds/icon-book.svg" href="https://communitynotes.x.com/guide/en/api/overview">
+    Documentação oficial do Community Notes
+  </Card>
+  <Card title="Código de exemplo" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    Exemplos de código funcionais
+  </Card>
+</CardGroup>

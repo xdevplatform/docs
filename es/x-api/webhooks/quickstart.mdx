@@ -1,0 +1,412 @@
+---
+title: Inicio rápido
+sidebarTitle: Inicio rápido
+description: "Esta guía te acompaña en la configuración de una app consumidora de webhook, implementando la. Referencia del nivel estándar de X API v2 que cubre webhooks."
+keywords: ["inicio rápido de webhook", "configuración de webhook", "verificación CRC", "challenge response check", "seguridad de webhook", "app consumidora de webhook"]
+---
+
+Esta guía te acompaña en la configuración de una app consumidora de webhook, la implementación del Challenge-Response Check (CRC), la seguridad de los eventos entrantes y el registro de tu webhook con X.
+
+## 1. Desarrolla una app consumidora de webhook
+
+Para registrar un webhook con tu X app, debes desarrollar, desplegar y hospedar una web app que reciba eventos de webhook de X y responda a solicitudes de seguridad CRC.
+
+### Requisitos de URL
+
+Crea una web app con una URL HTTPS accesible públicamente que actuará como el endpoint del webhook para recibir eventos:
+
+- El **path** del URI depende de ti. Todos estos ejemplos son válidos:
+  - `https://mydomain.com/service/listen`
+  - `https://mydomain.com/webhook/twitter`
+- La URL **no puede** incluir una especificación de puerto (por ejemplo, `https://mydomain.com:5000/webhook` **no** funcionará)
+
+### Lo que tu app debe manejar
+
+Tu endpoint de webhook debe manejar dos tipos de solicitudes HTTP:
+
+| Tipo de solicitud | Propósito |
+|:-------------|:--------|
+| **GET** | [Validación CRC](#2-the-crc-check) — X verifica que controlas el endpoint |
+| **POST** | Entrega de eventos — X envía payloads JSON de eventos |
+
+---
+
+## 2. La verificación CRC
+
+El Challenge-Response Check (CRC) es la forma en que X valida que la URL de callback que proporcionaste es válida y que **tú la controlas**. Tu web app debe responder correctamente a las solicitudes CRC para registrar y mantener tu webhook.
+
+### Cuándo se dispara CRC
+
+| Disparador | Descripción |
+|:--------|:------------|
+| **Registro inicial** | Cuando llamas a `POST /2/webhooks` |
+| **Validación horaria** | X valida automáticamente tu webhook cada hora |
+| **Revalidación manual** | Cuando llamas a `PUT /2/webhooks/:webhook_id` |
+
+Si tu webhook falla una verificación CRC, se marcará como `invalid` y **dejará de recibir eventos** hasta que la vuelva a pasar.
+
+### Cómo funciona el CRC
+
+Cuando X envía un CRC, hace una **solicitud GET** a la URL de tu webhook con un parámetro de consulta `crc_token`:
+
+```
+GET https://your-webhook-url.com/webhook?crc_token=challenge_string
+```
+
+Tu aplicación debe responder con un cuerpo JSON que contenga un `response_token`:
+
+```json
+{
+  "response_token": "sha256=<base64_encoded_hmac_hash>"
+}
+```
+
+### Cómo construir la respuesta CRC
+
+1. Usa el valor de `crc_token` del parámetro de consulta como el **mensaje**
+2. Usa el **consumer secret** de tu app (API secret key) como la **clave**
+3. Crea un hash **HMAC SHA-256**
+4. Codifica el resultado en **Base64**
+5. Antepone `sha256=` a la cadena codificada
+
+<Warning>
+**Importante:** Tu web app debe usar el **consumer secret** de tu app (API secret key) para el cifrado CRC — no tu bearer token ni access token.
+</Warning>
+
+### Ejemplo: Python
+
+```python title="Ejemplo" lines wrap icon="python"
+import hmac
+import hashlib
+import base64
+
+def handle_crc(crc_token, consumer_secret):
+    """
+    Respond to a Twitter CRC check.
+    
+    Args:
+        crc_token: The crc_token query parameter from the GET request
+        consumer_secret: Your app's consumer secret (API secret key)
+    
+    Returns:
+        dict with the response_token
+    """
+    sha256_hash = hmac.new(
+        consumer_secret.encode('utf-8'),
+        crc_token.encode('utf-8'),
+        hashlib.sha256
+    ).digest()
+
+    return {
+        "response_token": "sha256=" + base64.b64encode(sha256_hash).decode('utf-8')
+    }
+```
+
+### Ejemplo: Node.js
+
+```javascript title="Ejemplo" lines wrap icon="square-js"
+const crypto = require('crypto');
+
+function handleCrc(crcToken, consumerSecret) {
+  const hmac = crypto
+    .createHmac('sha256', consumerSecret)
+    .update(crcToken)
+    .digest('base64');
+
+  return {
+    response_token: `sha256=${hmac}`
+  };
+}
+```
+
+### Ejemplo: Flask (endpoint completo)
+
+Este ejemplo muestra un endpoint de webhook completo que maneja tanto la validación CRC (GET) como la entrega de eventos (POST):
+
+```python title="Ejemplo" expandable lines wrap icon="python"
+from flask import Flask, request, jsonify
+import hmac
+import hashlib
+import base64
+
+app = Flask(__name__)
+
+CONSUMER_SECRET = "your_consumer_secret_here"
+
+@app.route("/webhook", methods=["GET", "POST"])
+def webhook():
+    if request.method == "GET":
+        # Handle CRC check
+        crc_token = request.args.get("crc_token")
+        if crc_token:
+            sha256_hash = hmac.new(
+                CONSUMER_SECRET.encode("utf-8"),
+                crc_token.encode("utf-8"),
+                hashlib.sha256,
+            ).digest()
+            response_token = "sha256=" + base64.b64encode(sha256_hash).decode("utf-8")
+            return jsonify({"response_token": response_token}), 200
+        return "Missing crc_token", 400
+
+    elif request.method == "POST":
+        # Handle incoming webhook events
+        event = request.get_json()
+        print("Received event:", event)
+        return "", 200
+```
+
+---
+
+## 3. Asegurar webhooks
+
+Las APIs basadas en webhooks de X proporcionan dos métodos para confirmar la seguridad de tu servidor de webhook:
+
+### Challenge-Response Check (CRC)
+
+El CRC permite a X confirmar la propiedad de la web app que recibe los eventos de webhook. Consulta el [Paso 2](#2-the-crc-check) más arriba para los detalles completos de implementación.
+
+### Verificación de firma
+
+Cada solicitud POST de X incluye una cabecera `x-twitter-webhooks-signature` que te permite confirmar que X es la fuente del webhook entrante.
+
+Para verificar la firma:
+
+1. Obtén el valor de la cabecera `x-twitter-webhooks-signature` de la solicitud entrante
+2. Crea un hash HMAC SHA-256 usando tu **consumer secret** como clave y el **cuerpo crudo de la solicitud** como mensaje
+3. Codifica el hash en Base64 y antepone `sha256=`
+4. Compara el valor calculado con el valor de la cabecera — deben coincidir
+
+```python title="Ejemplo" expandable lines wrap icon="python"
+import hmac
+import hashlib
+import base64
+
+def verify_signature(payload, signature_header, consumer_secret):
+    """
+    Verify that a webhook POST request actually came from X.
+    
+    Args:
+        payload: The raw request body (bytes)
+        signature_header: The x-twitter-webhooks-signature header value
+        consumer_secret: Your app's consumer secret
+    
+    Returns:
+        True if the signature is valid
+    """
+    expected = "sha256=" + base64.b64encode(
+        hmac.new(
+            consumer_secret.encode("utf-8"),
+            payload,
+            hashlib.sha256
+        ).digest()
+    ).decode("utf-8")
+    
+    return hmac.compare_digest(expected, signature_header)
+```
+
+---
+
+## 4. Registra tu webhook
+
+Una vez que tu app pueda manejar las verificaciones CRC, registra la URL de tu webhook haciendo una solicitud `POST /2/webhooks`. Cuando hagas esta solicitud, X enviará inmediatamente una solicitud CRC a tu web app para verificar la propiedad.
+
+Todos los endpoints de gestión de webhook requieren autenticación con **OAuth2 App Only Bearer Token**.
+
+### Crear un webhook
+
+**`POST /2/webhooks`** — [Referencia de la API](/x-api/webhooks/create-webhook)
+
+```bash
+curl --request POST \
+  --url 'https://api.x.com/2/webhooks' \
+  --header 'Authorization: Bearer $BEARER_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "url": "https://yourdomain.com/webhooks/twitter"
+  }'
+```
+
+**Respuesta exitosa (200 OK):**
+
+Una respuesta exitosa indica que el webhook fue creado y la verificación CRC inicial pasó.
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "url": "https://yourdomain.com/webhooks/twitter",
+    "valid": true,
+    "created_at": "2025-01-15T12:00:00.000Z"
+  }
+}
+```
+
+Cuando un webhook se registra con éxito, la respuesta incluye un **webhook ID**. Este ID se necesita al hacer solicitudes a productos que soportan webhooks (por ejemplo, enlazar con Filtered Stream o crear suscripciones para Account Activity).
+
+**Razones comunes de fallo:**
+
+| Razón | Descripción |
+|:-------|:------------|
+| `CrcValidationFailed` | Tu URL de callback no respondió correctamente a la verificación CRC (por ejemplo, expiró, respuesta incorrecta) |
+| `UrlValidationFailed` | La URL de callback no cumple con los requisitos (por ejemplo, no es `https`, formato inválido) |
+| `DuplicateUrlFailed` | Tu aplicación ya tiene registrado un webhook para esta URL |
+| `WebhookLimitExceeded` | Tu aplicación alcanzó el número máximo de webhooks permitidos |
+
+### Ver webhooks
+
+**`GET /2/webhooks`** — [Referencia de la API](/x-api/webhooks/get-webhook)
+
+Recupera todas las configuraciones de webhook asociadas con tu aplicación.
+
+```bash
+curl --request GET \
+  --url 'https://api.x.com/2/webhooks' \
+  --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+**Respuesta (con un webhook):**
+
+```json title="Respuesta de ejemplo" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "created_at": "2025-01-15T12:00:00.000Z",
+      "id": "1234567890",
+      "url": "https://yourdomain.com/webhooks/twitter",
+      "valid": true
+    }
+  ],
+  "meta": {
+    "result_count": 1
+  }
+}
+```
+
+**Respuesta (sin webhooks):**
+
+```json
+{
+  "data": [],
+  "meta": {
+    "result_count": 0
+  }
+}
+```
+
+### Eliminar un webhook
+
+**`DELETE /2/webhooks/:webhook_id`** — [Referencia de la API](/x-api/webhooks/delete-webhook)
+
+Elimina un webhook usando su `webhook_id` (obtenido de la respuesta de creación o listado).
+
+```bash
+curl --request DELETE \
+  --url 'https://api.x.com/2/webhooks/1234567890' \
+  --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+**Respuesta:**
+
+```json
+{
+  "data": {
+    "deleted": true
+  }
+}
+```
+
+| Razón del fallo | Descripción |
+|:---------------|:------------|
+| `WebhookIdInvalid` | El `webhook_id` proporcionado no se encontró o no está asociado con tu app |
+
+### Validar y volver a habilitar un webhook
+
+**`PUT /2/webhooks/:webhook_id`** — [Referencia de la API](/x-api/webhooks/validate-webhook)
+
+Dispara una verificación CRC para el webhook dado. Si la verificación tiene éxito, el webhook se vuelve a habilitar con `valid: true`.
+
+```bash
+curl --request PUT \
+  --url 'https://api.x.com/2/webhooks/1234567890' \
+  --header 'Authorization: Bearer $BEARER_TOKEN'
+```
+
+**Respuesta:**
+
+Una respuesta 200 OK indica que la verificación CRC se inició. El campo `valid` refleja el estado después del intento de verificación. Puedes verificar el estado actual usando `GET /2/webhooks`.
+
+```json
+{
+  "data": {
+    "valid": true
+  }
+}
+```
+
+| Razón del fallo | Descripción |
+|:---------------|:------------|
+| `WebhookIdInvalid` | El `webhook_id` proporcionado no se encontró o no está asociado con tu app |
+| `CrcValidationFailed` | La URL de callback no respondió correctamente a la verificación CRC |
+
+---
+
+## Pruebas con xurl
+
+Para propósitos de prueba, la herramienta `xurl` admite webhooks temporales. Instala la última versión del [proyecto `xurl`](https://github.com/xdevplatform/xurl) desde GitHub, configura tu autorización y luego ejecuta:
+
+```bash
+xurl webhook start
+```
+
+Esto generará una URL de webhook pública temporal, manejará automáticamente todas las verificaciones CRC y registrará los eventos de suscripción entrantes. Es una excelente manera de verificar tu configuración antes del despliegue. Ejemplo de salida:
+
+```
+Starting webhook server with ngrok...
+Enter your ngrok authtoken (leave empty to try NGROK_AUTHTOKEN env var):
+
+Attempting to use NGROK_AUTHTOKEN environment variable for ngrok authentication.
+Configuring ngrok to forward to local port: 8080
+Ngrok tunnel established!
+  Forwarding URL: https://<your-ngrok-subdomain>.ngrok-free.app -> localhost:8080
+
+Use this URL for your X API webhook registration: https://<your-ngrok-subdomain>.ngrok-free.app/webhook
+
+Starting local HTTP server to handle requests from ngrok tunnel...
+```
+
+---
+
+## Notas importantes
+
+<Warning>
+- **Todos los Direct Messages entrantes** se entregarán vía webhooks. Los DMs enviados vía [POST /2/dm_conversations/with/:participant_id/messages](/x-api/direct-messages/send-a-new-message-to-a-user) también se entregarán, para que tu app pueda rastrear DMs enviados desde otros clientes.
+
+- Si tienes **más de una web app** que comparte la misma URL de webhook y el mismo usuario mapeado a cada app, el mismo evento se enviará a tu webhook **varias veces** (una por web app).
+
+- En algunos casos, tu webhook puede recibir **eventos duplicados**. Tu app de webhook debe tolerar esto y **deduplicar por ID de evento**.
+
+- X envía los eventos como **solicitudes POST** con payloads JSON. Consulta la [estructura del objeto de datos de Account Activity](/x-api/account-activity/introduction#account-activity-data-object-structure) para ver payloads de ejemplo.
+</Warning>
+
+---
+
+## Apps de ejemplo
+
+| App | Descripción |
+|:----|:------------|
+| [Servidor de webhook simple](https://github.com/m-rosinsky/XWebhookTest/blob/main/app.py) | Un único script de Python que muestra cómo responder a la verificación CRC y aceptar eventos POST |
+| [Dashboard de Account Activity API](https://github.com/xdevplatform/account-activity-dashboard-enterprise/tree/master) | Una web app escrita con [bun.sh](https://bun.sh) que te permite gestionar webhooks, suscripciones y recibir eventos en vivo |
+| [Herramienta de pruebas xurl](https://github.com/xdevplatform/xurl) | Herramienta CLI para pruebas temporales de webhook — maneja automáticamente las verificaciones CRC y registra los eventos |
+
+---
+
+## Próximos pasos
+
+<CardGroup cols={2}>
+  <Card title="Filtered Stream Webhooks" icon="/icons/xds/icon-filter.svg" href="/x-api/webhooks/stream/introduction">
+    Recibe Posts filtrados vía webhook
+  </Card>
+  <Card title="Account Activity API" icon="/icons/xds/icon-bell.svg" href="/x-api/account-activity/introduction">
+    Recibe eventos de cuenta vía webhook
+  </Card>
+</CardGroup>

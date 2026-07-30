@@ -1,0 +1,198 @@
+---
+title: Guia de integração
+sidebarTitle: Guia de integração
+keywords: ["integração de blocks", "integração de bloqueio de usuários", "guia de blocks"]
+description: "Este guia cobre os principais conceitos necessários para integrar os endpoints de blocks ao seu. Referência para o nível standard da X API v2 sobre blocks."
+---
+
+import { Button } from '/snippets/button.mdx';
+
+Este guia cobre os principais conceitos necessários para integrar os endpoints de blocks à sua aplicação.
+
+<Callout icon="/icons/xds/icon-key.svg" color="#22C55E" iconType="regular">
+Os endpoints de bloquear e desbloquear usuários só estão disponíveis no plano Enterprise. Você pode preencher o formulário de interesse Enterprise [aqui](/forms/enterprise-api-interest).
+</Callout>
+
+---
+
+## Autenticação
+
+Os endpoints de blocks exigem autenticação do usuário:
+
+| Método | Descrição |
+|:-------|:------------|
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | Recomendado para novas aplicações |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | Suporte legado |
+
+<Warning>
+A autenticação App-Only não é suportada. Você deve autenticar em nome de um usuário.
+</Warning>
+
+### Escopos obrigatórios (OAuth 2.0)
+
+| Escopo | Necessário para |
+|:------|:-------------|
+| `block.read` | Obter contas bloqueadas |
+| `block.write` | Bloquear e desbloquear contas |
+| `users.read` | Necessário junto com os escopos de block |
+
+---
+
+## Visão geral dos endpoints
+
+| Método | Endpoint | Descrição | Disponibilidade |
+|:-------|:---------|:------------|:-------------|
+| GET | `/2/users/:id/blocking` | Obter a lista de contas bloqueadas | <div className="flex items-center gap-1 flex-nowrap whitespace-nowrap"><Badge color="blue" size="xs">Pay-per-use</Badge><Badge color="green" size="xs">Enterprise</Badge></div> |
+| POST | `/2/users/:id/blocking` | Bloquear uma conta | <Badge color="green" size="xs">Enterprise</Badge> |
+| DELETE | `/2/users/:source_user_id/blocking/:target_user_id` | Desbloquear uma conta | <Badge color="green" size="xs">Enterprise</Badge> |
+
+---
+
+## Fields e expansions
+
+### Resposta padrão
+
+```json
+{
+  "data": [
+    {
+      "id": "1234567890",
+      "name": "Example User",
+      "username": "example"
+    }
+  ]
+}
+```
+
+### Fields disponíveis
+
+<Accordion title="user.fields">
+| Field | Descrição |
+|:------|:------------|
+| `created_at` | Data de criação da conta |
+| `description` | Bio do usuário |
+| `profile_image_url` | URL do avatar |
+| `public_metrics` | Contagem de seguidores/seguindo |
+| `verified` | Status de verificação |
+</Accordion>
+
+<Accordion title="expansions">
+| Expansion | Descrição |
+|:----------|:------------|
+| `pinned_tweet_id` | Post fixado do usuário |
+</Accordion>
+
+---
+
+## O que acontece quando você bloqueia
+
+<CardGroup cols={2}>
+  <Card title="Eles não podem" icon="xmark">
+    - Ver seus Posts (a menos que estejam deslogados)
+    - Seguir você
+    - Enviar DMs para você
+    - Adicionar você a Lists
+    - Marcar você em fotos
+  </Card>
+  <Card title="Você não pode" icon="xmark">
+    - Ver os Posts deles
+    - Seguir eles
+    - Enviar DMs para eles
+  </Card>
+</CardGroup>
+
+<Note>
+Quando você bloqueia alguém que segue você, essa pessoa deixa de seguir você automaticamente.
+</Note>
+
+---
+
+## Paginação
+
+Para usuários com listas grandes de bloqueios, os resultados são paginados:
+
+<CodeGroup dropdown>
+
+```bash cURL
+# Primeira requisição
+curl "https://api.x.com/2/users/123/blocking?max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+
+# Requisição subsequente com token de paginação
+curl "https://api.x.com/2/users/123/blocking?max_results=100&pagination_token=NEXT_TOKEN" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+# Use um user access token do OAuth 2.0
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# O SDK trata a paginação automaticamente
+all_blocked = []
+
+for page in client.users.get_blocking(user_id="123", max_results=100):
+    if page.data:
+        all_blocked.extend(page.data)
+
+print(f"Blocked {len(all_blocked)} users")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+async function getAllBlockedUsers(userId) {
+  const allBlocked = [];
+
+  // O SDK trata a paginação automaticamente
+  const paginator = client.users.getBlocking(userId, { maxResults: 100 });
+
+  for await (const page of paginator) {
+    if (page.data) {
+      allBlocked.push(...page.data);
+    }
+  }
+
+  return allBlocked;
+}
+
+// Uso
+const blocked = await getAllBlockedUsers("123");
+console.log(`Blocked ${blocked.length} users`);
+```
+
+</CodeGroup>
+
+---
+
+## Tratamento de erros
+
+| Status | Erro | Solução |
+|:-------|:------|:---------|
+| 400 | Requisição inválida | Verifique o formato do user ID |
+| 401 | Não autorizado | Verifique o access token |
+| 403 | Proibido | Verifique escopos e permissões. Bloquear/desbloquear requerem [Enterprise](/forms/enterprise-api-interest) |
+| 404 | Não encontrado | O usuário não existe |
+| 429 | Muitas requisições | Aguarde e tente novamente |
+
+---
+
+## Próximos passos
+
+<CardGroup cols={2}>
+  <Card title="Guia rápido" icon="/icons/xds/icon-rocket.svg" href="/x-api/users/blocks/quickstart">
+    Faça sua primeira requisição de blocks
+  </Card>
+  <Card title="Mutes" icon="volume-xmark" href="/x-api/users/mutes/introduction">
+    Silencie usuários em vez de bloqueá-los
+  </Card>
+  <Card title="Referência da API" icon="/icons/xds/icon-code.svg" href="/x-api/users/get-blocking">
+    Documentação completa do endpoint
+  </Card>
+  <Card title="Código de exemplo" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    Exemplos de código funcionais
+  </Card>
+</CardGroup>

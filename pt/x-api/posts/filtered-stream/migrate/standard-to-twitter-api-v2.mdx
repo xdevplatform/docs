@@ -1,0 +1,138 @@
+---
+title: v1 para v2
+sidebarTitle: v1 para v2
+keywords: ["migração v1.1 para v2", "migração de filtered stream", "migrar filtered stream", "standard para v2 filtered stream", "v1 para v2 filtered stream", "guia de migração"]
+description: "Se você tem trabalhado com o endpoint v1.1 statuses/filter, este guia pode ajudar. Referência para o tier standard da X API v2 sobre migrate."
+
+
+---
+
+### Standard v1.1 em comparação com a X API v2
+
+Se você tem trabalhado com o endpoint v1.1 [statuses/filter](https://developer.x.com/en/docs/x-api/v1/tweets/filter-realtime/api-reference/post-statuses-filter), este guia pode ajudar você a entender as similaridades e diferenças entre os endpoints de filtered stream do standard e da X API v2.
+
+* **Similaridades**
+    * Parâmetros de requisição e operadores
+    * Suporte para histórico de edições e metadados de Post
+* **Diferenças**
+    * URLs dos endpoints
+    * Requisito de App e Project
+    * Método de autenticação
+    * Volume de regras e stream persistente
+    * Formato dos dados de resposta
+    * Parâmetros de requisição
+    * Disponibilidade de recursos de recuperação e redundância
+    * Operadores de query
+
+#### Similaridades
+
+**Parâmetros de requisição e operadores**
+
+O endpoint standard v1.1 statuses/filter apresenta alguns parâmetros que podem ser passados junto com a requisição para filtrar o stream. Com o filtered stream v2, em vez disso você usa um conjunto de [operadores](/x-api/posts/filtered-stream/integrate/operators) que podem ser combinados usando lógica booleana para filtrar os Posts desejados. Os operadores disponíveis incluem alguns que são substitutos diretos para os parâmetros existentes do standard v1.1.
+
+Os seguintes parâmetros de requisição do standard v1.1 têm operadores equivalentes na X API v2:
+
+
+| **Standard** | **X API v2** |
+| :--- | :--- |
+| follow \- Uma lista separada por vírgulas de IDs de usuário, indicando os usuários cujos Posts devem ser entregues no stream. | Muitos operadores que podem ajudar você a encontrar Posts relacionados a usuários específicos:<br/><br/>* @<br/>* from:<br/>* to:<br/>* etc. |
+| track \- Uma lista separada por vírgulas de frases que serão usadas para determinar quais Posts serão entregues no stream. | Muitos operadores que podem ajudar você a encontrar Posts relacionados a palavras-chave específicas:<br/><br/>* keyword<br/>* "exact phrase match"<br/>* #<br/>* etc. |
+
+**Suporte para histórico de edições e metadados de Post**
+
+Ambas as versões fornecem metadados que descrevem qualquer histórico de edições. Confira as [Referências da API do filtered stream](/x-api/posts/filtered-stream/introduction) e a [página de fundamentos de edições de Post](/x-api/fundamentals/edit-posts) para mais detalhes.
+
+#### Diferenças
+
+**URLs dos endpoints**
+
+* Endpoints standard v1.1:
+    * https://stream.x.com/1.1/statuses/filter.json
+* Endpoint da X API v2:
+    * https://api.x.com/2/tweets/search/stream
+    * https://api.x.com/2/tweets/search/stream/rule
+
+**Requisitos de App e Project**
+
+Os endpoints da X API v2 exigem que você use credenciais de um [App de desenvolvedor](/resources/fundamentals/developer-apps) associado a um [Project](/resources/fundamentals/developer-apps) ao autenticar suas requisições. Todos os endpoints da X API v1.1 podem usar credenciais de Apps ou de Apps associados a um App.
+
+**Método de autenticação**
+
+O endpoint standard suporta [OAuth 1.0a User Context](/resources/fundamentals/authentication), enquanto os endpoints de filtered stream da X API v2 suportam [OAuth 2.0 App-Only](/resources/fundamentals/authentication#oauth-2-0) (também chamado de autenticação Application-only). Para fazer requisições à versão X API v2, você deve usar um App Access Token para autenticar suas requisições.
+
+Se você não tiver mais o App Access Token que foi apresentado quando criou seu App e app no Developer Console, você pode gerar um novo navegando até a página "Keys and tokens" do seu app no Developer Console. Se quiser gerar um App Access Token programaticamente, consulte este [guia de OAuth 2.0 App-Only](/resources/fundamentals/authentication#app-only-authentication-and-oauth-2-0-bearer-token).
+
+**Volume de regras e stream persistente**
+
+O endpoint standard v1.1 suporta uma única regra para filtrar a conexão de streaming. Para alterar a regra, você precisa desconectar o stream e enviar uma nova requisição com as regras de filtragem revisadas submetidas como parâmetros.
+
+O endpoint de filtered stream da X API v2 permite aplicar múltiplas regras a um único stream e adicionar e remover regras do seu stream mantendo a conexão do stream.
+
+**Formato dos dados de resposta**
+
+Uma das maiores diferenças entre as versões dos endpoints standard v1.1 e X API v2 é como você seleciona quais campos retornam no seu payload.
+
+Para os endpoints standard, você recebe muitos dos campos de resposta por padrão e depois tem a opção de usar parâmetros para identificar quais campos ou conjuntos de campos devem retornar no payload.
+
+A versão X API v2 entrega apenas os campos id e text do Post por padrão. Para solicitar quaisquer campos ou objetos adicionais, você precisará usar os parâmetros [fields](/x-api/fundamentals/fields) e [expansions](/x-api/fundamentals/expansions). Quaisquer campos de Post que você solicite desses endpoints retornarão no objeto Post primário. Quaisquer objetos e campos expandidos de user, media, poll ou place retornarão em um objeto includes dentro da sua resposta. Você pode então associar quaisquer objetos expandidos de volta ao objeto Post correspondendo aos IDs localizados tanto no Post quanto no objeto expandido.
+
+Nós encorajamos você a ler mais sobre esses novos parâmetros em seus respectivos guias, ou lendo nosso guia sobre [como usar fields e expansions](/x-api/fundamentals/data-dictionary/reference#how-to-use-fields-and-expansions).
+
+Também elaboramos um [guia de migração de formato de dados](/x-api/migrate/data-format-migration#migrating-from-standard-v1-1s-data-format-to-v2) que pode ajudar você a mapear campos do standard v1.1 para os campos mais novos da v2. Este guia também fornecerá o parâmetro específico de expansion e field que você precisará passar com sua requisição v2 para retornar campos específicos.
+
+
+Além das mudanças em como você solicita determinados campos, a X API v2 também está introduzindo novos designs JSON para os objetos retornados pelas APIs, incluindo objetos Post e [user](/x-api/fundamentals/data-dictionary/reference#user).
+
+* No nível raiz do JSON, os endpoints standard retornam objetos Post em um array statuses, enquanto a X API v2 retorna um array data.
+* Em vez de se referir a "statuses" retweetados e citados, o JSON da X API v2 se refere a Tweets Retweetados e Citados. Muitos campos legados e deprecated, como contributors e user.translator_type, estão sendo removidos.
+* Em vez de usar tanto favorites (no objeto Post) quanto favourites (no objeto user), a X API v2 usa o termo like.
+* A X está adotando a convenção de que valores JSON sem valor (por exemplo, null) não são escritos no payload. Atributos de Post e user só são incluídos se tiverem valores não nulos.
+     
+
+Também introduzimos um novo conjunto de campos ao [objeto Post](/x-api/fundamentals/data-dictionary/reference#tweet), incluindo os seguintes:
+
+* Um campo [conversation_id](/x-api/fundamentals/conversation-id)
+* Dois novos campos [annotations](/x-api/fundamentals/post-annotations), incluindo context e entities
+* Vários novos campos [metrics](/x-api/fundamentals/metrics)
+* Um novo campo reply_setting, que mostra quem pode responder a um determinado Post
+
+**Parâmetros de requisição**
+
+Também há um conjunto de parâmetros de requisição do filtered stream standard **não** suportados na X API v2:
+
+| Parâmetro standard v1.1 | Detalhes |
+| :--- | :--- |
+| locations \- Uma lista separada por vírgulas de pares longitude,latitude que especificam um conjunto de bounding boxes para filtrar Posts. | Ainda não lançamos operadores baseados em localização para a X API v2. |
+| Delimited | Com o endpoint v1.1, definir isso para o comprimento da string indica que os statuses devem ser delimitados no stream, para que os clientes saibam quantos bytes ler antes do fim da mensagem de status.<br/><br/>Esta funcionalidade não está disponível na X API v2. |
+| Stall_warnings | Com o endpoint v1.1, definir este parâmetro como true fará com que mensagens periódicas sejam entregues se o cliente estiver em risco de ser desconectado. <br/><br/>Com a X API v2, avisos de stall são enviados por padrão com a nova linha enviada de tempos em tempos. |
+
+**Disponibilidade de recursos de recuperação e redundância**
+
+A versão X API v2 do filtered stream introduz recursos de recuperação e redundância que podem ajudar você a maximizar o tempo de atividade do streaming, bem como recuperar quaisquer Posts que possam ter sido perdidos devido a uma desconexão que durou cinco minutos ou menos.
+
+Conexões redundantes permitem que você se conecte a um determinado stream até duas vezes, o que pode ajudar a garantir que você mantenha uma conexão com o stream o tempo todo, mesmo que uma de suas conexões falhe.
+
+O parâmetro backfill_minutes pode ser usado para recuperar até cinco minutos de dados perdidos.
+
+Ambos os recursos estão disponíveis apenas via [acesso Academic Research](/x-api/getting-started/about-x-api). Você pode aprender mais sobre essa funcionalidade por meio do nosso guia de integração de [recursos de recuperação e redundância](/x-api/fundamentals/recovery-and-redundancy).
+
+**Novos operadores de query**
+
+A X API v2 introduz novos operadores em apoio a dois novos recursos:
+
+* **[Conversation IDs](/x-api/fundamentals/conversation-id)** \- À medida que as conversas se desenrolam no X, um conversation ID estará disponível para marcar Posts que fazem parte da conversa. Todos os Posts na conversa terão seu conversation_id definido como o Post ID que a iniciou.
+    * conversation_id:
+* **[X Annotations](/x-api/fundamentals/post-annotations)** fornecem informações contextuais sobre Posts e incluem annotations de entity e context. Entities são compostas por pessoas, lugares, produtos e organizações. Contexts são domínios, ou tópicos, dos quais as entities identificadas fazem parte. Por exemplo, pessoas mencionadas em um Post podem ter um context que indica se elas são atletas, atores ou políticos.
+    * context: \- corresponde a Posts que foram anotados com um context de interesse.
+    * entity: \- corresponde a Posts que foram anotados com uma entity de interesse.
+
+---
+
+## Exemplos de código
+
+### Adicionar uma regra ao filtered stream (v2)
+
+
+**Exemplos Standard v1.1 vs v2**
+
+Veja os exemplos completos de migração na documentação oficial da X API.

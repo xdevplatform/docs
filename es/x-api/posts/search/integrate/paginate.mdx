@@ -1,0 +1,124 @@
+---
+title: Paginación
+sidebarTitle: Paginación
+keywords: ["paginación de search", "guía de paginación", "paginar resultados", "tokens de paginación", "paginación de búsqueda", "next token"]
+
+description: "Las consultas de búsqueda típicamente coinciden con más Posts de los que se pueden devolver en una sola respuesta de API. Referencia del nivel estándar de X API v2 sobre integración."
+---
+
+### Paginación de recent search
+
+#### Introducción
+
+Las consultas de búsqueda típicamente coinciden con más Posts de los que se pueden devolver en una sola respuesta de la API. Cuando eso sucede, los datos se devuelven en una serie de 'páginas'. La paginación se refiere a los métodos para solicitar todas las páginas para recuperar todo el conjunto de datos.
+
+Aquí están los detalles fundamentales de la paginación de recent search:
+
+* Los endpoints de recent search responderán a una consulta con al menos una página y proporcionarán un next_token en su respuesta JSON si hay páginas adicionales disponibles. Para recibir los Posts coincidentes, este proceso puede repetirse hasta que no se incluya ningún token en la respuesta.
+* El next_token no expira. Las solicitudes múltiples que usen el mismo valor de next_token recibirán los mismos resultados, independientemente de cuándo se haga la solicitud.
+
+* Los Posts se entregan en orden cronológico inverso, en la zona horaria UTC. Esto es cierto dentro de las páginas individuales, así como en múltiples páginas: 
+    * El primer Post en la primera respuesta será el más reciente que coincida con tu consulta.
+    * El último Post en la última respuesta será el más antiguo que coincida con tu consulta.
+
+* El parámetro de solicitud max_results te permite configurar el número de Posts devueltos por respuesta. Este valor predeterminado es de 10 Posts y tiene un máximo de 100. 
+
+* Cada implementación de paginación implicará analizar los next_tokens del payload de respuesta e incluirlos en la solicitud de búsqueda de la "siguiente página". Consulta a continuación para obtener más detalles sobre cómo construir estas solicitudes de "siguiente página".
+     
+
+El endpoint recent search se diseñó para admitir dos patrones fundamentales de uso:
+
+* **Obtener histórico** - Solicitar Posts coincidentes de un período de tiempo de interés. Estas son típicamente solicitudes puntuales en apoyo de investigación histórica. Las solicitudes de búsqueda pueden basarse en los parámetros de solicitud start_time y end_time. El endpoint recent search responde con Posts entregados en orden cronológico inverso, comenzando con el Post coincidente más reciente. 
+
+* **Sondeo** - Solicitar Posts coincidentes que se han publicado desde el último Post recibido. Estos casos de uso a menudo tienen un enfoque casi en tiempo real y se caracterizan por solicitudes frecuentes, "escuchando" los nuevos Posts de interés. El endpoint recent search proporciona el parámetro de solicitud since_id en apoyo del patrón de "sondeo". Para ayudar con la navegación por IDs de Post, el parámetro de solicitud until_id también está disponible.
+     
+
+A continuación, hablaremos del modo histórico. Este es el modo predeterminado del endpoint recent search e ilustra los fundamentos de la paginación. Luego discutiremos ejemplos de casos de uso de sondeo. Cuando el sondeo activa la paginación, hay un paso adicional para gestionar las solicitudes de búsqueda.
+ 
+
+#### Recuperación de datos históricos
+
+Esta sección describe cómo puedes recuperar Posts de un período de interés (actualmente limitado a los últimos siete días) utilizando los parámetros de solicitud start_time y end_time. Las solicitudes históricas son típicamente solicitudes puntuales en apoyo de investigación y análisis. 
+
+Realizar solicitudes de un período de datos es el modo predeterminado del endpoint recent search. Si una solicitud de búsqueda no especifica un parámetro de solicitud start_time, end_time o since_id, el end_time será por defecto "ahora" (en realidad 30 segundos antes de la hora de la consulta) y el start_time será por defecto hace siete días.
+
+El endpoint responderá con la primera 'página' de Posts en orden cronológico inverso, comenzando con el Post más reciente. El payload de respuesta JSON también incluirá un next_token si hay páginas adicionales de datos. Para recopilar todo el conjunto de Posts coincidentes, independientemente del número de páginas, se realizan solicitudes hasta que no se proporcione ningún next_token. 
+
+Por ejemplo, aquí hay una solicitud inicial de Posts con la palabra clave snow de la última semana:
+
+https://api.x.com/2/tweets/search/recent?query=snow
+
+La respuesta incluye los 10 Posts más recientes, junto con estos atributos "meta" en la respuesta JSON:
+
+```
+"meta": {
+        "newest_id": "1204860593741553664",
+        "oldest_id": "1204860580630278147",
+        "next_token": "b26v89c19zqg8o3fobd8v73egzbdt3qao235oql",
+        "result_count": 10
+    }
+```
+
+Para recuperar los siguientes 10 Posts, este next_token se añade a la solicitud original. La solicitud sería:
+
+https://api.x.com/2/tweets/search/recent?query=snow&next_token=b26v89c19zqg8o3fobd8v73egzbdt3qao235oql
+
+El proceso de buscar un next_token e incluirlo en una solicitud posterior se puede repetir hasta que se recopilen todos (o un número determinado de) Posts, o hasta que se haya hecho un número especificado de solicitudes. Si la fidelidad de los datos (recopilar todas las coincidencias de tu consulta) es clave para tu caso de uso, un diseño simple de "repetir hasta que request.next_token sea nulo" será suficiente. 
+ 
+
+#### Casos de uso de sondeo y escucha
+
+Esta sección describe cómo puedes recuperar Posts recientes mediante sondeo del endpoint recent search con el parámetro de solicitud since_id. 
+
+Con los casos de uso de sondeo, se realizan consultas de "¿algún nuevo Post de interés?" de forma continua y frecuente. A diferencia de los casos de uso históricos, que basan las solicitudes en tiempo, los casos de uso de sondeo típicamente basan las solicitudes en IDs de Post.
+
+Central al patrón de uso de sondeo es que cada nuevo Post tiene un [ID único](/resources/fundamentals/x-ids) que se 'emite' desde la plataforma X generalmente en orden ascendente. Si un Post tiene un ID más pequeño que otro, significa que se publicó antes.
+
+El endpoint recent search admite la navegación por el archivo de Post mediante el ID de Post. Las respuestas del endpoint incluyen los IDs de Post oldest_id y newest_id. En el modo de sondeo, las solicitudes se hacen con since_id establecido en el ID más grande/más reciente recibido hasta ahora. 
+
+Por ejemplo, digamos que se hace una consulta de nuevos Posts sobre snow cada cinco minutos, y el último Post que recibimos tenía un ID de Post de 10000. Cuando es el momento de sondear, la solicitud se ve así:
+
+https://api.x.com/2/tweets/search/recent?query=snow&since_id=10000
+
+A continuación, digamos que se han publicado siete Posts desde nuestra última solicitud. Dado que todos estos caben en una sola 'página' de datos, no hay next_token. La respuesta proporciona el ID de Post del Post más reciente (más nuevo):
+
+```
+"meta": {
+        "newest_id": "12000",
+        "oldest_id": "10005",
+        "result_count": 7
+    }
+```
+
+Para hacer la siguiente consulta de sondeo, este valor de newest_id se usa para establecer el siguiente parámetro since_id:
+
+`https://api.x.com/2/tweets/search/recent?query=snow&since_id=12000`
+
+Cuando hay más datos disponibles y se proporcionan next tokens, solo se necesita el valor de newest_id de la primera página de resultados. Cada página de datos incluirá valores de newest_id y oldest_id, pero el valor proporcionado en la primera página es el único necesario para la siguiente solicitud de sondeo programada regularmente. Por lo tanto, si estás implementando un diseño de sondeo o buscando Posts por rango de ID, la lógica de paginación es un poco más complicada. 
+
+Ahora digamos que ahora hay 18 Posts coincidentes más. El endpoint respondería con esta respuesta inicial con una página de datos completa y un next_token para solicitar la siguiente página de datos de este período de cinco minutos. También incluiría el ID de Post más nuevo necesario para el próximo intervalo de sondeo en cinco minutos.  
+
+```
+"meta": {
+        "newest_id": "13800",
+        "oldest_id": "12500",
+        "next_token": "fnsih9chihsnkjbvkjbsc",
+        "result_count": 10
+    }
+```
+
+Para recopilar todos los datos coincidentes de este período de cinco minutos, pasa el next_token en tu siguiente solicitud, junto con el mismo valor de since_id que la solicitud anterior.
+
+https://api.x.com/2/tweets/search/recent?query=snow&since\_id=12000&next\_token=fnsih9chihsnkjbvkjbsc
+
+```
+"meta": {
+        "newest_id": "12300",
+        "oldest_id": "12010",
+        "result_count": 8
+    }
+```
+
+Esta segunda respuesta proporciona los ocho Posts restantes y ningún next_token. Ten en cuenta que no actualizamos nuestro valor de newest_id (12300), y en su lugar basamos nuestro siguiente since_id en el valor de newest_id de la primera respuesta:
+
+https://api.x.com/2/tweets/search/recent?query=snow&since_id=13800

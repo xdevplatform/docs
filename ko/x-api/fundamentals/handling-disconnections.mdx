@@ -1,0 +1,160 @@
+---
+title: 연결 해제 처리
+sidebarTitle: 연결 해제 처리
+description: "Filtered Stream, Volume Streams, Powerstream, Compliance Streams를 포함한 X 스트리밍 endpoint 사용 시 연결 해제를 처리하는 방법을 배웁니다."
+keywords: ["스트리밍 연결 해제", "연결 해제 처리", "스트림 재연결", "stream reconnection", "disconnection handling", "스트림 오류"]
+---
+
+[Filtered Stream](/x-api/posts/filtered-stream/introduction), [Volume Streams](/x-api/posts/volume-streams/introduction), [Powerstream](/x-api/powerstream/introduction), [Compliance Streams](/x-api/compliance/streams/introduction)를 포함한 X 스트리밍 endpoint 사용 시 연결 해제를 처리하는 방법을 배웁니다.
+
+## 연결 해제란 무엇인가요?
+
+스트리밍 API에 연결한다는 것은 매우 오래 지속되는 HTTPS 요청을 하고 응답을 점진적으로 파싱하는 것을 의미합니다. 스트리밍 endpoint에 연결할 때는 HTTPS 요청을 만들고 실용적인 한 결과 스트림을 소비해야 합니다.
+
+X 서버는 다음의 경우를 제외하고 연결을 무기한 열어 둡니다:
+
+- 서버 측 오류
+- 과도한 클라이언트 측 지연
+- 네트워크 문제
+- 정기 서버 유지 관리
+- 중복 로그인
+
+스트리밍 연결에서는 연결 해제가 **반드시** 발생하며 예상해야 합니다. 애플리케이션은 재연결 로직을 포함해야 합니다.
+
+---
+
+## 연결이 끊어지는 이유
+
+연결 해제의 가능한 이유:
+
+| 이유 | 설명 |
+|:-------|:------------|
+| 인증 오류 | 잘못된 토큰 또는 잘못된 인증 방법 |
+| 서버 재시작 | X 측의 코드 배포 - 예상해야 하며 이를 고려하여 설계 |
+| 클라이언트가 너무 느림 | 클라이언트가 볼륨을 따라가지 못함. 서버 측 메시지 큐가 너무 커져서 연결이 닫힘 |
+| 할당량 초과 | 계정이 일일/월별 Post 할당량을 초과 |
+| 너무 많은 연결 | 활성 중복 연결이 너무 많음 |
+| 갑작스러운 읽기 중단 | Post를 읽는 속도가 갑자기 떨어짐 |
+| 네트워크 문제 | 서버와 클라이언트 간 연결 문제 |
+| 서버 유지 관리 | 일시적인 서버 측 문제 또는 예정된 유지 관리([status 페이지](https://api.twitterstat.us/) 확인) |
+
+---
+
+## 일반적인 연결 해제 오류
+
+### Operational disconnect
+
+```json
+{
+  "errors": [{
+    "title": "operational-disconnect",
+    "disconnect_type": "UpstreamOperationalDisconnect",
+    "detail": "This stream has been disconnected upstream for operational reasons.",
+    "type": "https://api.x.com/2/problems/operational-disconnect"
+  }]
+}
+```
+
+### Too many connections
+
+```json
+{
+  "title": "ConnectionException",
+  "detail": "This stream is currently at the maximum allowed connection limit.",
+  "connection_issue": "TooManyConnections",
+  "type": "https://api.x.com/2/problems/streaming-connection"
+}
+```
+
+---
+
+## 연결 해제 감지
+
+스트리밍 endpoint는 20초 keep-alive 하트비트(개행 문자)를 제공합니다. 이 신호를 사용해 연결 해제를 감지하세요:
+
+1. 코드는 새 콘텐츠와 하트비트 도착이 중단될 때를 감지해야 합니다
+2. 20초 동안 데이터가 수신되지 않으면 재연결 로직을 트리거하세요
+3. 일부 HTTP 클라이언트는 읽기 시간 초과를 지정할 수 있습니다 — 이를 20초로 설정하세요
+
+---
+
+## 재연결 전략
+
+설정된 연결이 끊어지면 즉시 재연결을 시도하세요. 재연결이 실패하면 오류 유형에 따라 백오프 전략을 사용하세요:
+
+### TCP/IP 네트워크 오류
+
+**선형** 백오프. 이러한 문제는 일반적으로 일시적입니다.
+
+- 시도할 때마다 지연 시간을 250ms씩 증가
+- 최대 지연 시간: 16초
+
+### HTTP 오류
+
+재연결이 적절한 HTTP 오류의 경우 **지수** 백오프.
+
+- 5초 대기로 시작
+- 시도할 때마다 두 배로 증가
+- 최대 지연 시간: 320초
+
+### Rate limit 오류 (HTTP 429)
+
+더 긴 초기 대기 시간을 가진 **지수** 백오프.
+
+- 1분 대기로 시작
+- 시도할 때마다 두 배로 증가
+- 수신되는 각 429는 rate limit이 만료될 때까지 대기 시간을 늘림
+
+---
+
+## Rate limit 및 사용량
+
+스트리밍 연결 응답은 한도를 이해하는 데 도움이 되는 세 개의 헤더를 반환합니다:
+
+| Header | 설명 |
+|:-------|:------------|
+| `x-rate-limit-limit` | 15분 창 동안 할당된 요청 수 |
+| `x-rate-limit-remaining` | 15분 창에서 지금까지 만든 요청 |
+| `x-rate-limit-reset` | 창이 재설정되는 UNIX 타임스탬프 |
+
+전달된 Post 수를 추적하려면 클라이언트 측에서 미터링 로직을 구현하여 소비를 측정하고 필요한 경우 일시 중지할 수 있도록 하세요.
+
+---
+
+## 재연결 모범 사례
+
+### FIFO 큐 아키텍처 사용
+
+스트림 클라이언트는 들어오는 Post를 선입선출(FIFO) 큐나 유사한 메모리 구조에 삽입해야 합니다. 별도의 프로세스/스레드가 해당 큐에서 Post를 소비하여 파싱하고 저장해야 합니다. 이 설계는 Post 볼륨이 극적으로 변할 때 효율적으로 확장됩니다.
+
+### 백오프 전략 테스트
+
+잘못된 인증 자격 증명을 사용해 백오프 구현을 테스트하고 재연결 시도를 검토하세요. 좋은 구현은 429 응답을 받지 않습니다.
+
+### 여러 번의 재연결에 대한 알림 발행
+
+클라이언트가 재연결 간 시간의 상한선에 도달하면, 연결 문제를 분류할 수 있도록 알림을 보내세요.
+
+### DNS 변경 처리
+
+클라이언트 프로세스가 DNS Time To Live(TTL)를 준수하는지 확인하세요. 일부 스택은 프로세스 지속 시간 동안 해결된 주소를 캐시하고 TTL 내의 DNS 변경사항을 반영하지 않습니다. 공격적인 캐싱은 X가 IP 주소 간에 부하를 이동할 때 서비스 중단으로 이어집니다.
+
+### User-Agent 헤더 설정
+
+`User-Agent` HTTP 헤더에 클라이언트의 버전을 포함하세요. 이는 X 측의 문제를 진단하는 데 매우 중요합니다. 환경이 `User-Agent` 설정을 허용하지 않으면 대신 `x-user-agent` 헤더를 사용하세요.
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="복구 및 이중화" icon="/icons/xds/icon-shield-keyhole.svg" href="/x-api/fundamentals/recovery-and-redundancy">
+    연결 해제 후 누락된 데이터 복구
+  </Card>
+  <Card title="스트리밍 데이터 소비" icon="stream" href="/x-api/fundamentals/consuming-streaming-data">
+    견고한 스트리밍 클라이언트 구축
+  </Card>
+  <Card title="고용량 처리" icon="gauge-high" href="/x-api/fundamentals/high-volume-capacity">
+    고처리량 스트림 처리
+  </Card>
+</CardGroup>

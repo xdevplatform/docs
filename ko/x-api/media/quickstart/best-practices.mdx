@@ -1,0 +1,105 @@
+---
+title: 모범 사례
+sidebarTitle: 모범 사례
+keywords: ["미디어 업로드 모범 사례", "미디어 업로드", "미디어 모범 사례", "이미지 업로드", "비디오 업로드", "미디어 업로드 가이드"]
+
+description: "POST /2/media/upload endpoint 사용을 위한 중요 개념과 모범 사례. 빠른 시작을 다루는 X API v2 standard 등급 레퍼런스."
+---
+
+[`POST /2/media/upload`](/x-api/media/upload-media) endpoint를 사용할 때 이해해야 할 몇 가지 중요한 개념이 있습니다. OAuth로 미디어를 업로드하는 것은 약간 까다로울 수 있으므로, 유의해야 할 사항과 이 endpoint 사용에 대한 작동 예제를 여기에 정리했습니다.
+
+## 유의 사항
+
+- Post에 최대 4장의 사진, 1개의 애니메이션 GIF 또는 1개의 비디오를 첨부할 수 있습니다.
+- 전달되는 이미지는 원본 바이너리 이미지이거나 base64로 인코딩된 바이너리여야 하며, Content-Type이 적절히 설정된 경우(확실하지 않을 때는 `application/octet-stream`) 다른 방식으로 인코딩하거나 이스케이프할 필요가 없습니다.
+- base64 인코딩된 이미지를 게시할 때는 메시지의 이미지 부분에 "Content-Transfer-Encoding: base64"를 설정해야 합니다.
+- Multi-part 메시지 경계는 자체 줄에 있어야 하며 CRLF로 종료되어야 합니다.
+- 이 endpoint를 사용해 POST하는 방법의 작동 예제는 [xurl](https://github.com/xdevplatform/xurl)로 테스트하는 것을 권장합니다. 또한 사용 가능한 [X Libraries](/resources/tools-and-libraries)를 살펴보세요.
+- 긴 정수를 정확히 표현할 수 없는 Javascript 및 기타 언어의 경우 API 응답에 제공되는 `media_id_string`을 사용하세요.
+
+## Media 카테고리
+
+Media Category 파라미터는 업로드할 미디어 파일의 사용 사례를 정의하며 미디어 업로드에 적용되는 파일 크기 제한이나 기타 제약 조건에 영향을 줄 수 있습니다. 미디어를 사용하려 할 때 문제를 방지하려면 미디어를 업로드할 때 올바른 미디어 카테고리를 사용하는 것이 중요합니다. 업로드 흐름의 일부로 INIT 요청에 전달되는 선택 값입니다. Media category가 지정되지 않은 경우 업로드된 미디어는 콘텐츠 유형에 따라 Post용 미디어(`tweet_image`, `tweet_video` 또는 `tweet_gif`)로 간주됩니다.
+
+가장 일반적인 미디어 카테고리는 다음과 같습니다:
+
+- `tweet_image`
+- `tweet_video`
+- `tweet_gif`
+- `dm_image`
+- `dm_video`
+- `dm_gif`
+- `subtitles`
+
+Ads API 파트너인 경우 프로모션 비디오에 권장되는 미디어 카테고리에 대한 자세한 내용은 [이 문서](/x-ads-api/creatives#promoted-video)를 참조하세요.
+
+## 이미지 사양 및 권장 사항
+
+이미지 파일은 다음 기준을 모두 충족해야 합니다:
+
+- **지원되는 이미지 미디어 유형**: `JPG`, `PNG`, `GIF`, `WEBP`
+- **이미지 크기**: `<= 5 MB`
+- **애니메이션 GIF 크기**: `<= 15 MB`
+
+위의 파일 크기 제한은 미디어 업로드 endpoint에서 적용됩니다. 또한 `media_id`로 Post 생성(또는 유사한) endpoint를 호출할 때 적용되는 별도의 제품 엔티티별 파일 크기 제한이 있습니다. 파일 크기 제한 및 기타 제약 조건은 `media_category` 파라미터에 따라 다를 수 있습니다.
+
+## 애니메이션 GIF 권장 사항
+
+GIF는 파일 크기 제한 내에 있더라도 Post 생성 중 실패할 수 있습니다. 성공률을 높이기 위해 다음 제약 조건을 준수하세요.
+
+- **해상도**: `<= 1280x1080` (`width` x `height`)
+- **프레임 수**: `<= 350`
+- **픽셀 수**: `<= 3억` (`width` * `height` * `num_frames`)
+- **파일 크기**: `<= 15Mb`
+
+더 큰 GIF를 처리하려면 `media_category` 파라미터와 함께 [청크형 업로드](/x-api/media/quickstart/media-upload-chunked) endpoint를 사용하세요. 이를 통해 서버가 GIF 파일을 비동기로 처리할 수 있으며, 이는 대용량 파일 처리에 필요합니다. 애니메이션 GIF가 포함된 Post에 대한 비동기 업로드 동작을 활성화하려면 `media_category=tweet_gif`를 전달하세요.
+
+## 비디오 사양 및 권장 사항
+
+미디어 업로드에는 Async Path를 사용하세요.
+
+### 권장
+
+- **비디오 코덱**: `H264 High Profile`
+- **프레임 속도**: `30 FPS`, `60 FPS`
+- **비디오 해상도**: `1280x720`(가로), `720x1280`(세로), `720x720`(정사각형). 구독 사용자는 1080p 비디오를 업로드하고 1080p 재생을 얻을 수 있습니다. 비구독 사용자는 720p 비디오를 업로드하고 720p 재생을 얻을 수 있습니다.
+- **최소 비디오 비트레이트**: `5,000 kbps`
+- **최소 오디오 비트레이트**: `128 kbps`
+- **오디오 코덱**: `AAC LC`
+- **화면비**: `16:9`(가로 또는 세로), `1:1`(정사각형)
+
+### 고급
+
+- **프레임 속도**: `60 FPS` 이하여야 합니다
+- **크기**: `32x32`에서 `1280x1024` 사이여야 합니다
+- **파일 크기**: `512 mb`를 초과해서는 안 됩니다
+- **길이**: `0.5초`에서 `140초` 사이여야 합니다
+- **화면비**: `1:3`에서 `3:1` 사이여야 합니다
+- **[픽셀 화면비](https://en.wikipedia.org/wiki/Pixel_aspect_ratio)**: `1:1`이어야 합니다
+- **픽셀 형식**: [YUV](https://en.wikipedia.org/wiki/YUV) 4:2:0만 지원됩니다
+- 오디오는 [Low Complexity profile을 사용한 `AAC`](https://en.wikipedia.org/wiki/Advanced_Audio_Coding#Modular_encoding)여야 합니다. (High-Efficiency `AAC`는 지원되지 않습니다)
+- 오디오는 `모노` 또는 `스테레오`여야 하며 5.1 이상은 안 됩니다
+- [`open GOP`](https://en.wikipedia.org/wiki/Group_of_pictures)를 사용해서는 안 됩니다
+- [`progressive scan`](https://en.wikipedia.org/wiki/Progressive_scan)을 사용해야 합니다
+
+### 추가 정보
+
+아래 표에서 각 행은 업로드 권장 사항을 나타내지만 요구 사항은 아닙니다. 모든 업로드는 여러 플랫폼에 걸친 최적화를 위해 처리됩니다.
+
+| 방향 | 너비 | 높이 | 비디오 비트레이트 | 오디오 비트레이트 |
+| :--- | :--- | :--- | :--- | :--- |
+| 가로 | 1280 | 720 | 2048K | 128K |
+| 가로 | 640 | 360 | 768K | 64K |
+| 가로 | 320 | 180 | 256K | 64K |
+| 세로 | 720 | 1280 | 2048K | 128K |
+| 세로 | 360 | 640 | 768K | 64K |
+| 세로 | 180 | 320 | 256K | 64K |
+| 정사각형 | 720 | 720 | 2048K | 128K |
+| 정사각형 | 480 | 480 | 768K | 64K |
+| 정사각형 | 240 | 240 | 256K | 32K |
+
+미디어 업로드 방법의 예는 [청크형 미디어 업로드 문서](/x-api/media/quickstart/media-upload-chunked)를 참조하세요.
+
+### 문제 해결
+
+Media API 관련 문제는 개발자 포럼의 [Media API 카테고리](https://devcommunity.x.com/c/x-api/media-apis)에서 답변을 찾아보세요.

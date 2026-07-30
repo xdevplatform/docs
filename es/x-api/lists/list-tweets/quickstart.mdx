@@ -1,0 +1,154 @@
+---
+title: Inicio rápido
+sidebarTitle: Inicio rápido
+description: "Esta guía te guía en la recuperación de Posts desde el timeline de una List. Referencia del nivel estándar de X API v2 sobre list tweets."
+keywords: ["inicio rápido de list tweets", "inicio rápido de list timeline", "tutorial de get list posts"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+Esta guía te guía en la recuperación de Posts desde el timeline de una List.
+
+<Note>
+**Requisitos previos**
+
+Antes de comenzar, necesitarás:
+- Una [cuenta de desarrollador](https://developer.x.com/en/portal/petition/essential/basic-info) con una App aprobada
+- El Bearer Token de tu App
+</Note>
+
+---
+
+<Steps>
+  <Step title="Encuentra un ID de List" icon="/icons/xds/icon-bulleted-list.svg">
+    Puedes encontrar un ID de List en la URL al ver una List en x.com:
+
+    ```
+    https://x.com/i/lists/84839422
+                          └── Este es el ID de la List
+    ```
+  </Step>
+
+  <Step title="Solicita el timeline de la List" icon="terminal">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/lists/84839422/tweets?\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id&\
+user.fields=username,verified&\
+max_results=10" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Obtener Posts de una List con paginación
+for page in client.lists.get_tweets(
+    "84839422",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username", "verified"],
+    max_results=10
+):
+    for post in page.data:
+        print(f"{post.text[:50]}... - Likes: {post.public_metrics.like_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Obtener Posts de una List con paginación
+const paginator = client.lists.getTweets("84839422", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username", "verified"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text?.slice(0, 50)}... - Likes: ${post.public_metrics?.like_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Revisa la respuesta" icon="eye">
+    ```json
+    {
+      "data": [
+        {
+          "id": "1458172421115101189",
+          "text": "Check out our latest announcement...",
+          "author_id": "4172587277",
+          "created_at": "2024-01-15T10:30:00.000Z",
+          "public_metrics": {
+            "retweet_count": 42,
+            "reply_count": 5,
+            "like_count": 156,
+            "quote_count": 3
+          },
+          "edit_history_tweet_ids": ["1458172421115101189"]
+        }
+      ],
+      "includes": {
+        "users": [
+          {
+            "id": "4172587277",
+            "username": "TechNews",
+            "verified": true
+          }
+        ]
+      },
+      "meta": {
+        "result_count": 1,
+        "next_token": "7140dibdnow9c7btw3z2vwioavpvutgzrzm9icis4ndix"
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Pagina los resultados" icon="/icons/xds/icon-arrow-right.svg">
+    Los SDKs gestionan la paginación automáticamente. Para cURL, usa el `next_token` de la respuesta para obtener más Posts:
+
+    ```bash
+    curl "https://api.x.com/2/lists/84839422/tweets?\
+    max_results=10&\
+    pagination_token=7140dibdnow9c7btw3z2vwioavpvutgzrzm9icis4ndix" \
+      -H "Authorization: Bearer $BEARER_TOKEN"
+    ```
+  </Step>
+</Steps>
+
+<Note>
+Este endpoint devuelve hasta 800 de los Posts más recientes de la List.
+</Note>
+
+---
+
+## Próximos pasos
+
+<CardGroup cols={2}>
+  <Card title="List lookup" icon="/icons/xds/icon-bulleted-list.svg" href="/x-api/lists/list-lookup/quickstart">
+    Obtén detalles de una List
+  </Card>
+  <Card title="List members" icon="/icons/xds/icon-people.svg" href="/x-api/lists/list-members/introduction">
+    Obtén los miembros de una List
+  </Card>
+  <Card title="Guía de integración" icon="/icons/xds/icon-book.svg" href="/x-api/lists/list-tweets/integrate">
+    Conceptos clave y mejores prácticas
+  </Card>
+  <Card title="Referencia de la API" icon="/icons/xds/icon-code.svg" href="/x-api/lists/get-list-posts">
+    Documentación completa del endpoint
+  </Card>
+</CardGroup>

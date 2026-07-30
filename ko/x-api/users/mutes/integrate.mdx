@@ -1,0 +1,237 @@
+---
+title: 통합 가이드
+sidebarTitle: 통합 가이드
+keywords: ["mutes 통합", "사용자 뮤트 통합", "mutes 가이드"]
+description: "이 가이드는 애플리케이션에 mutes 엔드포인트를 통합할 때 필요한 핵심 개념을 다룹니다. Mutes를 다루는 X API v2 standard 티어 레퍼런스입니다."
+---
+
+import { Button } from '/snippets/button.mdx';
+
+이 가이드는 애플리케이션에 mutes 엔드포인트를 통합할 때 필요한 핵심 개념을 다룹니다.
+
+---
+
+## 인증
+
+Mutes 엔드포인트는 비공개 뮤트 목록에 접근하기 위해 사용자 인증이 필요합니다:
+
+| Method | Description |
+|:-------|:------------|
+| [OAuth 2.0 Authorization Code with PKCE](/resources/fundamentals/authentication#oauth-2-0-authorization-code-flow-with-pkce-2) | 새 애플리케이션에 권장 |
+| [OAuth 1.0a User Context](/resources/fundamentals/authentication) | 레거시 지원 |
+
+<Warning>
+App-Only 인증은 지원되지 않습니다. 사용자를 대신하여 인증해야 합니다.
+</Warning>
+
+### 필수 scope (OAuth 2.0)
+
+| Scope | Required for |
+|:------|:-------------|
+| `mute.read` | 뮤트된 계정 조회 |
+| `mute.write` | 계정 뮤트 및 뮤트 해제 |
+| `users.read` | mute scope와 함께 필요 |
+
+---
+
+## 엔드포인트 개요
+
+| Method | Endpoint | Description |
+|:-------|:---------|:------------|
+| GET | `/2/users/:id/muting` | 뮤트된 계정 목록 가져오기 |
+| POST | `/2/users/:id/muting` | 계정 뮤트 |
+| DELETE | `/2/users/:source_user_id/muting/:target_user_id` | 계정 뮤트 해제 |
+
+---
+
+## 필드 및 확장
+
+### 기본 응답
+
+```json
+{
+  "data": [
+    {
+      "id": "1234567890",
+      "name": "Example User",
+      "username": "example"
+    }
+  ]
+}
+```
+
+### 사용 가능한 필드
+
+<Accordion title="user.fields">
+| Field | Description |
+|:------|:------------|
+| `created_at` | 계정 생성 날짜 |
+| `description` | 사용자 소개 |
+| `profile_image_url` | 아바타 URL |
+| `public_metrics` | 팔로워/팔로잉 수 |
+| `verified` | 인증 상태 |
+</Accordion>
+
+<Accordion title="expansions">
+| Expansion | Description |
+|:----------|:------------|
+| `pinned_tweet_id` | 사용자의 고정된 Post |
+</Accordion>
+
+### fields를 사용한 예시
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/123456789/muting?\
+user.fields=username,verified,created_at&\
+max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# 추가 필드와 함께 뮤트된 사용자 가져오기
+for page in client.users.get_muting(
+    user_id="123456789",
+    user_fields=["username", "verified", "created_at"],
+    max_results=100
+):
+    for user in page.data:
+        print(f"{user.username} - Verified: {user.verified}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+const paginator = client.users.getMuting("123456789", {
+  userFields: ["username", "verified", "created_at"],
+  maxResults: 100,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((user) => {
+    console.log(`${user.username} - Verified: ${user.verified}`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## 페이지네이션
+
+뮤트 목록이 많은 사용자의 경우 결과가 페이지네이션됩니다:
+
+<CodeGroup dropdown>
+
+```bash cURL
+# 첫 번째 요청
+curl "https://api.x.com/2/users/123/muting?max_results=100" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+
+# 페이지네이션 토큰을 사용한 다음 요청
+curl "https://api.x.com/2/users/123/muting?max_results=100&pagination_token=NEXT_TOKEN" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# SDK가 페이지네이션을 자동으로 처리
+all_muted = []
+
+for page in client.users.get_muting(user_id="123", max_results=100):
+    if page.data:
+        all_muted.extend(page.data)
+
+print(f"Muted {len(all_muted)} users")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+async function getAllMutedUsers(userId) {
+  const allMuted = [];
+
+  // SDK가 페이지네이션을 자동으로 처리
+  const paginator = client.users.getMuting(userId, { maxResults: 100 });
+
+  for await (const page of paginator) {
+    if (page.data) {
+      allMuted.push(...page.data);
+    }
+  }
+
+  return allMuted;
+}
+
+// 사용 예시
+const muted = await getAllMutedUsers("123");
+console.log(`Muted ${muted.length} users`);
+```
+
+</CodeGroup>
+
+<Card title="페이지네이션 가이드" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/fundamentals/pagination">
+  페이지네이션에 대해 자세히 알아보기
+</Card>
+
+---
+
+## 동작 차이
+
+### 뮤트 vs 차단
+
+| Feature | Mute | Block |
+|:--------|:-----|:------|
+| 상대방의 Post 보기 | No (숨김) | No |
+| 상대방이 내 Post 보기 | Yes | No |
+| 상대방이 나를 팔로우 | Yes (가능) | No (제거됨) |
+| 상대방이 나에게 DM 가능 | Yes | No |
+| 알림 전송 | No | No |
+
+<Tip>
+뮤트는 비공개입니다 — 뮤트된 사용자에게는 알림이 가지 않으며 자신이 뮤트되었는지 알 수 없습니다.
+</Tip>
+
+---
+
+## 오류 처리
+
+| Status | Error | Solution |
+|:-------|:------|:---------|
+| 400 | Invalid request | 사용자 ID 형식 확인 |
+| 401 | Unauthorized | access token 확인 |
+| 403 | Forbidden | scope 및 권한 확인 |
+| 404 | Not Found | 사용자가 존재하지 않음 |
+| 429 | Too Many Requests | 잠시 후 재시도 |
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="퀵스타트" icon="/icons/xds/icon-rocket.svg" href="/x-api/users/mutes/quickstart/manage-mutes-quickstart">
+    첫 mutes 요청 만들기
+  </Card>
+  <Card title="Blocks" icon="/icons/xds/icon-block.svg" href="/x-api/users/blocks/introduction">
+    뮤트 대신 사용자 차단하기
+  </Card>
+  <Card title="API 레퍼런스" icon="/icons/xds/icon-code.svg" href="/x-api/users/get-muting">
+    전체 엔드포인트 문서
+  </Card>
+  <Card title="예제 코드" icon="github" href="https://github.com/xdevplatform/Twitter-API-v2-sample-code">
+    동작하는 코드 예제
+  </Card>
+</CardGroup>

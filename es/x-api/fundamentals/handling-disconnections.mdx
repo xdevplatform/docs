@@ -1,0 +1,160 @@
+---
+title: Gestión de desconexiones
+sidebarTitle: Gestión de desconexiones
+description: "Aprende a gestionar las desconexiones al usar los endpoints de streaming de X, incluidos Filtered Stream, Volume Streams, Powerstream y Compliance Streams."
+keywords: ["desconexiones de streaming", "gestionar desconexiones", "reconectar stream", "reconexión de stream", "gestión de desconexiones", "errores de stream"]
+---
+
+Aprende a gestionar las desconexiones al usar los endpoints de streaming de X, incluidos [Filtered Stream](/x-api/posts/filtered-stream/introduction), [Volume Streams](/x-api/posts/volume-streams/introduction), [Powerstream](/x-api/powerstream/introduction) y [Compliance Streams](/x-api/compliance/streams/introduction).
+
+## ¿Qué es una desconexión?
+
+Establecer una conexión a las APIs de streaming implica hacer una solicitud HTTPS de muy larga duración y parsear la respuesta de forma incremental. Al conectarse a un endpoint de streaming, debes formar una solicitud HTTPS y consumir el stream resultante durante el tiempo que sea práctico.
+
+Los servidores de X mantendrán la conexión abierta indefinidamente, salvo:
+
+- Errores del lado del servidor
+- Retraso excesivo del lado del cliente
+- Problemas de red
+- Mantenimiento rutinario del servidor
+- Inicios de sesión duplicados
+
+Con las conexiones de streaming, las desconexiones **ocurrirán** y deben esperarse. Tu aplicación debe incluir lógica de reconexión.
+
+---
+
+## Por qué las conexiones se desconectan
+
+Posibles razones de desconexiones:
+
+| Razón | Descripción |
+|:-------|:------------|
+| Error de autenticación | Token incorrecto o método de autenticación incorrecto |
+| Reinicio del servidor | Despliegue de código del lado de X — debe esperarse y diseñarse para gestionarlo |
+| Cliente demasiado lento | Tu cliente no está siguiendo el ritmo del volumen. La cola de mensajes del lado del servidor crece demasiado y la conexión se cierra |
+| Cuota excedida | Tu cuenta superó la cuota diaria/mensual de Posts |
+| Demasiadas conexiones | Tienes demasiadas conexiones redundantes activas |
+| Detención súbita de lectura | La tasa de lectura de Posts cae bruscamente |
+| Problemas de red | Problemas de conectividad entre el servidor y el cliente |
+| Mantenimiento del servidor | Problema temporal del lado del servidor o mantenimiento programado (consulta la [página de estado](https://api.twitterstat.us/)) |
+
+---
+
+## Errores comunes de desconexión
+
+### Operational disconnect
+
+```json
+{
+  "errors": [{
+    "title": "operational-disconnect",
+    "disconnect_type": "UpstreamOperationalDisconnect",
+    "detail": "This stream has been disconnected upstream for operational reasons.",
+    "type": "https://api.x.com/2/problems/operational-disconnect"
+  }]
+}
+```
+
+### Demasiadas conexiones
+
+```json
+{
+  "title": "ConnectionException",
+  "detail": "This stream is currently at the maximum allowed connection limit.",
+  "connection_issue": "TooManyConnections",
+  "type": "https://api.x.com/2/problems/streaming-connection"
+}
+```
+
+---
+
+## Detectar desconexiones
+
+Los endpoints de streaming proporcionan un keep-alive heartbeat de 20 segundos (un carácter de nueva línea). Usa esta señal para detectar desconexiones:
+
+1. Tu código debe detectar cuándo dejan de llegar contenidos nuevos y el heartbeat
+2. Si no se recibe ningún dato durante 20 segundos, activa la lógica de reconexión
+3. Algunos clientes HTTP te permiten especificar un timeout de lectura — configura esto en 20 segundos
+
+---
+
+## Estrategia de reconexión
+
+Una vez que una conexión establecida se pierde, intenta reconectarte inmediatamente. Si la reconexión falla, usa estrategias de backoff basadas en el tipo de error:
+
+### Errores de red TCP/IP
+
+Backoff **lineal**. Estos problemas son generalmente temporales.
+
+- Aumenta el retraso en 250 ms en cada intento
+- Retraso máximo: 16 segundos
+
+### Errores HTTP
+
+Backoff **exponencial** para errores HTTP en los que reconectarse sea apropiado.
+
+- Comienza con una espera de 5 segundos
+- Duplica en cada intento
+- Retraso máximo: 320 segundos
+
+### Errores de rate limit (HTTP 429)
+
+Backoff **exponencial** con una espera inicial más larga.
+
+- Comienza con una espera de 1 minuto
+- Duplica en cada intento
+- Cada 429 recibido aumenta el tiempo de espera hasta que expire el rate limiting
+
+---
+
+## Rate limits y uso
+
+Las respuestas de conexión de streaming devuelven tres cabeceras para ayudarte a comprender los límites:
+
+| Cabecera | Descripción |
+|:-------|:------------|
+| `x-rate-limit-limit` | Número de solicitudes asignadas durante la ventana de 15 minutos |
+| `x-rate-limit-remaining` | Solicitudes realizadas hasta ahora en la ventana de 15 minutos |
+| `x-rate-limit-reset` | Timestamp UNIX cuando se restablece la ventana |
+
+Para rastrear cuántos Posts se han entregado, implementa lógica de medición en el lado del cliente para que se pueda medir y pausar el consumo si es necesario.
+
+---
+
+## Buenas prácticas de reconexión
+
+### Usa una arquitectura de cola FIFO
+
+Tu cliente de stream debe insertar los Posts entrantes en una cola FIFO (first-in, first-out) o una estructura en memoria similar. Un proceso/hilo separado debe consumir los Posts de esa cola para su parseo y almacenamiento. Este diseño escala eficientemente cuando los volúmenes de Posts cambian drásticamente.
+
+### Prueba las estrategias de backoff
+
+Prueba tu implementación de backoff usando credenciales de autorización inválidas y examina los intentos de reconexión. Una buena implementación no debe recibir ninguna respuesta 429.
+
+### Emite alertas para múltiples reconexiones
+
+Si tu cliente alcanza su umbral superior de tiempo entre reconexiones, envía notificaciones para que puedas clasificar los problemas de conexión.
+
+### Gestiona cambios de DNS
+
+Asegúrate de que tu proceso cliente respete el Time To Live (TTL) del DNS. Algunas pilas almacenan en caché las direcciones resueltas durante la duración del proceso y no captarán los cambios de DNS dentro del TTL. El almacenamiento en caché agresivo conduce a interrupciones del servicio a medida que X redistribuye la carga entre direcciones IP.
+
+### Configura la cabecera User-Agent
+
+Incluye la versión de tu cliente en la cabecera HTTP `User-Agent`. Esto es fundamental para diagnosticar problemas del lado de X. Si tu entorno impide configurar `User-Agent`, usa la cabecera `x-user-agent` en su lugar.
+
+---
+
+## Próximos pasos
+
+<CardGroup cols={2}>
+  <Card title="Recuperación y redundancia" icon="/icons/xds/icon-shield-keyhole.svg" href="/x-api/fundamentals/recovery-and-redundancy">
+    Recupera los datos perdidos después de desconexiones
+  </Card>
+  <Card title="Consumo de datos de streaming" icon="stream" href="/x-api/fundamentals/consuming-streaming-data">
+    Construye clientes de streaming robustos
+  </Card>
+  <Card title="Capacidad de alto volumen" icon="gauge-high" href="/x-api/fundamentals/high-volume-capacity">
+    Maneja streams de alto rendimiento
+  </Card>
+</CardGroup>

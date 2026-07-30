@@ -1,0 +1,189 @@
+---
+title: 빠른 시작
+sidebarTitle: 빠른 시작
+description: "이 가이드는 규정 준수를 확인하기 위한 배치 compliance 작업을 생성하는 방법을 설명합니다. batch compliance를 다루는 X API v2 표준 계층에 대한 참고 자료입니다."
+keywords: ["compliance 빠른 시작", "batch compliance 튜토리얼", "compliance 작업 가이드"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+이 가이드는 Post 또는 사용자의 규정 준수 상태를 확인하기 위한 batch compliance 작업을 생성하는 과정을 안내합니다.
+
+<Note>
+**사전 요구 사항**
+
+시작하기 전에 다음이 필요합니다:
+- 승인된 App이 있는 [개발자 계정](https://developer.x.com/en/portal/petition/essential/basic-info)
+- App의 Bearer Token
+</Note>
+
+---
+
+<Steps>
+  <Step title="작업 생성" icon="plus">
+    유형(tweets 또는 users)을 지정하여 새로운 compliance 작업을 생성합니다:
+
+    <Tabs>
+      <Tab title="cURL">
+    ```bash
+    curl -X POST "https://api.x.com/2/compliance/jobs" \
+      -H "Authorization: Bearer $BEARER_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "type": "tweets",
+        "name": "my-compliance-job"
+      }'
+    ```
+      </Tab>
+      <Tab title="Python">
+    ```python
+    import requests
+
+    bearer_token = "YOUR_BEARER_TOKEN"
+
+    url = "https://api.x.com/2/compliance/jobs"
+    headers = {
+        "Authorization": f"Bearer {bearer_token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "type": "tweets",
+        "name": "my-compliance-job"
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+    print(response.json())
+    ```
+      </Tab>
+    </Tabs>
+
+    **응답:**
+
+    ```json
+    {
+      "data": {
+        "id": "1234567890",
+        "type": "tweets",
+        "name": "my-compliance-job",
+        "status": "created",
+        "upload_url": "https://storage.googleapis.com/...",
+        "download_url": "https://storage.googleapis.com/...",
+        "created_at": "2024-01-15T10:00:00.000Z"
+      }
+    }
+    ```
+
+    다음 단계를 위해 `upload_url`과 `download_url`을 저장하세요.
+  </Step>
+
+  <Step title="데이터 파일 준비" icon="file">
+    한 줄에 하나의 ID가 있는 텍스트 파일을 만듭니다:
+
+    ```
+    1234567890
+    1234567891
+    1234567892
+    1234567893
+    ```
+
+    `ids.txt`로 저장합니다.
+  </Step>
+
+  <Step title="데이터 업로드" icon="upload">
+    제공된 `upload_url`에 파일을 업로드합니다:
+
+    ```bash
+    curl -X PUT "UPLOAD_URL_FROM_RESPONSE" \
+      -H "Content-Type: text/plain" \
+      --data-binary @ids.txt
+    ```
+  </Step>
+
+  <Step title="작업 상태 확인" icon="clock">
+    작업이 완료될 때까지 상태를 폴링합니다:
+
+    ```bash
+    curl "https://api.x.com/2/compliance/jobs/1234567890" \
+      -H "Authorization: Bearer $BEARER_TOKEN"
+    ```
+
+    **작업 상태:**
+
+    | 상태 | 설명 |
+    |:-------|:------------|
+    | `created` | 작업 생성됨, 업로드 대기 중 |
+    | `in_progress` | 데이터 처리 중 |
+    | `complete` | 결과 다운로드 준비 완료 |
+    | `failed` | 작업 실패 |
+    | `expired` | 완료 전에 작업 만료 |
+  </Step>
+
+  <Step title="결과 다운로드" icon="download">
+    상태가 `complete`가 되면 `download_url`에서 다운로드합니다:
+
+    ```bash
+    curl "DOWNLOAD_URL_FROM_RESPONSE" -o results.json
+    ```
+
+    **결과 형식** (한 줄당 하나의 JSON 객체):
+
+    ```json
+    {"id": "1234567890", "action": "delete", "created_at": "2024-01-10T12:00:00.000Z", "redacted_at": "2024-01-12T08:30:00.000Z", "reason": "deleted"}
+    {"id": "1234567891", "action": "delete", "created_at": "2024-01-10T12:00:00.000Z", "redacted_at": "2024-01-13T14:20:00.000Z", "reason": "suspended"}
+    ```
+
+    규정 준수 이벤트가 있는 ID만 결과에 표시됩니다. 결과에 없는 ID는 여전히 유효합니다.
+  </Step>
+</Steps>
+
+---
+
+## 규정 준수 작업
+
+<AccordionGroup>
+  <Accordion title="Post 규정 준수 이벤트">
+    | Action | Reason | 설명 |
+    |:-------|:-------|:------------|
+    | `delete` | `deleted` | Post 삭제됨 |
+    | `delete` | `bounced` | Post가 규정 준수 검사에 실패 |
+    | `delete` | `protected` | 계정이 보호됨 |
+    | `delete` | `suspended` | 계정이 정지됨 |
+    | `delete` | `scrub_geo` | 지리 데이터 제거됨 |
+  </Accordion>
+
+  <Accordion title="사용자 규정 준수 이벤트">
+    | Action | Reason | 설명 |
+    |:-------|:-------|:------------|
+    | `delete` | `deleted` | 계정 삭제됨 |
+    | `delete` | `suspended` | 계정 정지됨 |
+    | `delete` | `protected` | 계정 보호됨 |
+    | `delete` | `deactivated` | 계정 비활성화됨 |
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## 모든 작업 나열
+
+App의 모든 compliance 작업을 가져옵니다:
+
+```bash
+curl "https://api.x.com/2/compliance/jobs?type=tweets" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+---
+
+## 다음 단계
+
+<CardGroup cols={2}>
+  <Card title="통합 가이드" icon="/icons/xds/icon-book.svg" href="/x-api/compliance/batch-compliance/integrate">
+    주요 개념 및 모범 사례
+  </Card>
+  <Card title="Compliance 스트림" icon="stream" href="/x-api/compliance/streams/introduction">
+    실시간 규정 준수 이벤트
+  </Card>
+  <Card title="API 참조" icon="/icons/xds/icon-code.svg" href="/x-api/compliance/create-compliance-job">
+    전체 엔드포인트 문서
+  </Card>
+</CardGroup>

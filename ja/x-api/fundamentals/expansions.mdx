@@ -1,0 +1,226 @@
+---
+title: Expansions
+description: "X API v2 の expansions を使用して、関連する users、media、polls、places、参照 post を単一のレスポンスの includes セクション内に含めます。"
+sidebarTitle: Expansions
+keywords: ["expansions", "expand objects", "object expansion", "nested objects", "related objects"]
+---
+
+Expansions を使用すると、関連するオブジェクトを 1 回の API レスポンスに含めることができます。複数のリクエストを行う代わりに、post と作者、メディア、参照された post を 1 回の呼び出しで取得できます。
+
+---
+
+## Expansions の仕組み
+
+expansion をリクエストすると、API はレスポンスの `includes` セクションに完全なオブジェクトを含めます。
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?expansions=author_id" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+レスポンス:
+
+```json title="Example response" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Hello world!",
+    "author_id": "2244994945"
+  },
+  "includes": {
+    "users": [{
+      "id": "2244994945",
+      "name": "X Developers",
+      "username": "xdevelopers"
+    }]
+  }
+}
+```
+
+`data` 内の `author_id` は `includes` 内の user オブジェクトにリンクされます。
+
+---
+
+## Post の expansions
+
+| Expansion | Returns | Use case |
+|:----------|:--------|:---------|
+| `author_id` | User オブジェクト | Post の作者の詳細を取得 |
+| `referenced_tweets.id` | Post オブジェクト | 引用/返信対象の post を取得 |
+| `referenced_tweets.id.author_id` | User オブジェクト | 参照 post の作者を取得 |
+| `in_reply_to_user_id` | User オブジェクト | 返信対象のユーザーを取得 |
+| `attachments.media_keys` | Media オブジェクト | 画像、動画、GIF を取得 |
+| `attachments.poll_ids` | Poll オブジェクト | 投票の選択肢と票数を取得 |
+| `geo.place_id` | Place オブジェクト | 位置情報の詳細を取得 |
+| `entities.mentions.username` | User オブジェクト | メンションされたユーザーを取得 |
+| `edit_history_tweet_ids` | Post オブジェクト | 編集された post の以前のバージョンを取得 |
+
+---
+
+## User の expansions
+
+| Expansion | Returns | Use case |
+|:----------|:--------|:---------|
+| `pinned_tweet_id` | Post オブジェクト | ユーザーの固定 post を取得 |
+
+---
+
+## Space の expansions
+
+| Expansion | Returns | Use case |
+|:----------|:--------|:---------|
+| `creator_id` | User オブジェクト | Space の作成者を取得 |
+| `host_ids` | User オブジェクト | Space のホストを取得 |
+| `speaker_ids` | User オブジェクト | Space のスピーカーを取得 |
+| `invited_user_ids` | User オブジェクト | 招待されたユーザーを取得 |
+
+---
+
+## DM の expansions
+
+| Expansion | Returns | Use case |
+|:----------|:--------|:---------|
+| `sender_id` | User オブジェクト | メッセージ送信者を取得 |
+| `participant_ids` | User オブジェクト | 会話参加者を取得 |
+| `attachments.media_keys` | Media オブジェクト | 添付メディアを取得 |
+| `referenced_tweets.id` | Post オブジェクト | 参照 post を取得 |
+
+---
+
+## List の expansions
+
+| Expansion | Returns | Use case |
+|:----------|:--------|:---------|
+| `owner_id` | User オブジェクト | list の所有者を取得 |
+
+---
+
+## Fields との組み合わせ
+
+Expansions は各オブジェクトのデフォルトフィールドを返します。追加のフィールドを取得するには、expansions とフィールドパラメータを組み合わせます。
+
+```bash
+curl "https://api.x.com/2/tweets/1234567890?\
+expansions=author_id,attachments.media_keys&\
+user.fields=description,public_metrics&\
+media.fields=url,alt_text" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+レスポンス:
+
+```json title="Example response" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1234567890",
+    "text": "Check out this image!",
+    "author_id": "2244994945",
+    "attachments": {
+      "media_keys": ["3_1234567890"]
+    }
+  },
+  "includes": {
+    "users": [{
+      "id": "2244994945",
+      "name": "X Developers",
+      "username": "xdevelopers",
+      "description": "The voice of the X Developer Platform",
+      "public_metrics": {
+        "followers_count": 570842
+      }
+    }],
+    "media": [{
+      "media_key": "3_1234567890",
+      "type": "photo",
+      "url": "https://pbs.twimg.com/media/example.jpg",
+      "alt_text": "Example image"
+    }]
+  }
+}
+```
+
+---
+
+## 複数の expansions
+
+複数の expansions はカンマ区切りのリストとしてリクエストします。
+
+```bash
+expansions=author_id,referenced_tweets.id,attachments.media_keys
+```
+
+---
+
+## 一般的なパターン
+
+<Tabs>
+  <Tab title="完全な post コンテキスト">
+作者、メディア、参照 post を含む post を取得します。
+
+```bash
+expansions=author_id,attachments.media_keys,referenced_tweets.id
+tweet.fields=created_at,public_metrics,conversation_id
+user.fields=username,name,profile_image_url
+media.fields=url,preview_image_url,type
+```
+  </Tab>
+  <Tab title="会話スレッド">
+作者付きで返信を取得します。
+
+```bash
+expansions=author_id,in_reply_to_user_id,referenced_tweets.id
+tweet.fields=conversation_id,in_reply_to_user_id,created_at
+user.fields=username,name
+```
+  </Tab>
+  <Tab title="固定 post を持つユーザー">
+固定 post 付きでユーザープロフィールを取得します。
+
+```bash
+expansions=pinned_tweet_id
+user.fields=description,public_metrics,verified
+tweet.fields=created_at,public_metrics
+```
+  </Tab>
+</Tabs>
+
+---
+
+## data と includes をリンクする
+
+`includes` 内のオブジェクトには位置情報がありません。ID を使ってリンクします。
+
+```python
+# Python の例
+response = api_call()
+post = response["data"]
+users = {u["id"]: u for u in response["includes"]["users"]}
+
+# 作者を取得
+author = users.get(post["author_id"])
+print(f"{author['name']} said: {post['text']}")
+```
+
+```javascript
+// JavaScript の例
+const { data: post, includes } = response;
+const users = Object.fromEntries(
+  includes.users.map(u => [u.id, u])
+);
+
+const author = users[post.author_id];
+console.log(`${author.name} said: ${post.text}`);
+```
+
+---
+
+## 次のステップ
+
+<CardGroup cols={2}>
+  <Card title="Fields" icon="/icons/xds/icon-bulleted-list.svg" href="/x-api/fundamentals/fields">
+    各オブジェクトに対して特定のフィールドをリクエスト。
+  </Card>
+  <Card title="Data Dictionary" icon="/icons/xds/icon-book.svg" href="/x-api/fundamentals/data-dictionary">
+    完全なオブジェクトスキーマ。
+  </Card>
+</CardGroup>

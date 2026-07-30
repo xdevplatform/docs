@@ -1,0 +1,243 @@
+---
+title: Full-Archive Post Counts
+sidebarTitle: Full-Archive Post Counts
+description: "Esta guía te muestra cómo obtener recuentos históricos de Posts desde marzo de 2006. Referencia del nivel estándar de X API v2 sobre quickstart."
+keywords: ["quickstart de full archive tweet counts", "quickstart de archive counts", "quickstart de historical counts", "full archive counts"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+Esta guía te muestra cómo obtener recuentos históricos de Posts desde marzo de 2006.
+
+<Warning>
+Full-archive Post counts requiere acceso [Self-serve](/x-api/getting-started/about-x-api) o [Enterprise](/x-api/getting-started/about-x-api).
+</Warning>
+
+<Note>
+**Requisitos previos**
+
+Antes de comenzar, necesitarás:
+- Una [cuenta de desarrollador](https://developer.x.com/en/portal/petition/essential/basic-info) con acceso Self-serve o Enterprise
+- El Bearer Token de tu App
+</Note>
+
+---
+
+## Obtener full-archive Post counts
+
+<Steps>
+  <Step title="Construye una consulta">
+    Usa la misma sintaxis de consulta que full-archive search. Por ejemplo, para contar Posts de @XDevelopers:
+
+    ```
+    from:XDevelopers
+    ```
+  </Step>
+
+  <Step title="Establece un rango de tiempo">
+    Especifica `start_time` y `end_time` para buscar en períodos históricos específicos:
+
+    | Parameter | Format | Example |
+    |:----------|:-------|:--------|
+    | `start_time` | ISO 8601 | `2020-01-01T00:00:00Z` |
+    | `end_time` | ISO 8601 | `2020-12-31T23:59:59Z` |
+  </Step>
+
+  <Step title="Realiza la solicitud">
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/counts/all?\
+query=from%3AXDevelopers&\
+start_time=2020-01-01T00%3A00%3A00Z&\
+end_time=2020-12-31T23%3A59%3A59Z&\
+granularity=day" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Obtén full-archive Post counts
+response = client.posts.count_all(
+    query="from:XDevelopers",
+    start_time="2020-01-01T00:00:00Z",
+    end_time="2020-12-31T23:59:59Z",
+    granularity="day"
+)
+
+for bucket in response.data:
+    print(f"{bucket.start}: {bucket.tweet_count} Posts")
+
+print(f"Total: {response.meta.total_tweet_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Obtén full-archive Post counts
+const response = await client.posts.countAll({
+  query: "from:XDevelopers",
+  startTime: "2020-01-01T00:00:00Z",
+  endTime: "2020-12-31T23:59:59Z",
+  granularity: "day",
+});
+
+response.data?.forEach((bucket) => {
+  console.log(`${bucket.start}: ${bucket.tweet_count} Posts`);
+});
+
+console.log(`Total: ${response.meta?.total_tweet_count}`);
+```
+
+</CodeGroup>
+
+  </Step>
+
+  <Step title="Revisa la respuesta">
+    ```json
+    {
+      "data": [
+        {
+          "end": "2020-01-02T00:00:00.000Z",
+          "start": "2020-01-01T00:00:00.000Z",
+          "tweet_count": 3
+        },
+        {
+          "end": "2020-01-03T00:00:00.000Z",
+          "start": "2020-01-02T00:00:00.000Z",
+          "tweet_count": 5
+        }
+      ],
+      "meta": {
+        "total_tweet_count": 8
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+---
+
+## Opciones de granularidad
+
+Controla cómo se agrupan los recuentos:
+
+| Granularity | Description |
+|:------------|:------------|
+| `minute` | Recuentos por minuto |
+| `hour` | Recuentos por hora (predeterminado) |
+| `day` | Recuentos por día |
+
+---
+
+## Paginar los resultados
+
+Para rangos de tiempo grandes, utiliza el `next_token` de la respuesta:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/tweets/counts/all?\
+query=from%3AXDevelopers&\
+start_time=2015-01-01T00%3A00%3A00Z&\
+end_time=2020-12-31T23%3A59%3A59Z&\
+granularity=day&\
+next_token=abc123" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+# Obtén los recuentos con paginación
+next_token = None
+
+while True:
+    response = client.posts.count_all(
+        query="from:XDevelopers",
+        start_time="2015-01-01T00:00:00Z",
+        end_time="2020-12-31T23:59:59Z",
+        granularity="day",
+        next_token=next_token
+    )
+    
+    for bucket in response.data:
+        print(f"{bucket.start}: {bucket.tweet_count}")
+    
+    next_token = response.meta.next_token
+    if not next_token:
+        break
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+// Obtén los recuentos con paginación
+let nextToken = undefined;
+
+do {
+  const response = await client.posts.countAll({
+    query: "from:XDevelopers",
+    startTime: "2015-01-01T00:00:00Z",
+    endTime: "2020-12-31T23:59:59Z",
+    granularity: "day",
+    nextToken,
+  });
+
+  response.data?.forEach((bucket) => {
+    console.log(`${bucket.start}: ${bucket.tweet_count}`);
+  });
+
+  nextToken = response.meta?.next_token;
+} while (nextToken);
+```
+
+</CodeGroup>
+
+---
+
+## Diferencias clave con recent counts
+
+| Feature | Recent Counts | Full-Archive Counts |
+|:--------|:--------------|:--------------------|
+| Rango de tiempo | Últimos 7 días | Marzo de 2006 hasta ahora |
+| Acceso requerido | Todos los desarrolladores | Pay-per-use, Enterprise |
+| Rango de tiempo predeterminado | Últimos 7 días | Últimos 30 días |
+
+---
+
+## Parámetros comunes
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `query` | Consulta de búsqueda (obligatorio) | — |
+| `granularity` | Tamaño del bucket de tiempo | `hour` |
+| `start_time` | Timestamp más antiguo (ISO 8601) | Hace 30 días |
+| `end_time` | Timestamp más reciente (ISO 8601) | Ahora |
+| `next_token` | Token de paginación | — |
+
+---
+
+## Próximos pasos
+
+<CardGroup cols={2}>
+  <Card title="Recent counts" icon="clock" href="/x-api/posts/counts/quickstart/recent-tweet-counts">
+    Obtén recent Post counts
+  </Card>
+  <Card title="Construir una consulta" icon="/icons/xds/icon-search.svg" href="/x-api/posts/counts/integrate/build-a-query">
+    Domina la sintaxis de consulta
+  </Card>
+  <Card title="Referencia de la API" icon="/icons/xds/icon-code.svg" href="/x-api/posts/get-count-of-all-posts">
+    Documentación completa del endpoint
+  </Card>
+</CardGroup>

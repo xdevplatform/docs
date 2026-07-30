@@ -1,0 +1,81 @@
+---
+title: Coincidencia de Posts con reglas
+sidebarTitle: Coincidencia de Posts con reglas
+keywords: ["coincidencia de reglas", "reglas de filtrado", "coincidencia de reglas", "reglas de stream", "reglas de filtered stream", "etiquetas de reglas"]
+
+description: "Utiliza el campo matching_rules del payload para identificar con qué reglas de X API v2 Filtered Stream coincidió un Post entregado, incluyendo etiquetas y puntuaciones de embedding."
+---
+
+### Coincidencia de Posts devueltos con su regla asociada
+
+El endpoint de filtered stream te permite tener múltiples reglas en vigor a través de una única conexión. Antes de comenzar a recibir Posts en tu stream, deberás crear una regla que especifique los tipos de Posts que te interesan. 
+
+Cuando especificas tus reglas para coincidir con Posts basados en una amplia variedad de atributos, incluyendo atributos de usuario, geolocalización, idioma y muchos otros, puedes adjuntar una etiqueta para distinguir esta regla a un nivel superior. Las etiquetas son una buena manera de contextualizar tu regla, especialmente si tienes muchas reglas en vigor. Las reglas de filtrado determinan qué actividades de Post se enviarán a través de la conexión.
+
+Si necesitas añadir una nueva regla de filtrado para capturar un tipo diferente de Post, o eliminar una regla existente, tu app puede enviar una solicitud al endpoint [POST tweets/search/stream/rules](/x-api/stream/update-stream-rules) para hacerlo. Cuando se envía esa solicitud, las reglas de filtrado se modifican automáticamente y los cambios simplemente entran en vigor en el stream de datos sin necesidad de reconectarse. La mayoría de las adiciones de reglas surten efecto en unos 20 segundos o menos. Es poco probable, pero según factores externos (por ejemplo, conectividad de red), puede tardar más antes de que empieces a recibir Posts coincidentes. Si no puedes encontrar una regla en el endpoint de list rule, asegúrate de que la solicitud de creación de la regla haya sido exitosa; esto se puede hacer revisando tus logs en busca de mensajes de error.
+
+
+#### Reglas coincidentes
+
+Cuando una actividad se entrega a través de tu conexión de filtered stream, en un array matching_rules, contiene la lista de filtros que coincidieron con el Post entregado.
+
+En el payload del Post hay metadatos adicionales en formato string que incluyen el id y el tag de la regla que provocó la entrega de un Post específico. Si varias reglas coinciden con un solo Post, la actividad se entrega una sola vez con cada una de las reglas coincidentes incluidas en estos metadatos. Las reglas coincidentes proporcionan una forma sencilla de asociar un Post específico con reglas específicas, lo cual es especialmente útil si tienes muchas reglas distintas. Dado que los datos se entregan a través de un solo stream de esta manera, asegurarte de tener id y tag únicos es esencial para la coincidencia. 
+
+**Aquí tienes un ejemplo de cómo aparece el array "matching_rules" en el payload del Post:**
+ 
+
+```json
+"matching_rules": [
+    {
+      "id": "1166916266197536768",
+      "tag": "test-rule-tag-00000"
+    },
+    {
+      "id": "1166916266197536769",
+      "tag": "test-rule-tag-12345"
+    }
+  ]
+```
+
+#### Coincidencias de reglas de embedding
+
+Cuando un Post coincide con una regla que contiene el operador `embedding:`, la entrada `matching_rules` para esa regla incluye dos campos adicionales (presentes solo en las coincidencias basadas en embedding):
+
+| Field | Description |
+|:------|:------------|
+| `embedding_similarity` | La puntuación de similitud del coseno (0.0–1.0) entre la consulta de la regla y el Post coincidente. |
+| `embedding_threshold` | El umbral aplicado (tu valor o el predeterminado `0.3`). |
+
+Extracto de payload de ejemplo para una coincidencia de embedding:
+
+```json title="Ejemplo de respuesta" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "1784600000000000001",
+    "text": "The new carbon tax proposal could reshape how industries approach emissions..."
+  },
+  "matching_rules": [
+    {
+      "id": "1784567890123456789",
+      "tag": "climate-semantic",
+      "embedding_similarity": 0.4523,
+      "embedding_threshold": 0.4
+    }
+  ]
+}
+```
+
+Para las reglas de palabras clave, `from:`, `has:` y otras reglas que no son de embedding, las entradas `matching_rules` contienen únicamente `id` y `tag`.
+
+#### Etiquetas de regla
+
+En el momento en que se crean, cada regla de filtrado puede crearse con una etiqueta. Las etiquetas de regla no tienen un significado especial, ya que simplemente se tratan como cadenas opacas que se transportan junto con la regla. Se incluirán en los metadatos matching_rules de las actividades devueltas, y tienen como objetivo facilitar la distinción de tus reglas a un nivel superior. 
+
+Las etiquetas proporcionan una forma sencilla de crear agrupaciones lógicas de reglas de filtrado. Por ejemplo, puedes generar un ID único para una regla específica como su etiqueta y permitir que tu app haga referencia a ese ID dentro de las actividades que procesa para asociar un resultado con clientes, campañas, categorías u otros grupos relacionados específicos.
+
+Ten en cuenta que las etiquetas no se pueden actualizar en una regla existente y solo se pueden incluir cuando se crea una regla. Para "actualizar" o "renombrar" una etiqueta, primero necesitas eliminar la regla y luego añadirla de nuevo con la etiqueta deseada. La mejor solución es simplemente usar un identificador único como tu etiqueta, que tu sistema puede asociar con varios otros puntos de datos dentro de tu propia app, todo sin tener que cambiar nada en el conjunto de reglas.
+
+### Filtered stream - Características de recuperación y redundancia
+<Note>
+Nota: estas características de recuperación y redundancia solo están disponibles para quienes tienen acceso Enterprise.
+</Note>

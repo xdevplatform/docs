@@ -1,0 +1,232 @@
+---
+title: Quickstart de Home Timeline
+sidebarTitle: Home Timeline
+description: "Esta guía te muestra cómo hacer tu primera solicitud al endpoint de home timeline en cronología inversa. Referencia del nivel estándar de X API v2 sobre quickstart."
+keywords: ["home timeline", "cronología inversa", "quickstart de home timeline", "quickstart de timeline", "tutorial de home timeline"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+Esta guía te muestra cómo hacer tu primera solicitud al endpoint de home timeline en cronología inversa.
+
+<Note>
+**Requisitos previos**
+
+Antes de comenzar, necesitarás:
+- Una [cuenta de desarrollador](https://developer.x.com/en/portal/petition/essential/basic-info) con una App aprobada
+- User Access Tokens (este endpoint requiere autenticación de usuario)
+</Note>
+
+---
+
+## Paso 1: Obtén el ID de usuario
+
+Necesitas el ID de usuario de la cuenta cuyo home timeline deseas recuperar. Encuéntralo usando el endpoint username lookup:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/by/username/XDevelopers" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_BEARER_TOKEN")
+
+response = client.users.get_by_username("XDevelopers")
+print(f"User ID: {response.data.id}")
+```
+
+```javascript JavaScript SDK
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ bearerToken: "YOUR_BEARER_TOKEN" });
+
+const response = await client.users.getByUsername("XDevelopers");
+console.log(`User ID: ${response.data?.id}`);
+```
+
+</CodeGroup>
+
+La respuesta incluye el ID de usuario:
+
+```json
+{
+  "data": {
+    "id": "2244994945",
+    "name": "X Developers",
+    "username": "XDevelopers"
+  }
+}
+```
+
+---
+
+## Paso 2: Solicita el home timeline
+
+Realiza una solicitud GET con el ID de usuario y el User Access Token:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/timelines/reverse_chronological" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python Python SDK
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Obtén el home timeline con paginación
+for page in client.posts.get_home_timeline("2244994945"):
+    for post in page.data:
+        print(post.text)
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Obtén el home timeline con paginación
+const paginator = client.posts.getHomeTimeline("2244994945");
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(post.text);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Paso 3: Revisa la respuesta
+
+```json title="Ejemplo de respuesta" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "id": "1524796546306478083",
+      "text": "Today marks the launch of Devs in the Details...",
+      "edit_history_tweet_ids": ["1524796546306478083"]
+    },
+    {
+      "id": "1524468552404668416",
+      "text": "Join us tomorrow for a discussion about bots...",
+      "edit_history_tweet_ids": ["1524468552404668416"]
+    }
+  ],
+  "meta": {
+    "result_count": 2,
+    "newest_id": "1524796546306478083",
+    "oldest_id": "1524468552404668416",
+    "next_token": "7140dibdnow9c7btw421dyz6jism75z99gyxd8egarsc4"
+  }
+}
+```
+
+---
+
+## Paso 4: Añade fields y expansions
+
+Solicita datos adicionales con parámetros de consulta:
+
+<CodeGroup dropdown>
+
+```bash cURL
+curl "https://api.x.com/2/users/2244994945/timelines/reverse_chronological?\
+tweet.fields=created_at,public_metrics,author_id&\
+expansions=author_id&\
+user.fields=username,verified&\
+max_results=10" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```python title="Python SDK" lines wrap icon="python"
+from xdk import Client
+
+client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
+
+# Obtén el home timeline con fields y expansions
+for page in client.posts.get_home_timeline(
+    "2244994945",
+    tweet_fields=["created_at", "public_metrics", "author_id"],
+    expansions=["author_id"],
+    user_fields=["username", "verified"],
+    max_results=10
+):
+    for post in page.data:
+        print(f"{post.text[:50]}... - Likes: {post.public_metrics.like_count}")
+```
+
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
+
+// Obtén el home timeline con fields y expansions
+const paginator = client.posts.getHomeTimeline("2244994945", {
+  tweetFields: ["created_at", "public_metrics", "author_id"],
+  expansions: ["author_id"],
+  userFields: ["username", "verified"],
+  maxResults: 10,
+});
+
+for await (const page of paginator) {
+  page.data?.forEach((post) => {
+    console.log(`${post.text?.slice(0, 50)}... - Likes: ${post.public_metrics?.like_count}`);
+  });
+}
+```
+
+</CodeGroup>
+
+---
+
+## Paso 5: Pagina los resultados
+
+Los SDKs manejan la paginación automáticamente. Para cURL, usa el `next_token` de la respuesta para obtener más resultados:
+
+```bash
+curl "https://api.x.com/2/users/2244994945/timelines/reverse_chronological?\
+max_results=10&\
+pagination_token=7140dibdnow9c7btw421dyz6jism75z99gyxd8egarsc4" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+---
+
+## Parámetros comunes
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `max_results` | Resultados por página (1-100) | 10 |
+| `start_time` | Timestamp más antiguo del Post (ISO 8601) | — |
+| `end_time` | Timestamp más reciente del Post (ISO 8601) | — |
+| `since_id` | Devuelve Posts posteriores a este ID | — |
+| `until_id` | Devuelve Posts anteriores a este ID | — |
+| `exclude` | Excluye `retweets`, `replies` o ambos | — |
+
+---
+
+## Próximos pasos
+
+<CardGroup cols={2}>
+  <Card title="Menciones de usuario" icon="at" href="/x-api/posts/timelines/quickstart/user-mention-quickstart">
+    Obtén los Posts que mencionan a un usuario
+  </Card>
+  <Card title="Guía de integración" icon="/icons/xds/icon-book.svg" href="/x-api/posts/timelines/integrate">
+    Conceptos clave y mejores prácticas
+  </Card>
+  <Card title="Referencia de la API" icon="/icons/xds/icon-code.svg" href="/x-api/users/get-timeline">
+    Documentación completa del endpoint
+  </Card>
+  <Card title="Guía de paginación" icon="/icons/xds/icon-arrow-right.svg" href="/x-api/fundamentals/pagination">
+    Navega por conjuntos de resultados grandes
+  </Card>
+</CardGroup>
