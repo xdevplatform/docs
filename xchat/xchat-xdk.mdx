@@ -260,7 +260,7 @@ The snippets use the two **optional** session stores for the shortest call forms
 
 ## Lifecycle and keys
 
-Construct the SDK, store private keys (passcode-protected secure key backup or a local key blob), register **public** keys with the Chat API, and call **`set_identity(user_id, signing_key_version)`** after unlock or import. It sets the sender and signing-key version every signed action defaults to, so the encrypt and prepare methods work without per-call identity arguments. Call `generate_keypairs` once per device/app identity; post the registration payload to the public-keys endpoint. Use `setup` / `unlock` (and related passcode helpers) for secure key backup on every binding. `export_keys` / `import_keys` (raw key-blob persistence for bots and servers) are available on the **native bindings only**: Python, Go, .NET, JVM, and Rust. The JS/WASM binding does not expose raw key export or import: in a browser any script that reaches the instance could exfiltrate the identity, so JS keeps keys inside secure key backup. A JS server that wants to avoid a backup-realm round-trip per request should reuse one unlocked `Chat` instance across requests, or run a native binding where key blobs are supported.
+Construct the SDK, store private keys (passcode-protected secure key backup or a local key blob), register **public** keys with the X Chat API, and call **`set_identity(user_id, signing_key_version)`** after unlock or import. It sets the sender and signing-key version every signed action defaults to, so the encrypt and prepare methods work without per-call identity arguments. Call `generate_keypairs` once per device/app identity; post the registration payload to the public-keys endpoint. Use `setup` / `unlock` (and related passcode helpers) for secure key backup on every binding. `export_keys` / `import_keys` (raw key-blob persistence for bots and servers) are available on the **native bindings only**: Python, Go, .NET, JVM, and Rust. The JS/WASM binding does not expose raw key export or import: in a browser any script that reaches the instance could exfiltrate the identity, so JS keeps keys inside secure key backup. A JS server that wants to avoid a backup-realm round-trip per request should reuse one unlocked `Chat` instance across requests, or run a native binding where key blobs are supported.
 
 The SDK also needs the version the X API reports for your registered public key, so key-change entries targeting other versions are skipped. `set_identity` records it together with the user id; `import_keys` accepts it directly as an optional argument (Rust and Go use `import_keys_with_version` / `ImportKeysWithVersion`).
 
@@ -363,11 +363,11 @@ Three **prepare** methods each make one call do everything a key change needs: g
 
 | Scenario | Method | Action signatures returned |
 |:---------|:-------|:---------------------------|
-| Start a 1:1 (omit the conversation id; the SDK derives it) or rotate any conversation’s key (pass the id) | `prepare_conversation_key_change` | 1 |
+| Start a 1:1 (omit the conversation id; the SDK derives it) or rotate any conversation's key (pass the id) | `prepare_conversation_key_change` | 1 |
 | Create a group (id minted by `POST /2/chat/conversations/group/initialize`) | `prepare_group_create` | 2: send both |
 | Add members to a group | `prepare_group_members_change` | 2: send both |
 
-Keep the **raw** key bytes for `encrypt_message` and media; never pass the API’s encrypted envelope into encrypt.
+Keep the **raw** key bytes for `encrypt_message` and media; never pass the API's encrypted envelope into encrypt.
 
 <Warning>
 **Verify fetched keys before wrapping.** The prepare methods encrypt the fresh conversation key to whatever public keys you pass. Before passing them, call `verify_key_binding(identity, signing, signature)` on each fetched record (its `public_key`, `signing_public_key`, and `identity_public_key_signature` fields from the public-keys API) so a substituted identity key cannot receive the conversation key.
