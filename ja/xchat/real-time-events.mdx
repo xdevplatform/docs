@@ -1,7 +1,8 @@
 ---
-title: X Chat のリアルタイムイベント
+title: "新着メッセージをリアルタイムで受け取る"
 sidebarTitle: リアルタイムイベント
-description: chat.received、chat.sent、その他の暗号化された X Chat のアクティビティを Webhook またはアクティビティストリームで受信し、Chat XDK でペイロードを復号します。
+description: "Webhook またはストリームで X Chat の新着メッセージやイベントをリアルタイムに受信し、Chat XDK で復号します。"
+keywords: ["X Chat イベント", "Webhook", "アクティビティストリーム", "リアルタイムメッセージ", "chat.received", "chat.sent"]
 ---
 
 X は **`chat.received`**、**`chat.sent`**、および関連する X Chat のアクティビティを、ペイロードに**暗号文**を含めて配信します。[Chat XDK](/ja/xchat/xchat-xdk) で復号してください。
@@ -32,10 +33,10 @@ X は **`chat.received`**、**`chat.sent`**、および関連する X Chat の�
 
 **アクティビティサブスクリプション:** 永続的なサブスクリプションを次で管理します。
 
-- `POST /2/activity/subscriptions` — 作成
-- `GET /2/activity/subscriptions` — 一覧(ページング)
-- `PUT /2/activity/subscriptions/{subscription_id}` — 更新
-- `DELETE /2/activity/subscriptions/{subscription_id}` または `DELETE /2/activity/subscriptions?ids=` — 削除
+- `POST /2/activity/subscriptions`: 作成
+- `GET /2/activity/subscriptions`: 一覧(ページング)
+- `PUT /2/activity/subscriptions/{subscription_id}`: 更新
+- `DELETE /2/activity/subscriptions/{subscription_id}` または `DELETE /2/activity/subscriptions?ids=`: 削除
 
 リクエストボディと必要なスコープは各ルートの OpenAPI 操作で定義されています。X Activity API(XAA)サブスクリプションの作成には、監視するユーザーに対する**ユーザーコンテキスト認可**(OAuth 2.0 のユーザーコンテキストと関連スコープ。チャットイベントには `dm.read` など)が必要です。
 
@@ -46,12 +47,12 @@ X は **`chat.received`**、**`chat.sent`**、および関連する X Chat の�
     ```python
     from xdk import Client
 
-    # Stream (app token) — exact helper names depend on your XDK version
+    # Stream (app token); exact helper names depend on your XDK version
     stream_client = Client(bearer_token="YOUR_BEARER_TOKEN")
     # for event in stream_client.activity.stream():
     #     handle_payload(event)  # see "Decrypt with the Chat XDK" below
 
-    # Or create a subscription — requires user-context auth for the monitored user
+    # Or create a subscription; requires user-context auth for the monitored user
     client = Client(access_token="YOUR_OAUTH2_USER_TOKEN")
     client.activity.create_subscription({
         "event_type": "chat.received",
@@ -86,9 +87,9 @@ Webhook を使う場合は、Challenge-Response Check(GET `crc_token`)に対し�
 
 ## 3. Chat XDK で復号する
 
-ライブフィールド:**`payload.encoded_event`**、オプションで **`payload.conversation_key_change_event`**。配信は **`event_uuid`** で重複排除してください。メッセージは復号済みイベントに含まれる **`message_id`** で重複排除してください——これは署名済みコンテンツの一部です。シーケンス ID はバックエンドで割り当てられる署名なしのメタデータです。
+ライブフィールド:**`payload.encoded_event`**、オプションで **`payload.conversation_key_change_event`**。配信は **`event_uuid`** で重複排除してください。メッセージは復号済みイベントに含まれる **`message_id`** で重複排除してください。これは署名済みコンテンツの一部です。シーケンス ID はバックエンドで割り当てられる署名なしのメタデータです。
 
-以下のスニペットは、最も短いハンドラーになるように 2 つの**オプション**セッションストアを使います:`set_signing_keys` は参加者の公開鍵を保持(一度 [public-keys エンドポイント](/x-api/chat/get-user-public-keys) から取得)し、`set_cache_keys(true)` は各会話の検証済み鍵を保持するので、`decrypt_event` はイベントだけで済みます。ペイロードが `conversation_key_change_event` を含む場合は、まずそれを `decrypt_events` に通してください:これは鍵変更を検証し、キャッシュがオンなら以後の `decrypt_event` 呼び出しのために鍵を保持します。インスタンス状態を持たない方式が好ましい場合は、呼び出しごとに鍵を渡してください——このセクションの末尾のノートを参照してください。
+以下のスニペットは、最も短いハンドラーになるように 2 つの**オプション**セッションストアを使います:`set_signing_keys` は参加者の公開鍵を保持(一度 [public-keys エンドポイント](/x-api/chat/get-user-public-keys) から取得)し、`set_cache_keys(true)` は各会話の検証済み鍵を保持するので、`decrypt_event` はイベントだけで済みます。ペイロードが `conversation_key_change_event` を含む場合は、まずそれを `decrypt_events` に通してください:これは鍵変更を検証し、キャッシュがオンなら以後の `decrypt_event` 呼び出しのために鍵を保持します。インスタンス状態を持たない方式が好ましい場合は、呼び出しごとに鍵を渡してください。このセクションの末尾のノートを参照してください。
 
 JavaScript は camelCase のイベントタイプ(`message`)を使いますが、他のバインディングは `"Message"` とスネークケースのフィールドを使います。
 
@@ -197,9 +198,9 @@ JavaScript は camelCase のイベントタイプ(`message`)を使いますが�
   </Tab>
 </Tabs>
 
-代わりに鍵マップを自分の手で保持したい場合、`extract_conversation_keys` は `conversation_key_change_event` から鍵を復号し、`decrypt_event` はそれら(および送信者の署名鍵)を明示的な引数として受け取ります——明示的で空でない引数は常にストアより優先されます。
+代わりに鍵マップを自分の手で保持したい場合、`extract_conversation_keys` は `conversation_key_change_event` から鍵を復号し、`decrypt_event` はそれら(および送信者の署名鍵)を明示的な引数として受け取ります。明示的で空でない引数は常にストアより優先されます。
 
-履歴:[`GET /2/chat/conversations/{id}/events`](/x-api/chat/get-chat-conversation-events) + **`decrypt_events`** — [はじめに](/ja/xchat/getting-started#6-receive-and-decrypt) を参照してください。
+履歴:[`GET /2/chat/conversations/{id}/events`](/x-api/chat/get-chat-conversation-events) + **`decrypt_events`**。[はじめに](/ja/xchat/getting-started#6-receive-and-decrypt) を参照してください。
 
 ---
 

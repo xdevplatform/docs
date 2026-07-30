@@ -1,7 +1,8 @@
 ---
-title: Eventos de X Chat en tiempo real
+title: "Recibe mensajes de X Chat al instante"
 sidebarTitle: Eventos en tiempo real
-description: "Recibe actividad cifrada de X Chat como chat.received y chat.sent mediante webhooks o el activity stream, y descifra los payloads con el Chat XDK."
+description: "Escucha nuevos mensajes y eventos de X Chat en tiempo real mediante webhooks o un stream, y descífralos con el Chat XDK."
+keywords: ["eventos de X Chat", "webhooks", "activity stream", "mensajes en tiempo real", "chat.received", "chat.sent"]
 ---
 
 X entrega **`chat.received`**, **`chat.sent`** y actividad de X Chat relacionada con **texto cifrado** en el payload. Descifra con el [Chat XDK](/es/xchat/xchat-xdk).
@@ -12,7 +13,7 @@ X entrega **`chat.received`**, **`chat.sent`** y actividad de X Chat relacionada
 | **Webhooks** | Rutas opcionales `POST` / `GET` `/2/webhooks` y `PUT` / `DELETE` `/2/webhooks/{webhook_id}` si terminas en tu propia URL HTTPS |
 | **Chat XDK** | `decrypt_event` / `decrypt_events`, con los almacenes de sesión `set_signing_keys` / `set_cache_keys` |
 
-Los tipos de eventos privados de X Chat necesitan autorización para el usuario que monitorizas. Los adjuntos cifrados de X Chat usan **`media_hash_key`** y la descarga de multimedia de X Chat—no `expansions=attachments.media_keys` / `media.fields=variants` de la API de Posts.
+Los tipos de eventos privados de X Chat necesitan autorización para el usuario que monitorizas. Los adjuntos cifrados de X Chat usan **`media_hash_key`** y la descarga de multimedia de X Chat, no `expansions=attachments.media_keys` / `media.fields=variants` de la API de Posts.
 
 ---
 
@@ -32,10 +33,10 @@ Los tipos de eventos privados de X Chat necesitan autorización para el usuario 
 
 **Suscripciones de Activity:** administra suscripciones duraderas con:
 
-- `POST /2/activity/subscriptions` — crear  
-- `GET /2/activity/subscriptions` — listar (paginado)  
-- `PUT /2/activity/subscriptions/{subscription_id}` — actualizar  
-- `DELETE /2/activity/subscriptions/{subscription_id}` o `DELETE /2/activity/subscriptions?ids=` — eliminar  
+- `POST /2/activity/subscriptions`: crear  
+- `GET /2/activity/subscriptions`: listar (paginado)  
+- `PUT /2/activity/subscriptions/{subscription_id}`: actualizar  
+- `DELETE /2/activity/subscriptions/{subscription_id}` o `DELETE /2/activity/subscriptions?ids=`: eliminar  
 
 Los cuerpos de solicitud y los alcances requeridos están definidos en la operación OpenAPI de cada ruta. Crear una suscripción de la X Activity API (XAA) requiere **autorización en contexto de usuario** (contexto de usuario OAuth 2.0 con los alcances relevantes, como `dm.read` para eventos de chat) del usuario cuya actividad monitorizas.
 
@@ -46,12 +47,12 @@ Los cuerpos de solicitud y los alcances requeridos están definidos en la operac
     ```python
     from xdk import Client
 
-    # Stream (app token) — exact helper names depend on your XDK version
+    # Stream (app token); exact helper names depend on your XDK version
     stream_client = Client(bearer_token="YOUR_BEARER_TOKEN")
     # for event in stream_client.activity.stream():
     #     handle_payload(event)  # see "Decrypt with the Chat XDK" below
 
-    # Or create a subscription — requires user-context auth for the monitored user
+    # Or create a subscription; requires user-context auth for the monitored user
     client = Client(access_token="YOUR_OAUTH2_USER_TOKEN")
     client.activity.create_subscription({
         "event_type": "chat.received",
@@ -86,9 +87,9 @@ Si usas webhooks, responde a los Challenge-Response Checks (GET `crc_token`) con
 
 ## 3. Descifrar con el Chat XDK
 
-Campos en vivo: **`payload.encoded_event`**, opcional **`payload.conversation_key_change_event`**. Deduplica las entregas con **`event_uuid`**; deduplica los mensajes con el **`message_id`** que lleva el evento descifrado—forma parte del contenido firmado, mientras que los sequence ids son metadatos no firmados asignados por el backend.
+Campos en vivo: **`payload.encoded_event`**, opcional **`payload.conversation_key_change_event`**. Deduplica las entregas con **`event_uuid`**; deduplica los mensajes con el **`message_id`** que lleva el evento descifrado. Forma parte del contenido firmado, mientras que los sequence ids son metadatos no firmados asignados por el backend.
 
-Los snippets a continuación usan los dos almacenes de sesión **opcionales** para el handler más corto: `set_signing_keys` guarda las claves públicas de los participantes (obtenidas una vez del [endpoint public-keys](/x-api/chat/get-user-public-keys)), y `set_cache_keys(true)` mantiene la clave verificada de cada conversación, así que `decrypt_event` solo necesita el evento. Cuando un payload lleva `conversation_key_change_event`, pásalo primero por `decrypt_events`: eso verifica el cambio de clave y, con la caché activada, retiene su clave para la llamada a `decrypt_event`. ¿Prefieres no tener estado de instancia? Pasa las claves por llamada en su lugar—consulta la nota al final de esta sección.
+Los snippets a continuación usan los dos almacenes de sesión **opcionales** para el handler más corto: `set_signing_keys` guarda las claves públicas de los participantes (obtenidas una vez del [endpoint public-keys](/x-api/chat/get-user-public-keys)), y `set_cache_keys(true)` mantiene la clave verificada de cada conversación, así que `decrypt_event` solo necesita el evento. Cuando un payload lleva `conversation_key_change_event`, pásalo primero por `decrypt_events`: eso verifica el cambio de clave y, con la caché activada, retiene su clave para la llamada a `decrypt_event`. ¿Prefieres no tener estado de instancia? Pasa las claves por llamada en su lugar; consulta la nota al final de esta sección.
 
 JavaScript usa tipos de evento en camelCase (`message`); otros bindings usan `"Message"` y campos snake_case.
 
@@ -197,9 +198,9 @@ JavaScript usa tipos de evento en camelCase (`message`); otros bindings usan `"M
   </Tab>
 </Tabs>
 
-Para mantener los mapas de claves bajo tu control en su lugar, `extract_conversation_keys` descifra las claves de `conversation_key_change_event` y `decrypt_event` las acepta (junto con las claves de firma del remitente) como argumentos explícitos—un argumento explícito no vacío siempre gana sobre los almacenes.
+Para mantener los mapas de claves bajo tu control en su lugar, `extract_conversation_keys` descifra las claves de `conversation_key_change_event` y `decrypt_event` las acepta (junto con las claves de firma del remitente) como argumentos explícitos; un argumento explícito no vacío siempre gana sobre los almacenes.
 
-Historial: [`GET /2/chat/conversations/{id}/events`](/x-api/chat/get-chat-conversation-events) + **`decrypt_events`** — consulta [Primeros pasos](/es/xchat/getting-started#6-receive-and-decrypt).
+Historial: [`GET /2/chat/conversations/{id}/events`](/x-api/chat/get-chat-conversation-events) + **`decrypt_events`**; consulta [Primeros pasos](/es/xchat/getting-started#6-receive-and-decrypt).
 
 ---
 

@@ -1,11 +1,11 @@
 ---
-title: Troubleshoot X Chat encryption and delivery errors
+title: "Fix common X Chat problems"
 sidebarTitle: Troubleshooting
-description: Diagnose common X Chat encryption issues including Chat XDK errors, secure key backup recovery, decryption failures, and building signed send payloads.
-keywords: ["X Chat errors", "Chat XDK", "decryption", "secure key backup", "encryption"]
+description: "Solutions for the most common X Chat issues: key setup, backup recovery, messages that won't decrypt, and send errors."
+keywords: ["X Chat errors", "troubleshooting", "Chat XDK", "decryption failed", "secure key backup", "encryption errors"]
 ---
 
-This page covers problems that are **specific to X Chat encryption and the Chat XDK**—keys, secure key backup, decrypt/verify, and building encrypted send payloads.
+This page covers problems that are **specific to X Chat encryption and the Chat XDK**: keys, secure key backup, decrypt/verify, and building encrypted send payloads.
 
 For webhooks, OAuth, HTTP status codes, and rate limits, use the general [X API](/x-api/introduction) and [authentication](/fundamentals/authentication/overview) documentation.
 
@@ -64,7 +64,7 @@ For webhooks, OAuth, HTTP status codes, and rate limits, use the general [X API]
 
 ### Encrypt or decrypt fails because keys or identity are not set
 
-Load private keys first, then set the **session identity**—your user id plus the `public_key_version` from your record on X. The `encrypt_*` and `prepare_*` methods sign with it; calling them with no session identity (and no explicit per-call override) is an error.
+Load private keys first, then set the **session identity**: your user id plus the `public_key_version` from your record on X. The `encrypt_*` and `prepare_*` methods sign with it; calling them with no session identity (and no explicit per-call override) is an error.
 
 <Tabs>
   <Tab title="Python">
@@ -108,9 +108,9 @@ Load private keys first, then set the **session identity**—your user id plus t
 
 ### Your local public key never matches the account's registered keys
 
-Clients often need to answer *"is the key on this device one of the keys registered to this account?"*—after a restore or import, to adopt the right `public_key_version`, or to decide whether onboarding already happened. Comparing the Chat XDK's `get_public_keys` output against the API's `public_key` field **as strings always fails**, even for the same key, because the two use different encodings:
+Clients often need to answer *"is the key on this device one of the keys registered to this account?"*, after a restore or import, to adopt the right `public_key_version`, or to decide whether onboarding already happened. Comparing the Chat XDK's `get_public_keys` output against the API's `public_key` field **as strings always fails**, even for the same key, because the two use different encodings:
 
-- The **API** stores and returns the key exactly as registration uploaded it: the DER (SPKI) encoding — the raw key behind a fixed algorithm-identifier prefix
+- The **API** stores and returns the key exactly as registration uploaded it: the DER (SPKI) encoding, which is the raw key behind a fixed algorithm-identifier prefix
 - The **Chat XDK**'s `get_public_keys` returns the raw key alone, without that prefix
 
 Same key, two spellings. To compare, base64-decode both and check that the API bytes **end with** the SDK bytes (identical bytes also match, in case both sides ever hold the same encoding):
@@ -171,13 +171,13 @@ Same key, two spellings. To compare, base64-decode both and check that the API b
   </Tab>
 </Tabs>
 
-Once matched, adopt that row's `public_key_version` for `set_identity`. When comparing versions (for example to pick the newest key), compare **numerically**—versions are millisecond timestamps of varying string length, so lexicographic comparison picks the wrong one.
+Once matched, adopt that row's `public_key_version` for `set_identity`. When comparing versions (for example to pick the newest key), compare **numerically**: versions are millisecond timestamps of varying string length, so lexicographic comparison picks the wrong one.
 
 ### Missing conversation key for a message
 
 An error like `Message encrypted with key version '…' but no matching key found` means you do not have the **raw** key for that message’s `conversation_key_version`.
 
-1. Decrypt key material from `conversation_key_change_event` (live events) or `meta.conversation_key_events` (history) with `extract_conversation_keys`, **or** include those blobs in `decrypt_events`—with `set_cache_keys(true)` enabled, `decrypt_events` also retains each conversation’s latest verified key so later `decrypt_event` and `encrypt_*` calls can omit it
+1. Decrypt key material from `conversation_key_change_event` (live events) or `meta.conversation_key_events` (history) with `extract_conversation_keys`, **or** include those blobs in `decrypt_events`; with `set_cache_keys(true)` enabled, `decrypt_events` also retains each conversation’s latest verified key so later `decrypt_event` and `encrypt_*` calls can omit it
 2. Confirm conversation keys were added for that version and you are still a participant (see [Getting Started](/xchat/getting-started#4-set-up-conversation-keys))
 
 ### Peer has no public keys
@@ -198,11 +198,11 @@ They may not have finished onboarding. After they register, load `public_key`, `
 
 Verification is **fail-closed by default** (`reject_unverified = true`): the SDK already rejects unverified signed events, so a failure here means the verification inputs are wrong, not that you need to turn checking on. Common causes:
 
-- Missing or incomplete signing-key entry for the **sender** (all fields required by the Chat XDK—see the [Chat XDK](/xchat/xchat-xdk) reference)
+- Missing or incomplete signing-key entry for the **sender** (all fields required by the Chat XDK; see the [Chat XDK](/xchat/xchat-xdk) reference)
 - No signing keys passed on the call and none stored via `set_signing_keys`
-- The sender rotated versions—re-fetch their public keys
+- The sender rotated versions: re-fetch their public keys
 - A key version below the accepted floor never verifies
-- On a **group key-change event**, the signer has since left the group, so their keys are no longer served—see [Key changes from departed members](/xchat/groups#key-changes-from-departed-members)
+- On a **group key-change event**, the signer has since left the group, so their keys are no longer served; see [Key changes from departed members](/xchat/groups#key-changes-from-departed-members)
 
 The `set_reject_unverified` setter exists to opt **out** of this default (`false`, not recommended). If you disabled it earlier, restore the fail-closed default:
 
@@ -241,11 +241,11 @@ The `set_reject_unverified` setter exists to opt **out** of this default (`false
 
 ### A reply carries `reply_preview_validation: "Invalid"`
 
-Decrypted replies may carry `reply_preview_validation` (`"Valid"` / `"Invalid"`; JavaScript uses `'valid'` / `'invalid'`). `Invalid` means the quoted preview inside the message does not match the signed original event it embeds—treat the quote as untrusted and render the quoted content only from the validated original. The message itself is verified separately and is still authentic; nothing throws for an invalid preview.
+Decrypted replies may carry `reply_preview_validation` (`"Valid"` / `"Invalid"`; JavaScript uses `'valid'` / `'invalid'`). `Invalid` means the quoted preview inside the message does not match the signed original event it embeds. Treat the quote as untrusted and render the quoted content only from the validated original. The message itself is verified separately and is still authentic; nothing throws for an invalid preview.
 
 ### Old events permanently fail verification
 
-Errors like `signature missing or no matching signing key` or an ECDSA mismatch on **old** events are permanent. Signatures are immutable and verified by rebuilding the signed payload from the event itself, so an event that was signed over different bytes (or never signed) fails on every future load—no retry, key refresh, or API call can heal it. Treat these events as tombstones, not retryable errors. Rotating the conversation key starts a clean, verifiable history from that point forward; new messages are unaffected.
+Errors like `signature missing or no matching signing key` or an ECDSA mismatch on **old** events are permanent. Signatures are immutable and verified by rebuilding the signed payload from the event itself, so an event that was signed over different bytes (or never signed) fails on every future load. No retry, key refresh, or API call can heal it. Treat these events as tombstones, not retryable errors. Rotating the conversation key starts a clean, verifiable history from that point forward; new messages are unaffected.
 
 ---
 
@@ -257,13 +257,13 @@ These mistakes are specific to X Chat encryption (not general HTTP errors):
 |:------|:----|
 | Wrong key bytes | Pass the **raw** conversation key bytes into the Chat XDK, not the encrypted key string from the API |
 | Wrong JSON field names | Map `encrypted_content` → `encoded_message_create_event` and `encoded_event_signature` → `encoded_message_event_signature` |
-| Wrong message id | Send the `message_id` from the returned payload—the SDK generates it and embeds it in the signed event, so any other value fails. On retries, reuse the same encrypted payload so the id is never minted twice |
+| Wrong message id | Send the `message_id` from the returned payload: the SDK generates it and embeds it in the signed event, so any other value fails. On retries, reuse the same encrypted payload so the id is never minted twice |
 | Version mismatch | Align `conversation_key_version` with the key you use; align the signing key version passed to `set_identity` with your public-key record |
-| Path id form | URL paths still need the hyphenated conversation id (`:` → `-`), but for signing the SDK accepts any form: `A:B`, `A-B` (either order), or the bare recipient user id—all canonicalize to the same signed bytes |
+| Path id form | URL paths still need the hyphenated conversation id (`:` → `-`), but for signing the SDK accepts any form: `A:B`, `A-B` (either order), or the bare recipient user id; all canonicalize to the same signed bytes |
 
 ### API returns 400 for a state-changing call
 
-Every state-changing chat call—adding or rotating conversation keys, creating a group, adding members—requires **`action_signatures`** in the request body, validated at the API boundary. A missing or malformed entry (each needs `message_id`, `encoded_message_event_detail`, and a `message_event_signature` with `signature`, `public_key_version`, and `signature_version`) returns an HTTP 400 problem-details response immediately. Use the SDK prepare methods (`prepare_conversation_key_change`, `prepare_group_create`, `prepare_group_members_change`) and send **all** returned signatures—group create and member adds return two.
+Every state-changing chat call (adding or rotating conversation keys, creating a group, adding members) requires **`action_signatures`** in the request body, validated at the API boundary. A missing or malformed entry (each needs `message_id`, `encoded_message_event_detail`, and a `message_event_signature` with `signature`, `public_key_version`, and `signature_version`) returns an HTTP 400 problem-details response immediately. Use the SDK prepare methods (`prepare_conversation_key_change`, `prepare_group_create`, `prepare_group_members_change`) and send **all** returned signatures; group create and member adds return two.
 
 ---
 

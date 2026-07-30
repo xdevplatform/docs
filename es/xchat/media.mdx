@@ -1,15 +1,15 @@
 ---
-title: Multimedia y adjuntos
+title: "Envía imágenes y archivos en X Chat"
 sidebarTitle: Multimedia
-description: "Cifra, sube, envía, descarga y descifra imágenes y archivos adjuntos en X Chat con el cifrado de streams del Chat XDK y los endpoints de subida de medios."
-keywords: ["X Chat media", "encrypted images", "attachments", "encrypt_stream", "media upload"]
+description: "Comparte imágenes y archivos adjuntos en tus chats cifrados: cifra, sube, envía, descarga y descifra multimedia con el Chat XDK."
+keywords: ["multimedia de X Chat", "imágenes cifradas", "archivos adjuntos", "encrypt_stream", "subida de medios", "descarga de medios"]
 ---
 
 Las imágenes y otros archivos usan la **misma clave de conversación** que el texto. Cifra los bytes con el Chat XDK (`encrypt_stream` / `decrypt_stream`), sube mediante las rutas **`/2/chat/media/upload`** (barra lateral **API reference → Media**) y luego adjunta **`media_hash_key`** en `encrypt_message`.
 
 Incluye **`media.write`** con tus alcances de DM al subir. Usa IDs de conversación con guiones en las rutas (`:` → `-`). Prefiere el MIME/dimensiones a partir de los bytes **descifrados**.
 
-Esta ruta **no** es el modelo de multimedia de Posts (`expansions=attachments.media_keys`, `media.fields=variants`, etc.). Esos parámetros aplican a **Posts**; los blobs de X Chat E2EE se direccionan por **`media_hash_key`** y la descarga de multimedia de X Chat.
+Esta ruta **no** es el modelo de multimedia de Posts (`expansions=attachments.media_keys`, `media.fields=variants`, etc.). Esos parámetros aplican a **Posts**; los blobs cifrados de X Chat se direccionan por **`media_hash_key`** y la descarga de multimedia de X Chat.
 
 ```mermaid
 flowchart LR
@@ -104,7 +104,7 @@ flowchart LR
   </Tab>
 </Tabs>
 
-`encrypt_stream` / `decrypt_stream` procesan todo el payload en memoria. Para archivos grandes, `stream_encryptor()` / `stream_decryptor()` devuelven objetos incrementales (`StreamEncryptor` / `StreamDecryptor`): alimenta trozos con `push`, luego llama a `finish` una vez—`finish` falla si el stream se truncó.
+`encrypt_stream` / `decrypt_stream` procesan todo el payload en memoria. Para archivos grandes, `stream_encryptor()` / `stream_decryptor()` devuelven objetos incrementales (`StreamEncryptor` / `StreamDecryptor`): alimenta trozos con `push`, luego llama a `finish` una vez; `finish` falla si el stream se truncó.
 
 ---
 
@@ -122,7 +122,7 @@ Usa los cuerpos de solicitud en las páginas OpenAPI bajo **API reference → Me
 
 ## Enviar con un adjunto
 
-Cifra con un adjunto multimedia, luego haz POST del cuerpo send-message (mismo mapeo de campos que [Primeros pasos](/es/xchat/getting-started#5-send-a-message)). El SDK genera el `message_id` y lo devuelve en el payload—envía ese valor, y reutiliza el mismo payload en los reintentos para que nunca se genere un ID dos veces.
+Cifra con un adjunto multimedia, luego haz POST del cuerpo send-message (mismo mapeo de campos que [Primeros pasos](/es/xchat/getting-started#5-send-a-message)). El SDK genera el `message_id` y lo devuelve en el payload. Envía ese valor, y reutiliza el mismo payload en los reintentos para que nunca se genere un ID dos veces.
 
 <Tabs>
   <Tab title="Python">
@@ -268,7 +268,7 @@ El par de clave de conversación se puede omitir por completo: con `set_cache_ke
 
 Ruta: [`GET /2/chat/media/{conversation_id}/{media_hash_key}`](/x-api/chat/download-chat-media). El cuerpo de la respuesta es texto cifrado. En mensajes entrantes, lee `media_hash_key` de los adjuntos descifrados / `media_hashes`.
 
-**Elige la clave por la versión de clave del evento.** Cada evento de mensaje descifrado lleva el `keyVersion` (JS; `key_version` en los otros bindings) con el que se cifró su contenido. Descifra un adjunto con la clave de conversación de **esa** versión—`conversationKeys.keys[event.keyVersion]`—no la más reciente. Después de una rotación de clave (por ejemplo la incorporación de un miembro), la última clave no puede descifrar multimedia adjunta a mensajes anteriores.
+**Elige la clave por la versión de clave del evento.** Cada evento de mensaje descifrado lleva el `keyVersion` (JS; `key_version` en los otros bindings) con el que se cifró su contenido. Descifra un adjunto con la clave de conversación de **esa** versión (`conversationKeys.keys[event.keyVersion]`), no la más reciente. Después de una rotación de clave (por ejemplo la incorporación de un miembro), la última clave no puede descifrar multimedia adjunta a mensajes anteriores.
 
 <Tabs>
   <Tab title="Python">

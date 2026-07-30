@@ -1,8 +1,8 @@
 ---
-title: Build encrypted group conversations with X Chat
+title: "Create encrypted group conversations in X Chat"
 sidebarTitle: Groups
-description: Create multi-participant X Chat group conversations with shared conversation keys, encrypted titles, member management, and signed messages.
-keywords: ["X Chat groups", "group DM", "conversation keys", "group name encryption"]
+description: "Build group conversations in X Chat: create a group, add or remove members, and set an encrypted name and avatar, all with the same security as 1:1 chats."
+keywords: ["X Chat groups", "group chat", "group DM", "conversation keys", "group name encryption", "add members"]
 ---
 
 Group chats use the **same encryption model** as 1:1 X Chat: one **conversation key** shared by members, wrapped to each member’s **identity public key**, with messages encrypted and signed by the Chat XDK. What changes is **membership**, **how you create the conversation**, and often **encrypted title/avatar** fields on the conversation.
@@ -27,13 +27,13 @@ Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the gro
 
 ## Create the group and establish keys
 
-1. Mint the group id with `POST /2/chat/conversations/group/initialize` — the response's `data.conversation_id` is the g-prefixed id you use everywhere below.
+1. Mint the group id with `POST /2/chat/conversations/group/initialize`: the response's `data.conversation_id` is the g-prefixed id you use everywhere below.
 2. Load each member's identity public key and `public_key_version` (`GET` public-key routes under **Encryption keys**; [`GET /2/users/public_keys`](/x-api/users/get-public-keys-for-multiple-users) fetches several users in one request). Verify each record with `verify_key_binding` before using it (see the warning in [Getting Started](/xchat/getting-started#4-set-up-conversation-keys)).
-3. Run **`prepare_group_create`** once, with **all** members (including yourself), the g-prefixed id, and the member/admin id lists. One call generates the conversation key, wraps it for every member, and signs the create with the session identity from `set_identity` — it returns **two** action signatures (the conversation-key change and the group create).
+3. Run **`prepare_group_create`** once, with **all** members (including yourself), the g-prefixed id, and the member/admin id lists. One call generates the conversation key, wraps it for every member, and signs the create with the session identity from `set_identity`. It returns **two** action signatures (the conversation-key change and the group create).
 4. `POST /2/chat/conversations/group` with the group members/admins, `conversation_key_version`, `conversation_participant_keys` (SDK **`encrypted_key`** → API **`encrypted_conversation_key`**), and **both** `action_signatures`. Validation failures come back as stable, human-readable messages, for example `"Too many members: adding these members would exceed the allowed group size."` or `"Cannot add all members: one or more of the requested members cannot be added to this conversation."`.
 5. Keep the **raw** conversation key and **version** for encrypt/decrypt.
 
-`prepare_group_create` signs the `title` and `avatar_url` you pass in and embeds them verbatim in the group-create event. The server matches those against your request, so the `group_name` / `group_avatar_url` values in the POST body must be **byte-identical** to what you passed the SDK — otherwise the call fails signature validation.
+`prepare_group_create` signs the `title` and `avatar_url` you pass in and embeds them verbatim in the group-create event. The server matches those against your request, so the `group_name` / `group_avatar_url` values in the POST body must be **byte-identical** to what you passed the SDK; otherwise the call fails signature validation.
 
 <Tabs>
   <Tab title="Python">
@@ -57,7 +57,7 @@ Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the gro
       conversationId: groupId, // g-prefixed id from POST /2/chat/conversations/group/initialize
       memberIds, adminIds, title: 'Project team',
     });
-    // prepared.actionSignatures has two entries — send both
+    // prepared.actionSignatures has two entries; send both
     ```
   </Tab>
   <Tab title="Rust">
@@ -68,7 +68,7 @@ Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the gro
     );
     params.title = Some("Project team".into());
     let prepared = chat.prepare_group_create(params)?;
-    // prepared.action_signatures has two entries — send both
+    // prepared.action_signatures has two entries; send both
     ```
   </Tab>
   <Tab title="Go">
@@ -78,7 +78,7 @@ Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the gro
         PublicKeys: memberPublicKeys, ConversationID: groupID,
         MemberIDs: memberIDs, AdminIDs: adminIDs, Title: "Project team",
     })
-    // prepared.ActionSignatures has two entries — send both
+    // prepared.ActionSignatures has two entries; send both
     _ = prepared
     _ = err
     ```
@@ -91,7 +91,7 @@ Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the gro
         {
             Title = "Project team",
         });
-    // prepared.ActionSignatures has two entries — send both
+    // prepared.ActionSignatures has two entries; send both
     ```
   </Tab>
   <Tab title="Java">
@@ -101,16 +101,16 @@ Crypto is still: **Chat XDK** for keys and payloads; **X API** to create the gro
         new GroupCreateParams(memberPublicKeys, groupId, memberIds, adminIds);
     params.title = "Project team";
     PreparedConversationChange prepared = chat.prepareGroupCreate(params);
-    // prepared.actionSignatures has two entries — send both
+    // prepared.actionSignatures has two entries; send both
     ```
   </Tab>
 </Tabs>
 
-The body mapping for participant keys and action signatures (`message_id`, `encoded_message_event_detail`, nested `message_event_signature`) is the same as the keys POST in [Getting Started — conversation keys](/xchat/getting-started#4-set-up-conversation-keys).
+The body mapping for participant keys and action signatures (`message_id`, `encoded_message_event_detail`, nested `message_event_signature`) is the same as the keys POST in [Getting Started: conversation keys](/xchat/getting-started#4-set-up-conversation-keys).
 
-When membership changes, call **`prepare_group_members_change`** with the new member ids plus the current roster (members, admins, pending members, and the current title/avatar/TTL if set). It rotates the conversation key and, like group create, returns **two** action signatures — POST all of it to **add members** (`POST /2/chat/conversations/{id}/members`). Then expect **key-change** traffic: treat it like [key rotation in Getting Started](/xchat/getting-started#6-receive-and-decrypt) (`extract_conversation_keys` / `decrypt_events`, then encrypt with the latest version).
+When membership changes, call **`prepare_group_members_change`** with the new member ids plus the current roster (members, admins, pending members, and the current title/avatar/TTL if set). It rotates the conversation key and, like group create, returns **two** action signatures. POST all of it to **add members** (`POST /2/chat/conversations/{id}/members`). Then expect **key-change** traffic: treat it like [key rotation in Getting Started](/xchat/getting-started#6-receive-and-decrypt) (`extract_conversation_keys` / `decrypt_events`, then encrypt with the latest version).
 
-Because `prepare_group_members_change` generates a **fresh** conversation key wrapped only to the roster you pass, new members receive the new key version and cannot decrypt messages sent under earlier versions. The reverse is not true: rotation never revokes access to **earlier** versions — anyone who already holds an old key can still read the messages encrypted under it. If you suspect a conversation key was exposed, rotate with `prepare_conversation_key_change`; this protects future messages only.
+Because `prepare_group_members_change` generates a **fresh** conversation key wrapped only to the roster you pass, new members receive the new key version and cannot decrypt messages sent under earlier versions. The reverse is not true: rotation never revokes access to **earlier** versions; anyone who already holds an old key can still read the messages encrypted under it. If you suspect a conversation key was exposed, rotate with `prepare_conversation_key_change`; this protects future messages only.
 
 ---
 
@@ -181,11 +181,11 @@ Always encrypt with the **latest** key version after a membership-driven rotatio
 
 ### Key changes from departed members
 
-A group's key-change events are signed by whoever performed them—often the creator or an admin. If that member later **leaves the group** (or deactivates), the public-keys endpoints stop returning their keys, so the verified decrypt path (`decrypt_events` with signing keys) fails on those key-change events with `signature missing or no matching signing key`. The events are not corrupt; the verification material is simply no longer served.
+A group's key-change events are signed by whoever performed them, often the creator or an admin. If that member later **leaves the group** (or deactivates), the public-keys endpoints stop returning their keys, so the verified decrypt path (`decrypt_events` with signing keys) fails on those key-change events with `signature missing or no matching signing key`. The events are not corrupt; the verification material is simply no longer served.
 
 Long-lived groups should expect this and fall back to **`extract_conversation_keys`** for key-change events that cannot be verified. This path skips the signature check and recovers the conversation key by decrypting it with your identity key. The security model holds because:
 
-- Only key material that was **encrypted to your identity key** can be recovered at all—a third party cannot inject a key you can read
+- Only key material that was **encrypted to your identity key** can be recovered at all; a third party cannot inject a key you can read
 - Every **message** is still signature-verified against its own sender, so message authorship is unaffected
 
 Keep the verified path first: use `decrypt_events` (which also feeds the SDK's key cache when `set_cache_keys(true)` is enabled), and reach for `extract_conversation_keys` only for the key-change events it rejects.
