@@ -22,25 +22,14 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Puppeteer
-        run: npm install puppeteer
-
-      - name: Fetch Latest OpenAPI Specification with Puppeteer
+      - name: Fetch Latest OpenAPI Specification
         run: |
-          cat << EOF > fetch-openapi.js
-          const puppeteer = require('puppeteer');
-          const fs = require('fs/promises');
-
-          (async () => {
-            const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-            const page = await browser.newPage();
-            const response = await page.goto('https://api.twitter.com/2/openapi.json', { waitUntil: 'networkidle0' });
-            const body = await response.text();
-            await fs.writeFile('openapi.json', body);
-            await browser.close();
-          })();
-          EOF
-          node fetch-openapi.js
+          curl --fail --silent --show-error --location \
+            --retry 3 --retry-delay 5 --max-time 120 \
+            -o openapi.json \
+            https://api.x.com/2/openapi.json
+          # Fail early if the response is not valid JSON (e.g. an error page)
+          jq -e .openapi openapi.json > /dev/null
 
       - name: Remove Existing api-reference Directory
         run: rm -rf api-reference
