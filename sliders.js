@@ -50,6 +50,52 @@ const ENTERPRISE_ONLY_SLUGS = new Set([
   'follow-user', 'unfollow-user', 'like-post', 'unlike-post'
 ]);
 
+// API reference pages that live under API Reference > Enterprise (not General).
+// These are sold as custom Enterprise contracts, not pay-per-use — do not inject View Pricing.
+// Keep in sync with docs.json: X API > API Reference > dropdown "Enterprise".
+const ENTERPRISE_NAV_PATH_PREFIXES = [
+  '/x-api/account-activity/',
+  '/x-api/powerstream/',
+];
+
+const ENTERPRISE_NAV_PAGE_PATHS = new Set([
+  // Analytics
+  '/x-api/posts/get-post-analytics',
+  '/x-api/media/get-media-analytics',
+  // Volume Streams
+  '/x-api/stream/stream-all-posts',
+  '/x-api/stream/stream-english-posts',
+  '/x-api/stream/stream-japanese-posts',
+  '/x-api/stream/stream-korean-posts',
+  '/x-api/stream/stream-portuguese-posts',
+  '/x-api/stream/stream-sampled-posts',
+  '/x-api/stream/stream-10-sampled-posts',
+  // Likes Streams
+  '/x-api/stream/stream-all-likes',
+  '/x-api/stream/stream-sampled-likes',
+  // Filtered Stream Webhooks
+  '/x-api/webhooks/create-stream-link',
+  '/x-api/webhooks/delete-stream-link',
+  '/x-api/webhooks/get-stream-links',
+]);
+
+function isEnterpriseApiReferencePage(urlPath) {
+  const path = (urlPath || '').replace(/\/$/, '');
+  if (ENTERPRISE_NAV_PATH_PREFIXES.some(prefix =>
+      path.includes(prefix) || path.endsWith(prefix.slice(0, -1)))) {
+    return true;
+  }
+  if (ENTERPRISE_NAV_PAGE_PATHS.has(path)) {
+    return true;
+  }
+  for (const pagePath of ENTERPRISE_NAV_PAGE_PATHS) {
+    if (path.endsWith(pagePath)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Build mapping from pricing types to display strings
 function getPricingTypeDisplayName(pricingType) {
   const displayMapping = {
@@ -229,9 +275,7 @@ function buildSlugToPricingTypeMapping() {
   mapping['get-personalized-trends'] = 'Trends';
   mapping['get-ai-trends-by-id'] = 'Trends';
   
-  // Analytics endpoints (may not have pricing)
-  mapping['get-post-analytics'] = 'CountsRecent'; // Placeholder - may need to verify
-  mapping['get-media-analytics'] = 'CountsRecent'; // Placeholder - may need to verify
+  // Analytics: get-post-analytics / get-media-analytics live under Enterprise (no View Pricing)
   mapping['get-28-hour-post-insights'] = 'CountsRecent'; // Placeholder - may need to verify
   mapping['get-historical-post-insights'] = 'CountsRecent'; // Placeholder - may need to verify
   
@@ -249,9 +293,7 @@ function buildSlugToPricingTypeMapping() {
   mapping['get-webhook'] = 'CountsRecent'; // Placeholder - may need to verify
   mapping['delete-webhook'] = 'ContentManage'; // Placeholder - may need to verify
   mapping['validate-webhook'] = 'CountsRecent'; // Placeholder - may need to verify
-  mapping['create-stream-link'] = 'ContentCreate'; // Placeholder - may need to verify
-  mapping['get-stream-links'] = 'CountsRecent'; // Placeholder - may need to verify
-  mapping['delete-stream-link'] = 'ContentManage'; // Placeholder - may need to verify
+  // Filtered Stream Webhooks (create/get/delete-stream-link) live under Enterprise (no View Pricing)
   mapping['create-replay-job-for-webhook'] = 'ContentCreate'; // Placeholder - may need to verify
   
   // Compliance endpoints (may not have pricing)
@@ -261,13 +303,7 @@ function buildSlugToPricingTypeMapping() {
   
   // Community Notes endpoints are free (do not show View Pricing / cost estimator)
   
-  // Account Activity endpoints (may not have pricing)
-  mapping['create-subscription'] = 'ContentCreate'; // Placeholder - may need to verify
-  mapping['delete-subscription'] = 'ContentManage'; // Placeholder - may need to verify
-  mapping['get-subscriptions'] = 'CountsRecent'; // Placeholder - may need to verify
-  mapping['get-subscription-count'] = 'CountsRecent'; // Placeholder - may need to verify
-  mapping['validate-subscription'] = 'CountsRecent'; // Placeholder - may need to verify
-  mapping['create-replay-job'] = 'ContentCreate'; // Placeholder - may need to verify
+  // Account Activity endpoints live under Enterprise (no View Pricing)
   
   // Activity endpoints (may not have pricing)
   mapping['activity-stream'] = 'CountsRecent'; // Placeholder - may need to verify
@@ -283,17 +319,9 @@ function buildSlugToPricingTypeMapping() {
   // General endpoints
   mapping['get-openapi-spec'] = 'CountsRecent'; // Placeholder - may need to verify
   
-  // Stream endpoints (these are streaming, pricing may be different)
+  // Stream endpoints under General. Volume / likes firehose streams live under
+  // Enterprise and must not show View Pricing.
   mapping['stream-filtered-posts'] = 'Post';
-  mapping['stream-sampled-posts'] = 'Post';
-  mapping['stream-10-sampled-posts'] = 'Post';
-  mapping['stream-all-posts'] = 'Post';
-  mapping['stream-english-posts'] = 'Post';
-  mapping['stream-japanese-posts'] = 'Post';
-  mapping['stream-korean-posts'] = 'Post';
-  mapping['stream-portuguese-posts'] = 'Post';
-  mapping['stream-all-likes'] = 'Post';
-  mapping['stream-sampled-likes'] = 'Post';
   mapping['stream-posts-compliance-data'] = 'Post';
   mapping['stream-likes-compliance-data'] = 'Post';
   mapping['stream-users-compliance-data'] = 'User';
@@ -336,6 +364,12 @@ function extractPricingTypeFromPage() {
   // Community Notes endpoints (and possibly others) are free and should not show View Pricing
   if (urlPath.includes('/community-notes/')) {
     console.log('[Cost Estimator] Community Notes endpoint is free, skipping pricing injection.');
+    return null;
+  }
+
+  // Enterprise dropdown API reference pages use custom contracts, not PPU pricing
+  if (isEnterpriseApiReferencePage(urlPath)) {
+    console.log('[Cost Estimator] Enterprise API reference page, skipping pricing injection.');
     return null;
   }
 
@@ -760,6 +794,13 @@ async function injectElement() {
   // Check if already injected
   if (injected) {
     console.log('Element already injected, skipping.');
+    return;
+  }
+
+  // API reference pages under Enterprise (not General) should never show View Pricing
+  if (isEnterpriseApiReferencePage(currentUrl)) {
+    console.log('[Cost Estimator] Enterprise API reference page, skipping View Pricing.');
+    injected = true;
     return;
   }
   
