@@ -2,7 +2,7 @@
 title: X Activity API event payload examples
 sidebarTitle: Event payloads
 description: "Sample JSON payloads for X Activity API events, including posts, likes, follows, profile updates, chat, DMs, mutes, blocks, Spaces, news, and OAuth revokes."
-keywords: ["activity API payloads", "X Activity event examples", "post.create", "post.delete", "like.create", "follow.follow", "dm.sent", "chat.received", "oauth.revoke", "activity stream payloads"]
+keywords: ["activity API payloads", "X Activity event examples", "post.create", "post.delete", "post.mention.create", "post.reply.create", "post.quote.create", "post.repost.create", "like.create", "follow.follow", "dm.sent", "chat.received", "oauth.revoke", "activity stream payloads"]
 ---
 
 Events delivered by the X Activity API (via the [persistent HTTP stream](/x-api/activity/activity-stream) or [webhooks](/x-api/webhooks/introduction)) share a common envelope:
@@ -40,7 +40,7 @@ Payload samples use Mintlify code blocks with titles, line numbers, and wrapping
 
 ### `post.create`
 
-Fired when the filtered user creates a Post. The `payload` is a Post object; `includes` may contain related users and tweets.
+Fired when the filtered user creates a Post. Fires for standalone Posts, replies, quote Posts, and reposts by the filtered user. Inspect the payload to distinguish the type — for example, `in_reply_to_tweet_id` is present on replies, and `referenced_tweets` indicates quotes and reposts. The `payload` is a Post object; `includes` may contain related users and tweets.
 
 ```json title="post.create" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
 {
@@ -323,7 +323,7 @@ Fired when the filtered user deletes a Post. The `payload` contains the deleted 
 ```
 ### `post.mention.create`
 
-Fired when someone @mentions the filtered user in a Post. Private event — requires user-context authentication.
+Fired when another user explicitly @mentions the filtered user in the body of a Post. Does not fire for implicit mentions carried by replies or reposts. Private event — requires user-context authentication with the `tweet.read` scope.
 
 ```json title="post.mention.create" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
 {
@@ -548,6 +548,219 @@ Fired when someone @mentions the filtered user in a Post. Private event — requ
   }
 }
 ```
+### `post.reply.create`
+
+Fired when a user other than the filtered user posts a direct reply to a Post by the filtered user. Direct replies only (does not fire for replies to replies). Private event — requires user-context authentication with the `tweet.read` scope. The `payload` is a Post object for the reply; `includes` may contain related users and tweets (including the Post being replied to).
+
+```json title="post.reply.create" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "event_uuid": "3091827364059182736",
+    "filter": {
+      "user_id": "1111111111111111111"
+    },
+    "event_type": "post.reply.create",
+    "tag": "replies",
+    "payload": {
+      "paid_partnership": false,
+      "created_at": "2026-08-12T18:00:00.000Z",
+      "edit_history_tweet_ids": [
+        "2090000000000000001"
+      ],
+      "conversation_id": "2080761390344937796",
+      "in_reply_to_tweet_id": "2080761390344937796",
+      "in_reply_to_user_id": "1111111111111111111",
+      "referenced_tweets": [
+        {
+          "type": "replied_to",
+          "id": "2080761390344937796"
+        }
+      ],
+      "display_text_range": [
+        14,
+        45
+      ],
+      "text": "@ExampleUser Great post — thanks for sharing!",
+      "entities": {
+        "mentions": [
+          {
+            "start": 0,
+            "start_str": "0",
+            "end": 12,
+            "end_str": "12",
+            "username": "ExampleUser",
+            "id": "1111111111111111111"
+          }
+        ]
+      },
+      "author_id": "2222222222222222222",
+      "possibly_sensitive": false,
+      "public_metrics": {
+        "retweet_count": 0,
+        "retweet_count_str": "0",
+        "reply_count": 0,
+        "reply_count_str": "0",
+        "like_count": 0,
+        "like_count_str": "0",
+        "quote_count": 0,
+        "quote_count_str": "0",
+        "bookmark_count": 0,
+        "bookmark_count_str": "0",
+        "impression_count": 0,
+        "impression_count_str": "0"
+      },
+      "reply_settings": "everyone",
+      "id": "2090000000000000001",
+      "lang": "en"
+    },
+    "includes": {}
+  }
+}
+```
+### `post.quote.create`
+
+Fired when a user other than the filtered user quote Posts a Post by the filtered user. Direct quotes only (does not fire for quotes of quotes). Private event — requires user-context authentication with the `tweet.read` scope. The `payload` is a Post object for the quote; `referenced_tweets` identifies the quoted Post.
+
+```json title="post.quote.create" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "event_uuid": "4172938465017283645",
+    "filter": {
+      "user_id": "1111111111111111111"
+    },
+    "event_type": "post.quote.create",
+    "tag": "quotes",
+    "payload": {
+      "paid_partnership": false,
+      "created_at": "2026-08-12T18:05:00.000Z",
+      "edit_history_tweet_ids": [
+        "2090000000000000002"
+      ],
+      "conversation_id": "2090000000000000002",
+      "referenced_tweets": [
+        {
+          "type": "quoted",
+          "id": "2080761390344937796"
+        }
+      ],
+      "display_text_range": [
+        0,
+        29
+      ],
+      "text": "Adding some context to this. https://t.co/xxxxxxxx",
+      "entities": {
+        "urls": [
+          {
+            "start": 29,
+            "start_str": "29",
+            "end": 52,
+            "end_str": "52",
+            "url": "https://t.co/xxxxxxxx",
+            "expanded_url": "https://twitter.com/ExampleUser/status/2080761390344937796",
+            "display_url": "x.com/ExampleUser/st…"
+          }
+        ]
+      },
+      "author_id": "2222222222222222222",
+      "possibly_sensitive": false,
+      "public_metrics": {
+        "retweet_count": 0,
+        "retweet_count_str": "0",
+        "reply_count": 0,
+        "reply_count_str": "0",
+        "like_count": 0,
+        "like_count_str": "0",
+        "quote_count": 0,
+        "quote_count_str": "0",
+        "bookmark_count": 0,
+        "bookmark_count_str": "0",
+        "impression_count": 0,
+        "impression_count_str": "0"
+      },
+      "reply_settings": "everyone",
+      "id": "2090000000000000002",
+      "lang": "en"
+    },
+    "includes": {}
+  }
+}
+```
+### `post.repost.create`
+
+Fired when a user other than the filtered user reposts a Post by the filtered user. Private event — requires user-context authentication with the `tweet.read` scope. The `payload` is a Post object for the repost; `referenced_tweets` with `type: "retweeted"` identifies the original Post.
+
+```json title="post.repost.create" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "event_uuid": "5283049576128394756",
+    "filter": {
+      "user_id": "1111111111111111111"
+    },
+    "event_type": "post.repost.create",
+    "tag": "reposts",
+    "payload": {
+      "paid_partnership": false,
+      "created_at": "2026-08-12T18:10:00.000Z",
+      "edit_history_tweet_ids": [
+        "2090000000000000003"
+      ],
+      "conversation_id": "2090000000000000003",
+      "referenced_tweets": [
+        {
+          "type": "retweeted",
+          "id": "2080761390344937796"
+        }
+      ],
+      "display_text_range": [
+        0,
+        56
+      ],
+      "text": "RT @ExampleUser: Hello from the Activity API",
+      "entities": {
+        "mentions": [
+          {
+            "start": 3,
+            "start_str": "3",
+            "end": 15,
+            "end_str": "15",
+            "username": "ExampleUser",
+            "id": "1111111111111111111"
+          }
+        ]
+      },
+      "author_id": "2222222222222222222",
+      "possibly_sensitive": false,
+      "public_metrics": {
+        "retweet_count": 0,
+        "retweet_count_str": "0",
+        "reply_count": 0,
+        "reply_count_str": "0",
+        "like_count": 0,
+        "like_count_str": "0",
+        "quote_count": 0,
+        "quote_count_str": "0",
+        "bookmark_count": 0,
+        "bookmark_count_str": "0",
+        "impression_count": 0,
+        "impression_count_str": "0"
+      },
+      "reply_settings": "everyone",
+      "id": "2090000000000000003",
+      "lang": "en"
+    },
+    "includes": {}
+  }
+}
+```
+
+<Note>
+**Protected accounts:** Posts from protected accounts are not delivered through XAA, even when the subscribing app has user-context authorization for the filtered user.
+</Note>
+
+<Note>
+**Billing:** Each delivered Post event (`post.create`, `post.delete`, `post.mention.create`, `post.reply.create`, `post.quote.create`, `post.repost.create`) is billed as a Post.
+</Note>
+
 ---
 
 ## Like events
