@@ -2,7 +2,7 @@
 title: X Activity API for streaming user event data
 sidebarTitle: Introduction
 description: "Stream real-time user activity events from the X Platform, including posts, likes, follows, mutes, blocks, DMs, mentions, and profile updates via webhooks."
-keywords: ["activity API", "X Activity API", "activity events", "profile updates", "post.create", "post.delete", "like.create", "mute.mute", "block.block", "mute events", "block events", "user activity", "real-time events", "activity stream"]
+keywords: ["activity API", "X Activity API", "activity events", "profile updates", "post.create", "post.delete", "post.mention.create", "post.reply.create", "post.quote.create", "post.repost.create", "like.create", "mute.mute", "block.block", "mute events", "block events", "user activity", "real-time events", "activity stream"]
 ---
 
 import { BlueprintMark } from "/snippets/blueprint-mark.mdx";
@@ -28,18 +28,29 @@ Currently, X Activity API supports the following event types, organized by categ
 
 ### Post events
 
-Post events are triggered when a user creates or deletes a Post.
+Post events are triggered when the filtered user creates or deletes a Post, or when another user interacts with the filtered user's Posts (replies, quotes, reposts, and @mentions).
 
 | Event Name | Description | Filters |
 | --- | --- | --- |
-| `post.create` | Fired when a user creates a Post | `user_id` |
-| `post.delete` | Fired when a user deletes a Post | `user_id` |
-| `post.mention.create` | Fired when someone @mentions the filtered user in a Post | `user_id` |
+| `post.create` | Fired when the filtered user creates a Post. Fires for standalone Posts, replies, quote Posts, and reposts by the filtered user. Inspect the payload (for example `in_reply_to_tweet_id` or `referenced_tweets`) to distinguish the Post type. | `user_id` |
+| `post.delete` | Fired when the filtered user deletes a Post | `user_id` |
+| `post.mention.create` | Fired when another user explicitly @mentions the filtered user in the body of a Post. Does not fire for implicit mentions carried by replies or reposts. | `user_id` |
+| `post.reply.create` | Fired when a user other than the filtered user posts a direct reply to a Post by the filtered user. Direct replies only (does not fire for replies to replies). | `user_id` |
+| `post.quote.create` | Fired when a user other than the filtered user quote Posts a Post by the filtered user. Direct quotes only (does not fire for quotes of quotes). | `user_id` |
+| `post.repost.create` | Fired when a user other than the filtered user reposts a Post by the filtered user. | `user_id` |
 
 <Note>
-**Post events via XAA vs Filtered Stream:** X Activity API supports `post.create` and `post.delete` events. Subscribe by `user_id` to get real-time notifications when users create or delete Posts.
+**Protected accounts:** Posts from protected accounts are not delivered through XAA, even when the subscribing app has user-context authorization for the filtered user.
+</Note>
+
+<Note>
+**Post events via XAA vs Filtered Stream:** X Activity API delivers per-user Post activity by `user_id`. Subscribe to get real-time notifications when the filtered user creates or deletes Posts, or when other users reply to, quote, repost, or @mention them.
 
 If you want targeted keyword filtering, boolean logic, geo targeting, language filters, or any of the other operators that the Filtered Stream supports, use the [Filtered Stream](/x-api/posts/filtered-stream/introduction) endpoint instead.
+</Note>
+
+<Note>
+**Billing:** Each delivered Post event (`post.create`, `post.delete`, `post.mention.create`, `post.reply.create`, `post.quote.create`, `post.repost.create`) is billed as a Post.
 </Note>
 
 ### Like events
@@ -173,6 +184,8 @@ Public events are activities that a public user account performs publicly that a
 
 For these public events, you can create subscriptions by specifying the user ID in your filter and receive them via XAA.
 
+Posts from protected accounts are not delivered, even for public events.
+
 ### Private events
 
 Private events are activities that require explicit user consent through OAuth authentication. A user must authenticate via X and grant explicit permission to a developer app to access these events.
@@ -185,7 +198,10 @@ Private events are activities that require explicit user consent through OAuth a
 - DM sent (`dm.sent`)
 - DM read (`dm.read`)
 - DM typing indicator (`dm.indicate_typing`)
-- Post mentions (`post.mention.create`)
+- Post mentions (`post.mention.create`) — requires the `tweet.read` scope
+- Post replies (`post.reply.create`) — requires the `tweet.read` scope
+- Post quotes (`post.quote.create`) — requires the `tweet.read` scope
+- Post reposts (`post.repost.create`) — requires the `tweet.read` scope
 - Mutes (`mute.mute`, `mute.unmute`) — requires the `mute.read` scope
 - Blocks (`block.block`, `block.unblock`) — requires the `block.read` scope
 
