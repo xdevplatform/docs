@@ -1,7 +1,191 @@
 ---
 title: X Ads MCP
-sidebarTitle: X Ads MCP
-description: Connect Grok, Cursor, and other AI tools to the official X Ads MCP.
-icon: "/icons/xds/icon-ai-agents.svg"
+sidebarTitle: Overview
+description: Connect Grok, Claude Code, and other AI tools to the official X Ads MCP.
 keywords: ["XMCP", "MCP", "Model Context Protocol", "docs MCP", "AI agent", "AI tools", "Grok", "Cursor", "xurl", "OpenAPI", "MCP server", "Ads API", "X Ads API", "Ads MCP"]
 ---
+
+## Overview
+
+Ads MCP is a remote MCP (Model Context Protocol) server built into X's API gateway at `https://ads-api.x.com/mcp`. MCP is the open standard for connecting LLM agents to tools, so any MCP-capable client — Grok, Claude Code, or a custom agent built on the MCP SDKs — can connect and immediately use 23 X Ads tools with zero custom Ads API integration. The agent reads campaign data, runs analytics, and creates and manages campaigns through natural language; the MCP client handles all of the API plumbing.
+
+Authentication is the user's own OAuth2 token, so an agent only ever sees the ads accounts that user can access. Writes are safe by default: campaigns and line items are always created **PAUSED**, and nothing spends money until it is explicitly activated.
+
+Why MCP is useful:
+
+* **Zero integration cost** — no bespoke Ads API client code; point any MCP client at one URL and the tools are discovered automatically.
+* **Natural-language campaign management** — the model chains tools itself (accounts → funding instruments → campaign → line item → targeting) from a single plain-English request.
+* **Instant analytics** — pull performance stats and reach estimates conversationally, without writing queries or scripts.
+* **Scoped and safe** — the user's own token bounds what the agent can see, and every write starts paused.
+
+## Server Capabilities
+
+| Category | Tools |
+| :---- | :---- |
+| Accounts & Reads | `list_ads_accounts`, `list_campaigns`, `get_campaign`, `list_line_items`, `list_funding_instruments`, `list_promoted_posts`, `list_targeting_criteria`, `list_account_posts`, `get_active_entities` |
+| Analytics | `get_account_stats`, `get_campaign_reach` |
+| Targeting Search | `search_targeting_interests`, `search_targeting_locations` |
+| Writes | `create_campaign`, `update_campaign`, `activate_campaign`, `create_line_item`, `update_line_item`, `activate_line_item`, `add_targeting_criterion`, `remove_targeting`, `create_ad_post` (nullcast), `promote_post` |
+
+## Get Started
+
+### Step One: Register your X Ads App ID
+
+Go to the X Developer Console, create or reuse a previously created app.
+
+In the app's settings, enable the below:
+
+* **App Permissions:** Read and Write
+
+* **Type of app:** Native App (public client). (Confidential clients — Web App, Automated App or Bot — also work for Grok Build and manual token minting via `client_secret_basic`; never use `client_secret_post`, which X rejects.)
+
+* **Callback URI / Redirect URL:** register the callback for the client that you'll use:
+
+| Client | Callback to register |
+| :---- | :---- |
+| Grok (web) | `https://grok.com/connectors-oauth-exchange-code/` |
+| Grok Build (CLI) | `http://127.0.0.1:8080/callback` (must be `127.0.0.1`, not `localhost`) |
+| Claude Code | `http://localhost:8080/callback` |
+| Manual token mint | `http://localhost:8080/callback` |
+
+You may register multiple callbacks, but X keeps a single live OAuth grant per (app, user): signing in from a second client revokes the first client's tokens. In practice, use one client per X app — create one app per client if you want to run several simultaneously.
+
+* **Website URL:** `http://x.com`
+
+Under **Keys and tokens**, copy the **OAuth 2.0 Client ID** — the long string like `TzNHbE5X…6MTpjaQ`, **not** the numeric app ID shown elsewhere in the console. Native apps have no client secret (PKCE only).
+
+Under **Project Access**, click MANAGE and select **Ads Project** to automatically enable Ads API access to your App ID.
+
+Your X user must also have access to at least one ads account. You can open ads.x.com to ensure that your account is properly connected as MCP only sees accounts that you have access to.
+
+### Step Two: Connect your LLM
+
+The Ads MCP is a standard remote MCP server using the Streamable HTTP transport:
+
+* **Endpoint:** `https://ads-api.x.com/mcp` (all requests are HTTP POST with JSON-RPC; responses are SSE framed)
+
+**Choosing scopes:** `ads.read` grants the read and analytics tools, `ads.write` grants campaign and creative writes, and `offline.access` enables token refresh — always include it, or tokens expire in ~2 hours with no way to refresh. For a read-only agent that can browse and analyze but not create or change anything, omit `ads.write` — write tools will fail with authorization errors. Include both ads scopes for full functionality. Each client recipe below shows where to set them.
+
+#### Grok Build (CLI)
+
+Add to `~/.grok/config.toml` — the OAuth keys must be camelCase (snake_case keys are silently ignored):
+
+```toml
+[mcp_servers.ads-mcp]
+url = "https://ads-api.x.com/mcp"
+
+[mcp_servers.ads-mcp.oauth]
+clientId = "YOUR_OAUTH2_CLIENT_ID"
+callbackPort = 8080
+scopes = ["ads.read", "ads.write", "offline.access"]
+```
+
+The `scopes` array is where you choose access — drop `"ads.write"` for a read-only agent.
+
+Then run `grok` → `/mcps` → select `ads-mcp` → press `i` → complete the browser consent → done. The flow uses PKCE S256 and refreshes tokens automatically.
+
+No secret is needed with a Native App. If you use a confidential app, add `clientSecretEnvVar = "ADS_MCP_CLIENT_SECRET"` and export that variable in the same shell — never point it at an empty env var, which sends an empty secret.
+
+#### Grok (web)
+
+Go to grok.com/connectors → **New Connector** → **Custom**:
+
+* **Server URL:** `https://ads-api.x.com/mcp`
+
+* **Client ID:** your OAuth 2.0 Client ID string
+
+* **Client Secret:** leave blank
+
+* **Token Auth Method:** "none (PKCE only, recommended)"
+
+* Leave the auto-discovered endpoints as-is
+
+* Grok pre-fills the scope chips from the server's discovery metadata — delete all pre-filled chips and keep only `ads.read`, `ads.write`, `offline.access`.
+
+The scope chips are where you choose access — for a read-only agent, keep only `ads.read` and `offline.access`.
+
+Connect → complete the X consent screen → the connector is live.
+
+#### Claude Code
+
+Requires a public client — Claude Code sends `client_secret_post`, which X rejects for confidential clients:
+
+```bash
+claude mcp add x-ads https://ads-api.x.com/mcp \
+  --transport http \
+  --client-id YOUR_OAUTH2_CLIENT_ID \
+  --callback-port 8080
+```
+
+Then run `/mcp` inside Claude Code to sign in. There is no CLI flag for scopes — by default Claude Code requests the scopes the server advertises; to narrow to read-only, set `"oauth": { "scopes": "ads.read offline.access" }` on the server's entry in `~/.claude.json` (a single space-separated string).
+
+Alternatively, use a static token:
+
+```bash
+claude mcp add x-ads https://ads-api.x.com/mcp \
+  --transport http \
+  --header "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+#### User access token (curl, custom agents)
+
+The three clients above mint and refresh tokens automatically via OAuth login — skip this section unless your client only supports a static `Authorization` header.
+
+To mint a token manually, open the below URL in a browser logged in as the X account that owns your ads account (replace `YOUR_CLIENT_ID`):
+
+```text
+https://x.com/i/oauth2/authorize?response_type=code&client_id=YOUR_CLIENT_ID&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Fcallback&scope=ads.read%20ads.write%20offline.access&state=adsmcp&code_challenge=challenge&code_challenge_method=plain
+```
+
+The `scope=` parameter is where you choose access — the read-only variant is `scope=ads.read%20offline.access`.
+
+After clicking Authorize, the browser lands on a dead `localhost:8080/callback` page — copy the `code=` from the address bar and exchange it within ~30 seconds:
+
+```bash
+curl -s -X POST https://api.x.com/2/oauth2/token \
+  -d 'client_id=YOUR_CLIENT_ID' \
+  -d 'grant_type=authorization_code' \
+  -d 'code=PASTE_CODE_HERE' \
+  -d 'redirect_uri=http://localhost:8080/callback' \
+  -d 'code_verifier=challenge'
+```
+
+The response contains an `access_token` (~2 hours) and a `refresh_token`. When the access token expires, refresh without the browser:
+
+```bash
+curl -s -X POST https://api.x.com/2/oauth2/token \
+  -d 'client_id=YOUR_CLIENT_ID' \
+  -d 'grant_type=refresh_token' \
+  -d 'refresh_token=YOUR_REFRESH_TOKEN'
+```
+
+Refresh tokens rotate — always save the newest one — and when calls start failing with 401s, refresh and update the header in your client config.
+
+Point any MCP client or SDK at the endpoint with the token in an `Authorization` header; tools are discovered automatically via `tools/list`. For example, with the official TypeScript SDK:
+
+```typescript
+const transport = new StreamableHTTPClientTransport(
+  new URL("https://ads-api.x.com/mcp"),
+  { requestInit: { headers: { Authorization: "Bearer YOUR_ACCESS_TOKEN" } } }
+);
+```
+
+To check your token and connectivity without any client:
+
+```bash
+curl -s -X POST https://ads-api.x.com/mcp \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+A successful response lists the server's tools (the 23 documented here among them). If you get a 401, your token is invalid or expired; a 403 means your app isn't enrolled yet (see step one).
+
+### Step Three: Test It
+
+Start with reads: *"List my ads accounts"*, *"Show my campaigns and how they performed last week"*. Then try the write flow, e.g.:
+
+> Using my X Ads Account, create a paused campaign called "Test campaign" with a $10 daily budget, then add a paused item with a website clicks objective and a $1 bid targeting US users.
+
+The model chains the tools itself (funding instrument lookup → campaign → line item → targeting). Campaigns and line items are always created **PAUSED** — nothing spends until you explicitly activate.
