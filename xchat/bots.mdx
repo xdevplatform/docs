@@ -1,0 +1,78 @@
+---
+title: "Manage bot accounts with the Chat API"
+sidebarTitle: Bots
+description: "Create and manage programmatic bot accounts for your project: mint bearer tokens, rotate or revoke them, and manage the bot's identity."
+keywords: ["X bots", "bot accounts", "bot token", "create a bot", "rotate bot token", "app-only auth"]
+---
+
+A **bot** is a programmatic X account created by and belonging to your **project**. It is a real account with a user id, an @handle, and a display name, but it has no password and no login. The only way to act as a bot is its **bearer token**.
+
+Bot accounts carry an **"Automated by @owner"** label pointing to the X account that owns the client app.
+
+Endpoint details are under **API reference → Bots**.
+
+---
+
+## Authentication
+
+All six bot endpoints use **OAuth 2.0 app-only** auth: authenticate with your app's bearer token. No user context and no OAuth scopes are required to call them.
+
+Every operation is scoped to the calling app's project. You can only list and manage bots that belong to that project.
+
+---
+
+## Bot tokens
+
+- [`POST /2/bots`](/x-api/bots/create-a-bot) and [`POST /2/bots/:id/token`](/x-api/bots/rotate-bot-token) mint the bot's bearer token (format `xcbot_…`). The token is returned **once** and can never be retrieved again. Store it on receipt.
+- A bot has **one active token**: any mint revokes the previously outstanding token(s).
+- Token scopes default to `dm.read, dm.write, tweet.read, users.read, media.write`. A request may narrow to a subset of that set; requesting anything outside it returns a 400. The response includes `expires_at` (epoch milliseconds) and `scopes`.
+- [`DELETE /2/bots/:id/token`](/x-api/bots/revoke-bot-token) revokes without minting a replacement, as a standard OAuth2-style kill switch. It responds with `{"data":{"revoked":true}}`. The account survives; rotate later to re-activate.
+
+---
+
+## Lifecycle
+
+| Endpoint | What it does |
+|:---------|:-------------|
+| [`POST /2/bots`](/x-api/bots/create-a-bot) | Create a bot. Body: `handle` (required, 1–15 chars, letters/digits/underscore), `display_name` (optional, ≤50 chars, defaults to handle), `scopes` (optional subset). Returns 201 with `{id, username, name, token, expires_at, scopes}` |
+| [`GET /2/bots`](/x-api/bots/get-bots) | List the project's bots: `{"data":[{id, name, username}], "meta":{result_count, max_bots}}` |
+| [`POST /2/bots/:id/token`](/x-api/bots/rotate-bot-token) | Rotate: mints a new token, revokes the old. Body: optional `scopes` |
+| [`PUT /2/bots/:id`](/x-api/bots/update-bot) | Update identity: `handle`, `display_name`, `dm_permission` (`everyone` \| `premium` \| `no_one`); at least one field. Returns `{"data":{"updated":true}}` |
+| [`DELETE /2/bots/:id/token`](/x-api/bots/revoke-bot-token) | Revoke tokens, keep the bot |
+| [`DELETE /2/bots/:id`](/x-api/bots/delete-bot) | Delete: revokes tokens, permanently destroys the bot's X account, removes it from the project. Returns `{"data":{"deleted":true}}` |
+
+<Note>
+**Create is idempotent on handle.** Repeating a `POST /2/bots` whose handle already names one of the project's bots returns that same bot with a **freshly minted token**; the previous one is revoked. This makes retries safe when a response was lost, since the replaced token was never seen. A converge re-applies `display_name` if provided but never changes DM permission.
+</Note>
+
+---
+
+## Limits
+
+- Each project has a bot allowance set by its plan. `meta.max_bots` in the list response reports it; the default is 1. Creating past the cap returns an error.
+- Rate limits are per-app, in 15-minute windows.
+
+---
+
+## Example
+
+```bash
+POST /2/bots
+Authorization: Bearer <app bearer token>
+
+{"handle": "my_support_bot", "display_name": "Support Bot"}
+```
+
+```json
+201
+{
+  "data": {
+    "id": "2075014963136012288",
+    "username": "my_support_bot",
+    "name": "Support Bot",
+    "token": "xcbot_…",
+    "expires_at": 1787761273000,
+    "scopes": ["dm.read", "dm.write", "tweet.read", "users.read", "media.write"]
+  }
+}
+```
