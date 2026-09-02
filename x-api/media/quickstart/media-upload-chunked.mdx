@@ -1,38 +1,42 @@
 ---
 title: Chunked Media Upload
 sidebarTitle: Quickstart
-description: "This guide walks you through uploading videos and large media files using the chunked upload. Reference for the X API v2 standard tier covering quickstart."
+description: "Upload videos and large media files with the v2 chunked upload endpoints: initialize, append, finalize, and status."
 keywords: ["chunked upload", "media upload", "chunked media", "video upload", "large file upload", "chunked upload guide"]
 ---
 
-This guide walks you through uploading videos and large media files using the chunked upload workflow.
+This guide walks you through uploading videos and large media files using the v2 chunked upload endpoints.
 
 For video or large media uploads, you must:
-1. **INIT** — Initialize the upload and get a `media_id`
-2. **APPEND** — Upload each chunk of the file
-3. **FINALIZE** — Complete the upload
-4. **STATUS** — (If needed) Wait for processing to complete
+
+1. **INIT** — `POST /2/media/upload/initialize` — start the session and get a `media_id`
+2. **APPEND** — `POST /2/media/upload/{id}/append` — upload each chunk
+3. **FINALIZE** — `POST /2/media/upload/{id}/finalize` — complete the upload
+4. **STATUS** — `GET /2/media/upload` — wait for processing when `processing_info` is returned
 
 <Note>
-See [this sample code](https://github.com/xdevplatform/large-video-upload-python) for a complete Python example.
+Do not send `command=INIT`, `command=APPEND`, or `command=FINALIZE` to `POST /2/media/upload`. Those command-style parameters were the previous upload protocol. The v2 flow uses the dedicated paths above. `command=STATUS` is still used only on the status GET.
 </Note>
+
+Video duration and file size are limited by the authenticated user's Premium / verified status and by `media_category`. See [size and duration limits](/x-api/media/introduction#size-and-duration-limits). A successful upload can still be rejected when you attach the `media_id` to [`POST /2/tweets`](/x-api/posts/create-post).
 
 ---
 
 ## Step 1: Initialize upload (INIT)
 
-Start the upload session to get a `media_id`:
+Start the upload session. Send a JSON body — not multipart form fields.
 
 <CodeGroup dropdown>
 
 ```bash cURL
-curl -X POST "https://api.x.com/2/media/upload" \
+curl -X POST "https://api.x.com/2/media/upload/initialize" \
   -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
-  -H "Content-Type: multipart/form-data" \
-  -F "command=INIT" \
-  -F "media_type=video/mp4" \
-  -F "total_bytes=1048576" \
-  -F "media_category=amplify_video"
+  -H "Content-Type: application/json" \
+  -d '{
+    "media_type": "video/mp4",
+    "total_bytes": 1048576,
+    "media_category": "tweet_video"
+  }'
 ```
 
 ```python title="Python SDK" lines wrap icon="python"
@@ -40,11 +44,10 @@ from xdk import Client
 
 client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
 
-# Initialize chunked upload
-response = client.media.init_upload(
+response = client.media.initialize_upload(
     media_type="video/mp4",
     total_bytes=1048576,
-    media_category="amplify_video"
+    media_category="tweet_video",
 )
 
 media_id = response.data.id
@@ -56,11 +59,10 @@ import { Client } from "@xdevplatform/xdk";
 
 const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
 
-// Initialize chunked upload
-const response = await client.media.initUpload({
+const response = await client.media.initializeUpload({
   mediaType: "video/mp4",
   totalBytes: 1048576,
-  mediaCategory: "amplify_video",
+  mediaCategory: "tweet_video",
 });
 
 const mediaId = response.data?.id;
@@ -76,27 +78,26 @@ console.log(`Media ID: ${mediaId}`);
   "data": {
     "id": "1880028106020515840",
     "media_key": "13_1880028106020515840",
-    "expires_after_secs": 1295999
+    "expires_after_secs": 86400
   }
 }
 ```
+
+Use `tweet_video` for a regular Post. Use `amplify_video` for Ads creatives. See [media categories](#media-categories).
 
 ---
 
 ## Step 2: Upload chunks (APPEND)
 
-Upload each chunk of the file. For example, split a 3 MB file into 3 chunks:
+Upload each chunk to `POST /2/media/upload/{id}/append`. Keep each segment at or below **5 MB** (the server maximum is 8 MB). Segments are indexed from `0`.
 
 <CodeGroup dropdown>
 
 ```bash cURL
-curl -X POST "https://api.x.com/2/media/upload" \
+curl -X POST "https://api.x.com/2/media/upload/1880028106020515840/append" \
   -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
-  -H "Content-Type: multipart/form-data" \
-  -F "command=APPEND" \
-  -F "media_id=1880028106020515840" \
   -F "segment_index=0" \
-  -F "media=@/path/to/chunk1.mp4"
+  -F "media=@/path/to/chunk0.mp4"
 ```
 
 ```python title="Python SDK" lines wrap icon="python"
@@ -104,8 +105,7 @@ from xdk import Client
 
 client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
 
-# Upload chunks
-chunk_size = 1024 * 1024  # 1 MB chunks
+chunk_size = 4 * 1024 * 1024  # 4 MB chunks
 
 with open("video.mp4", "rb") as f:
     segment_index = 0
@@ -113,11 +113,11 @@ with open("video.mp4", "rb") as f:
         chunk = f.read(chunk_size)
         if not chunk:
             break
-        
+
         client.media.append_upload(
-            media_id=media_id,
+            id=media_id,
             segment_index=segment_index,
-            media=chunk
+            media=chunk,
         )
         segment_index += 1
         print(f"Uploaded chunk {segment_index}")
@@ -129,20 +129,18 @@ import fs from "fs";
 
 const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
 
-// Upload chunks
-const chunkSize = 1024 * 1024; // 1 MB chunks
+const chunkSize = 4 * 1024 * 1024; // 4 MB chunks
 const fileBuffer = fs.readFileSync("video.mp4");
 
 let segmentIndex = 0;
 for (let offset = 0; offset < fileBuffer.length; offset += chunkSize) {
   const chunk = fileBuffer.slice(offset, offset + chunkSize);
-  
-  await client.media.appendUpload({
-    mediaId,
+
+  await client.media.appendUpload(mediaId, {
     segmentIndex,
     media: chunk,
   });
-  
+
   console.log(`Uploaded chunk ${segmentIndex + 1}`);
   segmentIndex++;
 }
@@ -166,31 +164,26 @@ Complete the upload after all chunks are sent:
 <CodeGroup dropdown>
 
 ```bash cURL
-curl -X POST "https://api.x.com/2/media/upload" \
-  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
-  -H "Content-Type: multipart/form-data" \
-  -F "command=FINALIZE" \
-  -F "media_id=1880028106020515840"
+curl -X POST "https://api.x.com/2/media/upload/1880028106020515840/finalize" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
 ```
 
-```python Python SDK
+```python title="Python SDK" lines wrap icon="python"
 from xdk import Client
 
 client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
 
-# Finalize upload
-response = client.media.finalize_upload(media_id=media_id)
+response = client.media.finalize_upload(id=media_id)
 
 print(f"Processing state: {response.data.processing_info.state}")
 ```
 
-```javascript JavaScript SDK
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
 import { Client } from "@xdevplatform/xdk";
 
 const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
 
-// Finalize upload
-const response = await client.media.finalizeUpload({ mediaId });
+const response = await client.media.finalizeUpload(mediaId);
 
 console.log(`Processing state: ${response.data?.processing_info?.state}`);
 ```
@@ -222,7 +215,7 @@ If `processing_info` is returned, proceed to Step 4 to wait for processing. If n
 
 ## Step 4: Check status (STATUS)
 
-If `processing_info` was returned, poll for processing completion:
+If `processing_info` was returned, poll until processing completes:
 
 <CodeGroup dropdown>
 
@@ -237,11 +230,13 @@ import time
 
 client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
 
-# Wait for processing to complete
 while True:
-    response = client.media.get_status(media_id=media_id)
+    response = client.media.get_upload_status(
+        media_id=media_id,
+        command="STATUS",
+    )
     state = response.data.processing_info.state
-    
+
     if state == "succeeded":
         print("Media ready!")
         break
@@ -259,11 +254,12 @@ import { Client } from "@xdevplatform/xdk";
 
 const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
 
-// Wait for processing to complete
 while (true) {
-  const response = await client.media.getStatus({ mediaId });
+  const response = await client.media.getUploadStatus(mediaId, {
+    command: "STATUS",
+  });
   const state = response.data?.processing_info?.state;
-  
+
   if (state === "succeeded") {
     console.log("Media ready!");
     break;
@@ -286,7 +282,7 @@ while (true) {
 
 ## Step 5: Create Post with media
 
-Once processing is complete, create a Post with the media:
+Once processing is complete, create a Post with the media. Duration and size are checked again against the posting user's entitlement.
 
 <CodeGroup dropdown>
 
@@ -302,26 +298,24 @@ curl -X POST "https://api.x.com/2/tweets" \
   }'
 ```
 
-```python Python SDK
+```python title="Python SDK" lines wrap icon="python"
 from xdk import Client
 
 client = Client(bearer_token="YOUR_USER_ACCESS_TOKEN")
 
-# Create Post with media
 response = client.posts.create(
     text="Check out this video!",
-    media={"media_ids": [media_id]}
+    media={"media_ids": [media_id]},
 )
 
 print(f"Posted: {response.data.id}")
 ```
 
-```javascript JavaScript SDK
+```javascript title="JavaScript SDK" lines wrap icon="square-js"
 import { Client } from "@xdevplatform/xdk";
 
 const client = new Client({ accessToken: "YOUR_USER_ACCESS_TOKEN" });
 
-// Create Post with media
 const response = await client.posts.create({
   text: "Check out this video!",
   media: { mediaIds: [mediaId] },
@@ -332,16 +326,35 @@ console.log(`Posted: ${response.data?.id}`);
 
 </CodeGroup>
 
+If the video is longer than the posting user is allowed to attach, the response is **403 Forbidden**:
+
+```json
+{
+  "title": "Forbidden",
+  "detail": "This user is not allowed to post a video longer than 20 minutes.",
+  "type": "about:blank",
+  "status": 403
+}
+```
+
+`N` is the posting user's duration cap (20 minutes by default, 125 minutes for Premium / verified).
+
 ---
 
 ## Media categories
 
-| Category | Description |
-|:---------|:------------|
-| `tweet_image` | Image for a Post |
-| `tweet_gif` | Animated GIF for a Post |
-| `tweet_video` | Video for a Post |
-| `amplify_video` | Amplify video |
+| Category | Use for | Typical max (default / Premium) |
+|:---------|:--------|:--------------------------------|
+| `tweet_image` | Image on a Post | 5 MB |
+| `tweet_gif` | Animated GIF on a Post | 15 MB |
+| `tweet_video` | Video on a Post | 20 min / 8 GB · Premium: 125 min / 16 GB |
+| `amplify_video` | Ads / promoted video | 20 min / 8 GB · Premium: 125 min / 16 GB |
+| `dm_image` | Image in a Direct Message | 5 MB |
+| `dm_gif` | Animated GIF in a Direct Message | 15 MB |
+| `dm_video` | Video in a Direct Message | 140 s / 512 MB · Premium: 10 min / 1 GB |
+| `subtitles` | Subtitle file | 1 MB |
+
+If you omit `media_category`, the upload is treated as Post media (`tweet_image`, `tweet_video`, or `tweet_gif`) based on content type.
 
 ---
 
@@ -349,12 +362,15 @@ console.log(`Posted: ${response.data?.id}`);
 
 <CardGroup cols={2}>
   <Card title="Best practices" icon="/icons/xds/icon-book.svg" href="/x-api/media/quickstart/best-practices">
-    File constraints and requirements
+    File constraints, codecs, and duration limits
   </Card>
   <Card title="Create Posts" icon="/icons/xds/icon-chat.svg" href="/x-api/posts/manage-tweets/quickstart">
     Post with media
   </Card>
-  <Card title="API Reference" icon="/icons/xds/icon-code.svg" href="/x-api/media/initialize-media-upload">
-    Full endpoint documentation
+  <Card title="Initialize" icon="/icons/xds/icon-code.svg" href="/x-api/media/initialize-media-upload">
+    INIT endpoint reference
+  </Card>
+  <Card title="Create Post" icon="/icons/xds/icon-code.svg" href="/x-api/posts/create-post">
+    POST /2/tweets reference
   </Card>
 </CardGroup>

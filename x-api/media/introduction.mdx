@@ -7,23 +7,63 @@ keywords: ["media", "media upload", "images", "videos", "GIF", "media API", "upl
 
 A media object represents a single photo, video or animated GIF. Media objects are used by many endpoints within the X API, and may be included in Posts, Direct Messages, user profiles, advertising creatives and elsewhere. Each media object may have multiple display or playback variants, with different resolutions or formats.
 
-## Media types & size restrictions
+## Size and duration limits
 
-Size restrictions for uploading via API 
+Upload and posting are **separately enforced**. A file that uploads successfully can still be rejected when you attach it to a Post with [`POST /2/tweets`](/x-api/posts/create-post).
 
-- **Image**: `5 MB`
-- **GIF**: `15 MB`
-- **Video**: `512 MB` (when using `media_category=amplify_video`)
+Limits depend on:
+
+- The **authenticated user's** X Premium / verified status — not your developer API plan
+- The `media_category` you pass when initializing the upload
+
+### Images and GIFs
+
+| Type | Max file size | Notes |
+| :--- | :--- | :--- |
+| Image (`tweet_image`, `dm_image`) | 5 MB | JPG, PNG, GIF, WEBP |
+| Animated GIF (`tweet_gif`, `dm_gif`) | 15 MB | See [GIF constraints](/x-api/media/quickstart/best-practices#animated-gif-recommendations) |
+
+### Video
+
+Use [chunked upload](/x-api/media/quickstart/media-upload-chunked) for all videos. Simple `POST /2/media/upload` is for images and small files only.
+
+| Authenticated account | `media_category` | Max duration | Max file size |
+| :--- | :--- | :--- | :--- |
+| Default (no Premium) | `tweet_video`, `amplify_video` | 20 minutes | 8 GB |
+| X Premium / verified | `tweet_video`, `amplify_video` | 125 minutes | 16 GB |
+| Default (no Premium) | `dm_video` | 140 seconds (2 min 20 sec) | 512 MB |
+| X Premium / verified | `dm_video` | 10 minutes | 1 GB |
+
+Minimum video duration is **0.5 seconds** in all cases.
+
+These Post-video caps match the X app. Premium status is the uploading user's X Premium / verified subscription (`feature/long_video_upload`), not your developer API plan.
+
+<Note>
+`POST /2/media/upload/initialize` accepts `total_bytes` up to 16 GB. Passing a larger `total_bytes` than the account is allowed to upload fails at initialize or finalize.
+</Note>
+
+### Posting (`POST /2/tweets`)
+
+Attaching a `media_id` re-checks duration and size against the **posting user's** entitlement:
+
+- A Post may include **up to 4 photos**, **1 animated GIF**, or **1 video**.
+- If the video is longer than that user is allowed to post, the request fails with **403 Forbidden**:
+
+  `This user is not allowed to post a video longer than N minutes.`
+
+- Upload succeeding does not guarantee the media can be attached to a Post. Always handle this 403 when creating Posts with video.
+
+For codec, resolution, and frame-rate requirements, see [Best practices](/x-api/media/quickstart/best-practices).
 
 ## Creation
 
-Objects such as Posts, Direct Messages, user profile pictures, hosted Ads cards, etc. can contain one or more media objects. These top-level objects are collectively known as entities. The relevant entity creation API (e.g. [`POST /2/tweets`](/x-api/posts/creation-of-a-post)) can be passed one or more media objects using a unique `media_id`.
+Objects such as Posts, Direct Messages, user profile pictures, hosted Ads cards, etc. can contain one or more media objects. These top-level objects are collectively known as entities. The relevant entity creation API (e.g. [`POST /2/tweets`](/x-api/posts/create-post)) can be passed one or more media objects using a unique `media_id`.
 
 An entity which contains media object(s) can be created by following these steps:
 
 1. Upload the media file(s) using either the recommended [chunked](/x-api/media/quickstart/media-upload-chunked) upload (images/GIF/video), or the older [simple](/x-api/media/upload-media) upload (images only).
 1. Receive a `media_id` from step 1. This step may be repeated multiple times with different media if the entity allows multiple `media_id` parameters to be passed in.
-1. Create the entity by calling the appropriate endpoint, including the `media_id` and other required parameters. For example, attach a `media_id` to a Post using the [`POST /2/tweets`](/x-api/posts/creation-of-a-post) endpoint.
+1. Create the entity by calling the appropriate endpoint, including the `media_id` and other required parameters. For example, attach a `media_id` to a Post using the [`POST /2/tweets`](/x-api/posts/create-post) endpoint.
 
 
 ## Retrieving
