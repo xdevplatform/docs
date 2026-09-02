@@ -13600,8 +13600,10 @@
         "tags": [
           "Users"
         ],
-        "summary": "Create Bookmark",
-        "description": "Adds one or more Posts to the authenticated user's Bookmarks. Supply `tweet_id` for a single Post, or `tweet_ids` (at most 25) to bookmark several in one request. Optional `folder_id` applies to every Post in the request. Billing and rate limits still apply per HTTP request.",
+
+        "summary": "Create Users Bookmark",
+        "description": "Adds one or more Posts to the authenticated user's Bookmarks. Send tweet_id to bookmark a single Post, or tweet_ids (1-25 IDs) to bookmark multiple Posts in one request. tweet_id and tweet_ids are mutually exclusive. The optional folder_id applies to every Post in the request. Bulk requests return 200 with a result per Post; Posts that could not be bookmarked are reported in errors without failing the whole request.",
+
         "operationId": "createUsersBookmark",
         "parameters": [
           {
@@ -20268,36 +20270,71 @@
         }
       },
       "CreateUsersBookmarkRequest": {
-        "anyOf": [
+        "oneOf": [
           {
+            "title": "Single Post",
+            "type": "object",
             "required": [
               "tweet_id"
-            ]
+            ],
+            "properties": {
+              "folder_id": {
+                "type": "string",
+                "description": "Optional ID of the Bookmark folder to add the Post to. When omitted, the Post is added to the user's top-level Bookmarks only.",
+                "pattern": "^[0-9]{1,19}$"
+              },
+              "tweet_id": {
+                "type": "string",
+                "description": "The ID of the Post to add to the user's Bookmarks. Cannot be used together with tweet_ids.",
+                "pattern": "^[0-9]{1,19}$"
+              }
+            },
+            "additionalProperties": false
           },
           {
+            "title": "Bulk Posts",
+            "type": "object",
             "required": [
               "tweet_ids"
-            ]
+            ],
+            "properties": {
+              "folder_id": {
+                "type": "string",
+                "description": "Optional ID of the Bookmark folder to add the Posts to. Applies to every Post in the request. When omitted, the Posts are added to the user's top-level Bookmarks only.",
+                "pattern": "^[0-9]{1,19}$"
+              },
+              "tweet_ids": {
+                "type": "array",
+                "description": "The IDs of the Posts to add to the user's Bookmarks. Cannot be used together with tweet_id.",
+                "minItems": 1,
+                "maxItems": 25,
+                "items": {
+                  "type": "string",
+                  "description": "Unique identifier of a Post.",
+                  "pattern": "^[0-9]{1,19}$"
+                }
+              }
+            },
+            "additionalProperties": false
           }
-        ],
+        ]
+      },
+      "CreateUsersBookmarkResponse": {
         "type": "object",
-        "description": "At least one of `tweet_id`, `tweet_ids` is required.",
         "properties": {
-          "folder_id": {
-            "type": "string",
-            "description": "Optional ID of the Bookmark folder to add the Post(s) to. When omitted, Posts are added to the user's top-level Bookmarks only. A bulk request uses this one folder for every ID.",
-            "pattern": "^[0-9]{1,19}$"
-          },
-          "tweet_id": {
-            "type": "string",
-            "description": "The ID of the Post to add to the user's Bookmarks. Mutually exclusive with `tweet_ids`.",
-            "pattern": "^[0-9]{1,19}$"
+          "data": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CreateUsersBookmarkResponseData"
+              },
+              {
+                "$ref": "#/components/schemas/CreateUsersBookmarkBulkResponseData"
+              }
+            ]
           },
           "tweet_ids": {
             "type": "array",
-            "description": "Post IDs to add to the user's Bookmarks. At most 25. Mutually exclusive with `tweet_id`.",
-            "minItems": 1,
-            "maxItems": 25,
+            "description": "For bulk requests, Posts that could not be bookmarked are reported here per ID without failing the whole request.",
             "items": {
               "type": "string",
               "pattern": "^[0-9]{1,19}$"
@@ -20305,71 +20342,41 @@
           }
         }
       },
-      "CreateUsersBookmarkResponse": {
-        "oneOf": [
-          {
-            "type": "object",
-            "properties": {
-              "data": {
-                "type": "object",
-                "required": [
-                  "bookmarked"
-                ],
-                "properties": {
-                  "bookmarked": {
-                    "type": "boolean",
-                    "description": "Indicates whether the Post is bookmarked by the user."
-                  }
-                }
-              }
-            }
-          },
-          {
-            "type": "object",
-            "properties": {
-              "data": {
-                "type": "array",
-                "description": "Successfully bookmarked Posts, in request order.",
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "tweet_id",
-                    "bookmarked"
-                  ],
-                  "properties": {
-                    "bookmarked": {
-                      "type": "boolean",
-                      "description": "Indicates whether the Post is bookmarked by the user."
-                    },
-                    "tweet_id": {
-                      "type": "string",
-                      "description": "The Post ID that was bookmarked."
-                    }
-                  }
-                }
-              },
-              "errors": {
-                "type": "array",
-                "description": "Per-id failures; remaining IDs are still bookmarked.",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "detail": {
-                      "type": "string"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "tweet_id": {
-                      "type": "string",
-                      "description": "Post ID the failure applies to."
-                    }
-                  }
-                }
-              }
-            }
+      "CreateUsersBookmarkResponseData": {
+        "title": "Single Post",
+        "type": "object",
+        "required": [
+          "bookmarked"
+        ],
+        "properties": {
+          "bookmarked": {
+            "type": "boolean",
+            "description": "Indicates whether the Post is bookmarked by the user."
           }
         ]
+      },
+      "CreateUsersBookmarkBulkResponseData": {
+        "title": "Bulk Posts",
+        "type": "array",
+        "description": "The result for each Post in a bulk Bookmark request.",
+        "items": {
+          "type": "object",
+          "required": [
+            "tweet_id",
+            "bookmarked"
+          ],
+          "properties": {
+            "bookmarked": {
+              "type": "boolean",
+              "description": "Indicates whether the Post is bookmarked by the user."
+            },
+            "tweet_id": {
+              "type": "string",
+              "description": "The ID of the Post.",
+              "pattern": "^[0-9]{1,19}$"
+            }
+          }
+        }
       },
       "CreateWebhookReplayJobRequest": {
         "type": "object",
