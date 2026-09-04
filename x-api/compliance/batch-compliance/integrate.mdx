@@ -1,29 +1,105 @@
 ---
 title: Integration guide
 sidebarTitle: Integration guide
-keywords: ["batch compliance integration", "compliance batch integration", "compliance jobs integration", "batch compliance setup"]
-description: "When using the Batch compliance endpoints, developers can batch upload large amounts of. Reference for the X API v2 standard tier covering batch compliance."
-
-
+keywords: ["batch compliance integration", "compliance batch integration", "compliance jobs integration", "batch compliance setup", "compliance upload flow"]
+description: "Integrate the X API v2 Batch Compliance endpoints: create a job, upload your ID file to the tokenized upload URL, poll job status, and download results."
 ---
-import { Button } from '/snippets/button.mdx';
 
-## Working with resumable uploads
+The Batch Compliance endpoints let you upload large datasets of Post IDs or user IDs and find out what action is needed to keep your datasets in sync with user intent and the current state of content on X. This guide covers how the upload and download flow works and the constraints to plan for.
 
-When using the Batch compliance endpoints, developers can batch upload large amounts of X data and understand what action is needed to ensure that their datasets reflect user intent and the current state of the content on X. Uploading large amounts of data to a remote server is a relatively straightforward operation when systems and connectivity are stable and reliable. However, this may not always be the case. Some environments may impose a connection timeout, effectively cutting the connection between your app and the upload server after a set amount of time; you may also encounter connection issues, for example when trying to upload a large file from your laptop over a wi-fi connection. In these circumstances, it’s desirable to upload smaller portions of that file at a time, rather than having one single continuous connection.
+<Warning>
+  Resumable uploads are no longer supported. Setting `resumable` in the body of `POST /2/compliance/jobs` returns a 400 error: `Resumable uploads are not supported; create the job without resumable`. Create the job without the `resumable` field and upload your file in a single `PUT` request.
 
-X's batch compliance endpoints rely on Google Cloud Storage to process large files. This type of storage is optimized for various applications; Cloud Storage supports a technique to manage large files called resumable uploads.
+  Upload and download URLs are now served from `api.x.com` with a signed `token` query parameter. Earlier versions of these endpoints returned Google Cloud Storage signed URLs (`storage.googleapis.com`) and used `X-Goog-*` headers; that guidance no longer applies.
+</Warning>
 
-If the upload goes wrong at any point, Google Cloud Storage is able to resume the operation from where it was left off.
+## How the upload flow works
 
-### Creating a resumable job
+When you create a job with [`POST /2/compliance/jobs`](/x-api/compliance/create-compliance-job), the response includes two pre-authorized URLs:
 
-#### Step one:
+- `upload_url` — a `PUT` endpoint of the form `https://api.x.com/2/compliance/jobs/{id}/upload?token=...`. Upload your newline-delimited ID file here. See [Upload Compliance Job Submission](/x-api/compliance/upload-compliance-job-submission).
+- `download_url` — a `GET` endpoint of the form `https://api.x.com/2/compliance/jobs/{id}/download?token=...`. Download results here once the job status is `complete`. See [Download Compliance Job Results](/x-api/compliance/download-compliance-job-results).
 
-First, you will have to create a compliance job and specify whether you will be uploading Post IDs or user IDs (using the type parameter). Additionally, add resumable to the body and set it to true. Make sure to replace the $APP\_ACCESS\_TOKEN below with your App only Access Token below.
+The `token` query parameter is an opaque signed token scoped to the job. Use each URL exactly as returned; do not modify or strip the token.
 
+Both URLs expire. The job object reports the expiry times in the `upload_expires_at` and `download_expires_at` fields. If a URL expires before you use it, create a new job.
+
+## Step one: create a job
+
+Specify whether you are uploading Post IDs or user IDs with the `type` parameter (`tweets` or `users`). Replace `$APP_ACCESS_TOKEN` with your App only Access Token.
+
+```bash
+curl --request POST 'https://api.x.com/2/compliance/jobs' \
+  --header 'Authorization: Bearer $APP_ACCESS_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data-raw '{
+    "type": "tweets",
+    "name": "my-compliance-job"
+  }'
 ```
-curl --request POST \
- 'https://api.x.com/2/compliance/jobs' --header 'Authorization: Bearer $APP_ACCESS_TOKEN --header 'Content-Type: application/json' --data-raw '{
-   "type": "tweets",
-  
+
+The response contains the job `id`, `upload_url`, `download_url`, and their expiry times:
+
+```json
+{
+  "data": {
+    "id": "1234567890",
+    "type": "tweets",
+    "name": "my-compliance-job",
+    "status": "created",
+    "upload_url": "https://api.x.com/2/compliance/jobs/1234567890/upload?token=OPAQUE_SIGNED_TOKEN",
+    "upload_expires_at": "2026-08-28T14:15:00.000Z",
+    "download_url": "https://api.x.com/2/compliance/jobs/1234567890/download?token=OPAQUE_SIGNED_TOKEN",
+    "download_expires_at": "2026-09-04T14:00:00.000Z",
+    "created_at": "2026-08-28T14:00:00.000Z"
+  }
+}
+```
+
+## Step two: upload your ID file
+
+Prepare a plain text file with one Post ID or user ID per line, then `PUT` it to the `upload_url` from the create response:
+
+```bash
+curl --request PUT "$UPLOAD_URL" \
+  --header 'Content-Type: application/octet-stream' \
+  --data-binary @ids.txt
+```
+
+Upload the complete file in a single request before `upload_expires_at`.
+
+## Step three: poll job status
+
+Poll [`GET /2/compliance/jobs/{id}`](/x-api/compliance/get-compliance-job-by-id) until the status is `complete`:
+
+```bash
+curl "https://api.x.com/2/compliance/jobs/1234567890" \
+  --header 'Authorization: Bearer $APP_ACCESS_TOKEN'
+```
+
+## Step four: download results
+
+Once the job status is `complete`, `GET` the `download_url` before `download_expires_at`:
+
+```bash
+curl "$DOWNLOAD_URL" -o results.jsonl
+```
+
+Results are newline-delimited JSON with one object per ID that has a compliance event. IDs without compliance events are omitted and remain valid.
+
+## Constraints
+
+- One unfinished job per type at a time. Cancel an in-progress job with [`DELETE /2/compliance/jobs/{id}`](/x-api/compliance/cancel-compliance-job) before creating another job of the same type.
+- The ID file must be plain text with exactly one numeric ID per line, and every ID must match the job `type`.
+- The job creation, status, and list endpoints are rate limited to 150 requests per 15 minutes per App. See [Rate limits](/x-api/fundamentals/rate-limits).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="/icons/xds/icon-rocket.svg" href="/x-api/compliance/batch-compliance/quickstart">
+    Create your first compliance job
+  </Card>
+  <Card title="API Reference" icon="/icons/xds/icon-code.svg" href="/x-api/compliance/create-compliance-job">
+    Full endpoint documentation
+  </Card>
+</CardGroup>
