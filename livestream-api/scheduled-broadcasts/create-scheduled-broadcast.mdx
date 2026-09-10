@@ -10,15 +10,50 @@ openapi: "post /2/broadcasts/scheduled"
 The Livestream Scheduling API is in **closed beta** — breaking changes should be expected. See the [overview](/livestream-api/scheduled-broadcasts/overview).
 </Note>
 
-Creates a one-time or recurring scheduled broadcast. The `source_id` is an existing source ID, equal to the source's `rtmp_stream_key` — see [Stream Sources](/livestream-api/sources/overview).
+Creates a one-time or recurring scheduled broadcast owned by the authenticated user. The response returns `201 Created` with the newly created broadcast; for a recurring series, the response is the first occurrence.
 
-Set `manual_publish` to `true` when you want to publish explicitly with [`POST /2/broadcasts/scheduled/:id/live`](/livestream-api/scheduled-broadcasts/go-live). Otherwise, the scheduler publishes automatically at the scheduled start time.
+## Required fields
+
+| Field | Description |
+|:------|:------------|
+| `source_id` | Existing source ID, equal to the source's `rtmp_stream_key`. See [Stream Sources](/livestream-api/sources/overview). |
+| `scheduled_start_ms` | Scheduled start time, Unix epoch milliseconds as a decimal string. |
+| `scheduled_end_ms` | Scheduled end time, Unix epoch milliseconds as a decimal string. |
+
+## Publishing behavior
+
+Set `manual_publish` to `true` when you want to publish explicitly with [`POST /2/broadcasts/scheduled/:id/live`](/livestream-api/scheduled-broadcasts/go-live). Otherwise, the scheduler publishes automatically at `scheduled_start_ms`.
+
+## Optional fields
+
+- `title` and `description` set the broadcast's status text and description.
+- `thumbnail_media_id` is a numeric media ID used as the pre-live slate image.
+- `chat_option` controls chat permissions and is a numeric string.
+- `available_for_replay` enables replay after the broadcast ends.
+- `is_locked` locks the broadcast.
+- `locale` sets the broadcast's locale.
+- `telecast_id` associates the broadcast with an existing telecast (numeric string).
+- `recurrence` creates a recurring series — see below.
+
+## Example: one-time broadcast
+
+```json
+{
+  "source_id": "c47khpz1zuq9",
+  "scheduled_start_ms": "1784000000000",
+  "scheduled_end_ms": "1784003600000",
+  "title": "Product launch",
+  "description": "Live from our launch event",
+  "available_for_replay": true,
+  "manual_publish": true
+}
+```
 
 <Tip>
 Save both `broadcast_id` (alphanumeric, used in endpoint paths) and `scheduled_broadcast_id` (numeric, required in the body of [update requests](/livestream-api/scheduled-broadcasts/update-scheduled-broadcast)).
 </Tip>
 
-## Create a recurring schedule
+## Example: recurring schedule
 
 Add `recurrence` with a `frequency` (`Daily` or `Weekly`) and the number of `repeats` as a decimal string:
 
@@ -35,4 +70,4 @@ Add `recurrence` with a `frequency` (`Daily` or `Weekly`) and the number of `rep
 }
 ```
 
-The response returns the first scheduled occurrence. Use the [list endpoint](/livestream-api/scheduled-broadcasts/list-scheduled-broadcasts) to retrieve all generated occurrences.
+The response returns the first scheduled occurrence. Use the [list endpoint](/livestream-api/scheduled-broadcasts/list-scheduled-broadcasts) to retrieve all generated occurrences. Recurrence cannot be added or changed later through the [update endpoint](/livestream-api/scheduled-broadcasts/update-scheduled-broadcast).
