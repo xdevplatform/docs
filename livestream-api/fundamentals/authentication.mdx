@@ -1,36 +1,57 @@
 ---
 title: Authentication
 sidebarTitle: Authentication
-description: "The Livestream API requires OAuth 1.0a 3-legged (user context) authentication with HMAC-SHA1 signatures. Learn the requirements and how to sign requests correctly."
-keywords: ["Livestream authentication", "OAuth 1.0a", "HMAC-SHA1", "3-legged OAuth", "user context", "request signing"]
+description: "The Livestream API supports OAuth 2.0 Authorization Code Flow with PKCE (recommended) and OAuth 1.0a 3-legged user context. Learn the requirements for both flows."
+keywords: ["Livestream authentication", "OAuth 2.0", "PKCE", "broadcast.read", "broadcast.write", "OAuth 1.0a", "HMAC-SHA1", "user context"]
 ---
 
-All Livestream **management** endpoints require **OAuth 1.0a 3-legged (user context)** authentication:
+All Livestream endpoints support both **OAuth 2.0 Authorization Code Flow with PKCE** and **OAuth 1.0a 3-legged (user context)**. **OAuth 2.0 is strongly recommended** for all new integrations.
 
-- `GET /2/region`
-- All `/2/users/:user_id/sources*` endpoints
-- All `/2/users/:user_id/broadcasts*` endpoints
+## OAuth 2.0 (recommended)
 
-## Requirements
+Use **OAuth 2.0 Authorization Code Flow with PKCE** to obtain a user-context access token, then send it as a Bearer token on every request.
+
+### Requirements
+
+- Your application must be allow-listed for the Livestream API (contact your X partner manager).
+- Request the `broadcast.read` and `broadcast.write` scopes at minimum — these cover most operations. Add `offline.access` if you need a refresh token.
+- The authorizing user's numeric ID must exactly match the `:user_id` in the path. Mismatches are rejected with `400 Bad Request`.
+
+### Scopes
+
+| Scope | Purpose |
+|:------|:--------|
+| `broadcast.read` | Read stream sources, broadcasts, scheduled broadcasts, and chat history. |
+| `broadcast.write` | Create, update, publish, and end broadcasts and scheduled broadcasts; manage sources; send and moderate chat messages. |
+| `offline.access` | Issue a refresh token so you can renew the access token without re-prompting the user. |
+
+### Sending requests
+
+Include the access token in the `Authorization` header:
+
+```
+Authorization: Bearer YOUR_ACCESS_TOKEN
+```
+
+In the cURL examples throughout this documentation, `-H "Authorization: Bearer $ACCESS_TOKEN"` uses an access token obtained via this flow.
+
+For the full flow (authorization URL, PKCE challenge, token exchange, refresh), see the platform-wide guide on [OAuth 2.0 Authorization Code Flow with PKCE](/fundamentals/authentication/oauth-2-0/authorization-code).
+
+---
+
+## OAuth 1.0a (also supported)
+
+OAuth 1.0a 3-legged user context is still accepted for existing integrations.
+
+### Requirements
 
 - Use OAuth 1.0a with **HMAC-SHA1** signatures (3-legged user context).
 - Include a properly constructed `Authorization: OAuth ...` header on every request.
-- Your application must be allow-listed for the Livestream API (contact your X partner manager).
+- Your application must be allow-listed for the Livestream API.
 - The application must have **Read + Write** (or ReadWriteDm) access level.
 - The numeric user ID from the OAuth 1.0a access token must exactly match the `:user_id` in the path. Mismatches are rejected with `400 Bad Request`.
 
-<Warning>
-These endpoints currently require OAuth 1.0a. They do **not** accept OAuth 2.0 Bearer tokens.
-</Warning>
-
-<Note>
-Two exceptions use **OAuth 2.0 Authorization Code Flow with PKCE** (`broadcast.read` / `broadcast.write` scopes):
-
-- The [Livestream Scheduling API](/livestream-api/scheduled-broadcasts/overview) (closed beta) supports OAuth 2.0 in addition to OAuth 1.0a, and OAuth 2.0 is recommended for new scheduling integrations.
-- The [Send a Chat Message](/livestream-api/chat/send-chat-message) endpoint (`POST /2/broadcasts/:id/chat`) uses OAuth 2.0 user-context Bearer tokens.
-</Note>
-
-## Signing requests
+### Signing requests
 
 You sign each request yourself using your consumer key/secret and access token/secret. Every request must include an `Authorization: OAuth ...` header built from the standard OAuth 1.0a parameters:
 
@@ -66,12 +87,4 @@ oauth_timestamp="1772031973", oauth_nonce="a1b2c3d4e5",
 oauth_version="1.0", oauth_signature="bYsf2K%2Fa9c0vR..."
 ```
 
-In the cURL examples throughout this documentation, `-H "Authorization: OAuth ..."` is shorthand for a fully signed header like the one above.
-
 For more detail on OAuth 1.0a itself, see the platform-wide guide on [authorizing a request](/fundamentals/authentication/oauth-1-0a/authorizing-a-request) and [creating a signature](/fundamentals/authentication/oauth-1-0a/creating-a-signature).
-
-## Chat endpoints
-
-The endpoints used to obtain live chat **read** access (`/1.1/live_video_stream/status/...` and the chat access endpoint) are **unauthenticated** — they do not use OAuth signing. See [Accessing Live Chat](/livestream-api/chat/accessing-live-chat).
-
-**Sending** a chat message (`POST /2/broadcasts/:id/chat`) is authenticated with OAuth 2.0 (`broadcast.read` and `broadcast.write` scopes). See [Send a Chat Message](/livestream-api/chat/send-chat-message).
