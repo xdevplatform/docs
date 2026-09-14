@@ -66,18 +66,30 @@ Before you begin, you'll need:
         "type": "tweets",
         "name": "my-compliance-job",
         "status": "created",
-        "upload_url": "https://storage.googleapis.com/...",
-        "download_url": "https://storage.googleapis.com/...",
+        "upload_url": "https://api.x.com/2/compliance/jobs/1234567890/upload?token=...",
+        "upload_expires_at": "2024-01-15T10:15:00.000Z",
+        "download_url": "https://api.x.com/2/compliance/jobs/1234567890/download?token=...",
+        "download_expires_at": "2024-01-22T10:00:00.000Z",
         "created_at": "2024-01-15T10:00:00.000Z"
       }
     }
     ```
 
-    Save the `upload_url` and `download_url` for the next steps.
+    Save the `upload_url` and `download_url` for the next steps. Both are
+    signed, single-purpose URLs tied to this job: the `upload_url` expires
+    about **15 minutes** after job creation, and the `download_url` about
+    **7 days** after. If an upload URL expires before you use it, cancel the
+    job and create a new one.
+
+    <Note>
+    You can have one active (`created` or `in_progress`) job per job type at
+    a time. Creating a second one returns `409 Conflict` until the first
+    completes, fails, or is canceled.
+    </Note>
   </Step>
 
   <Step title="Prepare your data file" icon="file">
-    Create a text file with one ID per line:
+    Create a plain-text file with one numeric ID per line (up to 1 GiB):
 
     ```
     1234567890
@@ -86,17 +98,22 @@ Before you begin, you'll need:
     1234567893
     ```
 
-    Save as `ids.txt`.
+    Save as `ids.txt`. Lines that are not valid IDs are reported in the
+    results as error records rather than failing the whole job.
   </Step>
 
   <Step title="Upload your data" icon="upload">
-    Upload the file to the provided `upload_url`:
+    Upload the file to the provided `upload_url` with a single PUT. The URL's
+    signed token is the credential — no other authentication is required:
 
     ```bash
     curl -X PUT "UPLOAD_URL_FROM_RESPONSE" \
       -H "Content-Type: text/plain" \
       --data-binary @ids.txt
     ```
+
+    A successful upload returns `200 OK` and the job moves to
+    `in_progress`. An expired token returns `403` with a problem+json body.
   </Step>
 
   <Step title="Check job status" icon="clock">
@@ -119,20 +136,27 @@ Before you begin, you'll need:
   </Step>
 
   <Step title="Download results" icon="download">
-    Once status is `complete`, download from the `download_url`:
+    Once status is `complete`, download from the `download_url` (like the
+    upload URL, its signed token is the credential):
 
     ```bash
-    curl "DOWNLOAD_URL_FROM_RESPONSE" -o results.json
+    curl "DOWNLOAD_URL_FROM_RESPONSE" -o results.ndjson
     ```
 
-    **Result format** (one JSON object per line):
+    **Result format** (newline-delimited JSON, one object per line):
 
     ```json
-    {"id": "1234567890", "action": "delete", "created_at": "2024-01-10T12:00:00.000Z", "redacted_at": "2024-01-12T08:30:00.000Z", "reason": "deleted"}
-    {"id": "1234567891", "action": "delete", "created_at": "2024-01-10T12:00:00.000Z", "redacted_at": "2024-01-13T14:20:00.000Z", "reason": "suspended"}
+    {"id": "1234567890", "action": "delete", "created_at": "2024-01-10T12:00:00.000Z", "redacted_at": "2024-01-12T08:30:00.000Z", "deleted_at": "2024-01-12T08:30:00.000Z", "reason": "deleted"}
+    {"id": "1234567891", "action": "rehydrate", "created_at": "2024-01-10T12:00:00.000Z", "redacted_at": "2024-01-13T14:20:00.000Z", "reason": "tweet_edited"}
+    {"id": "1234567892", "action": "scrub_geo", "created_at": "2018-05-27T10:00:00.000Z", "redacted_at": "2019-06-20T02:00:00.000Z", "reason": "geo_scrubbed"}
+    {"id": "not_a_valid_id", "error": "invalid_id"}
     ```
 
-    Only IDs with compliance events appear in the results. IDs not in the results are still valid.
+    Only IDs with compliance events appear in the results. **An ID absent
+    from the results has no compliance event — your stored copy is fine.**
+    Invalid submitted lines come back as `{"id": ..., "error": "invalid_id"}`
+    records. `redacted_at` can be `null` when the original event predates
+    timestamp tracking.
   </Step>
 </Steps>
 
@@ -142,24 +166,29 @@ Before you begin, you'll need:
 
 <AccordionGroup>
   <Accordion title="Post compliance events">
-    | Action | Reason | Description |
-    |:-------|:-------|:------------|
-    | `delete` | `deleted` | Post was deleted |
-    | `delete` | `bounced` | Post failed compliance check |
-    | `delete` | `protected` | Account became protected |
-    | `delete` | `suspended` | Account was suspended |
-    | `delete` | `scrub_geo` | Geo data was removed |
+    | Action | Reason | What to do |
+    |:-------|:-------|:-----------|
+    | `delete` | `deleted` | Delete your stored copy — the Post was deleted |
+    | `delete` | `protected` | Delete your stored copy — the author's account became protected |
+    | `delete` | `deactivated` | Delete your stored copy — the author's account was deactivated |
+    | `delete` | `suspended` | Delete your stored copy — the author's account was suspended |
+    | `rehydrate` | `tweet_edited` | Re-fetch the Post — it was edited and your copy is a stale revision |
+    | `scrub_geo` | `geo_scrubbed` | Delete stored geo data for the Post — the author removed location data |
   </Accordion>
 
   <Accordion title="User compliance events">
-    | Action | Reason | Description |
-    |:-------|:-------|:------------|
-    | `delete` | `deleted` | Account was deleted |
-    | `delete` | `suspended` | Account was suspended |
-    | `delete` | `protected` | Account became protected |
-    | `delete` | `deactivated` | Account was deactivated |
+    | Action | Reason | What to do |
+    |:-------|:-------|:-----------|
+    | `delete` | `deleted` | Delete stored data for the account — it was deleted |
+    | `delete` | `protected` | Delete stored data — the account became protected |
+    | `delete` | `deactivated` | Delete stored data — the account was deactivated |
+    | `delete` | `suspended` | Delete stored data — the account was suspended |
   </Accordion>
 </AccordionGroup>
+
+When multiple events apply to the same ID, the results carry the
+highest-impact one: `delete` outranks `rehydrate`, which outranks
+`scrub_geo`.
 
 ---
 
@@ -169,6 +198,18 @@ Get all compliance jobs for your App:
 
 ```bash
 curl "https://api.x.com/2/compliance/jobs?type=tweets" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+---
+
+## Cancel a job
+
+Cancel a job that is awaiting upload or still processing (frees the
+one-active-job slot for its type):
+
+```bash
+curl -X DELETE "https://api.x.com/2/compliance/jobs/1234567890" \
   -H "Authorization: Bearer $BEARER_TOKEN"
 ```
 

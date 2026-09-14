@@ -2,28 +2,131 @@
 title: Integration guide
 sidebarTitle: Integration guide
 keywords: ["batch compliance integration", "compliance batch integration", "compliance jobs integration", "batch compliance setup"]
-description: "When using the Batch compliance endpoints, developers can batch upload large amounts of. Reference for the X API v2 standard tier covering batch compliance."
+description: "Key concepts, URL lifecycle, error handling, and best practices for integrating the X API v2 Batch Compliance endpoints."
 
 
 ---
 import { Button } from '/snippets/button.mdx';
 
-## Working with resumable uploads
+The Batch Compliance endpoints let you upload large datasets of Post IDs or
+user IDs and learn what action is needed to keep your datasets aligned with
+user intent and the current state of content on X. This guide covers the
+concepts the [quickstart](/x-api/compliance/batch-compliance/quickstart)
+glosses over: URL lifecycle, job lifecycle, error handling, and operational
+best practices.
 
-When using the Batch compliance endpoints, developers can batch upload large amounts of X data and understand what action is needed to ensure that their datasets reflect user intent and the current state of the content on X. Uploading large amounts of data to a remote server is a relatively straightforward operation when systems and connectivity are stable and reliable. However, this may not always be the case. Some environments may impose a connection timeout, effectively cutting the connection between your app and the upload server after a set amount of time; you may also encounter connection issues, for example when trying to upload a large file from your laptop over a wi-fi connection. In these circumstances, it’s desirable to upload smaller portions of that file at a time, rather than having one single continuous connection.
+## Signed URLs
 
-X's batch compliance endpoints rely on Google Cloud Storage to process large files. This type of storage is optimized for various applications; Cloud Storage supports a technique to manage large files called resumable uploads.
+Creating a job returns two signed, single-purpose URLs on `api.x.com`:
 
-If the upload goes wrong at any point, Google Cloud Storage is able to resume the operation from where it was left off.
+| URL | Method | Purpose | Lifetime |
+|:----|:-------|:--------|:---------|
+| `upload_url` | PUT | Submit your ID file for this job | ~15 minutes from job creation |
+| `download_url` | GET | Retrieve this job's results | ~7 days from job creation |
 
-### Creating a resumable job
+Each URL embeds a token that authorizes exactly one operation on exactly one
+job until its expiry. Treat the URLs as secrets — anyone holding them can
+perform that operation until they expire. Do not log them or embed them in
+client-side code.
 
-#### Step one:
+The exact expiry instants are returned as `upload_expires_at` and
+`download_expires_at` on the job object. If the upload window lapses before
+you use it, cancel the job (`DELETE /2/compliance/jobs/:id`) and create a
+new one — upload URLs are not refreshable.
 
-First, you will have to create a compliance job and specify whether you will be uploading Post IDs or user IDs (using the type parameter). Additionally, add resumable to the body and set it to true. Make sure to replace the $APP\_ACCESS\_TOKEN below with your App only Access Token below.
+## Job lifecycle
 
 ```
-curl --request POST \
- 'https://api.x.com/2/compliance/jobs' --header 'Authorization: Bearer $APP_ACCESS_TOKEN --header 'Content-Type: application/json' --data-raw '{
-   "type": "tweets",
-  
+created ──upload──▶ in_progress ──processing──▶ complete
+   │                     │                          │
+   └──── cancel ─────────┘                      download
+   (or expiry)                                  (~7 days)
+```
+
+- **One active job per type.** While a `tweets` job is `created` or
+  `in_progress`, creating another `tweets` job returns `409 Conflict`. A
+  `users` job can run concurrently with a `tweets` job.
+- **Processing is asynchronous.** Poll `GET /2/compliance/jobs/:id` with
+  backoff (e.g. every 30–60 seconds). Processing time scales with dataset
+  size.
+- **Jobs expire.** A job left in `created` without an upload expires. Jobs
+  can also end `failed`; both free the active-job slot.
+
+## Uploads
+
+The upload is a single `PUT` of a plain-text body, one numeric ID per line,
+up to 1 GiB. There is no resumable/chunked mode: if a transfer is
+interrupted, retry the whole PUT while the upload URL is valid, or cancel
+the job and start over. For very large datasets, split IDs across multiple
+sequential jobs — results are per-ID, so partitioning is safe.
+
+Invalid lines (non-numeric, malformed) don't fail the job; each comes back
+in the results as an error record:
+
+```json
+{"id": "not_a_valid_id", "error": "invalid_id"}
+```
+
+## Interpreting results
+
+Results are newline-delimited JSON. Three rules cover the contract:
+
+1. **Absence means clean.** An ID missing from the results has no
+   compliance event; your stored copy requires no action.
+2. **`action` tells you what to do**: `delete` (remove your stored copy),
+   `rehydrate` (re-fetch the Post — it was edited and your copy is stale),
+   or `scrub_geo` (remove stored location data for the Post).
+3. **One event per ID.** When several events apply, you receive the
+   highest-impact one: `delete` outranks `rehydrate`, which outranks
+   `scrub_geo`.
+
+Deletion events additionally carry `deleted_at` (an alias of `redacted_at`)
+for compatibility with consumers of the legacy results format. `redacted_at`
+can be `null` for events that predate timestamp tracking; the obligation to
+act is the same.
+
+## Error handling
+
+Errors use RFC 7807 problem+json bodies.
+
+| Status | When | Handling |
+|:-------|:-----|:---------|
+| `400` | Malformed request (bad `type`, bad body) | Fix the request |
+| `401` | Missing/invalid Bearer on the JSON endpoints, or unusable byte-path token | Check credentials / recreate the job |
+| `403` | Valid but expired or wrong-purpose byte-path token; App not enrolled for the endpoint | Recreate the job; check your App's access level |
+| `409` | A job of this type is already active | Wait for it, or cancel it |
+| `413` | Upload exceeds 1 GiB | Split the dataset across jobs |
+
+## Best practices
+
+- **Run compliance jobs on a schedule.** X requires stored content to
+  reflect current compliance state; a recurring (e.g. daily or weekly) job
+  over your stored IDs, acting on every returned event, is the intended
+  integration pattern. Pair batch jobs with the
+  [compliance streams](/x-api/compliance/streams/introduction) if you need
+  real-time signals between runs.
+- **Upload immediately after creating a job.** The ~15-minute upload window
+  is comfortably enough for automation but not for manual workflows with
+  long pauses.
+- **Store job IDs with your submissions.** `GET /2/compliance/jobs` lists
+  recent jobs, but correlating submissions to results is your side's
+  responsibility.
+- **Download results promptly** and persist them; the download URL lapses
+  after ~7 days and results are not retrievable afterward.
+- **Act on `rehydrate` via the Posts lookup endpoints** — re-fetching
+  returns the current revision of an edited Post along with its edit
+  history.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="/icons/xds/icon-rocket.svg" href="/x-api/compliance/batch-compliance/quickstart">
+    Create your first compliance job
+  </Card>
+  <Card title="Compliance streams" icon="stream" href="/x-api/compliance/streams/introduction">
+    Real-time compliance events
+  </Card>
+  <Card title="API Reference" icon="/icons/xds/icon-code.svg" href="/x-api/compliance/create-compliance-job">
+    Full endpoint documentation
+  </Card>
+</CardGroup>
