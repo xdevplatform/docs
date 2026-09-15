@@ -1,159 +1,102 @@
 ---
-title: Accessing Live Chat (Read Access)
+title: Accessing Live Chat
 sidebarTitle: Accessing Live Chat
-description: "Obtain read-only WebSocket access to a broadcast's live chat via a two-step unauthenticated token handoff, then connect and parse chat messages."
-keywords: ["live chat", "chat token", "accessChatPublic", "WebSocket", "chatapi", "live_video_stream"]
-tag: "DEPRECATED"
+description: "Receive live chat messages for your broadcasts in real time by subscribing to the broadcast.chat event on the X Activity API."
+keywords: ["live chat", "broadcast.chat", "X Activity API", "XAA", "webhook", "subscription", "broadcast.read"]
 ---
 
-<Warning>
-**This flow is deprecated.** Ingest live chat with the [X Activity API](/x-api/activity/introduction) `broadcast.chat` event instead of the WebSocket handoff described below.
-</Warning>
+Live chat is delivered through the [X Activity API](/x-api/activity/introduction) (XAA). Subscribe once to the `broadcast.chat` event for a user with the `broadcast.read` scope, and XAA pushes chat messages for every broadcast that user owns to your webhook in real time. There is no per-broadcast subscription and no separate handoff step.
 
-Obtaining a WebSocket connection for **read access** to a broadcast's live chat requires a short unauthenticated handoff using two endpoints. No OAuth signing is used for these steps.
+To send chat messages, use the [Send a Chat Message](/livestream-api/chat/send-chat-message) endpoint.
 
-These two endpoints are required for reading live chat. To post messages, use the separate authenticated [Send a Chat Message](/livestream-api/chat/send-chat-message) endpoint — it does not use this token handoff.
+## Prerequisites
 
-## Step 1: Get a chat token
-
-**Endpoint:** `GET https://api.twitter.com/1.1/live_video_stream/status/{mediaKey}`
+- A [developer app](https://developer.x.com/en/portal/petition/essential/basic-info) in a Project with the X Activity API and Webhooks enabled.
+- OAuth 2.0 Authorization Code Flow with PKCE for the broadcasting user, granting the `broadcast.read` scope. See [Authentication](/livestream-api/authentication).
+- The X user ID whose broadcasts you want to receive chat for (see [Getting Started](/livestream-api/getting-started)).
 
 <Note>
-This is a legacy endpoint and must be called against `api.twitter.com` (not `api.x.com`).
+`broadcast.chat` is a private event and can only be created for users who have authorized your app.
 </Note>
 
-**Auth:** None (unauthenticated).
+## Step 1: Register a webhook
 
-**Headers** (commonly sent for compatibility):
+XAA delivers events over a webhook you host. Create the webhook once per environment and reuse its `webhook_id` for every subscription.
 
-```
-x-periscope-user-agent: Twitter/m5
-```
+See the [Webhooks](/x-api/webhooks/introduction) guide for the full flow, including the CRC validation your endpoint must implement.
 
-### Path parameters
+## Step 2: Subscribe to `broadcast.chat` for the user
 
-| Name | Type | Required | Description |
-|:-----|:-----|:---------|:------------|
-| `mediaKey` | string | Yes | `media_key` from the [Create Broadcast](/livestream-api/broadcasts/create-broadcast) or [Get Broadcast](/livestream-api/broadcasts/get-broadcast) response (format `28_{id}`). |
+Create one subscription per broadcasting user. The subscription covers all broadcasts that user owns — you do not need to resubscribe when a new broadcast starts.
 
-### Example request
+**Endpoint:** `POST https://api.x.com/2/activity/subscriptions`
 
-```bash
-curl "https://api.twitter.com/1.1/live_video_stream/status/28_2026675106832068613" \
-  -H "x-periscope-user-agent: Twitter/m5"
-```
-
-### Success response
-
-For chat purposes (the endpoint returns more fields for playback clients):
-
-```json
-{
-  "chatToken": "23uU8f8NSyHF8U56BR2Fl0vld0lhrotyHToihIBDR5MAy72L4ypBisjvA..."
-}
-```
-
-- The `chatToken` is only available once the broadcast is live (`RUNNING`). Before then, this endpoint returns an error or a response without a `chatToken` — retry after publishing.
-- The `chatToken` is an opaque value used only for the next step.
-- **Watch the casing:** this response field is camelCase `chatToken`, but the Step 2 request body key is snake_case `chat_token`.
-
-## Step 2: Access chat
-
-**Endpoint:** `POST https://proxsee.pscp.tv/api/v2/accessChatPublic`
-
-**Auth:** None.
-
-**Headers:**
-
-```
-content-type: application/json
-x-periscope-user-agent: Twitter/m5
-x-idempotence: <current timestamp ms or nonce>
-x-attempt: 1
-```
-
-Send `x-idempotence` (a timestamp in ms or any unique nonce) and `x-attempt` (a retry counter starting at 1) for compatibility. A unique `x-idempotence` per logical request, reused across retries of that request, is the safe convention.
-
-### Request body
-
-```json
-{
-  "chat_token": "<chatToken value from Step 1>"
-}
-```
+**Auth:** OAuth 2.0 user context with the `broadcast.read` scope (the token must belong to the user in `filter.user_id`).
 
 ### Example request
 
 ```bash
-curl -X POST "https://proxsee.pscp.tv/api/v2/accessChatPublic" \
+curl -X POST "https://api.x.com/2/activity/subscriptions" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -H "x-periscope-user-agent: Twitter/m5" \
-  -H "x-idempotence: 1772031973914" \
-  -H "x-attempt: 1" \
-  -d '{"chat_token":"<chatToken value from Step 1>"}'
+  -d '{
+    "event_type": "broadcast.chat",
+    "filter": { "user_id": "1111111111111111111" },
+    "webhook_id": "2090847910112202752",
+    "tag": "live-chat"
+  }'
 ```
+
+### Request fields
+
+| Field | Required | Description |
+|:------|:---------|:------------|
+| `event_type` | Yes | Must be `broadcast.chat`. |
+| `filter.user_id` | Yes | The broadcasting user's ID. Must match the authenticated user. |
+| `webhook_id` | Yes | ID of the webhook that will receive events. |
+| `tag` | No | Caller-defined label echoed back on each event. |
 
 ### Success response
 
 ```json
 {
-  "endpoint": "https://prod-chat-ancillary-eu-central-1.pscp.tv",
-  "access_token": "23uU8f8NSyHF8U56BR2Fl0vld0lhrotyHToihIBDR5MAy72L4ypBisjvA..."
+  "data": {
+    "subscription": {
+      "subscription_id": "1998240115200000001",
+      "event_type": "broadcast.chat",
+      "filter": { "user_id": "1111111111111111111" },
+      "webhook_id": "2090847910112202752",
+      "tag": "live-chat",
+      "created_at": "2026-09-15T14:30:00.000Z",
+      "updated_at": "2026-09-15T14:30:00.000Z"
+    }
+  }
 }
 ```
 
-The exact `endpoint` host is returned by the server and may vary by region and broadcast. Always use the value returned in the response — do not hardcode it.
+Store the `subscription_id`; use it to update or delete the subscription later. See [List](/x-api/activity/get-x-activity-subscriptions), [Update](/x-api/activity/update-x-activity-subscription), and [Delete](/x-api/activity/deletes-x-activity-subscription) subscription endpoints for management.
 
-(For ended broadcasts/replays, `replay_endpoint` and `replay_access_token` may be present instead; your code should fall back to those.)
+## Step 3: Receive chat events on your webhook
 
-### Response fields
+Once the broadcast is live and viewers send chat messages, XAA POSTs `broadcast.chat` events to your webhook using the standard XAA event envelope:
 
-| Field | Type | Description |
-|:------|:-----|:------------|
-| `endpoint` | string | Chat server base URL (https). Convert to `wss://` and append `/chatapi/v1/chatnow` for the WebSocket URL. |
-| `access_token` | string | Token for authenticating the WebSocket session. |
-
-## Step 3: Connect the WebSocket
-
-Each WebSocket message is a JSON frame with a `kind` field:
-
-| `kind` | Direction | Purpose |
-|:-------|:----------|:--------|
-| `3` | client → server | Authenticate the session using the `access_token`. |
-| `2` | client → server | Subscribe to a chat room (wraps an inner `kind: 1` body containing the room). |
-| `1` | server → client | An incoming chat message (also the inner kind used inside the subscribe frame). |
-
-After obtaining `endpoint` + `access_token`:
-
-1. Connect: `wss://<host from endpoint>/chatapi/v1/chatnow`
-
-2. On open, send two frames, each a JSON string. The `payload` (and the inner `body`) are themselves JSON-encoded strings — the cleanest way to build them is to construct nested objects and stringify each layer:
-
-```javascript
-// Auth (kind 3)
-ws.send(JSON.stringify({
-  payload: JSON.stringify({ access_token: accessToken }),
-  kind: 3,
-}));
-
-// Subscribe (kind 2) — note: room is the broadcast id, NOT the media_key
-ws.send(JSON.stringify({
-  payload: JSON.stringify({ body: JSON.stringify({ room: broadcastId }), kind: 1 }),
-  kind: 2,
-}));
+```json
+{
+  "data": {
+    "event_uuid": "2080761390344937796",
+    "filter": { "user_id": "1111111111111111111" },
+    "event_type": "broadcast.chat",
+    "tag": "live-chat",
+    "payload": { },
+    "includes": { }
+  }
+}
 ```
 
-3. Incoming chat messages arrive as `kind === 1` frames whose payload is double-JSON-encoded. Decode by parsing each layer:
+`filter.user_id` identifies the broadcast owner. The `payload` describes the chat message; `includes` may contain related user objects. See [Event payloads](/x-api/activity/event-payloads) for the full shape.
 
-```javascript
-const outer = JSON.parse(raw);               // { payload, kind: 1 }
-const inner = JSON.parse(outer.payload);     // { body, kind, ... }
-const body = typeof inner.body === "string" ? JSON.parse(inner.body) : inner.body;
-// body => { body: "<text>", username, displayName?, uuid?, timestamp? }
-```
+Respond to each delivery with a `2xx` status within the timeout described in the [Webhooks](/x-api/webhooks/introduction) guide, then process the event asynchronously.
 
-See the reference implementation in the [code sample](/livestream-api/code-sample) for a complete working example of the chat access handoff, WebSocket connection, and message parsing (including replay support).
+## Pulling chat after a broadcast ends
 
-## Rate limiting and errors
-
-The status endpoint participates in X API rate limits. The access chat endpoint may have its own limits or return errors for invalid/expired tokens or non-live broadcasts.
+Real-time chat is delivered only while the broadcast is live. To read chat after a broadcast has ended, use [Get Chat History](/livestream-api/chat/get-chat-history).
