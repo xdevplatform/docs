@@ -32,7 +32,7 @@ This document provides guidance for AI agents, coding assistants, and LLM-based 
 
 - **X API v2** (`/x-api/...`): Posts, Users, Direct Messages, Lists, Spaces, Media, Streams (filtered + volume), Compliance, Webhooks, Account Activity, Trends, News, Usage, Connections.
 - **Enterprise APIs** (`/enterprise-api/...`): Account Activity (webhooks), X Activity (XAA), GNIP/PowerTrack historical & real-time, Compliance.
-- **Ads API** (`/x-ads-api/...`): Campaign Management, Creatives, Audiences, Analytics, Measurement, Catalog.
+- **Ads API** (`/x-ads-api/...`): Campaign Management, Creatives, Audiences, Analytics, Measurement, Catalog, Lead Generation.
 - **SDKs (XDKs)** (`/xdks/python/...` and `/xdks/typescript/...`): Official client libraries with full type coverage, pagination, and streaming helpers.
 - **Fundamentals**: Authentication, rate limits, data dictionary, expansions, fields, pagination, versioning, consistency.
 - **AI & Agent Tools** (`/tools/ai`, `/tools/llms-txt`, `/tools/skill-md`, `/tools/mcp`).
