@@ -1,0 +1,45 @@
+---
+title: Broadcast Lifecycle
+sidebarTitle: Overview
+description: "Broadcasts are ephemeral live sessions tied to a stream source, moving through NOT_STARTED, RUNNING, and ENDED states."
+keywords: ["broadcast lifecycle", "broadcast states", "NOT_STARTED", "RUNNING", "ENDED", "go live"]
+---
+
+Broadcasts are ephemeral sessions tied to a source. A broadcast starts in `NOT_STARTED`, moves to `RUNNING` when published, and ends in `ENDED` (or another terminal state).
+
+## Broadcast states
+
+| State | Meaning |
+|:------|:--------|
+| `NOT_STARTED` | Created but not yet live. Initial state returned by Create Broadcast. |
+| `PRE_PUBLISHED` | Transitional state while the broadcast is being prepared to go live. |
+| `RUNNING` | Live and publicly visible. Set after a successful `PUBLISH`. |
+| `ENDED` | Finished normally after `END`. Terminal — a broadcast cannot be restarted. |
+| `TIMED_OUT` | Terminal. The broadcast was not published in time, or ingest stopped before it went live. |
+| `CANCELED` | Terminal. The broadcast was canceled before or during its lifecycle. |
+
+The only transitions you trigger directly are `NOT_STARTED` → `RUNNING` (via `PUBLISH`) and `RUNNING` → `ENDED` (via `END`). The remaining states are set by the platform.
+
+<Warning>
+**Critical rule:** The chosen stream source must already be actively receiving an RTMP feed (`is_stream_active: true`) **before** you call Create Broadcast — otherwise you get a 404. There is a short delay after your encoder connects before this flips `true`, so poll `GET /2/users/:user_id/sources/:source_id` until `is_stream_active` is `true` before creating the broadcast.
+</Warning>
+
+## Endpoints
+
+| Endpoint | Method & Path | New Method & Path |
+|:---------|:--------------|:------------------|
+| Create Broadcast | [`POST /2/users/:user_id/broadcasts`](/livestream-api/broadcasts/create-broadcast) | — |
+| List Broadcasts | [`GET /2/users/:user_id/broadcasts`](/livestream-api/broadcasts/list-broadcasts) | [`GET /2/broadcasts`](/livestream-api/broadcasts/get-broadcasts) |
+| Get Broadcast | [`GET /2/users/:user_id/broadcasts/:broadcast_id`](/livestream-api/broadcasts/get-broadcast) | [`GET /2/broadcasts/:id`](/livestream-api/broadcasts/get-broadcast-by-id) |
+| Publish or End a Broadcast | [`PUT /2/users/:user_id/broadcasts/:broadcast_id/state`](/livestream-api/broadcasts/publish-or-end-broadcast) | — |
+| Delete Broadcast | [`DELETE /2/users/:user_id/broadcasts/:broadcast_id`](/livestream-api/broadcasts/delete-broadcast) | — |
+
+All routes accept both OAuth 2.0 and OAuth 1.0a [user context authentication](/livestream-api/authentication). The new routes (those without `user_id` in the path) are the recommended routes and return additional fields (for example, field selection with `broadcast.fields`).
+
+<Note>
+The original routes are being replaced as backend work completes and we drift away from the legacy Periscope endpoints. New routes will be added to the table above as they ship — use them in place of the original routes wherever a replacement is available.
+</Note>
+
+<Note>
+To schedule a broadcast in advance — one-time or recurring, with automatic or manual publishing — see the [Livestream Scheduling API](/livestream-api/scheduled-broadcasts/overview).
+</Note>

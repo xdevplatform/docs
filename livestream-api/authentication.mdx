@@ -1,0 +1,101 @@
+---
+title: Authentication
+sidebarTitle: Authentication
+description: "The Livestream API supports OAuth 2.0 Authorization Code Flow with PKCE (recommended) and OAuth 1.0a 3-legged user context. Learn the requirements for both flows."
+keywords: ["Livestream authentication", "OAuth 2.0", "PKCE", "broadcast.read", "broadcast.write", "OAuth 1.0a", "HMAC-SHA1", "user context"]
+---
+
+All Livestream endpoints support both **OAuth 2.0 Authorization Code Flow with PKCE** and **OAuth 1.0a 3-legged (user context)**. **OAuth 2.0 is strongly recommended** for all new integrations.
+
+## OAuth 2.0 (recommended)
+
+Use **OAuth 2.0 Authorization Code Flow with PKCE** to obtain a user-context access token, then send it as a Bearer token on every request.
+
+### Requirements
+
+- Your application must be allow-listed for the Livestream API (contact your X partner manager).
+- Request the `broadcast.read` and `broadcast.write` scopes at minimum — these cover most operations. Add `offline.access` if you need a refresh token.
+- The authorizing user's numeric ID must exactly match the `:user_id` in the path. Mismatches are rejected with `400 Bad Request`.
+
+### Scopes
+
+| Scope | Purpose |
+|:------|:--------|
+| `broadcast.read` | Read stream sources, broadcasts, scheduled broadcasts, and chat history. |
+| `broadcast.write` | Create, update, publish, and end broadcasts and scheduled broadcasts; manage sources; send and moderate chat messages. |
+| `offline.access` | Issue a refresh token so you can renew the access token without re-prompting the user. |
+
+### Helpful additional scopes
+
+Request these alongside the core Livestream scopes when your integration needs the related functionality.
+
+| Scope | Purpose |
+|:------|:--------|
+| `tweet.read` | Useful for reading the user's Post that carries the broadcast information. |
+| `tweet.write` | Helpful when posting clips, reposting the stream from other accounts, and similar publishing. |
+| `like.read` | Required to subscribe to the user's `like.create` events in the X Activity API, enabling like notifications. |
+| `follows.read` | Required to subscribe to the user's `follow.follow` and `subscriptions.subscribe` events, useful for common stream overlays. |
+
+### Sending requests
+
+Include the access token in the `Authorization` header:
+
+```
+Authorization: Bearer YOUR_ACCESS_TOKEN
+```
+
+In the cURL examples throughout this documentation, `-H "Authorization: Bearer $ACCESS_TOKEN"` uses an access token obtained via this flow.
+
+For the full flow (authorization URL, PKCE challenge, token exchange, refresh), see the platform-wide guide on [OAuth 2.0 Authorization Code Flow with PKCE](/fundamentals/authentication/oauth-2-0/authorization-code).
+
+---
+
+## OAuth 1.0a (also supported)
+
+OAuth 1.0a 3-legged user context is still accepted for existing integrations.
+
+### Requirements
+
+- Use OAuth 1.0a with **HMAC-SHA1** signatures (3-legged user context).
+- Include a properly constructed `Authorization: OAuth ...` header on every request.
+- Your application must be allow-listed for the Livestream API.
+- The application must have **Read + Write** (or ReadWriteDm) access level.
+- The numeric user ID from the OAuth 1.0a access token must exactly match the `:user_id` in the path. Mismatches are rejected with `400 Bad Request`.
+
+### Signing requests
+
+You sign each request yourself using your consumer key/secret and access token/secret. Every request must include an `Authorization: OAuth ...` header built from the standard OAuth 1.0a parameters:
+
+| Parameter | Value |
+|:----------|:------|
+| `oauth_consumer_key` | Your app's consumer (API) key |
+| `oauth_token` | The broadcasting user's access token |
+| `oauth_signature_method` | `HMAC-SHA1` |
+| `oauth_timestamp` | Current Unix time in seconds |
+| `oauth_nonce` | Unique random string, one per request |
+| `oauth_version` | `1.0` |
+| `oauth_signature` | Base64-encoded HMAC-SHA1 signature of the request |
+
+The signature base string is three parts joined by `&`: the uppercased HTTP method, the percent-encoded base request URL (scheme, host, and path — **no query string**), and the percent-encoded, sorted parameter string.
+
+**What goes into the parameter string:**
+
+- All the `oauth_*` parameters above (except `oauth_signature`)
+- Any URL query-string parameters (for example `pagination_token` when listing broadcasts)
+
+<Warning>
+**Do not include the JSON request body.** Every write endpoint here sends `application/json`, and under OAuth 1.0a only `application/x-www-form-urlencoded` bodies are folded into the signature — adding JSON body fields to the base string is the single most common cause of `401 Unauthorized`.
+</Warning>
+
+The signing key is `percentEncode(consumer_secret)&percentEncode(token_secret)`. Use strict RFC 3986 percent-encoding throughout: also escape `! * ' ( )`, and encode spaces as `%20` (never `+`). Many built-in helpers (e.g. JavaScript's `encodeURIComponent`) are not strict enough on their own.
+
+A finished header looks like this (sent as a single line):
+
+```
+Authorization: OAuth oauth_consumer_key="CONSUMER_KEY",
+oauth_token="ACCESS_TOKEN", oauth_signature_method="HMAC-SHA1",
+oauth_timestamp="1772031973", oauth_nonce="a1b2c3d4e5",
+oauth_version="1.0", oauth_signature="bYsf2K%2Fa9c0vR..."
+```
+
+For more detail on OAuth 1.0a itself, see the platform-wide guide on [authorizing a request](/fundamentals/authentication/oauth-1-0a/authorizing-a-request) and [creating a signature](/fundamentals/authentication/oauth-1-0a/creating-a-signature).
