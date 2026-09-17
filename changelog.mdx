@@ -7,6 +7,24 @@ keywords: ["changelog", "API updates", "release notes", "what's new", "API chang
 
 To subscribe to updates, please [**“Turn on notifications”**](https://help.x.com/en/managing-your-account/notifications-on-mobile-devices#:~:text=In%20the%20top%20menu,%20you,you%20would%20like%20to%20receive) for [**@API**](https://x.com/api). You can also follow this changelog in your feed reader via the [**RSS feed**](https://docs.x.com/changelog/rss.xml).
 
+<Update label="Sep 17, 2026" description="X API v2">
+  ### Batch Compliance moves to `api.x.com` signed URLs
+
+  Batch Compliance jobs now return `upload_url` and `download_url` values on `api.x.com` instead of Google Cloud Storage. Both URLs are single-purpose and time-bound: the upload URL is valid for ~15 minutes and the download URL for ~7 days, with the exact instants exposed as `upload_expires_at` and `download_expires_at` on the job.
+
+  Requests to these byte paths now require your App's `Authorization: Bearer` header in addition to the signed URL token. This differs from the previous GCS flow, where pre-signed URLs were self-authorizing. If you are migrating an existing integration, add the header to your upload and download requests.
+
+  Other behavioral changes worth noting:
+
+  - Uploads are a single `PUT` up to **1 GiB**; there is no resumable/chunked mode. Requests over the limit return **413**.
+  - Only **one active job per type** is allowed. Creating a second `tweets` job while one is `created` or `in_progress` returns **409 Conflict** (`users` and `tweets` jobs can run concurrently).
+  - Expired or wrong-purpose byte-path tokens return **403**; recreate the job to get fresh URLs (upload URLs are not refreshable).
+  - Results now use the full action/reason contract, including `rehydrate` / `tweet_edited` for edited Posts and `scrub_geo` / `geo_scrubbed` for removed location data. Deletion records include a `deleted_at` alias of `redacted_at` for compatibility with the legacy format.
+  - `DELETE /2/compliance/jobs/:id` cancels a job that is awaiting upload or still processing and frees the active-job slot.
+
+  See the [Batch Compliance introduction](/x-api/compliance/batch-compliance/introduction), [quickstart](/x-api/compliance/batch-compliance/quickstart), and [integration guide](/x-api/compliance/batch-compliance/integrate) for the full flow, error catalog, and best practices.
+</Update>
+
 <Update label="Sep 17, 2026" description="X Ads API">
   ### Conversion API Google Tag Manager server-side template
 
