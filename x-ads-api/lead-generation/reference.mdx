@@ -1,0 +1,574 @@
+---
+title: Lead Generation API Reference
+sidebarTitle: API Reference
+description: Complete technical reference for Lead Gen endpoints in the X Ads API — lead forms, LEAD_FORM card destinations, and leads export jobs.
+keywords: ["lead gen api", "lead forms api", "leads export", "LEAD_FORM", "x ads lead generation"]
+---
+
+## API Reference
+
+<Note>
+  This is the full technical reference. For an overview of Lead Gen Ads, form structure, and the create → attach → export workflow, see the{" "}
+  <a href="/x-ads-api/lead-generation">Lead Generation Overview</a>.
+</Note>
+
+<Note>
+  The Leads API requires the <strong>Campaign user</strong> permission. Lead exports are restricted to <strong>account administrators</strong>.
+</Note>
+
+Lead form create and update requests accept JSON bodies. Set `Content-Type` to `application/json`.
+
+### Lead Forms
+
+#### POST accounts/:account_id/lead_forms[](#post-accounts-account-id-lead-forms "Permalink to this headline")
+
+Create a lead form associated with the current account.
+
+**Resource URL[](#resource-url "Permalink to this headline")**
+
+`https://ads-api.x.com/12/accounts/:account_id/lead_forms`
+
+<ParamField path="account_id" type="string" required>
+  The identifier for the leveraged account. Appears within the resource's path and is generally a required parameter for all Advertiser API requests. The specified account must be associated with the authenticated user.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Form name, 1–255 characters.
+</ParamField>
+
+<ParamField body="purpose" type="string" required>
+  What the collected leads are used for, 1–1000 characters.
+</ParamField>
+
+<ParamField body="fields" type="array" required>
+  Non-empty array of fields the lead fills in. See [fields entries](#fields-entries). Keys must be unique within the form. At least one field must be required (`optional` is `false` or omitted).
+</ParamField>
+
+<ParamField body="privacy_policy" type="object" required>
+  Privacy policy of the advertiser collecting the leads. See [privacy_policy](#privacy-policy).
+</ParamField>
+
+<ParamField body="introduction" type="object" optional>
+  Introduction card shown before the form fields. See [introduction](#introduction).
+</ParamField>
+
+<ParamField body="final_page" type="object" optional>
+  Final page shown after the form is submitted. See [final_page](#final-page).
+</ParamField>
+
+**Example Request[](#example-request "Permalink to this headline")**
+
+`POST https://ads-api.x.com/12/accounts/18ce54d4x5t/lead_forms`
+
+```json
+{
+  "name": "Fall launch form",
+  "purpose": "Collect newsletter signups",
+  "introduction": {
+    "headline": "Sign up",
+    "description": "Get our newsletter"
+  },
+  "final_page": {
+    "headline": "Thanks for signing up",
+    "description": "We will be in touch soon",
+    "cta_button": {
+      "url": "https://example.com/welcome",
+      "title": "Visit our site"
+    }
+  },
+  "fields": [
+    { "key": "EMAIL" },
+    { "key": "FULL_NAME", "optional": true }
+  ],
+  "privacy_policy": {
+    "url": "https://example.com/privacy",
+    "company_name": "Example Inc"
+  }
+}
+```
+
+**Example Response[](#example-response "Permalink to this headline")**
+
+```json title="Example response" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "3f2b8c1a-8f4e-4a0b-9df2-0123456789ab",
+    "name": "Fall launch form",
+    "purpose": "Collect newsletter signups",
+    "introduction": {
+      "headline": "Sign up",
+      "description": "Get our newsletter"
+    },
+    "final_page": {
+      "headline": "Thanks for signing up",
+      "description": "We will be in touch soon",
+      "cta_button": {
+        "url": "https://example.com/welcome",
+        "title": "Visit our site"
+      }
+    },
+    "fields": [
+      { "key": "EMAIL", "optional": false },
+      { "key": "FULL_NAME", "optional": true }
+    ],
+    "privacy_policy": {
+      "url": "https://example.com/privacy",
+      "company_name": "Example Inc"
+    },
+    "deleted": false,
+    "created_at": "2026-08-14T18:22:01Z",
+    "updated_at": "2026-08-14T18:22:01Z"
+  }
+}
+```
+
+#### Nested objects
+
+##### introduction[](#introduction "Permalink to this headline")
+
+| Parameter | Required | Description |
+| :--- | :--- | :--- |
+| `headline` | Yes | 1–190 characters, non-blank. |
+| `description` | No | Up to 1000 characters. |
+
+##### final_page[](#final-page "Permalink to this headline")
+
+Shown to the lead after a successful submission. The optional CTA button links the lead onward (for example, to the advertiser's site).
+
+| Parameter | Required | Description |
+| :--- | :--- | :--- |
+| `headline` | Yes | 1–190 characters, non-blank. |
+| `description` | No | Up to 1000 characters. |
+| `cta_button` | No | Call-to-action button. When present, both of its properties are required. |
+| `cta_button.url` | Yes\* | Must be an `https://` URL. |
+| `cta_button.title` | Yes\* | Button label, 1–100 characters, non-blank. |
+
+\* Required only when `cta_button` itself is present.
+
+##### fields entries[](#fields-entries "Permalink to this headline")
+
+| Parameter | Required | Description |
+| :--- | :--- | :--- |
+| `key` | Yes | The kind of information the field collects. See [Field keys](#field-keys). Keys must be unique within the form. |
+| `optional` | No | Defaults to `false`. At least one field must be required (`optional=false`), so the form cannot be submitted empty. |
+
+##### Field keys[](#field-keys "Permalink to this headline")
+
+**Contact fields**
+
+| Key | Description |
+| :--- | :--- |
+| `EMAIL` | Email address |
+| `PHONE_NUMBER` | Phone number |
+| `STREET_ADDRESS` | Street address |
+| `CITY` | City |
+| `STATE` | State or region |
+| `COUNTRY` | Country |
+| `ZIP_CODE` | Postal code |
+
+**User information**
+
+| Key | Description |
+| :--- | :--- |
+| `FULL_NAME` | Full name |
+| `FIRST_NAME` | First name |
+| `LAST_NAME` | Last name |
+| `DATE_OF_BIRTH` | Date of birth |
+| `COMPANY_NAME` | Company name |
+| `JOB_TITLE` | Job title |
+| `WORK_EMAIL` | Work email address |
+| `WORK_PHONE_NUMBER` | Work phone number |
+| `GENDER` | Gender |
+| `HANDLE` | X handle |
+
+##### privacy_policy[](#privacy-policy "Permalink to this headline")
+
+| Parameter | Required | Description |
+| :--- | :--- | :--- |
+| `url` | Yes | Must be an `https://` URL. |
+| `company_name` | Yes | 1–255 characters, non-blank. |
+
+#### PUT accounts/:account_id/lead_forms/:lead_form_id[](#put-accounts-account-id-lead-forms-lead-form-id "Permalink to this headline")
+
+Update a lead form associated with the current account.
+
+Takes the same parameters as create; every one of them is optional. Omitted parameters keep their current value.
+
+Object parameters (`introduction`, `final_page`, `privacy_policy`) and the `fields` array are replaced wholesale when provided — there is no partial update within a nested object, and no way to unset one once set. A provided `fields` array must not be empty, and a provided `final_page` is validated the same way as on create.
+
+Archived (`deleted`) lead forms are immutable and return a not-found error.
+
+**Resource URL[](#resource-url "Permalink to this headline")**
+
+`https://ads-api.x.com/12/accounts/:account_id/lead_forms/:lead_form_id`
+
+<ParamField path="account_id" type="string" required>
+  The identifier for the leveraged account. Appears within the resource's path and is generally a required parameter for all Advertiser API requests. The specified account must be associated with the authenticated user.
+</ParamField>
+
+<ParamField path="lead_form_id" type="string" required>
+  The UUID of the lead form to update.
+</ParamField>
+
+<ParamField body="name" type="string" optional>
+  Form name, 1–255 characters.
+</ParamField>
+
+<ParamField body="purpose" type="string" optional>
+  What the collected leads are used for, 1–1000 characters.
+</ParamField>
+
+<ParamField body="fields" type="array" optional>
+  Replaces the form's fields wholesale. Must not be empty. See [fields entries](#fields-entries).
+</ParamField>
+
+<ParamField body="privacy_policy" type="object" optional>
+  Replaces the privacy policy wholesale. See [privacy_policy](#privacy-policy).
+</ParamField>
+
+<ParamField body="introduction" type="object" optional>
+  Replaces the introduction wholesale. See [introduction](#introduction).
+</ParamField>
+
+<ParamField body="final_page" type="object" optional>
+  Replaces the final page wholesale. See [final_page](#final-page).
+</ParamField>
+
+**Example Request[](#example-request "Permalink to this headline")**
+
+`PUT https://ads-api.x.com/12/accounts/18ce54d4x5t/lead_forms/3f2b8c1a-8f4e-4a0b-9df2-0123456789ab`
+
+```json
+{
+  "name": "Fall launch form (updated)",
+  "fields": [
+    { "key": "EMAIL" },
+    { "key": "PHONE_NUMBER", "optional": true }
+  ]
+}
+```
+
+#### GET accounts/:account_id/lead_forms[](#get-accounts-account-id-lead-forms "Permalink to this headline")
+
+List the account's lead forms, newest first.
+
+**Resource URL[](#resource-url "Permalink to this headline")**
+
+`https://ads-api.x.com/12/accounts/:account_id/lead_forms`
+
+<ParamField path="account_id" type="string" required>
+  The identifier for the leveraged account. Appears within the resource's path and is generally a required parameter for all Advertiser API requests. The specified account must be associated with the authenticated user.
+</ParamField>
+
+<ParamField query="count" type="int" default="100">
+  Number of forms per page.<br/>
+  Min: 1, Max: 200
+</ParamField>
+
+<ParamField query="cursor" type="string" optional>
+  Opaque pagination cursor from a previous response. Pass `next_cursor` back as `cursor` to fetch the next page; it is `null` on the last page. See [Pagination](/x-ads-api/fundamentals/pagination).
+</ParamField>
+
+<ParamField query="with_deleted" type="boolean" default="false">
+  Pass `true` to include archived forms.
+</ParamField>
+
+**Example Request[](#example-request "Permalink to this headline")**
+
+`GET https://ads-api.x.com/12/accounts/18ce54d4x5t/lead_forms?count=2`
+
+**Example Response[](#example-response "Permalink to this headline")**
+
+```json title="Example response" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": [
+    {
+      "id": "3f2b8c1a-8f4e-4a0b-9df2-0123456789ab",
+      "name": "Fall launch form",
+      "purpose": "Collect newsletter signups",
+      "introduction": {
+        "headline": "Sign up",
+        "description": "Get our newsletter"
+      },
+      "final_page": {
+        "headline": "Thanks for signing up",
+        "description": "We will be in touch soon",
+        "cta_button": {
+          "url": "https://example.com/welcome",
+          "title": "Visit our site"
+        }
+      },
+      "fields": [
+        { "key": "EMAIL", "optional": false },
+        { "key": "FULL_NAME", "optional": true }
+      ],
+      "privacy_policy": {
+        "url": "https://example.com/privacy",
+        "company_name": "Example Inc"
+      },
+      "deleted": false,
+      "created_at": "2026-08-14T18:22:01Z",
+      "updated_at": "2026-08-14T18:22:01Z"
+    },
+    {
+      "id": "7a1d3e92-2b5c-4c17-8e64-fedcba987654",
+      "name": "Webinar registration",
+      "purpose": "Collect webinar signups",
+      "fields": [{ "key": "WORK_EMAIL", "optional": false }],
+      "privacy_policy": {
+        "url": "https://example.com/privacy",
+        "company_name": "Example Inc"
+      },
+      "deleted": false,
+      "created_at": "2026-08-01T12:04:11Z",
+      "updated_at": "2026-08-01T12:04:11Z"
+    }
+  ],
+  "next_cursor": "8x7dpl"
+}
+```
+
+#### GET accounts/:account_id/lead_forms/:lead_form_id[](#get-accounts-account-id-lead-forms-lead-form-id "Permalink to this headline")
+
+Retrieve a single lead form associated with the current account.
+
+**Resource URL[](#resource-url "Permalink to this headline")**
+
+`https://ads-api.x.com/12/accounts/:account_id/lead_forms/:lead_form_id`
+
+<ParamField path="account_id" type="string" required>
+  The identifier for the leveraged account. Appears within the resource's path and is generally a required parameter for all Advertiser API requests. The specified account must be associated with the authenticated user.
+</ParamField>
+
+<ParamField path="lead_form_id" type="string" required>
+  The UUID of the lead form to retrieve.
+</ParamField>
+
+<ParamField query="with_deleted" type="boolean" default="false">
+  Pass `true` to retrieve an archived form. Archived forms return not-found when this is `false`.
+</ParamField>
+
+**Example Request[](#example-request "Permalink to this headline")**
+
+`GET https://ads-api.x.com/12/accounts/18ce54d4x5t/lead_forms/3f2b8c1a-8f4e-4a0b-9df2-0123456789ab`
+
+**Example Response[](#example-response "Permalink to this headline")**
+
+```json title="Example response" expandable lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "3f2b8c1a-8f4e-4a0b-9df2-0123456789ab",
+    "name": "Fall launch form",
+    "purpose": "Collect newsletter signups",
+    "introduction": {
+      "headline": "Sign up",
+      "description": "Get our newsletter"
+    },
+    "final_page": {
+      "headline": "Thanks for signing up",
+      "description": "We will be in touch soon",
+      "cta_button": {
+        "url": "https://example.com/welcome",
+        "title": "Visit our site"
+      }
+    },
+    "fields": [
+      { "key": "EMAIL", "optional": false },
+      { "key": "FULL_NAME", "optional": true }
+    ],
+    "privacy_policy": {
+      "url": "https://example.com/privacy",
+      "company_name": "Example Inc"
+    },
+    "deleted": false,
+    "created_at": "2026-08-14T18:22:01Z",
+    "updated_at": "2026-08-14T18:22:01Z"
+  }
+}
+```
+
+#### DELETE accounts/:account_id/lead_forms/:lead_form_id[](#delete-accounts-account-id-lead-forms-lead-form-id "Permalink to this headline")
+
+Soft-delete (archive) a lead form. Archived forms stop accepting submissions and can no longer be updated.
+
+**Resource URL[](#resource-url "Permalink to this headline")**
+
+`https://ads-api.x.com/12/accounts/:account_id/lead_forms/:lead_form_id`
+
+<ParamField path="account_id" type="string" required>
+  The identifier for the leveraged account. Appears within the resource's path and is generally a required parameter for all Advertiser API requests. The specified account must be associated with the authenticated user.
+</ParamField>
+
+<ParamField path="lead_form_id" type="string" required>
+  The UUID of the lead form to archive.
+</ParamField>
+
+**Example Request[](#example-request "Permalink to this headline")**
+
+`DELETE https://ads-api.x.com/12/accounts/18ce54d4x5t/lead_forms/3f2b8c1a-8f4e-4a0b-9df2-0123456789ab`
+
+**Example Response[](#example-response "Permalink to this headline")**
+
+```json title="Example response" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+  "data": {
+    "id": "3f2b8c1a-8f4e-4a0b-9df2-0123456789ab",
+    "name": "Fall launch form",
+    "purpose": "Collect newsletter signups",
+    "deleted": true,
+    "created_at": "2026-08-14T18:22:01Z",
+    "updated_at": "2026-09-15T16:10:44Z"
+  }
+}
+```
+
+### Attach a lead form to a card[](#attach-a-lead-form-to-a-card "Permalink to this headline")
+
+Use [POST accounts/:account_id/cards](/x-ads-api/creatives/reference#post-accounts-account-id-cards) to create a post card that opens a lead form. Set the destination type to `LEAD_FORM` and pass the form id.
+
+The `LEAD_FORM` destination can be used anywhere a destination is accepted, including `DETAILS` and `BUTTON` components and buttons in a `BUTTON_GROUP` component. Invalid lead form ids are rejected with one error per invalid id.
+
+```json
+{
+  "type": "LEAD_FORM",
+  "id": "3f2b8c1a-8f4e-4a0b-9df2-0123456789ab"
+}
+```
+
+| Parameter | Required | Description |
+| :--- | :--- | :--- |
+| `type` | Yes | Must be `LEAD_FORM`. |
+| `id` | Yes | Id of the lead form to open when the component is tapped. Must be a valid lead form id (UUID). |
+
+**Example Request[](#example-request "Permalink to this headline")**
+
+`POST https://ads-api.x.com/12/accounts/18ce54d4x5t/cards`
+
+```json
+{
+  "name": "Fall launch card",
+  "components": [
+    {
+      "type": "MEDIA",
+      "media_key": "3_1743570804436678656"
+    },
+    {
+      "type": "DETAILS",
+      "title": "Sign up",
+      "destination": {
+        "type": "LEAD_FORM",
+        "id": "3f2b8c1a-8f4e-4a0b-9df2-0123456789ab"
+      }
+    }
+  ]
+}
+```
+
+See the [Cards API reference](/x-ads-api/creatives/reference#cards) for the full card create contract, including `card_uri` and attaching the card to a Post.
+
+### Export leads[](#export-leads "Permalink to this headline")
+
+Leads collected by a form are exported through the ad-export job lifecycle: create an export job, poll its status, download the result, and optionally cancel it. A leads export is an export create with `entity_type` set to `leads`.
+
+<Note type="warning">
+  Leads exports are restricted to account administrators, since exported leads contain personal information.
+</Note>
+
+The remaining routes are shared by all export types and work the same way for leads exports.
+
+#### POST accounts/:account_id/ad-export/api/v1/exports[](#post-accounts-account-id-ad-export-api-v1-exports "Permalink to this headline")
+
+Create a leads export job. The form must exist, belong to the account, and not be archived; otherwise the request fails with a 404.
+
+**Resource URL[](#resource-url "Permalink to this headline")**
+
+`https://ads-api.x.com/12/accounts/:account_id/ad-export/api/v1/exports`
+
+<ParamField path="account_id" type="string" required>
+  The identifier for the leveraged account. Appears within the resource's path and is generally a required parameter for all Advertiser API requests. The specified account must be associated with the authenticated user.
+</ParamField>
+
+<ParamField body="entity_type" type="string" required>
+  Must be `leads`.
+</ParamField>
+
+<ParamField body="lead_form_id" type="string" required>
+  Id of the lead form whose leads to export. The form must exist, belong to the account, and not be archived.
+</ParamField>
+
+<ParamField body="start_epoch" type="int" required>
+  Start of the export window as a Unix timestamp in seconds. Inclusive.
+</ParamField>
+
+<ParamField body="end_epoch" type="int" required>
+  End of the export window as a Unix timestamp in seconds. Exclusive: the window is `[start_epoch, end_epoch)`, so leads submitted exactly at `end_epoch` are not included.
+</ParamField>
+
+<ParamField body="response_format" type="enum" optional>
+  Format of the exported file.<br/><br/>
+  Possible values: `json`, `csv`, `xlsx`
+</ParamField>
+
+**Example Request[](#example-request "Permalink to this headline")**
+
+`POST https://ads-api.x.com/12/accounts/18ce54d4x5t/ad-export/api/v1/exports`
+
+```json
+{
+  "entity_type": "leads",
+  "lead_form_id": "3f2b8c1a-8f4e-4a0b-9df2-0123456789ab",
+  "start_epoch": 1751328000,
+  "end_epoch": 1753920000,
+  "response_format": "json"
+}
+```
+
+The create response includes an export job `id`. Use that id to poll status, download the file, or cancel the job.
+
+#### GET accounts/:account_id/ad-export/api/v1/exports/:export_id[](#get-accounts-account-id-ad-export-api-v1-exports-export-id "Permalink to this headline")
+
+Return the job status. Once the job completes, the response includes a `download_url`.
+
+**Resource URL[](#resource-url "Permalink to this headline")**
+
+`https://ads-api.x.com/12/accounts/:account_id/ad-export/api/v1/exports/:export_id`
+
+<ParamField path="account_id" type="string" required>
+  The identifier for the leveraged account.
+</ParamField>
+
+<ParamField path="export_id" type="string" required>
+  The identifier of the export job returned when the job was created.
+</ParamField>
+
+#### GET accounts/:account_id/ad-export/api/v1/exports/:export_id/download[](#get-accounts-account-id-ad-export-api-v1-exports-export-id-download "Permalink to this headline")
+
+Download the exported file.
+
+**Resource URL[](#resource-url "Permalink to this headline")**
+
+`https://ads-api.x.com/12/accounts/:account_id/ad-export/api/v1/exports/:export_id/download`
+
+<ParamField path="account_id" type="string" required>
+  The identifier for the leveraged account.
+</ParamField>
+
+<ParamField path="export_id" type="string" required>
+  The identifier of a completed export job.
+</ParamField>
+
+#### DELETE accounts/:account_id/ad-export/api/v1/exports/:export_id[](#delete-accounts-account-id-ad-export-api-v1-exports-export-id "Permalink to this headline")
+
+Cancel the export job.
+
+**Resource URL[](#resource-url "Permalink to this headline")**
+
+`https://ads-api.x.com/12/accounts/:account_id/ad-export/api/v1/exports/:export_id`
+
+<ParamField path="account_id" type="string" required>
+  The identifier for the leveraged account.
+</ParamField>
+
+<ParamField path="export_id" type="string" required>
+  The identifier of the export job to cancel.
+</ParamField>

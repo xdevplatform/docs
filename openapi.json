@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "description": "X API v2 core endpoints",
-    "version": "2.167",
+    "version": "2.168",
     "title": "X API v2",
     "termsOfService": "https://developer.x.com/en/developer-terms/agreement-and-policy.html",
     "contact": {
@@ -15,6 +15,102 @@
     }
   },
   "paths": {
+    "/2/account": {
+      "get": {
+        "security": [
+          {
+            "OAuth2UserToken": [
+              "developer.read"
+            ]
+          }
+        ],
+        "tags": [
+          "Account"
+        ],
+        "summary": "Get developer account",
+        "description": "Returns the authenticated user's X Developer Platform account. A user without an account gets a resource-not-found error entry.",
+        "operationId": "getDeveloperAccount",
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetDeveloperAccountResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "security": [
+          {
+            "OAuth2UserToken": [
+              "developer.write"
+            ]
+          }
+        ],
+        "tags": [
+          "Account"
+        ],
+        "summary": "Ensure developer account",
+        "description": "Creates an X Developer Platform account for the authenticated user if they do not already have one, and returns it. Idempotent: when the user already has an account it is returned unchanged with `created` false.",
+        "operationId": "ensureAccount",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnsureAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnsureAccountResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/2/account_activity/subscriptions/count": {
       "get": {
         "security": [
@@ -119,10 +215,10 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "dm.read",
-              "dm.write",
-              "users.read"
+              "users.read",
+              "tweet.read",
+              "dm.write"
             ]
           },
           {
@@ -454,8 +550,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "like.read"
+              "like.read",
+              "tweet.read"
             ]
           },
           {
@@ -483,7 +579,8 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 1000,
-              "format": "int32"
+              "format": "int32",
+              "default": 1000
             },
             "style": "form"
           },
@@ -543,7 +640,7 @@
           "Activity"
         ],
         "summary": "Create X activity subscription",
-        "description": "Creates a subscription for an X activity event. OAuth2 user-context tokens must hold the scope matching the requested event_type: dm.read for chat.* and dm.* events, like.read for like.* events, mute.read for mute.* events, block.read for block.* events, and tweet.read for all other event types. Mute and block subscriptions are actor-only: filter.user_id must identify the authenticated user and direction is not supported.",
+        "description": "Creates a subscription for an X activity event. OAuth2 user-context tokens must hold the scope matching the requested event_type: dm.read for chat.* and dm.* events, like.read for like.* events, mute.read for mute.* events, block.read for block.* events, follows.read for subscriptions.* events, and tweet.read for all other event types. Mute and block subscriptions are actor-only: filter.user_id must identify the authenticated user and direction is not supported. subscriptions.* events require a user-context token and filter.user_id must identify the authenticated user. Optional filter.qualifiers further narrow supported chat, follow, unfollow, like, and subscriptions events.",
         "externalDocs": {
           "url": "https://docs.x.com/x-api/activity/create-x-activity-subscription"
         },
@@ -590,6 +687,12 @@
     "/2/activity/subscriptions/{subscription_id}": {
       "delete": {
         "security": [
+          {
+            "OAuth2UserToken": []
+          },
+          {
+            "UserToken": []
+          },
           {
             "BearerToken": []
           }
@@ -645,6 +748,12 @@
       },
       "put": {
         "security": [
+          {
+            "OAuth2UserToken": []
+          },
+          {
+            "UserToken": []
+          },
           {
             "BearerToken": []
           }
@@ -825,6 +934,336 @@
         }
       }
     },
+    "/2/bots": {
+      "get": {
+        "security": [
+          {
+            "BearerToken": []
+          }
+        ],
+        "tags": [
+          "Bots"
+        ],
+        "summary": "Get Bots",
+        "operationId": "getBots",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserFieldsParameter"
+          },
+          {
+            "$ref": "#/components/parameters/UserExpansionsParameter"
+          },
+          {
+            "$ref": "#/components/parameters/PostFieldsParameter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetBotsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "security": [
+          {
+            "BearerToken": []
+          }
+        ],
+        "tags": [
+          "Bots"
+        ],
+        "summary": "Create a bot",
+        "description": "Creates a bot account in the calling app's project and returns its bearer token. Idempotent on handle: repeating the request for a handle that already names one of the project's bots returns that bot with a freshly minted token, revoking the previous one — safe to retry when a response was lost, since the replaced token was never seen.",
+        "operationId": "createBot",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateBotResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/bots/{id}": {
+      "delete": {
+        "security": [
+          {
+            "BearerToken": []
+          }
+        ],
+        "tags": [
+          "Bots"
+        ],
+        "summary": "Delete Bot",
+        "operationId": "deleteBot",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,19}$"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteBotResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "security": [
+          {
+            "BearerToken": []
+          }
+        ],
+        "tags": [
+          "Bots"
+        ],
+        "summary": "Update Bot",
+        "operationId": "updateBot",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,19}$"
+            },
+            "style": "simple"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateBotResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/bots/{id}/token": {
+      "delete": {
+        "security": [
+          {
+            "BearerToken": []
+          }
+        ],
+        "tags": [
+          "Bots"
+        ],
+        "summary": "Revoke Bot Token",
+        "operationId": "revokeBotToken",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,19}$"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevokeBotTokenResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "security": [
+          {
+            "BearerToken": []
+          }
+        ],
+        "tags": [
+          "Bots"
+        ],
+        "summary": "Rotate Bot Token",
+        "operationId": "rotateBotToken",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,19}$"
+            },
+            "style": "simple"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RotateBotTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RotateBotTokenResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/2/broadcasts": {
       "get": {
         "security": [
@@ -894,6 +1333,183 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ListBroadcastsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/broadcasts/chat/moderators": {
+      "get": {
+        "security": [
+          {
+            "OAuth2UserToken": [
+              "broadcast.read",
+              "tweet.read",
+              "users.read"
+            ]
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "tags": [
+          "Broadcasts"
+        ],
+        "summary": "Get chat moderators",
+        "description": "Returns the authenticated broadcaster's persistent moderators as User resources. The list applies to all of their current and future broadcast chats.",
+        "operationId": "getChatModerators",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserFieldsParameter"
+          },
+          {
+            "$ref": "#/components/parameters/UserExpansionsParameter"
+          },
+          {
+            "$ref": "#/components/parameters/PostFieldsParameter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetChatModeratorsResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "security": [
+          {
+            "OAuth2UserToken": [
+              "broadcast.read",
+              "broadcast.write"
+            ]
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "tags": [
+          "Broadcasts"
+        ],
+        "summary": "Add a chat moderator",
+        "description": "Adds a moderator to the authenticated broadcaster's persistent list and returns the updated moderator user IDs. The list applies to all current and future broadcast chats.",
+        "operationId": "addChatModerator",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddChatModeratorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddChatModeratorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/broadcasts/chat/moderators/{user_id}": {
+      "delete": {
+        "security": [
+          {
+            "OAuth2UserToken": [
+              "broadcast.read",
+              "broadcast.write"
+            ]
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "tags": [
+          "Broadcasts"
+        ],
+        "summary": "Remove a chat moderator",
+        "description": "Removes a moderator from the authenticated broadcaster's persistent list and returns the updated moderator user IDs.",
+        "operationId": "removeChatModerator",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "A 64-bit signed integer.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,18}$"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemoveChatModeratorResponse"
                 }
               }
             }
@@ -1065,8 +1681,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "broadcast.read",
-              "broadcast.write"
+              "broadcast.write",
+              "broadcast.read"
             ]
           },
           {
@@ -1552,7 +2168,7 @@
           "Broadcasts"
         ],
         "summary": "Mute or time out a user in a broadcast chat",
-        "description": "Prevents a user from posting further messages in a running broadcast chat. When `end_at_ms` is provided, the mute expires at that time. The authenticated user must own the broadcast.",
+        "description": "Prevents a user from posting further messages in a running broadcast chat. When `end_at_ms` is provided, the mute expires at that time. The authenticated user must be the broadcast host or a moderator.",
         "operationId": "muteBroadcastChatUser",
         "parameters": [
           {
@@ -1610,8 +2226,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "broadcast.read",
-              "broadcast.write"
+              "broadcast.write",
+              "broadcast.read"
             ]
           },
           {
@@ -1622,7 +2238,7 @@
           "Broadcasts"
         ],
         "summary": "Unmute a user in a broadcast chat",
-        "description": "Allows a muted user to post messages in a running broadcast chat again. The authenticated user must own the broadcast.",
+        "description": "Allows a muted user to post messages in a running broadcast chat again. The authenticated user must be the broadcast host or a moderator.",
         "operationId": "unmuteBroadcastChatUser",
         "parameters": [
           {
@@ -1693,7 +2309,7 @@
           "Broadcasts"
         ],
         "summary": "Remove a chat message from a live broadcast",
-        "description": "Removes a specific chat message from a running broadcast owned by the authenticated user.",
+        "description": "Removes a specific chat message from a running broadcast where the authenticated user is the host or a moderator.",
         "operationId": "deleteBroadcastChatMessage",
         "parameters": [
           {
@@ -1947,9 +2563,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "users.read",
-              "dm.read"
+              "dm.read",
+              "tweet.read"
             ]
           },
           {
@@ -2019,9 +2635,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "users.read",
               "tweet.read",
-              "dm.read",
-              "users.read"
+              "dm.read"
             ]
           },
           {
@@ -2108,9 +2724,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "tweet.read",
               "dm.write",
-              "users.read",
-              "tweet.read"
+              "users.read"
             ]
           },
           {
@@ -2182,8 +2798,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "tweet.read",
+              "users.read",
               "dm.write"
             ]
           },
@@ -2269,7 +2885,7 @@
           "Chat"
         ],
         "summary": "Send Chat Message",
-        "description": "Sends an encrypted message to a specific Chat conversation. For 1:1 conversations, provide the recipient's user ID; the server constructs the canonical conversation ID from the authenticated user and recipient.",
+        "description": "Sends an encrypted message to a specific Chat conversation. For 1:1 conversations, provide the recipient's user ID; the server constructs the canonical conversation ID from the authenticated user and recipient. A recipient who cannot be messaged (closed inbox, system/notification account, or a 1:1 block) returns HTTP 403 with type https://api.x.com/2/problems/recipient-not-messageable.",
         "externalDocs": {
           "url": "https://developer.x.com/"
         },
@@ -2330,9 +2946,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
+              "users.read",
               "dm.write",
-              "users.read"
+              "tweet.read"
             ]
           },
           {
@@ -2478,9 +3094,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "users.read",
-              "dm.write"
+              "dm.write",
+              "tweet.read"
             ]
           },
           {
@@ -2916,9 +3532,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "list.read",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -3113,6 +3729,64 @@
       }
     },
     "/2/compliance/jobs/{id}": {
+      "delete": {
+        "security": [
+          {
+            "BearerToken": []
+          }
+        ],
+        "tags": [
+          "Compliance"
+        ],
+        "summary": "Cancel Compliance Job",
+        "description": "Cancels a Compliance Job that has not finished processing; its status becomes failed and a new job of the same type can be created.",
+        "externalDocs": {
+          "url": "https://developer.twitter.com/en/docs/twitter-api/compliance/batch-compliance/introduction"
+        },
+        "operationId": "deleteComplianceJobsById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,19}$"
+            },
+            "style": "simple"
+          },
+          {
+            "$ref": "#/components/parameters/ComplianceJobFieldsParameter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteComplianceJobsByIdResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
         "security": [
           {
@@ -3150,6 +3824,158 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GetComplianceJobsByIdResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/compliance/jobs/{id}/download": {
+      "get": {
+        "security": [
+          {
+            "BearerToken": []
+          }
+        ],
+        "tags": [
+          "Compliance"
+        ],
+        "summary": "Download Compliance Job Results",
+        "description": "Downloads the results file of a completed Compliance Job using the signed URL returned at job creation.",
+        "externalDocs": {
+          "url": "https://developer.twitter.com/en/docs/twitter-api/compliance/batch-compliance/introduction"
+        },
+        "operationId": "downloadComplianceJobResults",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,19}$"
+            },
+            "style": "simple"
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "description": "Signed download token from the job's download_url.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/ComplianceJobFieldsParameter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/compliance/jobs/{id}/upload": {
+      "put": {
+        "security": [
+          {
+            "BearerToken": []
+          }
+        ],
+        "tags": [
+          "Compliance"
+        ],
+        "summary": "Upload Compliance Job Submission",
+        "description": "Uploads the newline-delimited ID file for a Compliance Job using the signed URL returned at job creation.",
+        "externalDocs": {
+          "url": "https://developer.twitter.com/en/docs/twitter-api/compliance/batch-compliance/introduction"
+        },
+        "operationId": "uploadComplianceJobSubmission",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,19}$"
+            },
+            "style": "simple"
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "description": "Signed upload token from the job's upload_url.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/ComplianceJobFieldsParameter"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadComplianceJobSubmissionResponse"
                 }
               }
             }
@@ -3455,8 +4281,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "users.read",
+              "tweet.read",
               "dm.write"
             ]
           },
@@ -3712,9 +4538,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "dm.write",
               "tweet.read",
-              "users.read"
+              "users.read",
+              "dm.write"
             ]
           },
           {
@@ -3783,9 +4609,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "dm.write",
               "users.read",
-              "tweet.read"
+              "tweet.read",
+              "dm.write"
             ]
           },
           {
@@ -3977,8 +4803,8 @@
           {
             "OAuth2UserToken": [
               "dm.read",
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -4148,8 +4974,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "dm.read",
               "users.read",
+              "dm.read",
               "tweet.read"
             ]
           },
@@ -4833,10 +5659,10 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "list.read",
               "list.write",
-              "users.read",
-              "tweet.read"
+              "list.read",
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -4893,8 +5719,8 @@
           {
             "OAuth2UserToken": [
               "list.write",
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -4953,9 +5779,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
+              "list.read",
               "users.read",
-              "list.read"
+              "tweet.read"
             ]
           },
           {
@@ -5022,8 +5848,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "list.write",
               "users.read",
+              "list.write",
               "tweet.read"
             ]
           },
@@ -5095,8 +5921,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "list.read",
               "tweet.read",
+              "list.read",
               "users.read"
             ]
           },
@@ -5190,8 +6016,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "list.read",
-              "users.read"
+              "users.read",
+              "list.read"
             ]
           },
           {
@@ -5282,8 +6108,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "users.read",
-              "list.write"
+              "list.write",
+              "users.read"
             ]
           },
           {
@@ -5350,9 +6176,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
+              "users.read",
               "list.write",
-              "users.read"
+              "tweet.read"
             ]
           },
           {
@@ -5422,8 +6248,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "users.read",
+              "tweet.read",
               "list.read"
             ]
           },
@@ -5958,7 +6784,7 @@
           "Media"
         ],
         "summary": "Upload media",
-        "description": "Uploads a media file for use in posts or other content.",
+        "description": "Uploads a media file for use in posts, direct messages, or ads. The response carries the media identifiers, including the media_key used to reference the asset in later calls. The media field carries the file content base64-encoded in JSON bodies (raw bytes in multipart bodies); media_category is tweet_image, tweet_video, or tweet_gif for posts and ads, dm_image/dm_video/dm_gif for DMs, or subtitles. For X Ads accounts, register the returned media_key via create_media_library_item to add it to the account's media library and use it in campaigns.",
         "externalDocs": {
           "url": "https://docs.x.com/x-api/media/media-upload"
         },
@@ -6271,8 +7097,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -6363,8 +7189,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -6817,8 +7643,8 @@
           {
             "OAuth2UserToken": [
               "space.read",
-              "users.read",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -6894,8 +7720,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "space.read",
               "tweet.read",
+              "space.read",
               "users.read"
             ]
           },
@@ -6972,9 +7798,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "tweet.read",
               "users.read",
-              "space.read",
-              "tweet.read"
+              "space.read"
             ]
           },
           {
@@ -7077,9 +7903,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "tweet.read",
-              "space.read"
+              "space.read",
+              "users.read"
             ]
           },
           {
@@ -7243,8 +8069,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "tweet.read",
+              "users.read",
               "space.read"
             ]
           },
@@ -7503,8 +8329,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "tweet.read",
+              "users.read",
               "tweet.write"
             ]
           },
@@ -7561,8 +8387,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -10197,6 +11023,15 @@
       "get": {
         "security": [
           {
+            "OAuth2UserToken": [
+              "users.read",
+              "tweet.read"
+            ]
+          },
+          {
+            "UserToken": []
+          },
+          {
             "BearerToken": []
           }
         ],
@@ -11190,8 +12025,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.write",
               "users.read",
+              "tweet.write",
               "tweet.read"
             ]
           },
@@ -11327,8 +12162,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "like.read",
-              "users.read"
+              "users.read",
+              "like.read"
             ]
           },
           {
@@ -11418,8 +12253,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -11540,8 +12375,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -11738,8 +12573,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "tweet.moderate.write",
-              "users.read"
+              "users.read",
+              "tweet.moderate.write"
             ]
           },
           {
@@ -11783,6 +12618,51 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HidePostsReplyResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/usage/credits": {
+      "get": {
+        "security": [
+          {
+            "OAuth2UserToken": []
+          },
+          {
+            "BearerToken": []
+          }
+        ],
+        "tags": [
+          "Usage"
+        ],
+        "summary": "Get usage credits",
+        "description": "Returns the payer's developer-platform credit balance in USD. total_balance is max(0, prepaid_balance + free_balance); prepaid_balance may be negative.",
+        "operationId": "getUsageCredits",
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetUsageCreditsResponse"
                 }
               }
             }
@@ -11869,8 +12749,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -11945,8 +12825,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -12022,8 +12902,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -12244,8 +13124,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -12297,8 +13177,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "dm.read",
-              "users.read"
+              "users.read",
+              "dm.read"
             ]
           },
           {
@@ -12368,8 +13248,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "timeline.read"
+              "timeline.read",
+              "tweet.read"
             ]
           },
           {
@@ -12459,8 +13339,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -12712,9 +13592,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "block.read",
               "users.read",
-              "tweet.read"
+              "tweet.read",
+              "block.read"
             ]
           },
           {
@@ -12795,6 +13675,73 @@
             }
           }
         }
+      },
+      "post": {
+        "security": [
+          {
+            "OAuth2UserToken": [
+              "users.read",
+              "block.write",
+              "tweet.read"
+            ]
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "tags": [
+          "Users"
+        ],
+        "summary": "Users ID Block",
+        "operationId": "usersIdBlock",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            },
+            "style": "simple"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsersIdBlockRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsersIdBlockResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/2/users/{id}/bookmarks": {
@@ -12802,9 +13749,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "users.read",
               "bookmark.read",
-              "tweet.read",
-              "users.read"
+              "tweet.read"
             ]
           },
           {
@@ -12900,16 +13847,17 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "users.read",
               "bookmark.write",
-              "tweet.read",
-              "users.read"
+              "tweet.read"
             ]
           }
         ],
         "tags": [
           "Users"
         ],
-        "summary": "Create Users Bookmark",
+        "summary": "Create Bookmark",
+        "description": "Adds one or more Posts to the authenticated user's Bookmarks. Supply `tweet_id` for a single Post, or `tweet_ids` (at most 25) to bookmark several in one request. Optional `folder_id` applies to every Post in the request. Billing and rate limits still apply per HTTP request.",
         "operationId": "createUsersBookmark",
         "parameters": [
           {
@@ -12966,8 +13914,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
-              "bookmark.read"
+              "bookmark.read",
+              "users.read"
             ]
           },
           {
@@ -13045,8 +13993,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "bookmark.write",
-              "users.read"
+              "users.read",
+              "bookmark.write"
             ]
           }
         ],
@@ -13111,9 +14059,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
+              "tweet.read",
               "bookmark.read",
-              "tweet.read"
+              "users.read"
             ]
           },
           {
@@ -13271,9 +14219,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "tweet.read",
-              "dm.write"
+              "dm.write",
+              "users.read"
             ]
           },
           {
@@ -13330,9 +14278,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "tweet.read",
-              "dm.write"
+              "dm.write",
+              "users.read"
             ]
           },
           {
@@ -13389,9 +14337,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "list.read",
               "users.read",
-              "tweet.read",
-              "list.read"
+              "tweet.read"
             ]
           },
           {
@@ -13482,8 +14430,8 @@
           {
             "OAuth2UserToken": [
               "list.write",
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -13550,8 +14498,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "list.write",
+              "tweet.read",
               "users.read"
             ]
           },
@@ -13717,8 +14665,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "users.read",
-              "follows.read"
+              "follows.read",
+              "users.read"
             ]
           },
           {
@@ -13809,8 +14757,8 @@
           {
             "OAuth2UserToken": [
               "users.read",
-              "follows.write",
-              "tweet.read"
+              "tweet.read",
+              "follows.write"
             ]
           },
           {
@@ -13877,9 +14825,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "tweet.read",
               "like.read",
-              "users.read",
-              "tweet.read"
+              "users.read"
             ]
           },
           {
@@ -13978,8 +14926,8 @@
           {
             "OAuth2UserToken": [
               "like.write",
-              "users.read",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -14047,8 +14995,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "like.write",
-              "users.read"
+              "users.read",
+              "like.write"
             ]
           },
           {
@@ -14114,9 +15062,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "list.read",
               "users.read",
-              "tweet.read"
+              "tweet.read",
+              "list.read"
             ]
           },
           {
@@ -14207,8 +15155,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -14440,8 +15388,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "mute.write",
               "users.read",
+              "mute.write",
               "tweet.read"
             ]
           },
@@ -14509,9 +15457,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "list.read",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -14603,9 +15551,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "list.read",
               "tweet.read",
-              "users.read"
+              "users.read",
+              "list.read"
             ]
           },
           {
@@ -14669,9 +15617,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "list.write",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -14742,9 +15690,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "list.write",
+              "tweet.read",
               "users.read",
-              "tweet.read"
+              "list.write"
             ]
           },
           {
@@ -14815,8 +15763,8 @@
           {
             "OAuth2UserToken": [
               "dm.read",
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -14879,8 +15827,8 @@
           {
             "OAuth2UserToken": [
               "users.read",
-              "tweet.read",
-              "dm.write"
+              "dm.write",
+              "tweet.read"
             ]
           },
           {
@@ -14952,8 +15900,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "users.read",
-              "tweet.write"
+              "tweet.write",
+              "users.read"
             ]
           },
           {
@@ -15025,8 +15973,8 @@
           {
             "OAuth2UserToken": [
               "tweet.write",
-              "users.read",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -15416,14 +16364,86 @@
         }
       }
     },
+    "/2/users/{source_user_id}/blocking/{target_user_id}": {
+      "delete": {
+        "security": [
+          {
+            "OAuth2UserToken": [
+              "users.read",
+              "tweet.read",
+              "block.write"
+            ]
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "tags": [
+          "Users"
+        ],
+        "summary": "Unblock User",
+        "description": "Causes the source User to unblock the target User.",
+        "externalDocs": {
+          "url": "https://developer.twitter.com/en/docs/twitter-api/users/blocks/api-reference/delete-users-user_id-blocking"
+        },
+        "operationId": "usersIdUnblock",
+        "parameters": [
+          {
+            "name": "source_user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            },
+            "style": "simple"
+          },
+          {
+            "name": "target_user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserId"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsersIdUnblockResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/2/users/{source_user_id}/following/{target_user_id}": {
       "delete": {
         "security": [
           {
             "OAuth2UserToken": [
+              "users.read",
               "follows.write",
-              "tweet.read",
-              "users.read"
+              "tweet.read"
             ]
           },
           {
@@ -15564,6 +16584,12 @@
       "get": {
         "security": [
           {
+            "OAuth2UserToken": []
+          },
+          {
+            "UserToken": []
+          },
+          {
             "BearerToken": []
           }
         ],
@@ -15611,6 +16637,9 @@
       },
       "post": {
         "security": [
+          {
+            "OAuth2UserToken": []
+          },
           {
             "UserToken": []
           },
@@ -15725,6 +16754,9 @@
       "delete": {
         "security": [
           {
+            "OAuth2UserToken": []
+          },
+          {
             "UserToken": []
           },
           {
@@ -15782,6 +16814,9 @@
       },
       "put": {
         "security": [
+          {
+            "OAuth2UserToken": []
+          },
           {
             "UserToken": []
           },
@@ -15848,6 +16883,14 @@
   ],
   "tags": [
     {
+      "name": "Account",
+      "description": "Endpoints for managing the authenticated user's X Developer Platform account",
+      "externalDocs": {
+        "description": "Find out more",
+        "url": "https://docs.x.com/x-api/introduction"
+      }
+    },
+    {
       "name": "Account Activity",
       "description": "Endpoints relating to retrieving, managing Account Activity subscriptions",
       "externalDocs": {
@@ -15870,6 +16913,9 @@
         "description": "Find out more",
         "url": "https://docs.x.com/x-api/articles/introduction"
       }
+    },
+    {
+      "name": "Bots"
     },
     {
       "name": "Broadcasts",
@@ -16035,6 +17081,8 @@
               "bookmark.write": "Create and delete your bookmarks.",
               "broadcast.read": "View your live broadcasts and their chat.",
               "broadcast.write": "Manage your live broadcasts and send chat messages on your behalf.",
+              "developer.read": "View your developer accounts, apps, and settings.",
+              "developer.write": "Create and manage your X Developer Platform account.",
               "dm.read": "Read all your Direct Messages.",
               "dm.write": "Send and manage your Direct Messages.",
               "follows.read": "View accounts you follow and accounts following you.",
@@ -16147,7 +17195,9 @@
             "profile.update.profile_picture": "#/components/schemas/ProfileUpdateActivityResponsePayload",
             "profile.update.screenname": "#/components/schemas/ProfileUpdateActivityResponsePayload",
             "profile.update.url": "#/components/schemas/ProfileUpdateActivityResponsePayload",
-            "profile.update.verified_badge": "#/components/schemas/ProfileUpdateActivityResponsePayload"
+            "profile.update.verified_badge": "#/components/schemas/ProfileUpdateActivityResponsePayload",
+            "subscriptions.subscribe": "#/components/schemas/FollowActivityResponsePayload",
+            "subscriptions.unsubscribe": "#/components/schemas/FollowActivityResponsePayload"
           }
         }
       },
@@ -16323,6 +17373,49 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "AddChatModeratorRequest": {
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "description": "The user to appoint as a moderator.",
+            "pattern": "^[1-9][0-9]{0,18}$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AddChatModeratorResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AddChatModeratorResponseData"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "AddChatModeratorResponseData": {
+        "type": "object",
+        "required": [
+          "moderator_user_ids"
+        ],
+        "properties": {
+          "moderator_user_ids": {
+            "type": "array",
+            "description": "The user IDs currently appointed as chat moderators.",
+            "items": {
+              "type": "string"
             }
           }
         }
@@ -17862,6 +18955,10 @@
             "type": "string",
             "description": "Optional keyword filter."
           },
+          "qualifiers": {
+            "type": "object",
+            "description": "Optional event-specific string predicates."
+          },
           "user_id": {
             "type": "string",
             "description": "User the subscription is scoped to. For mute.* and block.* events, this must be the authenticated source user."
@@ -17892,8 +18989,12 @@
               "news.new",
               "follow.follow",
               "follow.unfollow",
+              "subscriptions.subscribe",
+              "subscriptions.unsubscribe",
               "spaces.start",
               "spaces.end",
+              "broadcast.start",
+              "broadcast.end",
               "broadcast.chat",
               "chat.received",
               "chat.sent",
@@ -18007,12 +19108,96 @@
             "type": "string",
             "description": "Optional keyword filter."
           },
+          "qualifiers": {
+            "type": "object",
+            "description": "Event-specific string predicates applied to the subscription."
+          },
           "user_id": {
             "type": "string",
             "description": "User the subscription is scoped to."
           }
         },
         "additionalProperties": false
+      },
+      "CreateBotRequest": {
+        "type": "object",
+        "required": [
+          "handle"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "The bot's display name; defaults to the handle.",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "handle": {
+            "type": "string",
+            "description": "The bot's handle (X screen name): 5-15 characters, letters, numbers, or underscores.",
+            "minLength": 5,
+            "maxLength": 15,
+            "pattern": "^[A-Za-z0-9_]{5,15}$"
+          },
+          "scopes": {
+            "type": "array",
+            "description": "Scopes for the bot's bearer token. Broadcast moderation additionally supports broadcast.read and broadcast.write. Defaults to the XChat scope set (dm.read, dm.write, tweet.read, users.read, media.write).",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateBotResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CreateBotResponseData"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "CreateBotResponseData": {
+        "type": "object",
+        "required": [
+          "id",
+          "token"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier of the bot's User account.",
+            "pattern": "^[0-9]{1,19}$"
+          },
+          "name": {
+            "type": "string",
+            "description": "The bot's display name."
+          },
+          "scopes": {
+            "type": "array",
+            "description": "Scopes granted to the bot's bearer token.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "token": {
+            "type": "string",
+            "description": "The bot's bearer token. Returned exactly once; store it securely."
+          },
+          "token_expires_at_ms": {
+            "type": "integer",
+            "description": "Expiry of the bot's bearer token, in epoch milliseconds."
+          },
+          "username": {
+            "type": "string",
+            "description": "The bot's X handle (screen name)."
+          }
+        }
       },
       "CreateChatConversationActionSignatures": {
         "type": "object",
@@ -19282,8 +20467,7 @@
         "type": "object",
         "required": [
           "source_id",
-          "scheduled_start_ms",
-          "scheduled_end_ms"
+          "scheduled_start_ms"
         ],
         "properties": {
           "available_for_replay": {
@@ -19317,7 +20501,7 @@
           },
           "scheduled_end_ms": {
             "type": "string",
-            "description": "End time, ms since Unix epoch (decimal string).",
+            "description": "Optional end time, ms since Unix epoch (decimal string). Omit for an open-ended broadcast.",
             "pattern": "^[0-9]{1,19}$"
           },
           "scheduled_start_ms": {
@@ -19473,49 +20657,108 @@
         }
       },
       "CreateUsersBookmarkRequest": {
-        "type": "object",
-        "required": [
-          "tweet_id"
+        "anyOf": [
+          {
+            "required": [
+              "tweet_id"
+            ]
+          },
+          {
+            "required": [
+              "tweet_ids"
+            ]
+          }
         ],
+        "type": "object",
+        "description": "At least one of `tweet_id`, `tweet_ids` is required.",
         "properties": {
           "folder_id": {
             "type": "string",
-            "description": "Optional ID of the Bookmark folder to add the Post to. When omitted, the Post is added to the user's top-level Bookmarks only.",
+            "description": "Optional ID of the Bookmark folder to add the Post(s) to. When omitted, Posts are added to the user's top-level Bookmarks only. A bulk request uses this one folder for every ID.",
             "pattern": "^[0-9]{1,19}$"
           },
           "tweet_id": {
             "type": "string",
-            "description": "The ID of the Post to add to the user's Bookmarks.",
+            "description": "The ID of the Post to add to the user's Bookmarks. Mutually exclusive with `tweet_ids`.",
             "pattern": "^[0-9]{1,19}$"
-          }
-        },
-        "additionalProperties": false
-      },
-      "CreateUsersBookmarkResponse": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/CreateUsersBookmarkResponseData"
           },
-          "errors": {
+          "tweet_ids": {
             "type": "array",
+            "description": "Post IDs to add to the user's Bookmarks. At most 25. Mutually exclusive with `tweet_id`.",
+            "minItems": 1,
+            "maxItems": 25,
             "items": {
-              "$ref": "#/components/schemas/Problem"
+              "type": "string",
+              "pattern": "^[0-9]{1,19}$"
             }
           }
         }
       },
-      "CreateUsersBookmarkResponseData": {
-        "type": "object",
-        "required": [
-          "bookmarked"
-        ],
-        "properties": {
-          "bookmarked": {
-            "type": "boolean",
-            "description": "Indicates whether the Post is bookmarked by the user."
+      "CreateUsersBookmarkResponse": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "required": [
+                  "bookmarked"
+                ],
+                "properties": {
+                  "bookmarked": {
+                    "type": "boolean",
+                    "description": "Indicates whether the Post is bookmarked by the user."
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "array",
+                "description": "Successfully bookmarked Posts, in request order.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "tweet_id",
+                    "bookmarked"
+                  ],
+                  "properties": {
+                    "bookmarked": {
+                      "type": "boolean",
+                      "description": "Indicates whether the Post is bookmarked by the user."
+                    },
+                    "tweet_id": {
+                      "type": "string",
+                      "description": "The Post ID that was bookmarked."
+                    }
+                  }
+                }
+              },
+              "errors": {
+                "type": "array",
+                "description": "Per-id failures; remaining IDs are still bookmarked.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "tweet_id": {
+                      "type": "string",
+                      "description": "Post ID the failure applies to."
+                    }
+                  }
+                }
+              }
+            }
           }
-        }
+        ]
       },
       "CreateWebhookReplayJobRequest": {
         "type": "object",
@@ -19814,6 +21057,32 @@
         },
         "additionalProperties": false
       },
+      "DeleteBotResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/DeleteBotResponseData"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "DeleteBotResponseData": {
+        "type": "object",
+        "required": [
+          "deleted"
+        ],
+        "properties": {
+          "deleted": {
+            "type": "boolean",
+            "description": "Whether the bot was deleted."
+          }
+        }
+      },
       "DeleteBroadcastChatMessageResponse": {
         "type": "object",
         "properties": {
@@ -20012,6 +21281,20 @@
           "deleted": {
             "type": "boolean",
             "description": "Indicates whether the Community Note was deleted."
+          }
+        }
+      },
+      "DeleteComplianceJobsByIdResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ComplianceJob"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
           }
         }
       },
@@ -20615,6 +21898,48 @@
           }
         }
       },
+      "EnsureAccountRequest": {
+        "type": "object",
+        "properties": {
+          "metadata": {
+            "type": "string",
+            "description": "Optional provisioning-credit metadata (an opaque string, e.g. a subscription tier) to claim for the account, attributed to the calling app. Omit to just ensure the account.",
+            "maxLength": 64,
+            "pattern": "^[\\x00-\\x{FFFF}]*$"
+          }
+        }
+      },
+      "EnsureAccountResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/EnsureAccountResponseData"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "EnsureAccountResponseData": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "created"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "description": "Unique identifier of the developer account."
+          },
+          "created": {
+            "type": "boolean",
+            "description": "Whether this request created the account."
+          }
+        }
+      },
       "Error": {
         "type": "object",
         "required": [
@@ -21114,12 +22439,49 @@
             "type": "string",
             "description": "Optional keyword filter."
           },
+          "qualifiers": {
+            "type": "object",
+            "description": "Event-specific string predicates applied to the subscription."
+          },
           "user_id": {
             "type": "string",
             "description": "User the subscription is scoped to."
           }
         },
         "additionalProperties": false
+      },
+      "GetBotsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/User"
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          },
+          "includes": {
+            "$ref": "#/components/schemas/Expansions"
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "max_bots": {
+                "type": "integer"
+              },
+              "result_count": {
+                "type": "integer",
+                "description": "Number of items in the data array.",
+                "format": "int32"
+              }
+            }
+          }
+        }
       },
       "GetBroadcastChatResponse": {
         "type": "object",
@@ -21266,6 +22628,36 @@
           }
         }
       },
+      "GetChatModeratorsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/User"
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          },
+          "includes": {
+            "$ref": "#/components/schemas/Expansions"
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "result_count": {
+                "type": "integer",
+                "description": "Number of items in the data array.",
+                "format": "int32"
+              }
+            }
+          }
+        }
+      },
       "GetCommunitiesByIdResponse": {
         "type": "object",
         "properties": {
@@ -21349,6 +22741,42 @@
                 "format": "int32"
               }
             }
+          }
+        }
+      },
+      "GetDeveloperAccountResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/GetDeveloperAccountResponseData"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "GetDeveloperAccountResponseData": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "name",
+          "created_at"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "description": "Unique identifier of the developer account."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Creation time of the account (ISO 8601)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name of the developer account."
           }
         }
       },
@@ -22470,6 +23898,67 @@
             }
           }
         }
+      },
+      "GetUsageCreditsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/GetUsageCreditsResponseData"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "GetUsageCreditsResponseData": {
+        "type": "object",
+        "required": [
+          "total_balance",
+          "prepaid_balance",
+          "free_balance",
+          "free_grants"
+        ],
+        "properties": {
+          "free_balance": {
+            "type": "number",
+            "description": "USD remaining across unexpired free grants."
+          },
+          "free_grants": {
+            "type": "array",
+            "description": "Unexpired free grants, soonest expiry first.",
+            "items": {
+              "$ref": "#/components/schemas/GetUsageCreditsResponseDataFreeGrants"
+            }
+          },
+          "prepaid_balance": {
+            "type": "number",
+            "description": "Purchased (prepaid) USD balance. May be negative when paid usage has overdrawn this bucket."
+          },
+          "total_balance": {
+            "type": "number",
+            "description": "Spendable USD remaining, clamped at 0.00: total_balance = max(0, prepaid_balance + free_balance)."
+          }
+        }
+      },
+      "GetUsageCreditsResponseDataFreeGrants": {
+        "type": "object",
+        "required": [
+          "amount"
+        ],
+        "properties": {
+          "amount": {
+            "type": "number",
+            "description": "USD remaining in this free grant."
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "When this grant expires (RFC 3339). Omitted if the grant never expires or the expiry is unknown."
+          }
+        },
+        "additionalProperties": false
       },
       "GetUsageResponse": {
         "type": "object",
@@ -26366,6 +27855,9 @@
             "$ref": "#/components/schemas/DisallowedResourceProblem"
           },
           {
+            "$ref": "#/components/schemas/RecipientNotMessageableProblem"
+          },
+          {
             "$ref": "#/components/schemas/InternalErrorProblem"
           }
         ],
@@ -26379,6 +27871,7 @@
             "https://api.x.com/2/problems/invalid-request": "#/components/schemas/InvalidRequestProblem",
             "https://api.x.com/2/problems/not-authorized-for-field": "#/components/schemas/NotAuthorizedForFieldProblem",
             "https://api.x.com/2/problems/not-authorized-for-resource": "#/components/schemas/NotAuthorizedForResourceProblem",
+            "https://api.x.com/2/problems/recipient-not-messageable": "#/components/schemas/RecipientNotMessageableProblem",
             "https://api.x.com/2/problems/resource-not-found": "#/components/schemas/ResourceNotFoundProblem",
             "https://api.x.com/2/problems/resource-unavailable": "#/components/schemas/ResourceUnavailableProblem"
           }
@@ -26420,6 +27913,60 @@
         "type": "string",
         "description": "Unique identifier of a PublicKey",
         "pattern": "^[0-9]{1,19}$"
+      },
+      "RecipientNotMessageableProblem": {
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "detail"
+        ],
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "https://api.x.com/2/problems/recipient-not-messageable"
+            ]
+          }
+        }
+      },
+      "RemoveChatModeratorResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RemoveChatModeratorResponseData"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "RemoveChatModeratorResponseData": {
+        "type": "object",
+        "required": [
+          "moderator_user_ids"
+        ],
+        "properties": {
+          "moderator_user_ids": {
+            "type": "array",
+            "description": "The user IDs currently appointed as chat moderators.",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       },
       "RemoveListsMemberByUserIdResponse": {
         "type": "object",
@@ -26558,6 +28105,96 @@
             "enum": [
               "https://api.x.com/2/problems/resource-unavailable"
             ]
+          }
+        }
+      },
+      "RevokeBotTokenResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RevokeBotTokenResponseData"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "RevokeBotTokenResponseData": {
+        "type": "object",
+        "required": [
+          "revoked"
+        ],
+        "properties": {
+          "revoked": {
+            "type": "boolean",
+            "description": "Whether the bot's token was revoked."
+          }
+        }
+      },
+      "RotateBotTokenRequest": {
+        "type": "object",
+        "properties": {
+          "scopes": {
+            "type": "array",
+            "description": "Scopes for the new bearer token. Broadcast moderation additionally supports broadcast.read and broadcast.write. Defaults to the XChat scope set (dm.read, dm.write, tweet.read, users.read, media.write).",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "RotateBotTokenResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RotateBotTokenResponseData"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "RotateBotTokenResponseData": {
+        "type": "object",
+        "required": [
+          "id",
+          "token"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier of the bot's User account.",
+            "pattern": "^[0-9]{1,19}$"
+          },
+          "name": {
+            "type": "string",
+            "description": "The bot's display name."
+          },
+          "scopes": {
+            "type": "array",
+            "description": "Scopes granted to the new bearer token.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "token": {
+            "type": "string",
+            "description": "The bot's new bearer token. Returned exactly once; store it securely. Every previously issued token for this bot is invalidated."
+          },
+          "token_expires_at_ms": {
+            "type": "integer",
+            "description": "Expiry of the new bearer token, in epoch milliseconds."
+          },
+          "username": {
+            "type": "string",
+            "description": "The bot's X handle (screen name)."
           }
         }
       },
@@ -27801,12 +29438,70 @@
             "type": "string",
             "description": "Optional keyword filter."
           },
+          "qualifiers": {
+            "type": "object",
+            "description": "Event-specific string predicates applied to the subscription."
+          },
           "user_id": {
             "type": "string",
             "description": "User the subscription is scoped to."
           }
         },
         "additionalProperties": false
+      },
+      "UpdateBotRequest": {
+        "type": "object",
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "New display name.",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "dm_permission": {
+            "type": "string",
+            "description": "Who may send Direct Messages to the bot.",
+            "enum": [
+              "everyone",
+              "premium",
+              "no_one"
+            ]
+          },
+          "handle": {
+            "type": "string",
+            "description": "New handle (X screen name): 5-15 characters, letters, numbers, or underscores.",
+            "minLength": 5,
+            "maxLength": 15,
+            "pattern": "^[A-Za-z0-9_]{5,15}$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateBotResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/UpdateBotResponseData"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "UpdateBotResponseData": {
+        "type": "object",
+        "required": [
+          "updated"
+        ],
+        "properties": {
+          "updated": {
+            "type": "boolean",
+            "description": "Whether the bot was updated."
+          }
+        }
       },
       "UpdateListsRequest": {
         "type": "object",
@@ -28102,6 +29797,34 @@
           }
         }
       },
+      "UploadComplianceJobSubmissionRequest": {
+        "type": "object",
+        "required": [
+          "submission"
+        ],
+        "properties": {
+          "submission": {
+            "type": "string",
+            "description": "The newline-delimited ID file, forwarded verbatim.",
+            "format": "binary"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UploadComplianceJobSubmissionResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ComplianceJob"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
       "Usage": {
         "type": "object",
         "properties": {
@@ -28274,6 +29997,10 @@
           "receives_your_dm": {
             "type": "boolean",
             "description": "Indicates if you can send a DM to this User."
+          },
+          "subscriber_count": {
+            "type": "integer",
+            "description": "The number of Premium subscribers of this User."
           },
           "subscribes_to_you": {
             "type": "boolean",
@@ -28971,6 +30698,71 @@
         "properties": {
           "user_withheld": {
             "$ref": "#/components/schemas/UserTakedownComplianceSchema"
+          }
+        }
+      },
+      "UsersIdBlockRequest": {
+        "type": "object",
+        "required": [
+          "target_user_id"
+        ],
+        "properties": {
+          "target_user_id": {
+            "type": "string",
+            "pattern": "^[0-9]{1,19}$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UsersIdBlockResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/UsersIdBlockResponseData"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "UsersIdBlockResponseData": {
+        "type": "object",
+        "required": [
+          "blocking"
+        ],
+        "properties": {
+          "blocking": {
+            "type": "boolean",
+            "description": "Indicates whether the user is blocked by the source user."
+          }
+        }
+      },
+      "UsersIdUnblockResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/UsersIdUnblockResponseData"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "UsersIdUnblockResponseData": {
+        "type": "object",
+        "required": [
+          "blocking"
+        ],
+        "properties": {
+          "blocking": {
+            "type": "boolean",
+            "description": "Indicates whether the source User is blocking the target User."
           }
         }
       },
@@ -29927,6 +31719,7 @@
               "protected",
               "public_metrics",
               "receives_your_dm",
+              "subscriber_count",
               "subscribes_to_you",
               "subscription",
               "subscription_type",

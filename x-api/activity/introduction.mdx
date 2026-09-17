@@ -69,12 +69,25 @@ Like events are triggered when a user likes a Post, or when one of the user's ow
 
 ### Follow events
 
-Follow events are triggered when the filtered user follows another user, or is followed by another user.
+Follow events are triggered when the filtered user follows another user, or is followed by another user. Supports the `direction` qualifier.
 
 | Event Name | Description | Filters |
 | --- | --- | --- |
 | `follow.follow` | Fired when a user follows another user | `user_id` |
 | `follow.unfollow` | Fired when a user unfollows another user | `user_id` |
+
+### Subscription events
+
+Subscription events are triggered when the filtered user subscribes to another user, or is subscribed to by another user, using the paid subscriptions button on the profile page. Supports the `direction` qualifier.
+
+| Event Name | Description | Filters |
+| --- | --- | --- |
+| `subscriptions.subscribe` | Fired when a user subscribes to another user | `user_id` |
+| `subscriptions.unsubscribe` | Fired when a user unsubscribes to another user. Emitted when the subscription actually expires, not upon cancellation, since the subscription is still active until expiration | `user_id` |
+
+<Note>
+  **Private events:** Subscription events are private and require user-context (OAuth 2.0) authentication with the `follows.read` scope. See [Event privacy and authentication](#event-privacy-and-authentication) below.
+</Note>
 
 ### Profile events
 
@@ -162,13 +175,15 @@ Block events are triggered when the filtered user blocks or unblocks another use
 
 ### Broadcast events
 
-Broadcast events are triggered when the filtered user receives a chat message in a broadcast that they own.
-
-| Event Name       | Description                                                                            | Filters   |
-| ---------------- | -------------------------------------------------------------------------------------- | --------- |
-| `broadcast.chat` | Fired when the filtered user receives a chat message in a broadcast that they own      | `user_id` |
+| Event Name        | Description                                                                            | Filters   |
+| ----------------- | -------------------------------------------------------------------------------------- | --------- |
+| `broadcast.start` | Fired when a user starts a live broadcast                                              | `user_id` |
+| `broadcast.end`   | Fired when a user ends a live broadcast                                                | `user_id` |
+| `broadcast.chat`  | Fired when the filtered user receives a chat message in a broadcast that they own      | `user_id` |
 
 <Note>
+  **Public events:** `broadcast.start` and `broadcast.end` are public events and can be subscribed to with either app-only or user-context authentication.
+
   **Private event:** `broadcast.chat` is a private event and requires user-context (OAuth 2.0) authentication with the `broadcast.read` scope. See [Event privacy and authentication](#event-privacy-and-authentication) below.
 </Note>
 
@@ -182,6 +197,52 @@ OAuth events are triggered when a user revokes your application's access.
 
 In future releases, XAA will expand to support additional event types including social interactions, content engagement, monetization features, and more. We will continue to update our docs when new event types become available.
 
+## Filter qualifiers
+
+Subscriptions accept an optional `filter.qualifiers` map of event-specific predicates that narrow which events match. Each entry is a string key and string value, and a subscription can have up to 8 entries.
+
+The following qualifiers are currently supported:
+
+| Qualifier | Values | Supported events |
+| --- | --- | --- |
+| `conversation_type` | `direct`, `group` | `chat.received` |
+| `direction` | `inbound`, `outbound` | `follow.follow`, `follow.unfollow`, `like.create`, `subscriptions.subscribe`, `subscriptions.unsubscribe` |
+| `post_id` | A Post ID | `like.create` |
+
+The `direction` qualifier is equivalent to the top-level `filter.direction` field. Both remain supported.
+
+Use `post_id` to receive `like.create` events only for likes on a specific Post. For example, to receive `like.create` events for likes on Post `1234567890123456789`:
+
+```json
+{
+  "event_type": "like.create",
+  "filter": {
+    "user_id": "1830023695835787264",
+    "qualifiers": { "post_id": "1234567890123456789" }
+  },
+  "webhook_id": "2090847910112202752",
+  "tag": "likes on a specific post"
+}
+```
+
+For example, to receive `chat.received` events for one-on-one conversations only:
+
+```json
+{
+  "event_type": "chat.received",
+  "filter": {
+    "user_id": "1830023695835787264",
+    "qualifiers": { "conversation_type": "direct" }
+  },
+  "webhook_id": "2090847910112202752",
+  "tag": "direct chats only"
+}
+```
+
+The create, list, and update subscription responses echo `filter.qualifiers` back. The field is omitted when no qualifiers are set.
+
+If you pass an unsupported qualifier key or value, the request returns a 400 error with a descriptive message, for example: `Invalid value 'bogus' for qualifier 'conversation_type'; expected one of: direct, group`.
+
 ## Event privacy and authentication
 
 The X Activity API distinguishes between **public events** and **private events**, at parity with the X app, as explained below.
@@ -193,6 +254,7 @@ Public events are activities that a public user account performs publicly that a
 **Current public events:**
 - Profile updates (bio, picture, banner, location, URL, username changes)
 - Post creation (`post.create`) and deletion (`post.delete`)
+- Broadcast start (`broadcast.start`) and end (`broadcast.end`)
 
 For these public events, you can create subscriptions by specifying the user ID in your filter and receive them via XAA.
 
@@ -214,6 +276,7 @@ Private events are activities that require explicit user consent through OAuth a
 - Post replies (`post.reply.create`) — requires the `tweet.read` scope
 - Post quotes (`post.quote.create`) — requires the `tweet.read` scope
 - Post reposts (`post.repost.create`) — requires the `tweet.read` scope
+- Subscriptions (`subscriptions.subscribe`, `subscriptions.unsubscribe`) — requires the `follows.read` scope
 - Mutes (`mute.mute`, `mute.unmute`) — requires the `mute.read` scope
 - Blocks (`block.block`, `block.unblock`) — requires the `block.read` scope
 - Broadcast chats (`broadcast.chat`) — requires the `broadcast.read` scope

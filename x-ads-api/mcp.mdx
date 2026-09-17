@@ -7,7 +7,7 @@ keywords: ["XMCP", "MCP", "Model Context Protocol", "docs MCP", "AI agent", "AI 
 
 ## Overview
 
-Ads MCP is a remote MCP (Model Context Protocol) server built into X's API gateway at `https://ads-api.x.com/mcp`. MCP is the open standard for connecting LLM agents to tools, so any MCP-capable client — Grok, Claude Code, or a custom agent built on the MCP SDKs — can connect and immediately use 23 X Ads tools with zero custom Ads API integration. The agent reads campaign data, runs analytics, and creates and manages campaigns through natural language; the MCP client handles all of the API plumbing.
+Ads MCP is a remote MCP (Model Context Protocol) server built into X's API gateway at `https://ads-api.x.com/mcp`. MCP is the open standard for connecting LLM agents to tools, so any MCP-capable client — Grok, Claude Code, or a custom agent built on the MCP SDKs — can connect and immediately use 74 X Ads tools with zero custom Ads API integration. The agent reads campaign data, runs analytics, and creates and manages campaigns through natural language; the MCP client handles all of the API plumbing.
 
 Authentication is the user's own OAuth2 token, so an agent only ever sees the ads accounts that user can access. Writes are safe by default: campaigns and line items are always created **PAUSED**, and nothing spends money until it is explicitly activated.
 
@@ -17,14 +17,22 @@ Why MCP is useful:
 * **Natural-language campaign management** — the model chains tools itself (accounts → funding instruments → campaign → line item → targeting) from a single plain-English request.
 * **Instant analytics** — pull performance stats and reach estimates conversationally, without writing queries or scripts.
 * **Scoped and safe** — the user's own token bounds what the agent can see, and every write starts paused.
+* **Full conversion tracking** — create and manage website pixels (web event tags) conversationally, then set one as a line item's `primary_web_event_tag`: Sales / website-conversion campaigns work end to end, from pixel creation to conversion reporting.
+* **Audiences and creatives** — build custom audiences and do-not-reach lists, estimate audience size before spending, and manage the full creative stack: cards, the media library, account media, and media creatives.
+* **App campaigns and precise reads** — app event tags, tracking tags, and app lists cover mobile-app campaign setup, and single-entity reads (`get_line_item`, `get_card`, `get_custom_audience`, …) let the agent fetch exactly the object it needs.
 
 ## Server Capabilities
 
 | Category | Tools |
 | :---- | :---- |
-| Accounts & Reads | `list_ads_accounts`, `list_campaigns`, `get_campaign`, `list_line_items`, `list_funding_instruments`, `list_promoted_posts`, `list_targeting_criteria`, `list_account_posts`, `get_active_entities` |
+| Accounts & Reads | `list_ads_accounts`, `list_campaigns`, `get_campaign`, `list_line_items`, `get_line_item`, `list_line_item_placements`, `list_funding_instruments`, `get_funding_instrument`, `list_promoted_posts`, `get_promoted_post`, `list_account_posts`, `get_active_entities` |
 | Analytics | `get_account_stats`, `get_campaign_reach` |
-| Targeting Search | `search_targeting_interests`, `search_targeting_locations` |
+| Targeting | `search_targeting_interests`, `search_targeting_locations`, `list_targeting_criteria`, `get_targeting_criterion`, `estimate_audience` |
+| Audiences | `list_custom_audiences`, `get_custom_audience`, `create_custom_audience`, `update_custom_audience`, `delete_custom_audience`, `list_custom_audience_targeted`, `list_do_not_reach_lists`, `create_do_not_reach_list`, `delete_do_not_reach_list`, `batch_do_not_reach_list_users` |
+| Creatives & Media | `list_cards`, `get_card`, `create_card`, `delete_card`, `list_media_library`, `get_media_library_item`, `create_media_library_item`, `update_media_library_item`, `delete_media_library_item`, `list_account_media`, `get_account_media`, `delete_account_media`, `list_media_creatives`, `get_media_creative`, `create_media_creative`, `delete_media_creative`, `list_post_previews` |
+| Conversion Tracking (web) | `list_web_event_tags`, `get_web_event_tag`, `create_web_event_tag`, `update_web_event_tag`, `delete_web_event_tag` |
+| App Events & Tracking Tags | `list_app_event_tags`, `get_app_event_tag`, `create_app_event_tag`, `delete_app_event_tag`, `list_tracking_tags`, `get_tracking_tag`, `create_tracking_tag`, `update_tracking_tag`, `delete_tracking_tag` |
+| App Lists | `list_app_lists`, `get_app_list`, `create_app_list`, `delete_app_list` |
 | Writes | `create_campaign`, `update_campaign`, `activate_campaign`, `create_line_item`, `update_line_item`, `activate_line_item`, `add_targeting_criterion`, `remove_targeting`, `create_ad_post` (nullcast), `promote_post` |
 
 ## Get Started
@@ -64,7 +72,7 @@ The Ads MCP is a standard remote MCP server using the Streamable HTTP transport:
 
 * **Endpoint:** `https://ads-api.x.com/mcp` (all requests are HTTP POST with JSON-RPC; responses are SSE framed)
 
-**Choosing scopes:** `ads.read` grants the read and analytics tools, `ads.write` grants campaign and creative writes, and `offline.access` enables token refresh — always include it, or tokens expire in ~2 hours with no way to refresh. For a read-only agent that can browse and analyze but not create or change anything, omit `ads.write` — write tools will fail with authorization errors. Include both ads scopes for full functionality. Each client recipe below shows where to set them.
+**Choosing scopes:** `ads.read` grants the read and analytics tools, `ads.write` grants campaign and creative writes, and `offline.access` enables token refresh — always include it, or tokens expire in ~2 hours with no way to refresh. Add `media.write` if the agent will upload media or use the media library write tools (`create_media_library_item`, `update_media_library_item`, `delete_media_library_item`, `delete_account_media`); it is not needed for read-only media browsing or for campaign management. For a read-only agent that can browse and analyze but not create or change anything, omit `ads.write` — write tools will fail with authorization errors. Include both ads scopes for full campaign management, and add `media.write` only when media uploads or media-library writes are required. Each client recipe below shows where to set them.
 
 #### Grok Build (CLI)
 
@@ -77,10 +85,10 @@ url = "https://ads-api.x.com/mcp"
 [mcp_servers.ads-mcp.oauth]
 clientId = "YOUR_OAUTH2_CLIENT_ID"
 callbackPort = 8080
-scopes = ["ads.read", "ads.write", "offline.access"]
+scopes = ["ads.read", "ads.write", "offline.access"]  # optional: "media.write"
 ```
 
-The `scopes` array is where you choose access — drop `"ads.write"` for a read-only agent.
+The `scopes` array is where you choose access — drop `"ads.write"` for a read-only agent. Add `"media.write"` only if the agent will upload media or use the media library write tools.
 
 Then run `grok` → `/mcps` → select `ads-mcp` → press `i` → complete the browser consent → done. The flow uses PKCE S256 and refreshes tokens automatically.
 
@@ -100,7 +108,7 @@ Go to grok.com/connectors → **New Connector** → **Custom**:
 
 * Leave the auto-discovered endpoints as-is
 
-* Grok pre-fills the scope chips from the server's discovery metadata — delete all pre-filled chips and keep only `ads.read`, `ads.write`, `offline.access`.
+* Grok pre-fills the scope chips from the server's discovery metadata — delete all pre-filled chips and keep only `ads.read`, `ads.write`, `offline.access` (and optionally `media.write`).
 
 The scope chips are where you choose access — for a read-only agent, keep only `ads.read` and `offline.access`.
 
@@ -117,7 +125,7 @@ claude mcp add x-ads https://ads-api.x.com/mcp \
   --callback-port 8080
 ```
 
-Then run `/mcp` inside Claude Code to sign in. There is no CLI flag for scopes — by default Claude Code requests the scopes the server advertises; to narrow to read-only, set `"oauth": { "scopes": "ads.read offline.access" }` on the server's entry in `~/.claude.json` (a single space-separated string).
+Then run `/mcp` inside Claude Code to sign in. There is no CLI flag for scopes — by default Claude Code requests the scopes the server advertises; to narrow to read-only, set `"oauth": { "scopes": "ads.read offline.access" }` on the server's entry in `~/.claude.json` (a single space-separated string). To include media library writes, use `"oauth": { "scopes": "ads.read ads.write media.write offline.access" }` (`media.write` is optional).
 
 Alternatively, use a static token:
 
@@ -137,7 +145,7 @@ To mint a token manually, open the below URL in a browser logged in as the X acc
 https://x.com/i/oauth2/authorize?response_type=code&client_id=YOUR_CLIENT_ID&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Fcallback&scope=ads.read%20ads.write%20offline.access&state=adsmcp&code_challenge=challenge&code_challenge_method=plain
 ```
 
-The `scope=` parameter is where you choose access — the read-only variant is `scope=ads.read%20offline.access`.
+The `scope=` parameter is where you choose access — the read-only variant is `scope=ads.read%20offline.access`. Add `%20media.write` if the agent will upload media or use the media library write tools.
 
 After clicking Authorize, the browser lands on a dead `localhost:8080/callback` page — copy the `code=` from the address bar and exchange it within ~30 seconds:
 
@@ -180,7 +188,7 @@ curl -s -X POST https://ads-api.x.com/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
-A successful response lists the server's tools (the 23 documented here among them). If you get a 401, your token is invalid or expired; a 403 means your app isn't enrolled yet (see step one).
+A successful response lists the server's tools (the 74 documented here among them). If you get a 401, your token is invalid or expired; a 403 means your app isn't enrolled yet (see step one).
 
 ### Step Three: Test It
 
@@ -188,4 +196,4 @@ Start with reads: *"List my ads accounts"*, *"Show my campaigns and how they per
 
 > Using my X Ads Account, create a paused campaign called "Test campaign" with a $10 daily budget, then add a paused item with a website clicks objective and a $1 bid targeting US users.
 
-The model chains the tools itself (funding instrument lookup → campaign → line item → targeting). Campaigns and line items are always created **PAUSED** — nothing spends until you explicitly activate.
+The model chains the tools itself (funding instrument lookup → campaign → line item → targeting). `create_line_item` requires `placements` as a comma-separated string (for example `ALL_ON_TWITTER` or `TWITTER_TIMELINE,TWITTER_PROFILE`); valid values for a product and objective come from `list_line_item_placements`. Budget, schedule, and pacing are set on the line item — `create_campaign` does not accept `standard_delivery`. Campaigns and line items are always created **PAUSED** — nothing spends until you explicitly activate with `activate_campaign` / `activate_line_item`. To pause a running line item, call `update_line_item` with `entity_status=PAUSED` (the only way to pause one); `activate_line_item` is the only way to make it eligible to spend again. Campaign pausing uses `update_campaign` with `entity_status=PAUSED`.

@@ -1,0 +1,131 @@
+---
+title: Lead Generation
+sidebarTitle: Overview
+description: Create native lead forms, attach them to cards, and export submitted leads for Lead Gen campaigns on X.
+keywords: ["lead gen", "lead generation", "lead forms", "leads api", "lead gen ads", "lead export", "x ads lead gen"]
+---
+
+import { Button } from "/snippets/button.mdx";
+
+**Create native lead forms, attach them to post cards, and export submitted leads for Lead Gen campaigns.**
+
+## Quick links
+
+- [Full API Reference](/x-ads-api/lead-generation/reference) — Lead forms, card destinations, and leads export endpoints
+- [Attach a lead form to a card](/x-ads-api/lead-generation/reference#attach-a-lead-form-to-a-card) — `LEAD_FORM` destination on card components
+- [Export leads](/x-ads-api/lead-generation/reference#export-leads) — Asynchronous export jobs for submitted leads
+
+## Overview
+
+Lead Gen Ads collect contact information in a native form on X. A person taps the ad, fills in the form without leaving X, and the advertiser receives the submission. After the first submission, later forms can be pre-filled for that person.
+
+The Leads API covers three pieces of that flow:
+
+1. **Lead forms** — Create and manage the form a person sees (introduction, fields, privacy policy, and optional thank-you page).
+2. **Cards** — Attach a form to a card with a `LEAD_FORM` destination so the card opens that form.
+3. **Exports** — Download submissions for a form over a time window as JSON, CSV, or XLSX.
+
+Promote the card like any other creative: attach the card's `card_uri` to a Post, then associate that Post with a line item. See [Creatives](/x-ads-api/creatives) and [Campaign management](/x-ads-api/campaign-management).
+
+<Note>
+  The Leads API requires the <strong>Campaign user</strong> permission on the ads account. Lead exports are further restricted to <strong>account administrators</strong>, because exported files contain personal information.
+</Note>
+
+## Workflow
+
+### 1. Create a lead form
+
+Create the form with [POST accounts/:account_id/lead_forms](/x-ads-api/lead-generation/reference#post-accounts-account-id-lead-forms). Requests use a JSON body.
+
+```
+twurl -A "Content-Type: application/json" -X POST -H ads-api.x.com "/12/accounts/18ce54d4x5t/lead_forms" -d '{"name":"Fall launch form","purpose":"Collect newsletter signups","introduction":{"headline":"Sign up","description":"Get our newsletter"},"final_page":{"headline":"Thanks for signing up","description":"We will be in touch soon","cta_button":{"url":"https://example.com/welcome","title":"Visit our site"}},"fields":[{"key":"EMAIL"},{"key":"FULL_NAME","optional":true}],"privacy_policy":{"url":"https://example.com/privacy","company_name":"Example Inc"}}'
+```
+
+The response includes the form `id` (a UUID). Use that id when you attach the form to a card and when you export leads.
+
+A form must include:
+
+- A **name** and **purpose**
+- A non-empty **fields** array (at least one field must be required)
+- A **privacy policy** with an `https://` URL and company name
+
+The **introduction** card (shown before the fields) and **final page** (shown after a successful submission) are optional. If you include a call-to-action on the final page, both `url` and `title` are required, and the URL must be `https://`.
+
+### 2. Attach the form to a card
+
+Create a card with [POST accounts/:account_id/cards](/x-ads-api/creatives/reference#post-accounts-account-id-cards) and set a component destination to type `LEAD_FORM` with the form id.
+
+```json
+{
+  "name": "Fall launch card",
+  "components": [
+    {
+      "type": "MEDIA",
+      "media_key": "3_1743570804436678656"
+    },
+    {
+      "type": "DETAILS",
+      "title": "Sign up",
+      "destination": {
+        "type": "LEAD_FORM",
+        "id": "3f2b8c1a-8f4e-4a0b-9df2-0123456789ab"
+      }
+    }
+  ]
+}
+```
+
+`LEAD_FORM` is valid anywhere a destination is accepted, including buttons in a `BUTTON_GROUP` component. Invalid lead form ids are rejected with one error per invalid id.
+
+Attach the returned `card_uri` to a Post, then promote that Post on a line item. See [Cards](/x-ads-api/creatives/reference#cards).
+
+### 3. Export submitted leads
+
+Leads are exported through the ad-export job lifecycle: create a job, poll its status, download the file, and optionally cancel it. Create a leads export by posting to [POST accounts/:account_id/ad-export/api/v1/exports](/x-ads-api/lead-generation/reference#post-accounts-account-id-ad-export-api-v1-exports) with `entity_type` set to `leads`.
+
+```json
+{
+  "entity_type": "leads",
+  "lead_form_id": "3f2b8c1a-8f4e-4a0b-9df2-0123456789ab",
+  "start_epoch": 1751328000,
+  "end_epoch": 1753920000,
+  "response_format": "json"
+}
+```
+
+The export window is `[start_epoch, end_epoch)`: start is inclusive, end is exclusive. The form must exist, belong to the account, and not be archived.
+
+## Form structure
+
+| Part | Required | When it is shown |
+| :--- | :--- | :--- |
+| `name` | Yes | Internal name for the form (1–255 characters). |
+| `purpose` | Yes | What collected leads are used for (1–1000 characters). |
+| `introduction` | No | Card shown before the form fields. |
+| `fields` | Yes | Inputs the lead fills in. Keys must be unique. At least one field must be required. |
+| `privacy_policy` | Yes | Advertiser privacy policy shown with the form. |
+| `final_page` | No | Thank-you page after a successful submission, with an optional CTA button. |
+
+### Field keys
+
+Each `fields` entry has a `key` and an optional `optional` flag (defaults to `false`).
+
+**Contact fields**
+
+`EMAIL` · `PHONE_NUMBER` · `STREET_ADDRESS` · `CITY` · `STATE` · `COUNTRY` · `ZIP_CODE`
+
+**User information**
+
+`FULL_NAME` · `FIRST_NAME` · `LAST_NAME` · `DATE_OF_BIRTH` · `COMPANY_NAME` · `JOB_TITLE` · `WORK_EMAIL` · `WORK_PHONE_NUMBER` · `GENDER` · `HANDLE`
+
+## Updating and archiving forms
+
+[PUT accounts/:account_id/lead_forms/:lead_form_id](/x-ads-api/lead-generation/reference#put-accounts-account-id-lead-forms-lead-form-id) takes the same parameters as create; every one is optional. Omitted parameters keep their current value.
+
+Object parameters (`introduction`, `final_page`, `privacy_policy`) and the `fields` array are replaced wholesale when provided. There is no partial update within a nested object, and no way to unset one once it is set.
+
+[DELETE accounts/:account_id/lead_forms/:lead_form_id](/x-ads-api/lead-generation/reference#delete-accounts-account-id-lead-forms-lead-form-id) soft-deletes (archives) the form. Archived forms stop accepting submissions and cannot be updated — update requests return a not-found error. Pass `with_deleted=true` on list or retrieve requests to include archived forms.
+
+## Full API Reference
+
+For the complete reference (lead forms, card destinations, and leads export), see the **[Lead Generation API Reference](/x-ads-api/lead-generation/reference)**.
