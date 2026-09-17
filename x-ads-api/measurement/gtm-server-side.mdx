@@ -1,0 +1,409 @@
+---
+title: Set up the Conversion API with Google Tag Manager
+description: Deploy the X Ads Conversion API from a Google Tag Manager server container using the official tag template.
+sidebarTitle: GTM server-side
+keywords: ["Google Tag Manager", "GTM", "server-side GTM", "Conversion API", "CAPI", "X Pixel", "web conversions", "tag template"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+Use the official **X Ads Conversion API** tag in a Google Tag Manager (GTM) **server** container to send website conversion events to X. The tag reads events that reach your tagging server and forwards them to the [X Ads Conversion API](/x-ads-api/measurement/web-conversions). You do not need to write request code.
+
+Sharing server-side conversions with X helps you:
+
+- Measure ad performance when browser-based tracking is limited
+- Optimize campaign delivery
+- Deduplicate the same conversion when you also use the X Pixel
+
+The official template is **X Ads Conversion API (Official)** and is published in [twitter/x-ads-conversion-api-gtm-template](https://github.com/twitter/x-ads-conversion-api-gtm-template). It can be added only to a **Server** container.
+
+<Button href="https://github.com/twitter/x-ads-conversion-api-gtm-template">
+  View the GTM template on GitHub
+</Button>
+
+<Note>
+This guide is for advertisers using Google Tag Manager. If you are building a custom server integration, use the [Web conversions](/x-ads-api/measurement/web-conversions) API reference instead.
+</Note>
+
+## How the integration works
+
+A typical setup uses both a **web** container and a **server** container:
+
+1. The **web** container (or `gtag.js`) sends events from the browser to your tagging server. Most advertisers use a Google Analytics 4 (GA4) configuration tag for this.
+2. The **GA4 Client** in the server container receives those events.
+3. The **X Ads Conversion API (Official)** tag fires on those events and `POST`s them to `https://ads-api.x.com/12/measurement/conversions/{pixel_id}` with your Pixel access token.
+
+```
+Website  →  GTM web container / gtag.js  →  Your tagging server  →  X Conversion API
+                 (optional X Pixel)              (GA4 Client + X CAPI tag)
+```
+
+We recommend running the X Pixel **and** the Conversion API for the same events (a redundant setup), then sending a shared **Conversion ID** so X can deduplicate.
+
+## Prerequisites
+
+Before you start, you need:
+
+| Requirement | Details |
+|---|---|
+| X Ads account | Access to [Ads Manager](https://ads.x.com) with permission to manage Events Manager |
+| X Pixel (event source) | An Event Source in Events Manager. The Event Source ID is your **Pixel ID** |
+| Conversion API access token | Generated in Events Manager for Conversion API access |
+| Conversion events | Existing Pixel events, or new events created with **Install with Conversion API** |
+| GTM web container | Installed on your website. See [Set up and install Tag Manager](https://support.google.com/tagmanager/answer/6103696) |
+| GTM server container | A tagging server URL. See [Server-side tagging](https://developers.google.com/tag-platform/tag-manager/server-side) |
+| Event stream into the server | Usually GA4 Configuration plus GA4 Event tags, or `gtag.js` with `server_container_url` |
+
+<Note>
+**Recommended:** Map a [first-party custom domain](https://developers.google.com/tag-platform/tag-manager/server-side/custom-domain) to your tagging server. First-party serving improves cookie durability for the X Click ID (`twclid`) and other identifiers.
+</Note>
+
+## Step 1: Collect your Pixel ID, Event IDs, and access token
+
+### Pixel ID
+
+1. Go to [ads.x.com](https://ads.x.com).
+2. Open **Tools** → **Events Manager**.
+3. If you do not already have an X Pixel event source, select **Add event source** and add one.
+4. Copy the Pixel ID from the event source. You will paste this into the GTM tag.
+
+### Conversion events (Event IDs)
+
+Each conversion you want to optimize or report on should exist in Events Manager.
+
+**Option A — Reuse an existing Pixel event (recommended for Pixel + Conversion API)**
+
+If the event is already firing from the X Pixel, copy that event’s **Event ID**. Using the same Event ID on both the Pixel and the Conversion API is required for deduplication.
+
+**Option B — Create a Conversion API event**
+
+1. Open the X Pixel event source.
+2. Select **Add events**.
+3. Choose **Install with Conversion API**.
+4. Copy the **Pixel ID** and **Event ID**, then save.
+
+<Note>
+**Event ID** in Events Manager is the conversion *type* (for example a Purchase event). It is **not** the per-occurrence deduplication key. The per-occurrence key is **Conversion ID**. See [Deduplication](#deduplication).
+</Note>
+
+### Access token
+
+The official GTM tag authenticates with the `X-Pixel-Token` header. Generate a Conversion API access token in Events Manager:
+
+1. In Events Manager, open **Install Pixel**.
+2. Select **Manual** as the installation method, then continue.
+3. Select **Conversion API**, then continue.
+4. Select **Generate access token** and copy the token.
+
+Store the token in a GTM variable (Constant, or a secret manager your tagging server supports). Do not hard-code it in multiple tags or commit it to source control.
+
+<Note>
+The GTM template uses this Pixel access token. You do **not** need to implement OAuth 1.0a or call the Ads API from GTM. OAuth credentials are only required for [custom Conversion API integrations](/x-ads-api/measurement/web-conversions).
+</Note>
+
+## Step 2: Create a GTM server container
+
+If you already have a server container and tagging server URL, skip to [Step 3](#step-3-send-website-events-to-the-server-container).
+
+1. Open [Google Tag Manager](https://tagmanager.google.com/).
+2. Select your account, then **Create Container**.
+3. Name the container and set the target platform to **Server**.
+4. Create the container and provision a tagging server. Google Cloud is the default path; other clouds use the [manual server setup](https://developers.google.com/tag-platform/tag-manager/server-side/manual-setup-guide).
+5. Copy the tagging server URL (for example `https://sgtm.example.com`).
+
+Server containers include a **GA4 Client** by default. Keep it enabled. It listens for GA4 requests (typically on `/g/collect`) and turns them into events the X tag can read.
+
+## Step 3: Send website events to the server container
+
+Configure the **web** container so conversion events reach the server.
+
+### GA4 Configuration tag
+
+In the web container, open your **Google Analytics: GA4 Configuration** tag (or create one):
+
+- If the tag supports **Send to server container**, enable it and set **Server Container URL** to your tagging server URL.
+- Otherwise, under **Fields to Set**, add:
+  - Field name: `transport_url`
+  - Field value: your tagging server URL
+
+To pass hashed user data into server-side GTM, also set:
+
+- Field name: `first_party_collection`
+- Field value: `true`
+
+If this GA4 Configuration tag currently sends production traffic to Google Analytics, adding a server URL starts sending that traffic to the server container. To keep sending events to GA4 as well, add a GA4 tag in the **server** container that fires on the same events.
+
+### GA4 Event tags
+
+For each conversion (Purchase, Lead, Sign up, and so on), add or update a **Google Analytics: GA4 Event** tag:
+
+1. Set **Event Name** to a stable value (`purchase`, `generate_lead`, `sign_up`, and so on).
+2. Under **Event Parameters**, map value, currency, items, and user data. See [Event parameter mapping](#event-parameter-mapping).
+3. If you use both Pixel and Conversion API, add `event_id` and set it to a unique per-conversion value. The official X tag uses this as **Conversion ID** unless you override it.
+
+Example `gtag.js` event:
+
+```javascript
+gtag('event', 'purchase', {
+  event_id: generateConversionId(), // unique per conversion; used for deduplication
+  transaction_id: 't_12345',
+  currency: 'USD',
+  value: 19.99,
+  user_data: {
+    email_address: userEmail,      // plain or SHA-256; the X tag hashes plain values
+    phone_number: userPhoneE164    // E.164 format recommended, e.g. +11234567890
+  },
+  items: [
+    {
+      item_id: 'sku-1',
+      item_name: 'Blue sneakers',
+      price: 19.99,
+      quantity: 1
+    }
+  ]
+});
+```
+
+<Note>
+You can keep using your existing GA4 event names. If you leave the X tag’s **Event ID** empty, the template sends `event_name` as `gtm_` plus the incoming name, lowercased (for example `purchase` → `gtm_purchase`). For Pixel + Conversion API deduplication, set **Event ID** to the Events Manager Event ID instead.
+</Note>
+
+## Step 4: Install the official X tag in the server container
+
+1. Open your **server** container.
+2. Go to **Templates**.
+3. Under **Tag Templates**, select **Search Gallery**.
+4. Search for **X Ads Conversion API (Official)** and add it to the workspace.
+
+If the template is not yet visible in the gallery, import it from GitHub:
+
+1. Download [`template.tpl`](https://github.com/twitter/x-ads-conversion-api-gtm-template/blob/main/template.tpl) from [twitter/x-ads-conversion-api-gtm-template](https://github.com/twitter/x-ads-conversion-api-gtm-template).
+2. In **Templates** → **Tag Templates**, select **New**.
+3. Open the overflow menu and choose **Import**.
+4. Select the `template.tpl` file and save.
+
+<Note>
+Use **X Ads Conversion API (Official)**. Community templates with similar names (for example third-party “X (Twitter) Conversion API” tags) are not this integration and may require different authentication.
+</Note>
+
+## Step 5: Create and configure the Conversion API tag
+
+1. In the server container, go to **Tags** → **New**.
+2. Choose **X Ads Conversion API (Official)** as the tag type.
+
+### Required configuration
+
+| Field | Required | What to enter |
+|---|---|---|
+| **Pixel ID** | Yes | Pixel ID from Events Manager |
+| **Access Token** | Yes | Conversion API access token. Prefer a GTM variable |
+| **Event ID** | Recommended | Events Manager Event ID for this conversion. If empty, the tag sends `gtm_{event_name}` from the incoming event. If both Event ID and event name are missing, the conversion is **not sent** |
+| **Set first-party cookies** | No (on by default) | When enabled, the tag writes a first-party `_twclid` cookie if `twclid` is present on the page URL |
+
+### Event data overrides (optional)
+
+Use these only when the incoming event does not already contain the value, or when you need to replace it.
+
+| Field | Default if empty | Notes |
+|---|---|---|
+| **Conversion ID** | Incoming event `event_id` | Per-conversion deduplication key. Must match the Pixel `conversion_id` when both fire |
+| **Email** | `user_data.email_address`, `user_data.sha256_email_address`, or `email` | Plain or SHA-256. Plain values are trimmed, lowercased, and hashed |
+| **Phone** | `user_data.phone_number`, `user_data.sha256_phone_number`, or `phone` | Plain or SHA-256. Send [E.164](https://en.wikipedia.org/wiki/E.164) (for example `+11234567890`) before hashing |
+| **IP Address** | `ip_override` or `ip` | Not hashed. Do not send IP or user agent as the only identifiers |
+| **User Agent** | `user_agent` | Not hashed. Do not send IP or user agent as the only identifiers |
+
+### Logs settings
+
+| Option | When to use |
+|---|---|
+| **Do not log** | Production, once the integration is verified |
+| **Log to console during debug and preview** (default) | Testing in GTM Preview |
+| **Always log to console** | Temporary troubleshooting only. Avoid in production; logs can include identifiers |
+
+## Step 6: Choose a trigger
+
+Create a trigger that fires when the GA4 Client has claimed the event.
+
+**One tag per conversion (recommended when you set Event ID in the tag)**
+
+- Trigger type: **Custom**
+- Condition: **Event Name** equals `purchase` (or `generate_lead`, `sign_up`, and so on)
+
+Create a separate X tag for each Events Manager Event ID.
+
+**Single tag for all events (when Event ID is left empty)**
+
+- Trigger: **All Events**, or a regex of the event names you want to send
+- The template will send `gtm_purchase`, `gtm_generate_lead`, and so on
+
+Do not fire the X tag on GTM’s internal clients-only requests. Confirm in Preview that the GA4 Client claimed the request before the X tag fires.
+
+## Step 7: Send identifiers for matching
+
+X needs at least one strong identifier to match the conversion to an X user. Include as many as you can.
+
+| Identifier | How the official tag finds it | Hashing |
+|---|---|---|
+| **X Click ID (`twclid`)** | Query parameter on `page_location`, first-party `_twclid` cookie, or event field `twclid` | None |
+| **Pixel cookie (`_twpid`)** | First-party `_twpid` cookie (usually set by the X Pixel) | None |
+| **Email** | Override, `user_data.email_address` / `sha256_email_address`, or `email` | SHA-256 (automatic for plain values) |
+| **Phone** | Override, `user_data.phone_number` / `sha256_phone_number`, or `phone` | SHA-256 (automatic for plain values) |
+| **IP address** | Override, `ip_override`, or `ip` | None. Must be paired with another identifier |
+| **User agent** | Override or `user_agent` | None. Must be paired with another identifier |
+
+### Click ID (`twclid`)
+
+Always pass Click ID when it is available.
+
+1. Website click-throughs from X ads append `twclid` to the landing-page URL.
+2. With **Set first-party cookies** enabled, the server tag stores that value in `_twclid` (about 390 days) so later conversions on the same domain can still send it.
+3. A first-party tagging domain makes this cookie more reliable.
+
+If you use the X Pixel on the page, keep it installed. The Pixel can set `_twpid`, which the server tag also reads.
+
+### Email and phone
+
+- Do not salt hashes.
+- Email: trim whitespace; the tag lowercases before hashing.
+- Phone: normalize to E.164 on your site or in GTM **before** the event reaches the server. The tag hashes but does not reformat numbers.
+- Already-hashed 64-character hex values are sent as-is.
+
+<Note>
+IP address or user agent alone is not enough. Send Click ID, email, or phone whenever possible. More identifiers improve match rate.
+</Note>
+
+Respect user consent and applicable privacy law. Do not send Conversion API events for users who have opted out of this type of tracking.
+
+## Event parameter mapping
+
+The tag maps GA4-style event data to the Conversion API automatically.
+
+| Conversion API field | Incoming event field | Notes |
+|---|---|---|
+| `event_id` | Tag **Event ID** | Events Manager Event ID. If unset, `event_name` is sent as `gtm_{name}` |
+| `conversion_id` | Tag **Conversion ID**, else event `event_id` | Deduplication key |
+| `event_source_url` | `page_location` | Page that produced the event |
+| `value` | `value` | Numeric |
+| `price_currency` | `currency` | Uppercased |
+| `contents[].content_id` | `items[].item_id` or `items[].id` | |
+| `contents[].content_name` | `items[].item_name` or `items[].name` | |
+| `contents[].content_price` | `items[].price` | |
+| `contents[].num_items` | `items[].quantity` | |
+| `number_items` | Sum of item quantities | |
+
+### Suggested GA4 event names
+
+These names work well if you leave **Event ID** empty (`gtm_{name}`) or if you trigger one X tag per name:
+
+| Common conversion | GA4 event name |
+|---|---|
+| Purchase | `purchase` |
+| Add to cart | `add_to_cart` |
+| Begin checkout | `begin_checkout` |
+| Lead | `generate_lead` |
+| Sign up | `sign_up` |
+| Search | `search` |
+| View content | `view_item` |
+| Add payment info | `add_payment_info` |
+| Page view | `page_view` |
+
+For Pixel + Conversion API, prefer the Events Manager **Event ID** on the X tag over relying on `gtm_{name}`.
+
+## Deduplication
+
+If the same conversion is sent by the X Pixel and the Conversion API, send both of the following on **both** channels:
+
+1. The same Events Manager **Event ID**
+2. The same **Conversion ID** for that occurrence (order ID, UUID, or the GA4 `event_id`)
+
+On the Pixel, this is the deduplication key in the snippet (`conversion_id`). On the GTM Conversion API tag, set **Conversion ID**, or send `event_id` on the GA4 event and let the tag use it.
+
+Use the same trigger in the web container for the Pixel tag and the GA4 Event tag so both sides fire together with the same ID.
+
+You do not need deduplication if Pixel and Conversion API send **different** events.
+
+## Step 8: Test in Preview
+
+Use GTM Preview on **both** containers before you publish.
+
+1. In the **server** container, select **Preview**. If you use a custom domain, preview against that URL.
+2. In the **web** container, select **Preview** and connect your website.
+3. Trigger a test conversion (for example complete a test purchase).
+4. In the **web** debugger, confirm the GA4 Event tag fired and that `event_id`, value, currency, and user data are present.
+5. In the **server** debugger:
+   - Confirm the GA4 Client claimed the request.
+   - Confirm **X Ads Conversion API (Official)** fired.
+   - Open the tag → **Request** and verify an outgoing `POST` to `https://ads-api.x.com/12/measurement/conversions/{your_pixel_id}`.
+   - Confirm the response status is **2xx**.
+6. In **Events Manager**, confirm the test conversion appears on the event (allow a short delay).
+
+### If the tag does not fire
+
+- The web GA4 Event tag did not fire, or is not sending to the server URL.
+- The server trigger does not match `event_name`.
+- Preview was started before the latest workspace changes; restart Preview.
+
+### If the tag fires and fails
+
+Open the outgoing request in the server debugger and inspect the response body. Common causes:
+
+- Invalid Pixel ID or access token
+- Missing Event ID **and** missing event name
+- No usable identifier (no `twclid`, email, or phone)
+- Event ID that does not belong to that Pixel
+
+Set **Logs Settings** to debug while testing. Switch to **Do not log** before production traffic.
+
+## Step 9: Publish
+
+1. Remove any test-only overrides.
+2. Set logs to **Do not log** (or keep debug-only).
+3. Submit and publish the **server** container.
+4. Submit and publish the **web** container if you changed it.
+5. After go-live, confirm Events Manager is receiving production events and that duplicate Pixel + API events are collapsing when Conversion IDs match.
+
+Conversion API traffic is rate-limited to **60,000 events per ad account per 15 minutes**. See [Web conversions](/x-ads-api/measurement/web-conversions).
+
+## Checklist
+
+- Pixel ID and Conversion API access token stored in GTM variables
+- Each conversion has an Events Manager Event ID (especially for Pixel + API)
+- Web container sends events to the server container URL
+- GA4 Client is enabled in the server container
+- Official tag installed (**X Ads Conversion API (Official)**)
+- Triggers match the events you intend to send
+- `twclid` captured (URL and/or `_twclid` cookie)
+- Email and/or E.164 phone included when available
+- Pixel and API share Conversion ID when both fire
+- Preview shows HTTP 2xx to `ads-api.x.com`
+- Events Manager shows the events
+- Server container published; first-party domain used in production
+
+## Frequently asked questions
+
+**Do I still need the X Pixel?**
+The Conversion API can run on its own. We recommend Pixel + Conversion API with shared Event ID and Conversion ID so you keep coverage when one channel drops events.
+
+**Does this require Ads API access or OAuth?**
+Not for this GTM template. The tag sends `X-Pixel-Token` with the Events Manager access token. Custom code integrations still use the [Web conversions](/x-ads-api/measurement/web-conversions) authentication flow.
+
+**Can I host the tagging server outside Google Cloud?**
+Yes. GTM server-side supports [manual provisioning](https://developers.google.com/tag-platform/tag-manager/server-side/manual-setup-guide) on other clouds.
+
+**Why is Click ID missing in Preview?**
+The test page URL may not include `twclid`, the `_twclid` cookie may be blocked on the default tagging domain, or **Set first-party cookies** is off. Load a URL that includes `?twclid=...` and use a first-party server domain.
+
+**Can one server tag send every event?**
+Yes, if you leave **Event ID** empty and trigger on multiple event names. The API then receives `gtm_{event_name}`. For named Events Manager events and Pixel deduplication, use one tag (or a lookup table variable) per Event ID.
+
+**How is this different from third-party X/Twitter GTM tags?**
+The official tag is **X Ads Conversion API (Official)**, maintained at [twitter/x-ads-conversion-api-gtm-template](https://github.com/twitter/x-ads-conversion-api-gtm-template). It authenticates with a Pixel access token and is supported for this Conversion API integration.
+
+## Related resources
+
+- [Web conversions (Conversion API)](/x-ads-api/measurement/web-conversions)
+- [Official GTM template (GitHub)](https://github.com/twitter/x-ads-conversion-api-gtm-template)
+- [Conversion tracking for websites (Ads Help)](https://business.x.com/en/help/campaign-measurement-and-analytics/conversion-tracking-for-websites.html)
+- [Policies for conversion tracking and custom audiences](https://business.x.com/en/help/ads-policies/campaign-considerations/policies-for-conversion-tracking-and-custom-audiences)
+- [Google: Server-side tagging](https://developers.google.com/tag-platform/tag-manager/server-side)
+- [Google: Send data to server-side Tag Manager](https://developers.google.com/tag-platform/tag-manager/server-side/send-data)
