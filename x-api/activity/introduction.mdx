@@ -287,6 +287,34 @@ Private events are activities that require explicit user consent through OAuth a
 - The user must explicitly grant permission for your app to access these events
 - Subscriptions for private events can only be created for users who have authorized your application
 
+## Subscription expiration
+
+When you create a subscription, you can pass an optional `expires_at` field with an RFC 3339 timestamp. When that time is reached, XAA automatically deletes the subscription so you do not have to clean it up yourself.
+
+If you omit `expires_at`, the subscription stays active until one of the following happens:
+
+- You delete it explicitly with `DELETE /2/activity/subscriptions/:id`.
+- For user-context subscriptions, the authenticating user revokes your app's OAuth access.
+
+For example, the following `POST /2/activity/subscriptions` payload creates a `news.new` subscription that expires on October 1, 2026:
+
+```json
+{
+  "event_type": "news.new",
+  "filter": {
+    "keyword": "artificial intelligence"
+  },
+  "tag": "AI news",
+  "expires_at": "2026-10-01T12:00:00.000Z"
+}
+```
+
+### Refreshing expiration
+
+To extend or shorten the expiration on an existing subscription, `POST` the same subscription again with a new `expires_at`. XAA treats the request as a refresh: the existing subscription is kept and its `expires_at` is updated to the new value. This is the only way to change `expires_at` — `PUT /2/activity/subscriptions/:id` updates `tag` and `webhook_id` but not expiration.
+
+The create, list, and update subscription responses echo `expires_at` back when it is set.
+
 ## Subscription limits
 
 The X Activity API has different subscription limits based on your account tier:
