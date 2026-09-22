@@ -87,7 +87,26 @@ X's webhook-based APIs provide two methods for confirming the security of your w
 
 1. **Challenge-Response Check (CRC)** — X sends periodic GET requests to your webhook URL. You respond with an HMAC-SHA256 hash to prove you control the endpoint. CRC checks happen on initial registration, hourly, and on manual re-validation.
 
-2. **Signature verification** — Each POST request from X includes an `x-twitter-webhooks-signature` header. You can verify this signature to confirm X is the source of incoming events.
+2. **Signature verification** — Each POST request from X includes a signature header. You can verify this signature to confirm X is the source of incoming events.
+
+### Signature headers
+
+X sends one of two signature headers on each webhook POST. Both use the format `sha256=<base64_encoded_hmac_sha256>` and are calculated over the raw request body.
+
+| Header | Secret used | Recommendation |
+|:-------|:------------|:---------------|
+| `X-Twitter-Webhooks-Signature-OAuth2` | OAuth 2.0 client secret | Recommended. Verify this header when present. |
+| `X-Twitter-Webhooks-Signature` | OAuth 1.0 consumer secret (API Secret Key) | Legacy. Format unchanged. Supported for backward compatibility. |
+
+- Apps that only have an OAuth 2.0 client secret configured receive only `X-Twitter-Webhooks-Signature-OAuth2`.
+- Apps that have both an OAuth 2.0 client secret and an OAuth 1.0 consumer secret may receive both headers during migration. Verify `X-Twitter-Webhooks-Signature-OAuth2` and, if you still need to support the legacy path, fall back to `X-Twitter-Webhooks-Signature`.
+- Apps that only have an OAuth 1.0 consumer secret continue to receive `X-Twitter-Webhooks-Signature` unchanged.
+
+The same rules apply to the CRC `response_token`: generate it with the OAuth 2.0 client secret when available, or with the OAuth 1.0 consumer secret for existing OAuth 1.0-only integrations.
+
+<Note>
+The OAuth 2.0 App Only Bearer Token used in the `Authorization` header when calling `/2/webhooks` is **not** used to compute CRC responses or webhook signatures. CRC and signature verification always use the app's OAuth 2.0 client secret or OAuth 1.0 consumer secret. Keep client and consumer secrets server-side, and never include them in webhook registration requests.
+</Note>
 
 <Card title="See full implementation details" icon="/icons/xds/icon-code.svg" href="/x-api/webhooks/quickstart">
   Step-by-step CRC setup, code examples, and signature verification
@@ -128,7 +147,9 @@ You can check the valid/invalid status of a webhook using the `GET /2/webhooks` 
 - An approved [developer account](https://developer.x.com/en/portal/petition/essential/basic-info)
 - A [Project and App](/resources/fundamentals/developer-apps) in the Developer Console
 - A publicly accessible HTTPS endpoint
-- Your app's **consumer secret** (API secret key) for CRC validation
+- One of the following webhook signing secrets for CRC validation and signature verification:
+  - **Recommended:** your app's **OAuth 2.0 client secret** (the Client Secret shown for the app in the Developer Console)
+  - Your app's **OAuth 1.0 consumer secret** (API Secret Key) — supported for backward compatibility with existing OAuth 1.0 integrations
 </Note>
 
 <CardGroup cols={2}>
