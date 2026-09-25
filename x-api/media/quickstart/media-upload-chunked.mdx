@@ -89,7 +89,11 @@ Use `tweet_video` for a regular Post. Use `amplify_video` for Ads creatives. See
 
 ## Step 2: Upload chunks (APPEND)
 
-Upload each chunk to `POST /2/media/upload/{id}/append`. Keep each segment at or below **5 MB** (the server maximum is 8 MB). Segments are indexed from `0`.
+Upload each chunk to `POST /2/media/upload/{id}/append`. Keep each segment at or below **5 MB** (the server maximum is 8 MB). Segments are indexed from `0` and increase by one for each chunk.
+
+<Note>
+Large Premium uploads need more than 1,000 segments. A 16 GB video takes about 2,000 APPEND requests at 8 MB per segment, or about 3,300 at 5 MB. `segment_index` is not capped at `999`, so keep incrementing it until the whole file is uploaded.
+</Note>
 
 <CodeGroup dropdown>
 
@@ -154,6 +158,15 @@ for (let offset = 0; offset < fileBuffer.length; offset += chunkSize) {
 - Uploads can be paused and resumed
 - Failed chunks can be retried individually
 </Info>
+
+### Pace APPEND requests for large files
+
+APPEND requests count against the [`POST /2/media/upload/:id/append` rate limit](/x-api/fundamentals/rate-limits) of 1,875 requests per 15 minutes per user. A multi-GB upload can reach this limit before it finishes.
+
+- Read the `x-rate-limit-remaining` and `x-rate-limit-reset` headers on each APPEND response.
+- If you receive a `429`, wait until the `x-rate-limit-reset` time, then retry the same `segment_index`.
+- Don't restart from segment `0`. Resume from the first segment that didn't succeed, then call FINALIZE after the last segment.
+- Use larger segments (up to 8 MB) to reduce the number of APPEND requests.
 
 ---
 
