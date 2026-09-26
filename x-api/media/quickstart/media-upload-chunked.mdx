@@ -89,7 +89,11 @@ Use `tweet_video` for a regular Post. Use `amplify_video` for Ads creatives. See
 
 ## Step 2: Upload chunks (APPEND)
 
-Upload each chunk to `POST /2/media/upload/{id}/append`. Keep each segment at or below **5 MB** (the server maximum is 8 MB). Segments are indexed from `0`.
+Upload each chunk to `POST /2/media/upload/{id}/append`. Keep each segment at or below **5 MB** (the server maximum is 8 MB). Segments are indexed from `0` and increase by one for each chunk.
+
+<Note>
+An upload session accepts up to 10,000 segments, so valid `segment_index` values are `0` through `9999`. This applies to every media category and account tier. A 16 GB video takes about 2,048 APPEND requests at 8 MB per segment, or about 3,277 at 5 MB.
+</Note>
 
 <CodeGroup dropdown>
 
@@ -154,6 +158,17 @@ for (let offset = 0; offset < fileBuffer.length; offset += chunkSize) {
 - Uploads can be paused and resumed
 - Failed chunks can be retried individually
 </Info>
+
+### Pace APPEND requests for large files
+
+APPEND requests count against the [`POST /2/media/upload/:id/append` rate limit](/x-api/fundamentals/rate-limits). For self-serve tiers (Basic, Pro, and pay-per-use), the limit is 1,875 requests per 15 minutes per user. Enterprise packages have higher limits. Treat the `x-rate-limit-limit` header as the authoritative limit for your plan. A multi-GB upload can reach this limit before it finishes.
+
+An upload session stays valid for 24 hours, and each APPEND response returns the session's `expires_at`. Pausing until `x-rate-limit-reset` doesn't expire the upload.
+
+- Read the `x-rate-limit-limit`, `x-rate-limit-remaining`, and `x-rate-limit-reset` headers on each APPEND response.
+- If you receive a `429`, wait until the `x-rate-limit-reset` time, then retry the same `segment_index`.
+- Don't restart from segment `0`. Resume from the first segment that didn't succeed, then call FINALIZE after the last segment.
+- Use larger segments (up to 8 MB) to reduce the number of APPEND requests. At 8 MB, a 16 GB upload spans roughly two 15-minute windows at the 1,875-request limit.
 
 ---
 
