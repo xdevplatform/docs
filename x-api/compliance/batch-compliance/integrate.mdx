@@ -91,10 +91,11 @@ curl -X PUT "UPLOAD_URL_FROM_RESPONSE" \
 ID lists typically compress about 4×, so a maximum-size submission
 (~5 million IDs) travels as roughly 25 MB. Concatenated gzip members (as
 produced by `pigz` and similar tools) are supported. The 100 MB size limit
-applies to the *decompressed* content. A body that is not valid gzip fails
-with `400` and the job accepts a retry; a `Content-Encoding` other than
-`gzip` or `identity` is rejected with `415` before the upload is counted
-against the job.
+applies to the *decompressed* content. A body that is not valid gzip is
+rejected in transit (today this surfaces as a `503`); re-compress the file
+and retry — the job stays ready for another upload. A `Content-Encoding`
+other than `gzip` or `identity` is rejected with `415` before the upload is
+counted against the job.
 
 Invalid lines (non-numeric, malformed) don't fail the job; each comes back
 in the results as an error record:
@@ -127,7 +128,7 @@ Errors use RFC 7807 problem+json bodies.
 
 | Status | When | Handling |
 |:-------|:-----|:---------|
-| `400` | Malformed request (bad `type`, bad body, invalid gzip) | Fix the request and retry |
+| `400` | Malformed request (bad `type`, bad body) | Fix the request and retry |
 | `401` | Missing/invalid Bearer on the JSON endpoints, or unusable byte-path token | Check credentials / recreate the job |
 | `403` | Valid but expired or wrong-purpose byte-path token; App not enrolled for the endpoint | Recreate the job; check your App's access level |
 | `409` | A job of this type is already active | Wait for it, or cancel it |
