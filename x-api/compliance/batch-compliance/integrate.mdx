@@ -51,8 +51,14 @@ created ──upload──▶ in_progress ──processing──▶ complete
   `in_progress`, creating another `tweets` job returns `409 Conflict`. A
   `users` job can run concurrently with a `tweets` job.
 - **Processing is asynchronous.** Poll `GET /2/compliance/jobs/:id` with
-  backoff (e.g. every 30–60 seconds). Processing time scales with dataset
-  size.
+  backoff (e.g. every 30–60 seconds). Processing time is driven mostly by
+  the time span your IDs cover, not the file size: a file of recent IDs
+  typically completes in well under an hour, while one that spans many
+  years takes far longer.
+- **Processing has a 36-hour ceiling.** A job that cannot finish within 36
+  hours ends `failed` with an explanatory message. Create a new job and
+  resubmit, splitting the IDs by time period (for example, one job for IDs
+  older than a year and one for the rest).
 - **Jobs expire.** A job left in `created` without an upload expires. Jobs
   can also end `failed`; both free the active-job slot.
 
@@ -67,6 +73,28 @@ mode: if a transfer is
 interrupted, retry the whole PUT while the upload URL is valid, or cancel
 the job and start over. For very large datasets, split IDs across multiple
 sequential jobs — results are per-ID, so partitioning is safe.
+
+### Compressed uploads
+
+Uploads may be gzip-compressed. Send the compressed file with a
+`Content-Encoding: gzip` header (`x-gzip` is accepted as an alias):
+
+```bash
+gzip ids.txt
+curl -X PUT "UPLOAD_URL_FROM_RESPONSE" \
+  -H "Authorization: Bearer $BEARER_TOKEN" \
+  -H "Content-Encoding: gzip" \
+  -H "Content-Type: text/plain" \
+  --data-binary @ids.txt.gz
+```
+
+ID lists typically compress about 4×, so a maximum-size submission
+(~5 million IDs) travels as roughly 25 MB. Concatenated gzip members (as
+produced by `pigz` and similar tools) are supported. The 100 MB size limit
+applies to the *decompressed* content. A body that is not valid gzip fails
+with `400` and the job accepts a retry; a `Content-Encoding` other than
+`gzip` or `identity` is rejected with `415` before the upload is counted
+against the job.
 
 Invalid lines (non-numeric, malformed) don't fail the job; each comes back
 in the results as an error record:
@@ -99,11 +127,12 @@ Errors use RFC 7807 problem+json bodies.
 
 | Status | When | Handling |
 |:-------|:-----|:---------|
-| `400` | Malformed request (bad `type`, bad body) | Fix the request |
+| `400` | Malformed request (bad `type`, bad body, invalid gzip) | Fix the request and retry |
 | `401` | Missing/invalid Bearer on the JSON endpoints, or unusable byte-path token | Check credentials / recreate the job |
 | `403` | Valid but expired or wrong-purpose byte-path token; App not enrolled for the endpoint | Recreate the job; check your App's access level |
 | `409` | A job of this type is already active | Wait for it, or cancel it |
-| `413` | Upload exceeds 100 MB | Split the dataset across jobs |
+| `413` | Upload exceeds 100 MB (after decompression) | Split the dataset across jobs |
+| `415` | Unsupported `Content-Encoding` on the upload | Use `gzip` or send the file uncompressed |
 
 ## Best practices
 
