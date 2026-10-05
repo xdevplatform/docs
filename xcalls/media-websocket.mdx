@@ -1,0 +1,122 @@
+---
+title: Media WebSocket
+sidebarTitle: Media WebSocket
+description: "The X Calls media WebSocket streams a call's audio to your agent and your agent's voice back as raw PCM16, with JSON events and commands for participants, turn-taking, chat and admission."
+keywords: ["media WebSocket", "PCM16", "call audio", "session.joined", "speech.started", "audio.clear", "barge-in", "voice agent"]
+---
+
+<Warning>
+  The X Calls API is in development. It isn't generally available yet, and endpoints and payloads may still change.
+</Warning>
+
+After [joining a call](/xcalls/api-reference/join-a-call), your agent takes part in it over a WebSocket: it receives the call's audio and events, and sends its voice and commands.
+
+## Connecting
+
+Open a WebSocket to the `media_url` from the join response, with the `media_token` as a bearer credential:
+
+```text
+GET wss://api.x.com/2/calls/media
+Authorization: Bearer <media_token>
+```
+
+Clients that cannot set headers (browsers, the WHATWG `WebSocket`) pass `?token=<media_token>` instead. Always use the `media_url` from the join response.
+
+If the upgrade is refused, the HTTP response says why:
+
+| Status | Meaning |
+|:-------|:--------|
+| `401` | Missing, malformed or expired token. Join again for a new one. |
+| `409` | The token was already used. |
+| `503` | No capacity right now; retry with backoff. |
+
+## Frames
+
+**Binary frames are audio**: PCM16 little-endian, mono, at the session's sample rate.
+
+- **From X**: the mix of everyone in the call except your agent, one 20 ms frame at a time in real time (at 16 kHz, 320 samples = 640 bytes). Silence arrives as zeros, so the stream never stalls.
+- **To X**: your agent's voice, in chunks of any size. Send it as fast as you produce it; X queues it and plays it into the call in real time.
+
+**Text frames are JSON**: events from X and commands to X, each with a `type`.
+
+## Session lifecycle
+
+```text
+connect ─▶ session.created ─┬───────────────────▶ session.joined ─▶ … ─▶ session.ended
+                            └─▶ session.waiting ─┘ (host admitted)
+```
+
+1. `session.created`: the token was accepted. Carries the audio format.
+2. `session.waiting`: only when the join response said `requires_approval`. The host was asked to admit your bot. The session ends with `rejected` if the host declines, or `approval_timeout` if nobody answers within 5 minutes.
+3. `session.joined`: your agent is in the call and audio flows. Carries the people already there.
+4. `session.ended`: the last event. X then closes the socket.
+
+## Events (X → your agent)
+
+| `type` | Fields | Meaning |
+|:-------|:-------|:--------|
+| `session.created` | `session_id`, `call_id`, `audio` {`encoding`, `sample_rate`, `channels`, `frame_ms`} | Token accepted; connecting to the call. |
+| `session.waiting` | | Waiting for the host to admit your bot. |
+| `session.joined` | `participants`: [participant] | Your agent is in the call. |
+| `participant.joined` | `participant` | Someone joined. |
+| `participant.left` | `user_id` | Someone left. |
+| `participant.updated` | `participant` | Someone muted or unmuted, or a guest's name became known. |
+| `join.requested` | `participant` | Someone asked to join. Answer with `join.admit` or `join.reject`. |
+| `speech.started` | `user_id` | Someone started talking. A good moment to stop your agent (`audio.clear`). |
+| `speech.stopped` | `user_id` | They stopped talking. |
+| `chat.message` | `user_id`, `text` | A message in the call's chat. |
+| `reaction` | `user_id`, `emoji` | An emoji reaction in the call. |
+| `playback.mark` | `name`, `cleared` | Everything queued before your `audio.mark` has played (`cleared: true`: it was dropped by `audio.clear` or `mute` instead). |
+| `session.ended` | `reason` | The session is over. |
+| `error` | `code`, `message` | A command failed, or the session failed (`session_failed`). |
+
+A **participant** is `{"user_id": "…", "is_guest": false, "muted": false}`. `is_guest` marks logged-out guests and room systems. Participants are the people whose audio is in the call. `muted` is left out until they have muted or unmuted, and a logged-out guest can first appear with `is_guest: false` and be corrected by a `participant.updated`.
+
+### Error codes
+
+| `code` | Meaning |
+|:-------|:--------|
+| `invalid_command` | Not a known command. |
+| `invalid_audio` | `audio.append` without base64 PCM. |
+| `unknown_join_request` | `join.admit` or `join.reject` for someone who has not asked. |
+| `command_forbidden` | Your user may not do that in this call. |
+| `command_failed` | Try again. |
+| `session_failed` | Join the call again. |
+
+### Why a session ended
+
+| `reason` | Meaning |
+|:---------|:--------|
+| `left` | Your agent sent `leave`, or you called `POST /2/calls/:id/leave`. |
+| `agent_disconnected` | Your WebSocket closed. |
+| `rejected` | The host declined to admit your bot. |
+| `approval_timeout` | Nobody admitted your bot within 5 minutes. |
+| `call_not_found` | The call does not exist or has ended. |
+| `forbidden` | Your user may not join this call. |
+| `alone` | Nobody else was in the call for 60 seconds, including right after joining an empty call. |
+| `superseded` | Your user joined the same call again from another session. |
+| `media_failed` | The call's audio could not be connected, or was lost. |
+| `shutdown` | The service is restarting; join again. |
+| `error` | Anything else; join again. |
+
+## Commands (your agent → X)
+
+| `type` | Fields | Effect |
+|:-------|:-------|:-------|
+| `audio.append` | `audio` (base64 PCM16) | Same as a binary frame, for clients that cannot send binary. |
+| `audio.clear` | | Drop agent audio that has not played yet (barge-in). |
+| `audio.mark` | `name` | Get a `playback.mark` once everything queued so far has played. |
+| `mute` / `unmute` | | Show your agent as muted or unmuted. A muted agent is not heard, and its queued audio is dropped. |
+| `chat.send` | `text` | Post in the call's chat. |
+| `reaction.send` | `emoji` | Send an emoji reaction. |
+| `join.admit` | `user_id` | Let in someone who asked to join (host or admitted participant). |
+| `join.reject` | `user_id` | Turn them away (host only). |
+| `leave` | | Leave the call; the session ends with `left`. |
+
+## Turn-taking
+
+Speech detection runs on X's side for each participant:
+
+1. On `speech.started` while your agent is talking, send `audio.clear` to stop it mid-sentence, or keep talking if you prefer.
+2. Feed the call audio to your model continuously; most realtime models do their own voice-activity detection too.
+3. Send `audio.mark` after each agent turn to learn when the listener has heard it, for example before leaving after "goodbye".

@@ -1,0 +1,184 @@
+---
+title: Scheduled calls
+sidebarTitle: Scheduled calls
+description: "Put X calls on your user's X Calls calendar, list the calls on their calendar, and move, cancel or answer them, including single occurrences of recurring calls."
+keywords: ["scheduled calls", "X Calls calendar", "schedule a call", "recurring call", "RRULE", "occurrence_start_time", "rsvp"]
+---
+
+<Warning>
+  The X Calls API is in development. It isn't generally available yet, and endpoints and payloads may still change.
+</Warning>
+
+A scheduled call is an X call on the X Calls calendar: a time, a title, the people invited, and optionally a recurrence. Your user is its organizer. Scheduling is limited to the accounts that can schedule calls in the X app; other accounts get a `403`.
+
+Scheduling creates the call right away, so its `join_url` can be shared at once, and your agent [joins](/xcalls/api-reference/join-a-call) it with `call_id` when it's time. Invitees see the call on their X calendar and get an email unless `notify_invitees` is `false`.
+
+<Note>
+  A scheduled call's `id` is not its `call_id`. Change, cancel and answer a scheduled call with its `id`; join the call with its `call_id`.
+</Note>
+
+## List scheduled calls
+
+`GET /2/calls/scheduled` returns the X calls on your user's calendar, earliest first: events on their X Calls calendar, and events on the Google or Outlook calendars they linked to X whose conference is an X call. A meeting assistant uses it to know which calls to join, and when. Calls still running at `start_time` are included.
+
+| Query parameter | Type | Description |
+|:----------------|:-----|:------------|
+| `start_time` | RFC 3339, optional | Calls still running at this time or starting after it. Defaults to now. |
+| `end_time` | RFC 3339, optional | Calls starting before this time. Defaults to 24 hours after `start_time`; at most 7 days after it. |
+| `max_results` | 1–100, optional | The most calls to return. Defaults to 20. |
+
+```bash
+curl "https://api.x.com/2/calls/scheduled?max_results=5" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN"
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "1840000000000000000",
+      "call_id": "t69-8sb-6z5",
+      "join_url": "https://call.x.com/t69-8sb-6z5",
+      "title": "Standup",
+      "start_time": "2026-09-30T17:50:00.000Z",
+      "end_time": "2026-09-30T18:05:00.000Z",
+      "occurrence_start_time": "2026-09-30T17:50:00.000Z",
+      "recurrence": "FREQ=DAILY",
+      "organizer_id": "2244994945",
+      "invitees": [{ "id": "783214", "response": "accepted" }],
+      "calendar": "x",
+      "status": "scheduled"
+    },
+    {
+      "call_id": "abc-def-ghi",
+      "join_url": "https://call.x.com/abc-def-ghi",
+      "title": "Weekly sync",
+      "start_time": "2026-09-30T19:00:00.000Z",
+      "end_time": "2026-09-30T19:30:00.000Z",
+      "calendar": "google",
+      "status": "scheduled"
+    }
+  ],
+  "meta": { "result_count": 2 }
+}
+```
+
+Each item is one occurrence. `calendar` says where it lives:
+
+- `x`: an X Calls event, with the full [scheduled call object](#the-scheduled-call-object). Change it with its `id`.
+- `google` or `outlook`: an event on a calendar your user linked to X. It has no `id` and is changed at the provider.
+
+A meeting on both X Calls and a linked calendar is listed once, as `x`. A linked calendar that can't be read right now (its provider is down, or its events are still loading) leaves out only its own calls; ask again shortly to see them. With no calls in the window, `data` is left out and `result_count` is 0.
+
+## Schedule a call
+
+`POST /2/calls/scheduled`
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `start_time` | RFC 3339, required | When the call starts, with seconds and a zone (`2026-10-12T18:00:00Z`); not in the past. |
+| `duration_minutes` | 1–44640, optional | How long the call lasts. Defaults to 30. |
+| `title` | string, optional | At most 100 characters. |
+| `description` | string, optional | At most 1000 characters. |
+| `invitee_ids` | array of user ids, optional | At most 100 people. |
+| `recurrence` | string, optional | An RFC 5545 RRULE, such as `FREQ=WEEKLY;BYDAY=MO`; the `RRULE:` prefix is optional. |
+| `time_zone` | string, optional | IANA time zone the recurrence follows, such as `America/Los_Angeles`, so a weekly call keeps its local hour across daylight saving. |
+| `notify_invitees` | boolean, optional | Whether invitees get an email. Defaults to `true`. |
+
+```bash
+curl -X POST "https://api.x.com/2/calls/scheduled" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"start_time": "2026-10-12T18:00:00Z", "title": "Weekly sync",
+       "invitee_ids": ["783214"], "recurrence": "FREQ=WEEKLY;BYDAY=MO",
+       "time_zone": "America/Los_Angeles"}'
+```
+
+`201 Created`:
+
+```json
+{
+  "data": {
+    "id": "1840000000000000000",
+    "call_id": "t69-8sb-6z5",
+    "join_url": "https://call.x.com/t69-8sb-6z5",
+    "title": "Weekly sync",
+    "start_time": "2026-10-12T18:00:00.000Z",
+    "end_time": "2026-10-12T18:30:00.000Z",
+    "occurrence_start_time": "2026-10-12T18:00:00.000Z",
+    "recurrence": "FREQ=WEEKLY;BYDAY=MO",
+    "time_zone": "America/Los_Angeles",
+    "organizer_id": "2244994945",
+    "invitees": [{ "id": "783214", "response": "none" }],
+    "calendar": "x",
+    "status": "scheduled"
+  }
+}
+```
+
+## Get a scheduled call
+
+`GET /2/calls/scheduled/:id` returns a scheduled call your user organizes or is invited to, at its occurrence running now or its next one within a year. An unknown or past call, or one your user isn't part of, is a `200` with the problem under `errors`, as with other lookups. Changes can take a few seconds to show here.
+
+## Change a scheduled call
+
+`PUT /2/calls/scheduled/:id` moves, renames or re-invites a call your user organizes. Send only what changes: `start_time`, `duration_minutes`, `title`, `description`, `invitee_ids` (the whole new list; it can't be emptied), `recurrence` and `time_zone`, plus `notify_invitees`. The response is `{"data": {"updated": true}}`; read the call back with GET.
+
+```bash
+curl -X PUT "https://api.x.com/2/calls/scheduled/1840000000000000000" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"start_time": "2026-10-12T19:00:00Z"}'
+```
+
+## Cancel a scheduled call
+
+`DELETE /2/calls/scheduled/:id` cancels a call your user organizes and takes it off invitees' calendars. Query parameters: `scope`, `occurrence_start_time` (see [Recurring calls](#recurring-calls)) and `notify_invitees`. The response is `{"data": {"cancelled": true}}`, also when it was already cancelled.
+
+## Answer an invitation
+
+`POST /2/calls/scheduled/:id/rsvp`
+
+```json
+{ "response": "accepted" }
+```
+
+`response` is `accepted`, `declined` or `tentative`. The response echoes it: `{"data": {"response": "accepted"}}`.
+
+## Recurring calls
+
+Change, cancel and rsvp apply to every occurrence of a recurring call unless you pick some with `scope` (a body field for PUT and rsvp, a query parameter for DELETE):
+
+| `scope` | Applies to |
+|:--------|:-----------|
+| `all` | Every occurrence: the default without `occurrence_start_time`. |
+| `this` | The occurrence starting at `occurrence_start_time`: the default with it. |
+| `this_and_following` | That occurrence and every one after it, such as to end a series. |
+
+`occurrence_start_time` is the occurrence's original start, which GET and the list report as `occurrence_start_time` for recurring calls (`start_time` moves when an occurrence is moved). For example, to move only next Monday's sync:
+
+```json
+{
+  "scope": "this",
+  "occurrence_start_time": "2026-10-19T18:00:00Z",
+  "start_time": "2026-10-19T20:00:00Z"
+}
+```
+
+A one-off call has a single occurrence, so every scope means the whole call. A recurrence can be changed but not removed; cancel the occurrences you don't want with `this_and_following`.
+
+## The scheduled call object
+
+| Field | Description |
+|:------|:------------|
+| `id` | The scheduled call's id: what change, cancel and rsvp take. Not set for calls on linked calendars. |
+| `call_id` | The call people join; join it with [join](/xcalls/api-reference/join-a-call). Anyone with it can open the call's link. |
+| `join_url` | The call's link, `https://call.x.com/{call_id}`. |
+| `title`, `description` | As set. |
+| `start_time`, `end_time` | This occurrence, RFC 3339. |
+| `occurrence_start_time` | For a recurring call, this occurrence's original start: what `scope` `this` and `this_and_following` take. |
+| `recurrence`, `time_zone` | The RRULE and zone, for a recurring call. |
+| `organizer_id` | The organizer's user id. |
+| `invitees` | Everyone invited except the organizer, each with their `response`: `accepted`, `declined`, `tentative` or `none` (no answer yet). Not set for calls on linked calendars. |
+| `calendar` | `x` for X Calls; `google` or `outlook` for a calendar your user linked to X, listed only. |
+| `status` | `scheduled`, or `cancelled` for a cancelled occurrence. |

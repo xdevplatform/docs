@@ -1,0 +1,90 @@
+---
+title: X Calls API
+sidebarTitle: Introduction
+description: "Put a voice agent in an X call: start and join calls as your app's user, stream raw call audio both ways over a WebSocket, and schedule calls on the X Calls calendar."
+keywords: ["X Calls API", "Calls API", "voice agent", "X call", "media WebSocket", "PCM16", "scheduled calls"]
+---
+
+<Warning>
+  The X Calls API is in development. It isn't generally available yet, and endpoints and payloads may still change.
+</Warning>
+
+The X Calls API puts a voice agent in an X call. Your agent joins as your app's user, typically a bot account, hears everyone in the call and talks back, like a person in the X app. Use it to:
+
+- **Call people**: start a call in a conversation with your bot; X rings the other members and your agent greets whoever picks up.
+- **Host calls**: start a call, share its link, and let your agent run it, admitting people if the call is closed.
+- **Join calls** your bot was given the link to: a meeting assistant, an interpreter, a game host.
+- **Schedule calls** on your user's X Calls calendar, and find the calls on it to join.
+
+You bring the agent: a speech-to-speech model, or speech-to-text → LLM → text-to-speech, connected to a WebSocket that streams raw audio both ways. X handles everything about the call itself.
+
+Endpoints are hosted under `https://api.x.com`.
+
+<CardGroup cols={3}>
+  <Card title="Quickstart" icon="rocket" href="/xcalls/quickstart">
+    Create a call and put an agent in it.
+  </Card>
+  <Card title="Media WebSocket" icon="waveform-lines" href="/xcalls/media-websocket">
+    Audio frames, events and commands.
+  </Card>
+  <Card title="Scheduled calls" icon="calendar" href="/xcalls/scheduled-calls">
+    Schedule, list, move and cancel calls.
+  </Card>
+</CardGroup>
+
+---
+
+## How it works
+
+```text
+ your app                        X API                            X call
+ ────────                        ─────                            ──────
+ POST /2/calls ───────────────▶  create the call ───────────────▶ (empty call)
+ POST /2/calls/:id/join ──────▶  admit your user, mint a
+          ◀── media_url + media_token (single use, ~2 min)
+ WebSocket media_url ─────────▶  your user enters the call ─────▶ participants see
+   (Bearer media_token)                                           and hear your bot
+   ◀── binary: call audio (PCM16) ──────────────────────────────── everyone else
+   ─── binary: agent audio (PCM16) ───────────────────────────────▶ everyone hears it
+   ◀── text: events (participant.joined, speech.started, …)
+ POST /2/calls/:id/leave ─────▶  (or send {"type":"leave"}, or close the socket)
+```
+
+## Core concepts
+
+- **Call**: has a host, a join policy and a short id such as `t69-8sb-6z5`. Its link is `https://call.x.com/{id}`. Anyone with the id can open it, so treat the id like a secret.
+- **Media session**: joining starts a media session for your user. Your user enters the call when your WebSocket connects and leaves when it closes. A user has one session per call.
+- **Audio**: plain PCM on the WebSocket, 16-bit little-endian mono at the sample rate you choose (8, 16, 24 or 48 kHz). X handles WebRTC, Opus, jitter and mixing: you receive one mixed stream of everyone else (never your own agent) and send one stream back.
+- **Scheduled call**: an X call on the X Calls calendar, with a time, a title, the people invited, and optionally a recurrence. Scheduling creates the call right away, so its link can be shared at once.
+
+### Join policies
+
+The join policy decides who gets in:
+
+| Policy | Who joins directly |
+|:-------|:-------------------|
+| `open` | Anyone with the id, including people who are not logged in. |
+| `closed` | The host, people the host admitted, and people already in the call. Everyone else asks to join. |
+| `trusted` | Like `closed`, plus members of the host's Verified Organization. |
+
+When your bot must be admitted, the join response says `"admission": "requires_approval"` and your WebSocket receives `session.waiting` until the host answers.
+
+### Key identifiers
+
+| Identifier | Example | What it is |
+|:-----------|:--------|:-----------|
+| Call id | `t69-8sb-6z5` | Identifies a call (`id`, or `call_id` on a scheduled call). Also its join secret. |
+| Session id | `cs_4f1c2a9e0b7d3a51` | Identifies a media session in events and logs. |
+| Media token | `eyJhbGciOiJIUzI1NiJ9…` | Single-use credential for the media WebSocket, valid about 2 minutes. |
+| Scheduled call id | `1840000000000000000` | Identifies a call on the X Calls calendar: what change, cancel and rsvp take. It is not the call id. |
+| Conversation id | `<user_id>-<user_id>`, `g…` | The XChat conversation a call is started in: a 1:1 or a group conversation. |
+
+---
+
+## Next steps
+
+1. [Quickstart](/xcalls/quickstart): create a call and connect an agent
+2. [Authentication](/xcalls/authentication): tokens, scopes and the media token
+3. [Media WebSocket](/xcalls/media-websocket): audio, events and commands
+4. [Calling people](/xcalls/calling-people): ring someone, answer, host a closed call
+5. [Scheduled calls](/xcalls/scheduled-calls): put calls on the calendar and find them
