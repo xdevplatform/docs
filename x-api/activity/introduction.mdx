@@ -35,9 +35,9 @@ Post events are triggered when the filtered user creates or deletes a Post, or w
 | `post.create` | Fired when the filtered user creates a Post. Fires for standalone Posts, replies, quote Posts, and reposts by the filtered user. Inspect the payload (for example `in_reply_to_tweet_id` or `referenced_tweets`) to distinguish the Post type. | `user_id` |
 | `post.delete` | Fired when the filtered user deletes a Post | `user_id` |
 | `post.mention.create` | Fired when another user explicitly @mentions the filtered user in the body of a Post. Does not fire for implicit mentions carried by replies or reposts. | `user_id` |
-| `post.reply.create` | Fired when a user other than the filtered user posts a direct reply to a Post by the filtered user. Direct replies only (does not fire for replies to replies). | `user_id` |
-| `post.quote.create` | Fired when a user other than the filtered user quote Posts a Post by the filtered user. Direct quotes only (does not fire for quotes of quotes). | `user_id` |
-| `post.repost.create` | Fired when a user other than the filtered user reposts a Post by the filtered user. | `user_id` |
+| `post.reply.create` | Fired when a user other than the filtered user posts a direct reply to a Post by the filtered user. Direct replies only (does not fire for replies to replies). | `user_id`, `post_id` |
+| `post.quote.create` | Fired when a user other than the filtered user quote Posts a Post by the filtered user. Direct quotes only (does not fire for quotes of quotes). | `user_id`, `post_id` |
+| `post.repost.create` | Fired when a user other than the filtered user reposts a Post by the filtered user. | `user_id`, `post_id` |
 
 <Note>
 **Protected accounts:** Posts from protected accounts are not delivered through XAA, even when the subscribing app has user-context authorization for the filtered user.
@@ -59,7 +59,7 @@ Like events are triggered when a user likes a Post, or when one of the user's ow
 
 | Event Name | Description | Filters |
 | --- | --- | --- |
-| `like.create` | Fired when a user likes a Post, or one of their Posts is liked | `user_id`, `direction` |
+| `like.create` | Fired when a user likes a Post, or one of their Posts is liked | `user_id`, `direction`, `post_id` |
 
 <Note>
 **Direction filter:** The `like.create` event supports an optional `direction` filter set to `outbound` or `inbound`. Use `outbound` for likes the user makes, and `inbound` for likes the user's Posts receive. If no `direction` is specified, both inbound and outbound like events are delivered.
@@ -111,8 +111,8 @@ Chat events pertain to the new, encrypted messaging stack, or XChat.
 
 | Event Name | Description | Filters |
 | --- | --- | --- |
-| `chat.received` | Fired when a user receives an encrypted direct message | `user_id` |
-| `chat.sent` | Fired when a user sends an encrypted direct message | `user_id` |
+| `chat.received` | Fired when a user receives an encrypted direct message | `user_id`, `conversation_type` |
+| `chat.sent` | Fired when a user sends an encrypted direct message | `user_id`, `conversation_type` |
 | `chat.conversation_join` | Fired when a user joins an encrypted chat conversation | `user_id` |
 
 ### Legacy DM events
@@ -206,9 +206,9 @@ The following qualifiers are currently supported:
 
 | Qualifier | Values | Supported events |
 | --- | --- | --- |
-| `conversation_type` | `direct`, `group` | `chat.received` |
+| `conversation_type` | `direct`, `group` | `chat.received`, `chat.sent` |
 | `direction` | `inbound`, `outbound` | `follow.follow`, `follow.unfollow`, `like.create`, `subscriptions.subscribe`, `subscriptions.unsubscribe` |
-| `post_id` | A Post ID | `like.create` |
+| `post_id` | A Post ID | `like.create`, `post.reply.create`, `post.quote.create`, `post.repost.create` |
 
 The `direction` qualifier is equivalent to the top-level `filter.direction` field. Both remain supported.
 
@@ -226,6 +226,22 @@ Use `post_id` to receive `like.create` events only for likes on a specific Post.
 }
 ```
 
+`post_id` matches the Post that was liked for `like.create`, the Post that was directly replied to for `post.reply.create`, the Post that was quoted for `post.quote.create`, and the Post that was reposted for `post.repost.create`. It does not match the root of a conversation for replies. For example, a reply to a reply matches the intermediate reply's ID, not the original Post's ID.
+
+For example, to receive replies to a specific Post:
+
+```json theme={null}
+{
+  "event_type": "post.reply.create",
+  "filter": {
+    "user_id": "1830023695835787264",
+    "qualifiers": { "post_id": "1234567890123456789" }
+  },
+  "webhook_id": "2090847910112202752",
+  "tag": "replies to a specific post"
+}
+```
+
 For example, to receive `chat.received` events for one-on-one conversations only:
 
 ```json
@@ -239,6 +255,16 @@ For example, to receive `chat.received` events for one-on-one conversations only
   "tag": "direct chats only"
 }
 ```
+
+`conversation_type` works the same way on `chat.sent`: `direct` matches messages the user sends in one-on-one conversations, and `group` matches messages the user sends in group conversations.
+
+`post_id` narrows the `user_id` filter; it doesn't replace it. For reply, quote, and repost events, `user_id` is the author of the Post being replied to, quoted, or reposted, so the `post_id` must be one of that user's Posts. Otherwise the subscription never receives events.
+
+You can create several subscriptions for the same event type and `user_id` if each uses a different `post_id` (for example, one subscription per Post you want to track).
+
+A subscription with a `post_id` and a subscription without one for the same event type and `user_id` would overlap, so the second create is rejected with a DuplicateSubscription error. Repeating an existing `post_id` is also rejected as a duplicate.
+
+`post_id` must be a valid Post ID (a numeric ID of up to 19 digits). Invalid values return a 400 error: `Invalid value '<value>' for qualifier 'post_id'; expected a valid post ID`.
 
 The create, list, and update subscription responses echo `filter.qualifiers` back. The field is omitted when no qualifiers are set.
 
