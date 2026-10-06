@@ -19,7 +19,7 @@ Scheduling creates the call right away, so its `join_url` can be shared at once,
 
 ## List scheduled calls
 
-`GET /2/calls/scheduled` returns the scheduled calls on your user's X Calls calendar that they organize or are invited to, earliest first. A meeting assistant uses it to know which calls to join, and when. Calls still running at `start_time` are included.
+`GET /2/calls/scheduled` returns the X calls on your user's calendar, earliest first: events on their X Calls calendar, and events on the Microsoft Outlook calendars they linked to X whose conference is an X call. A meeting assistant uses it to know which calls to join, and when. Calls still running at `start_time` are included.
 
 | Query parameter | Type | Description |
 |:----------------|:-----|:------------|
@@ -46,14 +46,29 @@ curl "https://api.x.com/2/calls/scheduled?max_results=5" \
       "recurrence": "FREQ=DAILY",
       "organizer_id": "2244994945",
       "invitees": [{ "id": "783214", "response": "accepted" }],
+      "calendar": "x",
+      "status": "scheduled"
+    },
+    {
+      "call_id": "abc-def-ghi",
+      "join_url": "https://call.x.com/abc-def-ghi",
+      "title": "Weekly sync",
+      "start_time": "2026-09-30T19:00:00.000Z",
+      "end_time": "2026-09-30T19:30:00.000Z",
+      "calendar": "outlook",
       "status": "scheduled"
     }
   ],
-  "meta": { "result_count": 1 }
+  "meta": { "result_count": 2 }
 }
 ```
 
-Each item is one occurrence, as a [scheduled call](#the-scheduled-call-object). With no calls in the window, `data` is left out and `result_count` is 0.
+Each item is one occurrence. `calendar` says where it lives:
+
+- `x`: an X Calls event, with the full [scheduled call object](#the-scheduled-call-object). Change it with its `id`.
+- `outlook`: an event on a Microsoft Outlook calendar your user linked to X. It has no `id` and is changed in Outlook.
+
+A meeting on both X Calls and a linked calendar is listed once, as `x`. A linked calendar that can't be read right now (Outlook is down, or its events are still loading) leaves out only its own calls; ask again shortly to see them. With no calls in the window, `data` is left out and `result_count` is 0.
 
 ## Schedule a call
 
@@ -95,6 +110,7 @@ curl -X POST "https://api.x.com/2/calls/scheduled" \
     "time_zone": "America/Los_Angeles",
     "organizer_id": "2244994945",
     "invitees": [{ "id": "783214", "response": "none" }],
+    "calendar": "x",
     "status": "scheduled"
   }
 }
@@ -155,7 +171,7 @@ A one-off call has a single occurrence, so every scope means the whole call. A r
 
 | Field | Description |
 |:------|:------------|
-| `id` | The scheduled call's id: what change, cancel and rsvp take. |
+| `id` | The scheduled call's id: what change, cancel and rsvp take. Not set for calls on linked Outlook calendars. |
 | `call_id` | The call people join; join it with [join](/xcalls/api-reference/join-a-call). Anyone with it can open the call's link. |
 | `join_url` | The call's link, `https://call.x.com/{call_id}`. |
 | `title`, `description` | As set. |
@@ -163,5 +179,6 @@ A one-off call has a single occurrence, so every scope means the whole call. A r
 | `occurrence_start_time` | For a recurring call, this occurrence's original start: what `scope` `this` and `this_and_following` take. |
 | `recurrence`, `time_zone` | The RRULE and zone, for a recurring call. |
 | `organizer_id` | The organizer's user id. |
-| `invitees` | Everyone invited except the organizer, each with their `response`: `accepted`, `declined`, `tentative` or `none` (no answer yet). |
+| `invitees` | Everyone invited except the organizer, each with their `response`: `accepted`, `declined`, `tentative` or `none` (no answer yet). Not set for calls on linked Outlook calendars. |
+| `calendar` | `x` for X Calls; `outlook` for a Microsoft Outlook calendar your user linked to X, listed only. |
 | `status` | `scheduled`, or `cancelled` for a cancelled occurrence. |
