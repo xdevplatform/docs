@@ -1,0 +1,60 @@
+---
+title: Errors and limits
+sidebarTitle: Errors and limits
+description: "The errors X Calls API endpoints return, in the standard X API problem format, and the limits on media tokens, sessions, admission, audio and calls."
+keywords: ["X Calls API errors", "problem types", "403", "404", "409", "limits", "media token", "alone timeout"]
+---
+
+<Warning>
+  The X Calls API is in development. It isn't generally available yet, and endpoints and payloads may still change.
+</Warning>
+
+## Errors
+
+Errors use the standard X API problem format (`type`, `title`, `detail`). Lookups (`GET /2/calls/:id`, `GET /2/calls/scheduled/:id`) return an unknown or unavailable resource as a `200` with the problem under `errors`, like other X API lookups.
+
+| Status | `type` | When |
+|:-------|:-------|:-----|
+| `400` | `https://api.x.com/2/problems/invalid-request` | A malformed body (for example an unknown `media.type`) or a value calls reject (an unsupported `sample_rate`, a `conversation_id` that is not an XChat id). `errors[]` says what to fix. |
+| `403` | `https://api.x.com/2/problems/unsupported-authentication` | An app-only token. Use a user-context token. |
+| `403` | `https://api.x.com/2/problems/missing-scopes` | An OAuth 2.0 token without the endpoint's scopes. |
+| `403` | `https://api.x.com/2/problems/oauth1-permissions` | An OAuth 1.0a app without the Direct Messages permission. |
+| `403` | `https://api.x.com/2/problems/not-authorized-for-resource` | Your user may not join or act on this call, or change, cancel or answer this scheduled call (only its organizer changes and cancels it; only invitees answer). |
+| `403` | `about:blank` | Your user is not a member of `conversation_id`, or may not schedule calls. |
+| `404` | `https://api.x.com/2/problems/resource-not-found` | Join or leave on an unknown or ended call, or a change to an unknown scheduled call. |
+| `409` | `https://api.x.com/2/problems/conflict` | A change to a scheduled call that was cancelled. |
+| `429` | rate limit | Too many requests for your plan. |
+| `503` | `about:blank` | Calls are temporarily unavailable, or a conversation's membership could not be checked. Retry with backoff. |
+
+An unknown call looked up with `GET /2/calls/:id`:
+
+```json
+{
+  "errors": [
+    {
+      "value": "zzz-zzz-zzz",
+      "detail": "Could not find call with id: [zzz-zzz-zzz].",
+      "title": "Not Found Error",
+      "resource_type": "call",
+      "parameter": "id",
+      "resource_id": "zzz-zzz-zzz",
+      "type": "https://api.x.com/2/problems/resource-not-found"
+    }
+  ]
+}
+```
+
+Errors on the media WebSocket arrive as `error` events and `session.ended` reasons. See [Media WebSocket](/xcalls/media-websocket#error-codes).
+
+## Limits
+
+| Limit | Value |
+|:------|:------|
+| Media token | Single use, valid about 2 minutes (`expires_at`). |
+| Sessions per user per call | 1; joining again replaces the earlier session, which ends with `superseded`. |
+| Waiting for the host to admit your bot | 5 minutes. |
+| Alone in a call | The session ends after 60 seconds. |
+| Agent audio queued ahead of playback | 2 minutes; beyond that the oldest audio is dropped. |
+| Audio | Mono PCM16 at 8, 16, 24 or 48 kHz; no video. |
+| Calls | X calls (XChat). Legacy 1:1 DM calls are not supported. |
+| Scheduled call window | `GET /2/calls/scheduled` covers at most 7 days per request. |
