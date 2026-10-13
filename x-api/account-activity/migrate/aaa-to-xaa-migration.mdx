@@ -1,21 +1,237 @@
 ---
-title: AAA to XAA migration
-description: Summary of the AAA to XAA migration and key benefits of XAA.
+title: Migrate from the Account Activity API to the X Activity API
+sidebarTitle: AAA to XAA migration
+description: "How Enterprise customers move from the Account Activity API (AAA) to the X Activity API (XAA) before AAA reaches end of life on January 1, 2027, including a managed migration option."
+keywords: ["AAA to XAA", "Account Activity API migration", "X Activity API migration", "AAA end of life", "AAA deprecation", "managed migration", "XAA migration guide"]
 ---
+
+<Warning>
+The Account Activity API (AAA) reaches end of life on **January 1, 2027**. Migrate to the [X Activity API (XAA)](/x-api/activity/introduction) before then to avoid an interruption in event delivery.
+</Warning>
 
 ## Summary
 
-We have set January 1, 2027 as the target date for AAA to reach end of life. All customers should plan to migrate to the new X Activity API (XAA) before that time. See the [X Activity API (XAA) documentation](/x-api/activity/introduction) for details. Please get in contact with your account manager with any and all questions.
+The X Activity API (XAA) replaces the Account Activity API (AAA) for real-time user activity. Every activity type AAA delivers has an equivalent XAA event, and XAA adds many event types that AAA never supported.
+
+You have two ways to migrate:
+
+- **Managed migration (recommended for Enterprise customers).** Submit a request and the X team migrates your existing AAA subscriptions to XAA for you. See [Managed migration](#managed-migration).
+- **Self-serve migration.** Create the XAA subscriptions yourself using the API. See [Self-serve migration](#self-serve-migration).
+
+Either way, your webhook consumer must be updated to read the XAA payload format before you cut over. See [What changes for your integration](#what-changes-for-your-integration).
+
+Contact your account manager with any questions.
 
 ## Benefits of XAA
 
-XAA offers several advantages over AAA:
+- **Covers everything AAA delivers.** Posts, mentions, replies, quotes, reposts, deletes, likes, follows, blocks, mutes, DMs, typing indicators, read receipts, and app revocations all have XAA equivalents. See the [event mapping](#aaa-to-xaa-event-mapping).
+- **Granular subscriptions.** Instead of an all-or-nothing subscription per user, choose exactly which event types you want for each user, and narrow them further with [filter qualifiers](/x-api/activity/introduction#filter-qualifiers) such as `direction`, `post_id`, and `conversation_type`. You only receive, and process, the events you need.
+- **New event types.** XAA supports event families AAA never served, including encrypted XChat messages, profile updates, live broadcast start, end, and chat events, Spaces, paid subscriptions, and Grok-curated news headlines filtered by keyword. See [Supported event types](/x-api/activity/introduction#supported-event-types).
+- **Webhook or streaming delivery.** Receive events on your existing webhook, over a [persistent HTTP stream](/x-api/activity/activity-stream), or both. The stream supports up to 5 minutes of backfill on connect and recovery of missed events with `start_time` and `end_time`.
+- **Keep your webhook and your users' authorizations.** XAA uses the same [V2 Webhooks API](/x-api/webhooks/introduction), CRC checks, and signature headers as AAA, so you can point XAA subscriptions at the webhook you already use. XAA accepts the OAuth 1.0a user access tokens you already hold, so users don't need to re-authorize your app.
+- **OAuth 2.0 with fine-grained scopes.** When you're ready, move to OAuth 2.0 and request only the scopes you need (for example `dm.read`, `like.read`, `block.read`, `mute.read`, `tweet.read`).
+- **X API v2 data format.** Post and user objects match the rest of X API v2, with related objects in `includes`, so the same parsing code works across endpoints.
+- **Better subscription management.** Tag subscriptions, set an automatic `expires_at`, list subscriptions for a single user, and delete up to 100 subscriptions in one request.
+- **Webhook replay.** Recover events delivered to your webhook with [`POST /2/webhooks/replay`](/x-api/webhooks/create-replay-job-for-webhook).
 
-- A full superset of all AAA features
-- Granular event-based subscription model, rather than all-or-nothing for a user subscription
-- Full OAuth2.0 support
-- Supports webhook delivery and persistent HTTP stream. You can use the same webhook you currently use for AAA if you so choose
-- Several additional event families that AAA did not serve including support for the new XChat service, live broadcast chat and lifecycle events, profile updates, and more
-- Non-user specific events such as platform news
-- OAuth revocation events
-- Uses the same replay mechanisms that AAA did
+## Managed migration
+
+Enterprise customers can ask the X team to perform the migration for you. We'll move your existing AAA subscriptions to the equivalent XAA subscriptions internally, so you don't need to re-create subscriptions or ask your users to re-authorize your app.
+
+<Steps>
+  <Step title="Submit a migration request">
+    Fill out the [AAA to XAA managed migration request form](https://forms.gle/19Cu4D5E41QuaKrD8).
+  </Step>
+  <Step title="Confirm the details with our team">
+    We'll contact you to confirm which apps, webhooks, and event types to migrate, and agree on a cutover time.
+  </Step>
+  <Step title="Update your webhook consumer">
+    Before cutover, update your webhook handler to accept XAA payloads. See [What changes for your integration](#what-changes-for-your-integration).
+  </Step>
+  <Step title="Verify delivery">
+    After cutover, confirm XAA events are arriving at your webhook. You can list the migrated subscriptions with [`GET /2/activity/subscriptions`](/x-api/activity/get-x-activity-subscriptions).
+  </Step>
+</Steps>
+
+<Note>
+Submit your request well ahead of January 1, 2027 so there's time to schedule and verify the cutover.
+</Note>
+
+## AAA to XAA event mapping
+
+AAA delivers every activity type below for each subscribed user. In XAA, each event type is a separate subscription.
+
+| AAA activity | AAA payload key | XAA event type | Notes |
+| --- | --- | --- | --- |
+| Posts, replies, reposts, and quote Posts by the user | `tweet_create_events` | `post.create` | Use `referenced_tweets` and `in_reply_to_tweet_id` to tell the Post types apart. |
+| @mentions of the user | `tweet_create_events` | `post.mention.create` | Explicit @mentions in the Post body only. |
+| Replies to the user's Posts | `tweet_create_events` | `post.reply.create` | Direct replies only. |
+| Quote Posts of the user's Posts | `tweet_create_events` | `post.quote.create` | |
+| Reposts of the user's Posts, including reposts of the user's quote Posts | `tweet_create_events` | `post.repost.create` | |
+| Post deletes by the user | `tweet_delete_events` | `post.delete` | |
+| Likes by the user or of the user's Posts | `favorite_events` | `like.create` | Use the `direction` qualifier (`outbound` or `inbound`) to receive only one side. |
+| Follows by or of the user | `follow_events` | `follow.follow` | Supports `direction`. |
+| Unfollows by or of the user | `follow_events` | `follow.unfollow` | Supports `direction`. |
+| Blocks and unblocks by the user | `block_events` | `block.block`, `block.unblock` | |
+| Mutes and unmutes by the user | `mute_events` | `mute.mute`, `mute.unmute` | |
+| DMs sent and received | `direct_message_events` | `dm.sent`, `dm.received` | The XAA `payload` keeps the `direct_message_events` structure. |
+| Typing indicators | `direct_message_indicate_typing_events` | `dm.indicate_typing` | |
+| Read receipts | `direct_message_mark_read_events` | `dm.read` | |
+| App authorization revoked | `user_event` | `oauth.revoke` | Delivered automatically. No subscription required. |
+
+Replicating an AAA subscription for one user takes up to 17 XAA subscriptions (one per event type in the table, excluding `oauth.revoke`). Each one counts toward your [subscription limit](/x-api/activity/introduction#subscription-limits), so only subscribe to the event types you use. Contact your account manager if you need a higher limit.
+
+## What changes for your integration
+
+### Payload format
+
+AAA sends v1.1 objects keyed by activity type, with `for_user_id` identifying the subscribed user. XAA wraps every event in a common envelope and uses X API v2 objects.
+
+<CodeGroup>
+
+```json AAA
+{
+  "for_user_id": "2244994945",
+  "favorite_events": [
+    {
+      "id": "a7ba59eab0bfcba386f7acedac279542",
+      "created_at": "Mon Mar 26 16:33:26 +0000 2018",
+      "favorited_status": { "...": "v1.1 Tweet object" },
+      "user": { "...": "v1.1 User object" }
+    }
+  ]
+}
+```
+
+```json XAA
+{
+  "data": {
+    "event_uuid": "2080761390344937796",
+    "created_at": "2026-10-07T19:17:36.304Z",
+    "filter": { "user_id": "2244994945" },
+    "event_type": "like.create",
+    "tag": "aaa-migration",
+    "payload": { "...": "event-specific data" },
+    "includes": { "...": "related v2 users and Posts" }
+  }
+}
+```
+
+</CodeGroup>
+
+| AAA | XAA |
+| --- | --- |
+| `for_user_id` | `data.filter.user_id` |
+| Activity key (for example `favorite_events`) | `data.event_type` (for example `like.create`) |
+| v1.1 Tweet and User objects | v2 Post and user objects in `data.payload` and `data.includes` |
+| No per-event identifier | `data.event_uuid` |
+
+See [Event payloads](/x-api/activity/event-payloads) for a full example of every XAA event type.
+
+<Tip>
+During the transition you may receive both formats on the same webhook. AAA payloads have a top-level `for_user_id`, and XAA payloads have a top-level `data.event_type`, so your handler can route on whichever is present.
+</Tip>
+
+### Behavior differences
+
+| Area | AAA | XAA |
+| --- | --- | --- |
+| Subscription model | One `/all` subscription per user | One subscription per event type per user |
+| Delivery | Webhook | Webhook, persistent HTTP stream, or both |
+| Replies | Any Post that mentions the user, including replies deeper in a thread | `post.reply.create` covers direct replies to the user's Posts, and `post.mention.create` covers explicit @mentions only |
+| Protected accounts | Posts by an authorized protected user are delivered | Posts from protected accounts are not delivered |
+| Replay window | Up to 5 days ([AAA replay](/x-api/account-activity/create-replay-job)) | Up to 24 hours ([webhook replay](/x-api/webhooks/create-replay-job-for-webhook)) |
+| App revocation | `user_event` | `oauth.revoke`. User-context subscriptions for that user are deleted automatically |
+
+## Self-serve migration
+
+<Steps>
+  <Step title="Inventory your AAA subscriptions">
+    List your webhooks with [`GET /2/webhooks`](/x-api/webhooks/get-webhook), then list the subscribed users on each with [`GET /2/account_activity/webhooks/:webhook_id/subscriptions/all/list`](/x-api/account-activity/get-subscriptions).
+  </Step>
+  <Step title="Choose event types">
+    Use the [event mapping](#aaa-to-xaa-event-mapping) to decide which XAA event types each user needs.
+  </Step>
+  <Step title="Update your webhook consumer">
+    Add support for the XAA envelope and v2 objects, and keep AAA parsing in place until cutover is complete.
+  </Step>
+  <Step title="Create XAA subscriptions">
+    Call [`POST /2/activity/subscriptions`](/x-api/activity/create-x-activity-subscription) once per user and event type, passing your existing `webhook_id`. Authenticate with the subscribed user's access token: either the OAuth 1.0a token you already use for AAA, or an OAuth 2.0 token with the matching scope. Public events can also be created with your app's bearer token. See [Event privacy and authentication](/x-api/activity/introduction#event-privacy-and-authentication).
+  </Step>
+  <Step title="Verify delivery">
+    Confirm XAA events are arriving for each migrated user. While both AAA and XAA subscriptions are active for a user, you receive each activity twice, once in each format.
+  </Step>
+  <Step title="Remove AAA subscriptions">
+    Delete each user's AAA subscription with [`DELETE /2/account_activity/webhooks/:webhook_id/subscriptions/:user_id/all`](/x-api/account-activity/delete-subscription).
+  </Step>
+</Steps>
+
+The following example creates XAA subscriptions for one user with the OAuth 1.0a credentials from your AAA integration:
+
+```python
+import requests
+from requests_oauthlib import OAuth1
+
+EVENT_TYPES = [
+    "post.create", "post.delete", "post.mention.create", "post.reply.create",
+    "post.quote.create", "post.repost.create", "like.create",
+    "follow.follow", "follow.unfollow", "block.block", "block.unblock",
+    "mute.mute", "mute.unmute", "dm.sent", "dm.received", "dm.read",
+    "dm.indicate_typing",
+]
+
+auth = OAuth1(CONSUMER_KEY, CONSUMER_SECRET, USER_ACCESS_TOKEN, USER_ACCESS_TOKEN_SECRET)
+
+for event_type in EVENT_TYPES:
+    response = requests.post(
+        "https://api.x.com/2/activity/subscriptions",
+        auth=auth,
+        json={
+            "event_type": event_type,
+            "filter": {"user_id": USER_ID},
+            "webhook_id": WEBHOOK_ID,
+            "tag": "aaa-migration",
+        },
+    )
+    print(event_type, response.status_code, response.json())
+```
+
+## Frequently asked questions
+
+<AccordionGroup>
+  <Accordion title="Can I keep using my current webhook?">
+    Yes. XAA uses the same V2 Webhooks API as AAA. Pass your existing `webhook_id` when you create XAA subscriptions. CRC checks and signature verification work the same way.
+  </Accordion>
+  <Accordion title="Do my users need to re-authorize my app?">
+    No. XAA accepts the OAuth 1.0a user access tokens you already use with AAA. If you use managed migration, we migrate your existing subscriptions for you.
+  </Accordion>
+  <Accordion title="Will I receive duplicate events during the migration?">
+    Yes, for any user who has both an AAA and an XAA subscription on the same webhook. Remove the AAA subscription once XAA delivery is verified, or have your handler ignore one format during the overlap.
+  </Accordion>
+  <Accordion title="Can I receive events without a webhook?">
+    Yes. Connect to [`GET /2/activity/stream`](/x-api/activity/activity-stream) to receive events for all your subscriptions over a persistent HTTP connection. A subscription with a `webhook_id` is delivered to both the webhook and the stream when the stream is open.
+  </Accordion>
+  <Accordion title="What happens to AAA after January 1, 2027?">
+    AAA reaches end of life and is no longer supported. Migrate your subscriptions before that date to avoid missing events.
+  </Accordion>
+  <Accordion title="How does XAA affect my Enterprise contract?">
+    Contact your account manager for details on XAA subscription limits and pricing for your account.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Request a managed migration" icon="/icons/xds/icon-rocket.svg" href="https://forms.gle/19Cu4D5E41QuaKrD8">
+    Have the X team migrate your AAA subscriptions
+  </Card>
+  <Card title="XAA introduction" icon="/icons/xds/icon-book.svg" href="/x-api/activity/introduction">
+    Event types, authentication, and limits
+  </Card>
+  <Card title="XAA quickstart" icon="/icons/xds/icon-code.svg" href="/x-api/activity/quickstart">
+    Create a subscription and receive events
+  </Card>
+  <Card title="Event payloads" icon="/icons/xds/icon-brackets.svg" href="/x-api/activity/event-payloads">
+    Sample JSON for every XAA event type
+  </Card>
+</CardGroup>
