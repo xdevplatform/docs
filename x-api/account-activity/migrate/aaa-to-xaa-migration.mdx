@@ -28,11 +28,11 @@ Contact your account manager with any questions.
 - **Granular subscriptions.** Instead of an all-or-nothing subscription per user, choose exactly which event types you want for each user, and narrow them further with [filter qualifiers](/x-api/activity/introduction#filter-qualifiers) such as `direction`, `post_id`, and `conversation_type`. You only receive, and process, the events you need.
 - **New event types.** XAA supports event families AAA never served, including encrypted XChat messages, profile updates, live broadcast start, end, and chat events, Spaces, paid subscriptions, and Grok-curated news headlines filtered by keyword. See [Supported event types](/x-api/activity/introduction#supported-event-types).
 - **Webhook or streaming delivery.** Receive events on your existing webhook, over a [persistent HTTP stream](/x-api/activity/activity-stream), or both. The stream supports up to 5 minutes of backfill on connect and recovery of missed events with `start_time` and `end_time`.
-- **Keep your webhook and your users' authorizations.** XAA uses the same [V2 Webhooks API](/x-api/webhooks/introduction), CRC checks, and signature headers as AAA, so you can point XAA subscriptions at the webhook you already use. XAA accepts the OAuth 1.0a user access tokens you already hold, so users don't need to re-authorize your app.
-- **OAuth 2.0 with fine-grained scopes.** When you're ready, move to OAuth 2.0 and request only the scopes you need (for example `dm.read`, `like.read`, `block.read`, `mute.read`, `tweet.read`).
+- **Keep your webhook and your users' authorizations.** XAA uses the same [V2 Webhooks API](/x-api/webhooks/introduction), CRC checks, and signature headers as AAA, so you can point XAA subscriptions at the webhook you already use. XAA accepts the OAuth 1.0a user access tokens you already hold, so users don't need to re-authorize your app to migrate.
+- **OAuth 2.0 with fine-grained scopes.** XAA supports OAuth 2.0, so you can request only the scopes you need (for example `dm.read`, `like.read`, `block.read`, `mute.read`, `tweet.read`). OAuth 1.0a support in XAA will be deprecated soon, so plan to move your users to OAuth 2.0.
+- **Same replay window.** Recover events from the past 24 hours with [`POST /2/webhooks/replay`](/x-api/webhooks/create-replay-job-for-webhook), the same window as AAA replay.
 - **X API v2 data format.** Post and user objects match the rest of X API v2, with related objects in `includes`, so the same parsing code works across endpoints.
 - **Better subscription management.** Tag subscriptions, set an automatic `expires_at`, list subscriptions for a single user, and delete up to 100 subscriptions in one request.
-- **Webhook replay.** Recover events delivered to your webhook with [`POST /2/webhooks/replay`](/x-api/webhooks/create-replay-job-for-webhook).
 
 ## Managed migration
 
@@ -140,8 +140,11 @@ During the transition you may receive both formats on the same webhook. AAA payl
 | Delivery | Webhook | Webhook, persistent HTTP stream, or both |
 | Replies | Any Post that mentions the user, including replies deeper in a thread | `post.reply.create` covers direct replies to the user's Posts, and `post.mention.create` covers explicit @mentions only |
 | Protected accounts | Posts by an authorized protected user are delivered | Posts from protected accounts are not delivered |
-| Replay window | Up to 5 days ([AAA replay](/x-api/account-activity/create-replay-job)) | Up to 24 hours ([webhook replay](/x-api/webhooks/create-replay-job-for-webhook)) |
 | App revocation | `user_event` | `oauth.revoke`. User-context subscriptions for that user are deleted automatically |
+
+<Note>
+We're looking at closing the reply and protected account gaps in XAA. This page will be updated as that work lands.
+</Note>
 
 ## Self-serve migration
 
@@ -156,7 +159,7 @@ During the transition you may receive both formats on the same webhook. AAA payl
     Add support for the XAA envelope and v2 objects, and keep AAA parsing in place until cutover is complete.
   </Step>
   <Step title="Create XAA subscriptions">
-    Call [`POST /2/activity/subscriptions`](/x-api/activity/create-x-activity-subscription) once per user and event type, passing your existing `webhook_id`. Authenticate with the subscribed user's access token: either the OAuth 1.0a token you already use for AAA, or an OAuth 2.0 token with the matching scope. Public events can also be created with your app's bearer token. See [Event privacy and authentication](/x-api/activity/introduction#event-privacy-and-authentication).
+    Call [`POST /2/activity/subscriptions`](/x-api/activity/create-x-activity-subscription) once per user and event type, passing your existing `webhook_id`. Authenticate with the subscribed user's access token: either an OAuth 2.0 token with the matching scope, or the OAuth 1.0a token you already use for AAA. Public events can also be created with your app's bearer token. See [Event privacy and authentication](/x-api/activity/introduction#event-privacy-and-authentication).
   </Step>
   <Step title="Verify delivery">
     Confirm XAA events are arriving for each migrated user. While both AAA and XAA subscriptions are active for a user, you receive each activity twice, once in each format.
@@ -167,6 +170,10 @@ During the transition you may receive both formats on the same webhook. AAA payl
 </Steps>
 
 The following example creates XAA subscriptions for one user with the OAuth 1.0a credentials from your AAA integration:
+
+<Warning>
+OAuth 1.0a support in XAA will be deprecated soon. You can use your existing OAuth 1.0a tokens to migrate, but plan to move your users to OAuth 2.0.
+</Warning>
 
 ```python
 import requests
@@ -203,7 +210,7 @@ for event_type in EVENT_TYPES:
     Yes. XAA uses the same V2 Webhooks API as AAA. Pass your existing `webhook_id` when you create XAA subscriptions. CRC checks and signature verification work the same way.
   </Accordion>
   <Accordion title="Do my users need to re-authorize my app?">
-    No. XAA accepts the OAuth 1.0a user access tokens you already use with AAA. If you use managed migration, we migrate your existing subscriptions for you.
+    Not to migrate. XAA accepts the OAuth 1.0a user access tokens you already use with AAA, and if you use managed migration, we migrate your existing subscriptions for you. OAuth 1.0a support in XAA will be deprecated soon, though, so plan to move your users to OAuth 2.0.
   </Accordion>
   <Accordion title="Will I receive duplicate events during the migration?">
     Yes, for any user who has both an AAA and an XAA subscription on the same webhook. Remove the AAA subscription once XAA delivery is verified, or have your handler ignore one format during the overlap.
