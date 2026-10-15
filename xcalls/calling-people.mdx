@@ -1,0 +1,46 @@
+---
+title: Calling people
+sidebarTitle: Calling people
+description: "Ring people from your bot's XChat conversations, answer calls started in a conversation with your bot, and admit people to the closed calls your bot hosts."
+keywords: ["call someone", "ring", "answer a call", "conversation_id", "closed call", "join.requested", "join.admit"]
+---
+
+<Warning>
+  The X Calls API is in development. It isn't generally available yet, and endpoints and payloads may still change.
+</Warning>
+
+## Calling someone
+
+Start the call in your bot's conversation with them, then join it:
+
+<Steps>
+  <Step title="Create the call in the conversation">
+    `POST /2/calls` with `conversation_id`: a 1:1 id (`<user_id>-<user_id>`, as the chat endpoints return it, or `<user_id>:<user_id>`) or a group id (`g…`). Your bot must be a member of the conversation.
+  </Step>
+  <Step title="Join it and connect your agent">
+    `POST /2/calls/:id/join`, then open the [media WebSocket](/xcalls/media-websocket).
+  </Step>
+  <Step title="X rings the other members">
+    When the host (your bot) enters the empty call, X rings the other members: in a group, every other member; in a 1:1 conversation, the other person, if X's messaging trust check allows your account to reach them. Ringing is a VoIP push, which reaches the X and XChat apps on iOS; people on other devices join from the conversation or the call link.
+  </Step>
+</Steps>
+
+If nobody joins within 60 seconds, your agent's session ends with `alone`.
+
+If the conversation already has a call in progress, `POST /2/calls` returns **that** call instead of a new one: its `host_id` is whoever started it, and its title and policy are theirs.
+
+## Answering a call
+
+X does not notify bots of incoming calls yet. When you know someone has started a call in a conversation with your bot, for example because they messaged your bot, `POST /2/calls` with that conversation's id returns the call in progress (`host_id` is the caller), and joining it answers.
+
+Conversation ids are matched exactly, so use the id in the form the caller's call uses (the chat endpoints return 1:1 ids as `<user_id>-<user_id>`). If no call is in progress, the request starts a new one.
+
+## Hosting a closed call
+
+When your bot hosts a `closed` or `trusted` call, people who are not admitted automatically ask to join. Your agent receives `join.requested` and answers with `join.admit` or `join.reject`:
+
+```json
+{ "type": "join.admit", "user_id": "783214" }
+```
+
+Requests made while your agent is not in the call are delivered once it joins.
