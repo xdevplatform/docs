@@ -281,6 +281,17 @@ The payload of the Powerstream API is the same format as the legacy GNIP Powertr
 ]
 ```
 
+## Limitations
+
+Powerstream sends the legacy PowerTrack payload. It does not build the X API v2 Post object, and it does not let you choose fields.
+
+- **Payload shape.** Each Post is enterprise JSON in the v1.1 style, the same shape as legacy PowerTrack. It is not a v2 object with `data`, `includes`, and `matching_rules`.
+- **Text.** `text` is the Post's short body. When `extended_tweet` is present, `extended_tweet.full_text` is that same short body (`text` may be a shorter legacy truncation of it). Neither field includes long-form text beyond the short body, and Article content is not included.
+- **No `note_tweet` or `article`.** The stream does not return a `note_tweet` object or an `article` object. Those fields exist on the [v2 Post](/x-api/fundamentals/data-dictionary) (`note_tweet` for long-form text beyond 280 characters, `article` for Article title, text, and entities).
+- **No field selection.** `tweet.fields` and `expansions` are not supported. The only query parameters on `GET /2/powerstream` are `backfillMinutes`, `startTime`, `endTime`, and `localDcOnly`. Any other parameter is rejected.
+
+**Tradeoff.** [Filtered stream](/x-api/posts/filtered-stream/introduction) hydrates Posts into the v2 object, including `note_tweet` and `article`, which is why its P99 latency is about 4–5 seconds. PowerTrack also waits on a fuller hydration path before delivery. Powerstream skips that hydration, which is why it is the lower-latency stream. Use filtered stream when you need long-form text or Articles.
+
 ## Limits and best practices
 
 - Rate Limits: 50 requests/24h for rule management; no limit on streams (but connection limits apply).
