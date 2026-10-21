@@ -281,6 +281,43 @@ The payload of the Powerstream API is the same format as the legacy GNIP Powertr
 ]
 ```
 
+### Edited posts
+
+Each edit of a post creates a new post with a new ID, and Powerstream delivers every version that matches your rules. Posts that carry edit data include these fields at the top level of the post object:
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `edit_history.initial_tweet_id` | string | ID of the first post in the edit chain. For an original post, this is its own ID. |
+| `edit_history.edit_tweet_ids` | array of strings | Every post ID in the edit chain, oldest first. |
+| `edit_controls.editable_until_ms` | number | When the post can no longer be edited, in milliseconds since the Unix epoch. |
+| `edit_controls.edits_remaining` | number | How many more times the post can be edited. |
+| `editable` | boolean | Whether the post can be edited. |
+
+A post is an edit when `edit_history.initial_tweet_id` is different from its `id_str`. For example, the second version of an edited post looks like this:
+
+```json title="Edited post (excerpt)" lines wrap icon="/icons/xds/icon-brackets.svg"
+{
+   "id_str": "1234567890123456790",
+   "text": "Updated text",
+   "edit_history": {
+       "initial_tweet_id": "1234567890123456789",
+       "edit_tweet_ids": [
+           "1234567890123456789",
+           "1234567890123456790"
+       ]
+   },
+   "edit_controls": {
+       "editable_until_ms": 1760040000000,
+       "edits_remaining": 4
+   },
+   "editable": true
+}
+```
+
+The first version of the same post has `"initial_tweet_id": "1234567890123456789"`, the same as its own `id_str`. Reposts and quoted posts include their own edit fields inside `retweeted_status` and `quoted_status`. Some fields can be missing on individual posts; posts without edit data, such as posts created before editing was available, don't include them.
+
+To receive only the first version of each post, add `-is:edit` to your rules. See [Filtering out edited posts](/x-api/powerstream/operators#filtering-out-edited-posts). For more on how editing works, see [Edit Posts](/x-api/fundamentals/edit-posts).
+
 ## Limits and best practices
 
 - Rate Limits: 50 requests/24h for rule management; no limit on streams (but connection limits apply).
