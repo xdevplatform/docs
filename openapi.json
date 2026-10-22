@@ -157,10 +157,10 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "users.read",
+              "dm.write",
               "dm.read",
-              "dm.write"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -217,8 +217,8 @@
             "OAuth2UserToken": [
               "users.read",
               "dm.read",
-              "tweet.read",
-              "dm.write"
+              "dm.write",
+              "tweet.read"
             ]
           },
           {
@@ -1368,9 +1368,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "tweet.read",
-              "broadcast.read"
+              "broadcast.read",
+              "users.read"
             ]
           },
           {
@@ -1426,8 +1426,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "broadcast.read",
-              "broadcast.write"
+              "broadcast.write",
+              "broadcast.read"
             ]
           },
           {
@@ -1631,8 +1631,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "broadcast.write",
-              "broadcast.read"
+              "broadcast.read",
+              "broadcast.write"
             ]
           },
           {
@@ -1689,8 +1689,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "broadcast.write",
-              "broadcast.read"
+              "broadcast.read",
+              "broadcast.write"
             ]
           },
           {
@@ -2095,8 +2095,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "broadcast.read",
-              "broadcast.write"
+              "broadcast.write",
+              "broadcast.read"
             ]
           },
           {
@@ -2349,6 +2349,63 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DeleteBroadcastChatMessageResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/calls": {
+      "post": {
+        "security": [
+          {
+            "OAuth2UserToken": [
+              "calls.write"
+            ]
+          },
+          {
+            "UserToken": []
+          }
+        ],
+        "tags": [
+          "Calls"
+        ],
+        "summary": "Create a call",
+        "description": "Starts an X call hosted by the authenticated user (typically a bot). Pass an XChat conversation_id to start the call in that conversation, or omit it for a standalone call anyone can join with the returned join_url (subject to join_policy). The call starts empty: put an agent in it with POST /2/calls/:id/join. When the host joins a conversation call, the other members are rung.",
+        "operationId": "createCall",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateCallResponse"
                 }
               }
             }
@@ -2890,13 +2947,135 @@
         }
       }
     },
+    "/2/calls/{id}/join": {
+      "post": {
+        "security": [
+          {
+            "OAuth2UserToken": [
+              "calls.join"
+            ]
+          }
+        ],
+        "tags": [
+          "Calls"
+        ],
+        "summary": "Join a call",
+        "description": "Starts a media session that takes part in the call as the authenticated user. The response carries a media_url and a short-lived media_token: open a WebSocket to media_url with the token as a Bearer credential to exchange PCM16 audio and events with the call; the user enters the call when the WebSocket connects. On a closed or trusted call the session asks the host first (admission: requires_approval).",
+        "operationId": "joinCall",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            },
+            "style": "simple"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinCallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinCallResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/2/calls/{id}/leave": {
+      "post": {
+        "security": [
+          {
+            "OAuth2UserToken": [
+              "calls.join"
+            ]
+          }
+        ],
+        "tags": [
+          "Calls"
+        ],
+        "summary": "Leave a call",
+        "description": "Ends the authenticated user's media session in the call (its WebSocket receives session.ended with reason left) and removes the user from the call.",
+        "operationId": "leaveCall",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,64}$"
+            },
+            "style": "simple"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaveCallResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The request has failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/2/chat/conversations": {
       "get": {
         "security": [
           {
             "OAuth2UserToken": [
-              "dm.read",
-              "users.read"
+              "users.read",
+              "dm.read"
             ]
           },
           {
@@ -2990,9 +3169,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "users.read",
               "dm.write",
-              "tweet.read",
-              "users.read"
+              "tweet.read"
             ]
           },
           {
@@ -3175,9 +3354,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
+              "dm.read",
               "tweet.read",
-              "dm.read"
+              "users.read"
             ]
           },
           {
@@ -3246,9 +3425,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "tweet.read",
               "dm.write",
-              "users.read",
-              "tweet.read"
+              "users.read"
             ]
           },
           {
@@ -3321,9 +3500,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "users.read",
               "tweet.read",
-              "dm.read",
-              "users.read"
+              "dm.read"
             ]
           },
           {
@@ -3478,8 +3657,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "users.read",
+              "tweet.read",
               "dm.write"
             ]
           },
@@ -3564,9 +3743,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "users.read",
               "tweet.read",
-              "dm.write",
-              "users.read"
+              "dm.write"
             ]
           },
           {
@@ -3651,8 +3830,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "dm.write",
-              "users.read"
+              "users.read",
+              "dm.write"
             ]
           },
           {
@@ -3800,9 +3979,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
+              "dm.write",
               "users.read",
-              "dm.write"
+              "tweet.read"
             ]
           },
           {
@@ -3876,8 +4055,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "dm.write",
-              "users.read"
+              "users.read",
+              "dm.write"
             ]
           },
           {
@@ -3948,9 +4127,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "users.read",
-              "dm.write"
+              "dm.write",
+              "tweet.read"
             ]
           },
           {
@@ -4023,9 +4202,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "tweet.read",
               "dm.read",
-              "users.read",
-              "tweet.read"
+              "users.read"
             ]
           },
           {
@@ -4115,8 +4294,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "users.read",
-              "dm.write"
+              "dm.write",
+              "users.read"
             ]
           },
           {
@@ -4262,9 +4441,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "users.read",
               "tweet.read",
-              "dm.read",
-              "users.read"
+              "dm.read"
             ]
           },
           {
@@ -4341,8 +4520,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "dm.write",
               "users.read",
+              "dm.write",
               "tweet.read"
             ]
           },
@@ -4417,8 +4596,8 @@
           {
             "OAuth2UserToken": [
               "dm.write",
-              "users.read",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -4491,9 +4670,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "dm.write",
               "tweet.read",
-              "users.read",
-              "dm.write"
+              "users.read"
             ]
           },
           {
@@ -4566,8 +4745,8 @@
           {
             "OAuth2UserToken": [
               "dm.write",
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -4639,9 +4818,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "users.read",
-              "dm.write"
+              "dm.write",
+              "tweet.read"
             ]
           },
           {
@@ -4713,9 +4892,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
+              "tweet.read",
               "dm.write",
-              "tweet.read"
+              "users.read"
             ]
           },
           {
@@ -4787,8 +4966,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "users.read",
-              "dm.write"
+              "dm.write",
+              "users.read"
             ]
           },
           {
@@ -4861,9 +5040,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
+              "users.read",
               "dm.write",
-              "users.read"
+              "tweet.read"
             ]
           },
           {
@@ -4935,9 +5114,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "dm.write",
               "users.read",
-              "tweet.read"
+              "tweet.read",
+              "dm.write"
             ]
           },
           {
@@ -5009,9 +5188,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "dm.write",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -5082,9 +5261,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
+              "dm.write",
               "tweet.read",
-              "dm.write"
+              "users.read"
             ]
           },
           {
@@ -5158,8 +5337,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "dm.read",
-              "users.read"
+              "users.read",
+              "dm.read"
             ]
           },
           {
@@ -5249,7 +5428,7 @@
           "Chat"
         ],
         "summary": "Mark Conversation as Read",
-        "description": "Marks a specific Chat conversation as read on behalf of the authenticated user. For 1:1 conversations, provide the recipient's user ID; the server constructs the canonical conversation ID from the authenticated user and recipient.",
+        "description": "Marks a specific Chat conversation as read on behalf of the authenticated user. For 1:1 conversations, provide the recipient's user ID; the server constructs the canonical conversation ID from the authenticated user and recipient. Without action_signatures the conversation is marked read up to its newest event and the read receipt is unsigned. With one action signature over a MarkConversationReadEvent, the server sends that signed read receipt, marking the conversation read up to the event it names.",
         "externalDocs": {
           "url": "https://developer.x.com/"
         },
@@ -5266,6 +5445,16 @@
             "style": "simple"
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkChatConversationReadRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "The request has succeeded.",
@@ -5375,9 +5564,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "users.read",
               "tweet.read",
-              "dm.write",
-              "users.read"
+              "dm.write"
             ]
           },
           {
@@ -5439,9 +5628,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "dm.write",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -5781,8 +5970,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "tweet.read",
+              "users.read",
               "dm.read"
             ]
           },
@@ -5878,9 +6067,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "dm.read",
               "tweet.read",
-              "users.read"
+              "users.read",
+              "dm.read"
             ]
           },
           {
@@ -5946,9 +6135,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "users.read",
-              "dm.write"
+              "dm.write",
+              "tweet.read"
             ]
           },
           {
@@ -6012,8 +6201,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "dm.read",
-              "users.read"
+              "users.read",
+              "dm.read"
             ]
           },
           {
@@ -6066,9 +6255,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "dm.write",
               "tweet.read",
-              "users.read",
-              "dm.write"
+              "users.read"
             ]
           },
           {
@@ -6128,8 +6317,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -6973,9 +7162,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "users.read",
-              "dm.write"
+              "dm.write",
+              "tweet.read"
             ]
           },
           {
@@ -7107,8 +7296,8 @@
           {
             "OAuth2UserToken": [
               "users.read",
-              "dm.read",
-              "tweet.read"
+              "tweet.read",
+              "dm.read"
             ]
           },
           {
@@ -7230,9 +7419,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
+              "users.read",
               "dm.write",
-              "users.read"
+              "tweet.read"
             ]
           },
           {
@@ -7301,9 +7490,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "users.read",
-              "dm.write"
+              "dm.write",
+              "tweet.read"
             ]
           },
           {
@@ -7608,8 +7797,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "dm.read",
-              "dm.write"
+              "dm.write",
+              "dm.read"
             ]
           },
           {
@@ -7667,8 +7856,8 @@
           {
             "OAuth2UserToken": [
               "users.read",
-              "dm.read",
-              "tweet.read"
+              "tweet.read",
+              "dm.read"
             ]
           },
           {
@@ -8471,9 +8660,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "tweet.read",
               "list.read",
-              "users.read",
-              "tweet.read"
+              "users.read"
             ]
           },
           {
@@ -8540,9 +8729,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "tweet.read",
-              "list.write"
+              "list.write",
+              "users.read"
             ]
           },
           {
@@ -8613,9 +8802,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "users.read",
-              "list.read"
+              "list.read",
+              "tweet.read"
             ]
           },
           {
@@ -8707,9 +8896,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "list.read",
               "tweet.read",
-              "users.read"
+              "users.read",
+              "list.read"
             ]
           },
           {
@@ -8868,9 +9057,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
+              "tweet.read",
               "list.write",
-              "tweet.read"
+              "users.read"
             ]
           },
           {
@@ -8940,8 +9129,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "list.read",
               "tweet.read",
+              "list.read",
               "users.read"
             ]
           },
@@ -9789,8 +9978,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -9881,8 +10070,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -10379,8 +10568,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "broadcast.write",
-              "broadcast.read"
+              "broadcast.read",
+              "broadcast.write"
             ]
           },
           {
@@ -10552,8 +10741,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "broadcast.write",
-              "broadcast.read"
+              "broadcast.read",
+              "broadcast.write"
             ]
           },
           {
@@ -10622,9 +10811,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "tweet.read",
               "users.read",
-              "space.read",
-              "tweet.read"
+              "space.read"
             ]
           },
           {
@@ -10700,9 +10889,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "space.read",
               "users.read",
-              "tweet.read",
-              "space.read"
+              "tweet.read"
             ]
           },
           {
@@ -10778,9 +10967,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "space.read",
               "tweet.read",
-              "users.read",
-              "space.read"
+              "users.read"
             ]
           },
           {
@@ -10884,8 +11073,8 @@
           {
             "OAuth2UserToken": [
               "users.read",
-              "space.read",
-              "tweet.read"
+              "tweet.read",
+              "space.read"
             ]
           },
           {
@@ -11049,9 +11238,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
+              "space.read",
               "users.read",
-              "space.read"
+              "tweet.read"
             ]
           },
           {
@@ -11226,8 +11415,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -11309,9 +11498,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.write",
               "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.write"
             ]
           },
           {
@@ -14174,8 +14363,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -15062,8 +15251,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -15141,8 +15330,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "like.read",
+              "users.read",
               "tweet.read"
             ]
           },
@@ -15449,8 +15638,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -15552,9 +15741,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "users.read",
-              "tweet.moderate.write"
+              "tweet.moderate.write",
+              "tweet.read"
             ]
           },
           {
@@ -16046,8 +16235,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -16104,8 +16293,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -16156,8 +16345,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "dm.read",
               "tweet.read",
+              "dm.read",
               "users.read"
             ]
           },
@@ -16228,8 +16417,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "timeline.read",
-              "tweet.read"
+              "tweet.read",
+              "timeline.read"
             ]
           },
           {
@@ -16480,8 +16669,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -16572,9 +16761,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
+              "block.read",
               "tweet.read",
-              "block.read"
+              "users.read"
             ]
           },
           {
@@ -16660,8 +16849,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "block.write",
               "users.read",
+              "block.write",
               "tweet.read"
             ]
           },
@@ -16730,8 +16919,8 @@
           {
             "OAuth2UserToken": [
               "users.read",
-              "tweet.read",
-              "bookmark.read"
+              "bookmark.read",
+              "tweet.read"
             ]
           },
           {
@@ -16827,9 +17016,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "users.read",
               "tweet.read",
-              "bookmark.write",
-              "users.read"
+              "bookmark.write"
             ]
           }
         ],
@@ -16973,8 +17162,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "bookmark.write",
-              "users.read"
+              "users.read",
+              "bookmark.write"
             ]
           }
         ],
@@ -17040,8 +17229,8 @@
           {
             "OAuth2UserToken": [
               "bookmark.read",
-              "users.read",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -17131,8 +17320,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "users.read",
-              "bookmark.write"
+              "bookmark.write",
+              "users.read"
             ]
           }
         ],
@@ -17199,9 +17388,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "dm.write",
               "users.read",
-              "tweet.read",
-              "dm.write"
+              "tweet.read"
             ]
           },
           {
@@ -17258,8 +17447,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "tweet.read",
+              "users.read",
               "dm.write"
             ]
           },
@@ -17317,9 +17506,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "list.read",
+              "users.read",
               "tweet.read",
-              "users.read"
+              "list.read"
             ]
           },
           {
@@ -17409,9 +17598,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
+              "tweet.read",
               "list.write",
-              "tweet.read"
+              "users.read"
             ]
           },
           {
@@ -17479,8 +17668,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "list.write",
-              "users.read"
+              "users.read",
+              "list.write"
             ]
           },
           {
@@ -17550,9 +17739,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "follows.read",
               "users.read",
-              "tweet.read",
-              "follows.read"
+              "tweet.read"
             ]
           },
           {
@@ -17644,9 +17833,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "follows.read",
+              "tweet.read",
               "users.read",
-              "tweet.read"
+              "follows.read"
             ]
           },
           {
@@ -17737,8 +17926,8 @@
           {
             "OAuth2UserToken": [
               "tweet.read",
-              "users.read",
-              "follows.write"
+              "follows.write",
+              "users.read"
             ]
           },
           {
@@ -17805,9 +17994,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "like.read",
               "tweet.read",
-              "users.read",
-              "like.read"
+              "users.read"
             ]
           },
           {
@@ -17905,9 +18094,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "like.write",
               "users.read",
-              "tweet.read",
-              "like.write"
+              "tweet.read"
             ]
           },
           {
@@ -17974,9 +18163,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "like.write",
-              "tweet.read"
+              "tweet.read",
+              "users.read"
             ]
           },
           {
@@ -18042,9 +18231,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "list.read",
               "tweet.read",
-              "users.read",
-              "list.read"
+              "users.read"
             ]
           },
           {
@@ -18281,8 +18470,8 @@
           {
             "OAuth2UserToken": [
               "mute.read",
-              "tweet.read",
-              "users.read"
+              "users.read",
+              "tweet.read"
             ]
           },
           {
@@ -18368,8 +18557,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "mute.write",
+              "tweet.read",
               "users.read"
             ]
           },
@@ -18531,9 +18720,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "list.read",
+              "users.read",
               "tweet.read",
-              "users.read"
+              "list.read"
             ]
           },
           {
@@ -18597,8 +18786,8 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "users.read",
               "list.write",
+              "users.read",
               "tweet.read"
             ]
           },
@@ -18670,9 +18859,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "list.write",
               "tweet.read",
-              "users.read"
+              "users.read",
+              "list.write"
             ]
           },
           {
@@ -18742,9 +18931,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "users.read",
               "tweet.read",
-              "dm.read",
-              "users.read"
+              "dm.read"
             ]
           },
           {
@@ -18807,8 +18996,8 @@
           {
             "OAuth2UserToken": [
               "users.read",
-              "dm.write",
-              "tweet.read"
+              "tweet.read",
+              "dm.write"
             ]
           },
           {
@@ -18879,9 +19068,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.write",
+              "users.read",
               "tweet.read",
-              "users.read"
+              "tweet.write"
             ]
           },
           {
@@ -19349,9 +19538,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "block.write",
+              "tweet.read",
               "users.read",
-              "tweet.read"
+              "block.write"
             ]
           },
           {
@@ -19421,9 +19610,9 @@
         "security": [
           {
             "OAuth2UserToken": [
-              "tweet.read",
               "users.read",
-              "follows.write"
+              "follows.write",
+              "tweet.read"
             ]
           },
           {
@@ -19493,9 +19682,9 @@
         "security": [
           {
             "OAuth2UserToken": [
+              "users.read",
               "tweet.read",
-              "mute.write",
-              "users.read"
+              "mute.write"
             ]
           },
           {
@@ -20064,6 +20253,7 @@
               "bookmark.write": "Create and delete your bookmarks.",
               "broadcast.read": "View your live broadcasts and their chat.",
               "broadcast.write": "Manage your live broadcasts and send chat messages on your behalf.",
+              "calls.join": "Join X calls for you, and listen, speak, send chat messages, and admit people who ask to join.",
               "calls.read": "View your X calls and the calls on your calendar.",
               "calls.write": "Start, schedule, change, and cancel X calls for you, and answer invitations.",
               "developer.read": "View your developer accounts, apps, and settings.",
@@ -22987,6 +23177,95 @@
             "description": "The bot's X handle (screen name)."
           }
         }
+      },
+      "CreateCallRequest": {
+        "type": "object",
+        "properties": {
+          "audio_only": {
+            "type": "boolean",
+            "description": "Start the call without video."
+          },
+          "conversation_id": {
+            "type": "string",
+            "description": "XChat conversation to start the call in.",
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9:_-]+$"
+          },
+          "join_policy": {
+            "type": "string",
+            "description": "open (default): anyone with the link joins; closed: the host admits each person; trusted: members of the host's Verified Organization join, others ask.",
+            "enum": [
+              "open",
+              "closed",
+              "trusted"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "Title shown to participants.",
+            "maxLength": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateCallResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CreateCallResponseData"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "CreateCallResponseData": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "description": "XChat conversation the call belongs to, if any."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Creation time (RFC 3339)."
+          },
+          "host_id": {
+            "type": "string",
+            "description": "X user id of the call's host."
+          },
+          "id": {
+            "type": "string",
+            "description": "Unique identifier of the call; also its join secret."
+          },
+          "join_policy": {
+            "type": "string",
+            "description": "Who may join: open (anyone with the link), closed (the host admits people), or trusted (the host's Verified Organization)."
+          },
+          "join_url": {
+            "type": "string",
+            "description": "Link people open to join the call on X."
+          },
+          "participant_count": {
+            "type": "integer",
+            "description": "People in the call right now."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the call."
+          },
+          "viewer_may_join": {
+            "type": "boolean",
+            "description": "Whether the authenticated user may join without asking the host."
+          }
+        },
+        "additionalProperties": false
       },
       "CreateChatConversationActionSignatures": {
         "type": "object",
@@ -30128,12 +30407,176 @@
           }
         }
       },
+      "JoinCallMedia": {
+        "type": "object",
+        "properties": {
+          "audio": {
+            "description": "The audio format your agent sends and receives.",
+            "$ref": "#/components/schemas/JoinCallMediaAudio"
+          },
+          "type": {
+            "type": "string",
+            "description": "websocket (default): your agent over the media WebSocket.",
+            "enum": [
+              "websocket"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "JoinCallMediaAudio": {
+        "type": "object",
+        "properties": {
+          "encoding": {
+            "type": "string",
+            "description": "Audio encoding on the media WebSocket (PCM16 little-endian mono).",
+            "enum": [
+              "pcm16"
+            ]
+          },
+          "sample_rate": {
+            "type": "integer",
+            "description": "8000, 16000, 24000 (default) or 48000."
+          }
+        },
+        "additionalProperties": false
+      },
+      "JoinCallRequest": {
+        "type": "object",
+        "properties": {
+          "media": {
+            "description": "The media session to start.",
+            "$ref": "#/components/schemas/JoinCallMedia"
+          }
+        },
+        "additionalProperties": false
+      },
+      "JoinCallResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/JoinCallResponseData"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "JoinCallResponseData": {
+        "type": "object",
+        "required": [
+          "session_id"
+        ],
+        "properties": {
+          "admission": {
+            "type": "string",
+            "description": "immediate, or requires_approval when the host must admit the session."
+          },
+          "call": {
+            "description": "The call.",
+            "$ref": "#/components/schemas/JoinCallResponseDataCall"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "When media_token expires (RFC 3339)."
+          },
+          "media_token": {
+            "type": "string",
+            "description": "Bearer token for media_url; single use, short-lived."
+          },
+          "media_type": {
+            "type": "string",
+            "description": "websocket."
+          },
+          "media_url": {
+            "type": "string",
+            "description": "Where to open the media WebSocket."
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Media session id."
+          }
+        },
+        "additionalProperties": false
+      },
+      "JoinCallResponseDataCall": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "description": "XChat conversation the call belongs to, if any."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Creation time (RFC 3339)."
+          },
+          "host_id": {
+            "type": "string",
+            "description": "X user id of the call's host."
+          },
+          "id": {
+            "type": "string",
+            "description": "Unique identifier of the call; also its join secret."
+          },
+          "join_policy": {
+            "type": "string",
+            "description": "Who may join: open (anyone with the link), closed (the host admits people), or trusted (the host's Verified Organization)."
+          },
+          "join_url": {
+            "type": "string",
+            "description": "Link people open to join the call on X."
+          },
+          "participant_count": {
+            "type": "integer",
+            "description": "People in the call right now."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the call."
+          },
+          "viewer_may_join": {
+            "type": "boolean",
+            "description": "Whether the authenticated user may join without asking the host."
+          }
+        },
+        "additionalProperties": false
+      },
       "Keyword": {
         "type": "string",
         "description": "A keyword to filter on.",
         "minLength": 1,
         "maxLength": 150,
         "example": "The President"
+      },
+      "LeaveCallResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/LeaveCallResponseData"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "LeaveCallResponseData": {
+        "type": "object",
+        "properties": {
+          "left": {
+            "type": "boolean",
+            "description": "Whether the user left the call."
+          }
+        },
+        "additionalProperties": false
       },
       "LikeComplianceSchema": {
         "type": "object",
@@ -30477,6 +30920,101 @@
           }
         },
         "additionalProperties": false
+      },
+      "MarkChatConversationReadActionSignatures": {
+        "type": "object",
+        "required": [
+          "message_id",
+          "encoded_message_event_detail",
+          "message_event_signature"
+        ],
+        "properties": {
+          "encoded_message_event_detail": {
+            "type": "string",
+            "description": "Base64-encoded message event detail.",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9+/=_-]+$"
+          },
+          "message_event_signature": {
+            "description": "Message event signature supplied with an action signature.",
+            "$ref": "#/components/schemas/MarkChatConversationReadActionSignaturesMessageEventSignature"
+          },
+          "message_id": {
+            "type": "string",
+            "description": "Client-generated ID of the message being signed.",
+            "minLength": 1
+          },
+          "signature_payload": {
+            "type": "string",
+            "description": "Payload string the client signed; used only in server-side failure logs."
+          }
+        }
+      },
+      "MarkChatConversationReadActionSignaturesMessageEventSignature": {
+        "type": "object",
+        "required": [
+          "signature",
+          "public_key_version",
+          "signature_version"
+        ],
+        "properties": {
+          "message_signing_key_info_list": {
+            "type": "array",
+            "description": "List of signing key information for message verification.",
+            "items": {
+              "$ref": "#/components/schemas/MarkChatConversationReadActionSignaturesMessageEventSignatureMessageSigningKeyInfoList"
+            }
+          },
+          "public_key_version": {
+            "type": "string",
+            "description": "The version of the public key used for signing.",
+            "pattern": "^[0-9]+$"
+          },
+          "signature": {
+            "type": "string",
+            "description": "The signature of the message event.",
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9+/=_-]+$"
+          },
+          "signature_version": {
+            "type": "string",
+            "description": "The version of the signature algorithm.",
+            "pattern": "^[0-9]+$"
+          },
+          "signing_public_key": {
+            "type": "string",
+            "description": "The public key used for signing."
+          }
+        }
+      },
+      "MarkChatConversationReadActionSignaturesMessageEventSignatureMessageSigningKeyInfoList": {
+        "type": "object",
+        "properties": {
+          "member_id": {
+            "type": "string",
+            "description": "The member ID associated with this signing key."
+          },
+          "public_key_version": {
+            "type": "string",
+            "description": "The version of the public key."
+          },
+          "signing_public_key": {
+            "type": "string",
+            "description": "The signing public key."
+          }
+        }
+      },
+      "MarkChatConversationReadRequest": {
+        "type": "object",
+        "properties": {
+          "action_signatures": {
+            "type": "array",
+            "description": "Signature over the read receipt (a MarkConversationReadEvent). Omit to send it unsigned.",
+            "items": {
+              "$ref": "#/components/schemas/MarkChatConversationReadActionSignatures"
+            }
+          }
+        }
       },
       "MarkChatConversationReadResponse": {
         "type": "object",
