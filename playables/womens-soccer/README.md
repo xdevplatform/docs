@@ -17,7 +17,7 @@ LAB=1 npm start           # also enables ?lab=... A/B toggles (see "Experiments"
 PUBLIC_URL=https://soccer.example.com PORT=8080 npm start   # production
 ```
 
-Env: `PORT` (3000), `HOST` (0.0.0.0), `PUBLIC_URL` (public HTTPS origin used in every absolute URL; if unset it is
+Env: `PORT` (3000, server.js only), `HOST` (0.0.0.0), `PUBLIC_URL` (public HTTPS origin used in every absolute URL; if unset it is
 derived from `Host` / `X-Forwarded-*`), `TWITTER_SITE` (optional `@handle` for `twitter:site`), `LAB=1`.
 
 | Route | Purpose |
@@ -30,16 +30,42 @@ derived from `Host` / `X-Forwarded-*`), `TWITTER_SITE` (optional `@handle` for `
 
 ## Deploy
 
-Any HTTPS host that runs Node works (Fly.io, Render, Railway, a VPS behind Caddy/nginx, Cloud Run). Requirements:
-a public **HTTPS** origin with a valid certificate, and `PUBLIC_URL` set to it (or a proxy that sends
+### Vercel (recommended; zero config)
+
+`vercel.json` rewrites `/`, `/r/:id`, `/play/:id`, `/card.png`, `/healthz`, `/favicon.ico` to one serverless function
+(`api/index.js` -> `lib/app.js`, original path passed as `?__path=`). `public/game.js` is served as a static file.
+Absolute URLs come from the request host (`x-forwarded-host/proto`, always `https` on Vercel); set `PUBLIC_URL` only if
+you front it with a custom domain that rewrites the Host header.
+
+Option A: dashboard. Import the GitHub repo in Vercel, add env var `LAB=1` (Production), deploy.
+
+Option B: CLI (needs a token from https://vercel.com/account/tokens):
+
+```bash
+VERCEL_TOKEN=... ./scripts/deploy-vercel.sh                 # LAB mode on; checks https://womens-soccer-playable.vercel.app
+VERCEL_TOKEN=... VERCEL_SCOPE=my-team ./scripts/deploy-vercel.sh --no-lab my-project-name
+```
+
+**Deployment Protection:** if the project has Vercel Authentication on, Twitterbot gets a login wall and X will show no
+card. Post the stable production alias (`https://<project>.vercel.app`) and make sure
+Settings -> Deployment Protection allows public access to production (or disable it). Check with
+`node scripts/check.js https://<project>.vercel.app/r/a1`.
+
+### Any Node host
+
+Needs a public **HTTPS** origin with a valid certificate and `PUBLIC_URL` set (or a proxy sending
 `X-Forwarded-Proto: https` and `X-Forwarded-Host`). If you front it with Cloudflare (as Tweetcraft does), make sure
 bot protection / "Under Attack" mode / WAF rules do **not** challenge `Twitterbot` on `/r/*`, `/play/*`, `/card.png`.
 
 ```bash
-# Dockerless example
-git clone <repo> && cd <repo>/playables/womens-soccer
 PUBLIC_URL=https://soccer.example.com PORT=8080 node server.js
 node scripts/check.js https://soccer.example.com/r/test123      # validates the recipe below
+```
+
+### GitHub
+
+```bash
+./scripts/publish-github.sh dianalaurag/womens-soccer-playable   # needs `gh auth login` as that account
 ```
 
 ## Player Card recipe (what the server emits)
@@ -126,8 +152,12 @@ whether the domain needs to be enabled.
 ## Layout
 
 ```
-server.js            dependency-free HTTP server (routes, CSP, card image generator)
-public/game.html     game page shell served at /play/:roomId
-public/game.js       the game (canvas 2D, input, AI, rendering)
+api/index.js         Vercel function entry (re-exports lib/app.js handler)
+lib/app.js           routes, card tags, CSP, LAB toggles, generated card image
+server.js            local/any-Node entry (http.createServer + listen)
+views/game.html      game page template served at /play/:roomId
+public/game.js       the game (canvas 2D, input, AI, rendering); static on Vercel
 scripts/check.js     recipe validator for a share URL
+scripts/deploy-vercel.sh, scripts/publish-github.sh
+vercel.json          rewrites + function config
 ```
