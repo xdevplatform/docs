@@ -1,0 +1,117 @@
+---
+title: Example agent
+sidebarTitle: Example agent
+description: "A complete X Calls agent in plain Node.js: join a call, stream its audio, speak, stop when someone interrupts, and leave cleanly; plus how to bridge a realtime speech-to-speech model."
+keywords: ["X Calls agent example", "Node.js", "media WebSocket", "realtime model", "speech-to-speech", "barge-in"]
+---
+
+<Warning>
+  The X Calls API is in development. It isn't generally available yet, and endpoints and payloads may still change.
+</Warning>
+
+This agent joins a call, plays a greeting tone where your text-to-speech would speak, stops talking when someone interrupts, and logs events and audio levels. It runs on Node.js 22 or later with no dependencies.
+
+```bash
+USER_ACCESS_TOKEN=<your bot's OAuth 2.0 user token> node agent.mjs t69-8sb-6z5
+```
+
+```javascript agent.mjs
+// A minimal X Calls agent: joins a call as your bot, plays a greeting tone
+// (stand-in for your TTS), stops talking when someone interrupts, and logs
+// what happens. Node.js 22+ with no dependencies.
+//
+//   USER_ACCESS_TOKEN=<your bot's OAuth 2.0 user token> node agent.mjs <call_id>
+
+const API = "https://api.x.com/2";
+const RATE = 16000; // Hz, PCM16 mono, both directions
+
+async function join(callId) {
+  const res = await fetch(`${API}/calls/${callId}/join`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.USER_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      media: { type: "websocket", audio: { encoding: "pcm16", sample_rate: RATE } },
+    }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(`join failed: ${res.status} ${JSON.stringify(body)}`);
+  return body.data;
+}
+
+// PCM16 little-endian, whatever the host's byte order.
+function tone(hz, seconds) {
+  const n = Math.round(RATE * seconds);
+  const view = new DataView(new ArrayBuffer(n * 2));
+  for (let i = 0; i < n; i++) {
+    view.setInt16(i * 2, Math.round(6000 * Math.sin((2 * Math.PI * hz * i) / RATE)), true);
+  }
+  return view.buffer;
+}
+
+function level(buffer) {
+  const view = new DataView(buffer);
+  let sum = 0;
+  for (let i = 0; i + 1 < view.byteLength; i += 2) sum += view.getInt16(i, true) ** 2;
+  return Math.round(Math.sqrt(sum / Math.max(1, view.byteLength / 2)));
+}
+
+function runAgent(session) {
+  const url = `${session.media_url}?token=${encodeURIComponent(session.media_token)}`;
+  const ws = new WebSocket(url);
+  ws.binaryType = "arraybuffer";
+  const send = (command) => ws.send(JSON.stringify(command));
+  let frames = 0;
+  let loudest = 0;
+
+  ws.onmessage = ({ data }) => {
+    if (data instanceof ArrayBuffer) {
+      // 20 ms of everyone else in the call: feed it to your model here.
+      loudest = Math.max(loudest, level(data));
+      if (++frames % 50 === 0) {
+        console.log(`heard ${frames / 50}s, loudest ${loudest}`);
+        loudest = 0;
+      }
+      return;
+    }
+    const event = JSON.parse(data);
+    console.log(event.type, JSON.stringify(event));
+    switch (event.type) {
+      case "session.joined":
+        ws.send(tone(440, 2)); // any chunk size; X paces it into the call
+        send({ type: "audio.mark", name: "greeting" });
+        break;
+      case "playback.mark":
+        if (event.name === "greeting" && !event.cleared) console.log("greeting played");
+        break;
+      case "speech.started":
+        send({ type: "audio.clear" }); // let the person talk
+        break;
+      case "session.ended":
+        ws.close();
+        break;
+    }
+  };
+  ws.onclose = () => process.exit(0);
+  process.on("SIGINT", () => {
+    if (ws.readyState === WebSocket.OPEN) send({ type: "leave" });
+    else process.exit(0);
+  });
+}
+
+runAgent(await join(process.argv[2]));
+```
+
+## Bridging a realtime model
+
+To connect a realtime speech-to-speech model instead, keep the same loop:
+
+1. Join at the model's native rate (for example 24 kHz) so no resampling is needed.
+2. Forward each binary frame from X to the model's audio input.
+3. Forward each audio chunk the model produces to X as a binary frame.
+4. When the model reports that the user started speaking (or X sends `speech.started`), send `audio.clear`.
+5. On `session.ended`, close the model session.
+
+See [Media WebSocket](/xcalls/media-websocket) for every event and command.
