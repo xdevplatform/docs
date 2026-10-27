@@ -1,25 +1,95 @@
 ---
-title: Migrating OAuth 1.0a user tokens to OAuth 2.0
+title: Migrate from OAuth 1.0a to OAuth 2.0
 sidebarTitle: Migrating from OAuth 1.0a
-description: "Exchange a stored OAuth 1.0a access token and secret for an OAuth 2.0 access token and refresh token for the same user, without asking the user to log in or re-authorize."
-keywords: ["OAuth 1.0a to OAuth 2.0", "token exchange", "migrate OAuth 1.0a", "OAuth 2.0 migration", "token-exchange grant", "oauth1_token", "refresh token", "OAuth 1.0a retirement"]
+description: "Move your app and your existing users from OAuth 1.0a to OAuth 2.0 before OAuth 1.0a is retired, without asking users to re-authorize."
+keywords: ["OAuth 1.0a to OAuth 2.0", "OAuth 1.0a migration", "OAuth 1.0a deprecation", "OAuth 1.0a retirement", "token exchange", "migrate OAuth 1.0a", "OAuth 2.0 migration", "token-exchange grant", "oauth1_token", "refresh token", "Bearer token", "AI coding agent"]
 ---
 
-If your app has existing users who authorized it with **OAuth 1.0a**, you can migrate each of them to **OAuth 2.0** without asking them to log in or re-authorize. The **token exchange** flow lets your servers trade a stored OAuth 1.0a access token and secret for an OAuth 2.0 access token and refresh token for the same user, with permissions matching what the user originally authorized.
+X is retiring OAuth 1.0a user authentication. Apps have until **[DATE TBD]** to move to OAuth 2.0. After that date, requests signed with OAuth 1.0a stop working.
 
-## Prerequisites
+**Why:** OAuth 2.0 is more secure for your users. OAuth 1.0a user tokens never expire, so a leaked token keeps working until the user revokes your app. OAuth 2.0 access tokens expire after 2 hours, refresh tokens are single-use, and each token carries only the scopes the user granted.
+
+**Your users don't need to do anything.** You move existing users to OAuth 2.0 from your servers with a token exchange. There is no consent screen, no new login, and no notification.
+
+What changes in your integration:
+
+| | OAuth 1.0a | OAuth 2.0 |
+| :--- | :--- | :--- |
+| App credentials | API key and secret | OAuth 2.0 Client ID, plus a Client Secret for confidential clients |
+| Per-user credentials | Access token and token secret | Access token and refresh token |
+| Authenticating a request | HMAC-SHA1 signature in an `Authorization: OAuth ...` header | `Authorization: Bearer <access_token>` header |
+| Token lifetime | No expiry | Access token: 2 hours. Refresh token: about 6 months, single-use |
+| Permissions | App-wide: Read; Read and write; or Read, write, and Direct Messages | Per scope, for example `tweet.read` or `dm.write` |
+
+The work is mechanical: enable OAuth 2.0 on your App, run one batch job to exchange your stored tokens, change one request header, and add a refresh routine. Most teams can finish in under a week, and an AI coding agent can do most of it. See [Migrate with an AI coding agent](#migrate-with-an-ai-coding-agent).
+
+<Warning>
+Exchange your users' tokens before **[DATE TBD]**. The exchange needs a working OAuth 1.0a token, so any user you haven't migrated by then has to sign in again through the OAuth 2.0 flow.
+</Warning>
+
+## Migration checklist
 
 <Steps>
-  <Step title="OAuth 2.0 enabled on your app">
-    In the [developer portal](https://developer.x.com), open your [App's](/fundamentals/developer-apps) settings and make sure OAuth 2.0 is set up. You need your **OAuth 2.0 Client ID** and, for confidential clients, your **Client Secret**. These are different from your OAuth 1.0a consumer key and secret.
+  <Step title="Enable OAuth 2.0 on your App">
+    In the [Developer Console](https://console.x.com), open the App your users authorized and enable OAuth 2.0 in its authentication settings. OAuth 1.0a keeps working: an App can have both enabled.
+
+    - **App type:** for a server-side integration, choose **Web App** or **Automated App / Bot**. These are confidential clients and get a Client Secret. See [OAuth 2.0 app types](/fundamentals/developer-apps).
+    - **Callback URL:** the exchange doesn't use it, but users who have to sign in again through the OAuth 2.0 flow do.
+    - **Credentials:** copy the **Client ID** and **Client Secret** from **Keys and tokens**. They are different from your OAuth 1.0a API key and secret.
+
+    Use the same App that issued your users' OAuth 1.0a tokens. Tokens issued to a different App fail the exchange with `invalid_grant`.
   </Step>
-  <Step title="Your stored OAuth 1.0a credentials">
-    For each user, the access token and its token secret, as issued when the user authorized your app.
+  <Step title="Find your OAuth 1.0a code paths">
+    List every place that signs requests with OAuth 1.0a, every place that stores or reads users' OAuth 1.0a tokens, and every call to an X API v1.1 endpoint. OAuth 2.0 user tokens work with X API v2, so move v1.1 calls to their v2 equivalents. The [endpoint map](/x-api/migrate/x-api-endpoint-map) lists them. Ads API calls move to OAuth 2.0 too: see [Ads API](#ads-api).
   </Step>
-  <Step title="A refresh-token loop">
-    OAuth 2.0 access tokens expire after **2 hours**. The exchange always returns a **refresh token** (valid for about 6 months and single-use; each refresh returns a new one). Your backend must store refresh tokens and refresh on expiry. If you already support OAuth 2.0 login, you have this. See the refresh token step in the [OAuth 2.0 user access token guide](/fundamentals/authentication/oauth-2-0/user-access-token) for the refresh request.
+  <Step title="Add OAuth 2.0 token storage">
+    For each user, store the access token, the refresh token, the access token's expiry time, and the granted scopes. Keep the OAuth 1.0a token and secret until the retirement date: you need them to exchange again if a user's OAuth 2.0 tokens are lost. Encrypt all tokens at rest and never log them.
+  </Step>
+  <Step title="Exchange your stored tokens">
+    Run a batch job that sends one [exchange request](#the-exchange-request) per user and stores the new tokens. Handle [errors](#errors) per user, stay within the [rate limit](#rate-limits), and don't run two jobs over the same users at once. Your users see nothing.
+  </Step>
+  <Step title="Send requests with a Bearer token">
+    Replace the OAuth 1.0a signature with `Authorization: Bearer <access_token>`. See [Switch requests to Bearer tokens](#switch-requests-to-bearer-tokens).
+  </Step>
+  <Step title="Refresh access tokens">
+    Access tokens expire after 2 hours. Refresh them before they expire, and save the new refresh token from every response. See [Refresh access tokens](#refresh-access-tokens).
+  </Step>
+  <Step title="Test, then cut over">
+    Migrate a few internal accounts first and compare results with your OAuth 1.0a path. Then switch users over in batches behind a flag you can turn off, and watch your error rates. Once all traffic uses OAuth 2.0, remove OAuth 1.0a signing from your code. After the retirement date, delete the stored OAuth 1.0a tokens.
   </Step>
 </Steps>
+
+Python and TypeScript code for steps 4 to 6 is in [Code](#code).
+
+## Migrate with an AI coding agent
+
+Paste this prompt into an AI coding agent that has access to your codebase. It reads this guide as Markdown and makes the changes in small steps. Review the result like any other pull request.
+
+```text title="Migration prompt" wrap
+Migrate this codebase's X API user authentication from OAuth 1.0a to OAuth 2.0.
+
+Read this guide first and treat it as the source of truth:
+https://docs.x.com/fundamentals/authentication/oauth-2-0/oauth-1-0a-token-exchange.md
+If you can't fetch it, stop and ask me to paste it. Use only the endpoints, parameters, scopes, and token lifetimes it documents. The guide's Code section has Python and TypeScript you can adapt.
+
+Work in small, reviewable commits:
+
+1. Inventory. Find every place that signs X API or Ads API requests with OAuth 1.0a (consumer key and secret, oauth_token, oauth_token_secret, HMAC-SHA1, OAuth 1.0a libraries), every place that stores or reads users' OAuth 1.0a tokens, and every call to an X API v1.1 endpoint. Write the list to MIGRATION_NOTES.md before you change any code.
+
+2. Storage. Add per-user storage for the OAuth 2.0 access_token, refresh_token, expires_at, and scope, and a migration status: pending, migrated, or needs_reauth. Keep the OAuth 1.0a token and secret. Encrypt tokens at rest the way this codebase stores other secrets, and never log them.
+
+3. Exchange job. Add a resumable batch job that sends POST https://api.x.com/2/oauth2/token for each pending user, with grant_type=urn:ietf:params:oauth:grant-type:token-exchange, subject_token set to the user's OAuth 1.0a access token, subject_token_type=urn:x:params:oauth:token-type:oauth1_token, and oauth_token_secret set to the user's OAuth 1.0a token secret. Authenticate with HTTP Basic using the OAuth 2.0 Client ID and Client Secret, or for a public client send client_id in the body. On 200, store the tokens and mark the user migrated. On 400 invalid_grant, mark the user needs_reauth and don't retry. On 429 or 5xx, retry with exponential backoff. Stay under 10,000 requests per 15 minutes per App per source IP. Never run two exchange jobs over the same users at once. Add a dry-run mode that processes a given number of users and prints counts by outcome.
+
+4. Requests. For migrated users, replace the OAuth 1.0a signature with an Authorization: Bearer <access_token> header, on both X API v2 and Ads API calls. Put the switch behind a flag that can be ramped by percentage of users and turned off. Move any v1.1 calls to their X API v2 equivalents.
+
+5. Refresh. Access tokens expire after expires_in seconds (2 hours). Refresh shortly before expiry with grant_type=refresh_token. Refresh tokens are single-use: save the new refresh_token from every response before using the new access token, and allow only one refresh per user at a time. If a refresh fails with HTTP 400, run the exchange again for that user with the stored OAuth 1.0a token.
+
+6. Tests. Cover exchange and refresh against a mocked token endpoint: success, invalid_grant, 429, 5xx, and refresh token rotation.
+
+7. Runbook. Add to MIGRATION_NOTES.md how to run the exchange job, how to ramp and roll back the flag, and what to monitor.
+
+Don't remove the OAuth 1.0a code path. Ask me first.
+```
 
 ## The exchange request
 
@@ -77,7 +147,11 @@ curl --location --request POST 'https://api.x.com/2/oauth2/token' \
 }
 ```
 
-Store the `refresh_token` (and current `access_token`) against the user, then call the API with `Authorization: Bearer <access_token>` exactly as for any OAuth 2.0 user.
+Store the `refresh_token` and the current `access_token` against the user, mark the user migrated, then call the API with `Authorization: Bearer <access_token>` exactly as for any OAuth 2.0 user.
+
+<Note>
+The user's OAuth 1.0a token remains valid after the exchange. The migration is non-destructive: run it at your own pace until the retirement date.
+</Note>
 
 ## What permissions do the new tokens get?
 
@@ -95,38 +169,9 @@ The OAuth 2.0 scopes are derived from what each user originally authorized under
 
 Scopes **not** covered by the original OAuth 1.0a authorization (for example `bookmark.read` or `space.read`) are not granted. To gain those, send the user through the normal [OAuth 2.0 authorization flow](/fundamentals/authentication/oauth-2-0/user-access-token). See the [scopes reference](/fundamentals/authentication/oauth-2-0/authorization-code#scopes) for what each scope allows.
 
-## Migration walkthrough
+## Re-running and retries (rotation)
 
-For each stored OAuth 1.0a token:
-
-<Steps>
-  <Step title="Send the exchange request">
-    `POST /2/oauth2/token` with the exchange parameters above.
-  </Step>
-  <Step title="On 200">
-    Persist `access_token` and `refresh_token` for the user and mark the user migrated.
-  </Step>
-  <Step title="On 400 invalid_grant">
-    The OAuth 1.0a token is no longer valid (the user revoked your app, changed relevant settings, or the token was already invalidated). Mark the user as needing normal OAuth 2.0 re-authorization if they return. Do not retry.
-  </Step>
-  <Step title="On 429 rate_limited">
-    You have hit the exchange rate limit. Wait and retry with backoff (see [Rate limits](#rate-limits)).
-  </Step>
-  <Step title="On 5xx">
-    Transient. Retry with backoff. Retrying an already-successful exchange is safe: you simply receive a fresh token pair, and the previous pair is invalidated (see [Re-running and retries](#re-running-and-retries-rotation)).
-  </Step>
-  <Step title="Switch the user's traffic">
-    Move the user's API traffic to `Authorization: Bearer` and your standard OAuth 2.0 refresh loop.
-  </Step>
-</Steps>
-
-<Note>
-Your OAuth 1.0a token for that user remains valid after the exchange. The migration is non-destructive. Run at your own pace; nothing forces a hard cutover until the OAuth 1.0a retirement date.
-</Note>
-
-### Re-running and retries (rotation)
-
-Exchanging the **same OAuth 1.0a token again** always works and returns a **new** OAuth 2.0 token pair, and invalidates the pair previously issued for that user and app. This makes migration scripts safely re-runnable, but it means you should always persist the most recent pair.
+Exchanging the **same OAuth 1.0a token again** always works and returns a **new** OAuth 2.0 token pair, and invalidates the pair previously issued for that user and App. This makes migration jobs safe to re-run, but it means you must always store the most recent pair. X keeps one live OAuth 2.0 grant per user per App, so the same applies when a user signs in to your App again through the OAuth 2.0 flow.
 
 <Warning>
 Do not run two exchange jobs over the same users concurrently. Each exchange invalidates the token pair issued by the previous one.
@@ -134,31 +179,341 @@ Do not run two exchange jobs over the same users concurrently. Each exchange inv
 
 ## Rate limits
 
-The exchange is limited to **10,000 requests per 15 minutes per app per source IP address**. A single worker migrating sequentially will rarely hit this; parallel workers should implement standard backoff on HTTP 429. At the full budget, one worker IP migrates roughly one million users per day.
+The exchange is limited to **10,000 requests per 15 minutes per App per source IP address**. A single worker migrating sequentially will rarely hit this; parallel workers should implement standard backoff on HTTP 429. At the full budget, one worker IP migrates roughly one million users per day.
 
 ## Errors
 
 | HTTP | `error` | Meaning | What to do |
 | :--- | :--- | :--- | :--- |
 | 400 | `invalid_request` | Missing or invalid parameter (for example, no `oauth_token_secret` or the wrong `subject_token_type`) | Fix the request |
-| 400 | `invalid_grant` | The OAuth 1.0a token and secret were not accepted (revoked, invalid, or not owned by your app) | Skip the user; re-authorize via the OAuth 2.0 flow if needed |
+| 400 | `invalid_grant` | The OAuth 1.0a token and secret were not accepted: the user revoked your app or changed relevant settings, the token was already invalidated, or it isn't owned by your App | Don't retry. Mark the user as needing to sign in through the OAuth 2.0 flow if they return |
 | 400 | `invalid_scope` | Requested `scope` exceeds what the mapping grants | Request a subset or omit `scope` |
-| 400 | `unauthorized_client` / `invalid_client` | App authentication failed (wrong OAuth 2.0 client credentials, or OAuth 2.0 not enabled on the app) | Check the prerequisites |
+| 400 | `unauthorized_client` / `invalid_client` | App authentication failed (wrong OAuth 2.0 client credentials, or OAuth 2.0 not enabled on the App) | Check step 1 of the [checklist](#migration-checklist) |
 | 429 | `rate_limited` | Exchange rate limit hit | Back off and retry |
-| 503 | `temporarily_unavailable` | Transient service issue | Retry with backoff |
+| 503 | `temporarily_unavailable` | Transient service issue | Retry with backoff. Treat any 5xx the same way |
+
+Retrying an exchange that already succeeded is safe: you receive a fresh token pair, and the previous pair is invalidated (see [Re-running and retries](#re-running-and-retries-rotation)).
 
 <Note>
 `invalid_grant` is deliberately generic. The response does not distinguish *why* a token was rejected.
 </Note>
 
+## Switch requests to Bearer tokens
+
+On X API v2 endpoints, only the `Authorization` header changes. Endpoints, parameters, and responses stay the same.
+
+<CodeGroup>
+
+```text Before (OAuth 1.0a)
+Authorization: OAuth oauth_consumer_key="CONSUMER_API_KEY", oauth_nonce="OAUTH_NONCE", oauth_signature="OAUTH_SIGNATURE", oauth_signature_method="HMAC-SHA1", oauth_timestamp="OAUTH_TIMESTAMP", oauth_token="ACCESS_TOKEN", oauth_version="1.0"
+```
+
+```text After (OAuth 2.0)
+Authorization: Bearer <access_token>
+```
+
+</CodeGroup>
+
+With the [Python](/xdks/python/overview) or [TypeScript](/xdks/typescript/overview) XDK, pass the user's access token instead of an `OAuth1` object:
+
+<CodeGroup>
+
+```python Python
+from xdk import Client
+
+client = Client(access_token=access_token)
+me = client.users.get_me()
+```
+
+```typescript TypeScript
+import { Client } from "@xdevplatform/xdk";
+
+const client = new Client({ accessToken });
+const me = await client.users.getMe();
+```
+
+```bash cURL
+curl "https://api.x.com/2/users/me" \
+--header "Authorization: Bearer $ACCESS_TOKEN"
+```
+
+</CodeGroup>
+
+To see which scopes each endpoint needs, check the [v2 authentication mapping](/fundamentals/authentication/guides/v2-authentication-mapping).
+
+## Ads API
+
+Exchanged tokens include `ads.read`, or `ads.read` and `ads.write`, when the user's original authorization included Ads API permissions (see the [permission mapping](#what-permissions-do-the-new-tokens-get)). The Ads API, including `ads-api.x.com`, accepts these OAuth 2.0 user tokens. Migrate your Ads API calls the same way: send `Authorization: Bearer <access_token>` instead of an OAuth 1.0a signature.
+
+## Refresh access tokens
+
+Access tokens expire after 2 hours (`expires_in` is in seconds). Before one expires, get a new one from the same token endpoint with the refresh token:
+
+<CodeGroup>
+
+```bash Confidential client
+curl --location --request POST 'https://api.x.com/2/oauth2/token' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--header 'Authorization: Basic <base64(oauth2_client_id:oauth2_client_secret)>' \
+--data-urlencode 'grant_type=refresh_token' \
+--data-urlencode 'refresh_token=<refresh_token>'
+```
+
+```bash Public client
+curl --location --request POST 'https://api.x.com/2/oauth2/token' \
+--header 'Content-Type: application/x-www-form-urlencoded' \
+--data-urlencode 'grant_type=refresh_token' \
+--data-urlencode 'client_id=<oauth2_client_id>' \
+--data-urlencode 'refresh_token=<refresh_token>'
+```
+
+</CodeGroup>
+
+The response contains a new access token and a new refresh token.
+
+- **Refresh tokens are single-use.** Each refresh returns a new refresh token, and the one you sent stops working. Save the new one before you use the new access token.
+- **Refresh each user from one place at a time.** If two workers refresh the same token at once, one of them fails. Use a per-user lock or a single refresh worker.
+- **Refresh tokens last about 6 months.** If one is lost or expires, exchange the user's OAuth 1.0a token again while OAuth 1.0a is supported. After the retirement date, the user must sign in again through the [OAuth 2.0 flow](/fundamentals/authentication/oauth-2-0/user-access-token).
+- **`offline.access` enables refresh.** Exchanged tokens always include it. For users who sign in through the OAuth 2.0 flow, request `offline.access`, or you won't get a refresh token.
+
+## Code
+
+The XDKs don't implement the token exchange grant, so this code calls the token endpoint directly. It handles confidential and public clients, the bulk exchange with the error handling above, and refresh with rotation. Replace `TokenStore` with your own database code.
+
+<CodeGroup>
+
+```python Python expandable
+# Python 3.9+. pip install requests
+import os
+import time
+from typing import ContextManager, Iterable, Protocol
+
+import requests
+
+TOKEN_URL = "https://api.x.com/2/oauth2/token"
+CLIENT_ID = os.environ["X_OAUTH2_CLIENT_ID"]
+CLIENT_SECRET = os.environ.get("X_OAUTH2_CLIENT_SECRET")  # leave unset for public clients
+
+
+class TokenStore(Protocol):
+    """Your database. Encrypt tokens at rest and never log them."""
+
+    # Yields (user_id, oauth1_token, oauth1_secret) for users not migrated yet.
+    def users_to_migrate(self) -> Iterable[tuple[str, str, str]]: ...
+    def get_oauth1(self, user_id: str) -> tuple[str, str]: ...
+    def save_tokens(self, user_id: str, tokens: dict) -> None: ...
+    def get_tokens(self, user_id: str) -> dict: ...
+    def mark_needs_reauth(self, user_id: str) -> None: ...
+    # One holder per user at a time, for example a database row lock.
+    def lock(self, user_id: str) -> ContextManager: ...
+
+
+class TokenError(Exception):
+    def __init__(self, status: int, error: str):
+        super().__init__(f"HTTP {status}: {error}")
+        self.status = status
+        self.error = error
+
+
+def _token_request(form: dict) -> dict:
+    auth = None
+    if CLIENT_SECRET:
+        auth = (CLIENT_ID, CLIENT_SECRET)  # confidential client: HTTP Basic
+    else:
+        form = {**form, "client_id": CLIENT_ID}  # public client
+    resp = requests.post(TOKEN_URL, data=form, auth=auth, timeout=30)
+    if resp.status_code != 200:
+        try:
+            error = resp.json().get("error", "")
+        except ValueError:
+            error = ""
+        raise TokenError(resp.status_code, error)
+    tokens = resp.json()
+    tokens["expires_at"] = time.time() + tokens["expires_in"]
+    return tokens
+
+
+def exchange(oauth1_token: str, oauth1_secret: str) -> dict:
+    """Trade a user's OAuth 1.0a token and secret for an OAuth 2.0 token pair."""
+    return _token_request({
+        "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+        "subject_token": oauth1_token,
+        "subject_token_type": "urn:x:params:oauth:token-type:oauth1_token",
+        "oauth_token_secret": oauth1_secret,
+    })
+
+
+def refresh(refresh_token: str) -> dict:
+    """Get a new access token. The response includes a new refresh token."""
+    return _token_request({"grant_type": "refresh_token", "refresh_token": refresh_token})
+
+
+def migrate_users(store: TokenStore) -> None:
+    """Exchange every user that still has only OAuth 1.0a tokens. Safe to re-run."""
+    for user_id, oauth1_token, oauth1_secret in store.users_to_migrate():
+        for attempt in range(8):
+            try:
+                store.save_tokens(user_id, exchange(oauth1_token, oauth1_secret))
+                break
+            except TokenError as e:
+                if e.status == 429 or e.status >= 500:
+                    time.sleep(min(2 ** attempt, 60))
+                    continue
+                if e.error == "invalid_grant":
+                    store.mark_needs_reauth(user_id)  # revoked or invalid: don't retry
+                    break
+                raise  # invalid_request, invalid_scope, or client errors: fix your setup
+        # Users still pending after 8 attempts are retried on the next run.
+
+
+def access_token_for(store: TokenStore, user_id: str) -> str:
+    """Return a valid access token for the user, refreshing it when needed."""
+    with store.lock(user_id):  # refresh tokens are single-use: one refresh per user at a time
+        tokens = store.get_tokens(user_id)
+        if tokens["expires_at"] - time.time() > 300:
+            return tokens["access_token"]
+        try:
+            tokens = refresh(tokens["refresh_token"])
+        except TokenError as e:
+            if e.status != 400:
+                raise  # 429 or 5xx: try again later
+            # Refresh token lost or expired: exchange again while OAuth 1.0a is supported.
+            tokens = exchange(*store.get_oauth1(user_id))
+        store.save_tokens(user_id, tokens)  # save the new refresh token before using the access token
+        return tokens["access_token"]
+```
+
+```typescript TypeScript expandable
+// Node.js 18+ (built-in fetch). No dependencies.
+const TOKEN_URL = "https://api.x.com/2/oauth2/token";
+const CLIENT_ID = process.env.X_OAUTH2_CLIENT_ID!;
+const CLIENT_SECRET = process.env.X_OAUTH2_CLIENT_SECRET; // leave unset for public clients
+
+export interface Tokens {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  scope: string;
+  token_type: string;
+  expires_at: number; // epoch milliseconds, computed locally
+}
+
+/** Your database. Encrypt tokens at rest and never log them. */
+export interface TokenStore {
+  /** Yields [userId, oauth1Token, oauth1Secret] for users not migrated yet. */
+  usersToMigrate(): AsyncIterable<[string, string, string]>;
+  getOAuth1(userId: string): Promise<[string, string]>;
+  saveTokens(userId: string, tokens: Tokens): Promise<void>;
+  getTokens(userId: string): Promise<Tokens>;
+  markNeedsReauth(userId: string): Promise<void>;
+  /** Runs fn while holding a per-user lock, for example a database row lock. */
+  withLock<T>(userId: string, fn: () => Promise<T>): Promise<T>;
+}
+
+export class TokenError extends Error {
+  status: number;
+  error: string;
+  constructor(status: number, error: string) {
+    super(`HTTP ${status}: ${error}`);
+    this.status = status;
+    this.error = error;
+  }
+}
+
+async function tokenRequest(params: Record<string, string>): Promise<Tokens> {
+  const body = new URLSearchParams(params);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+  if (CLIENT_SECRET) {
+    // Confidential client: HTTP Basic
+    const credentials = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64");
+    headers.Authorization = `Basic ${credentials}`;
+  } else {
+    body.set("client_id", CLIENT_ID); // public client
+  }
+  const res = await fetch(TOKEN_URL, { method: "POST", headers, body });
+  const json: any = await res.json().catch(() => ({}));
+  if (!res.ok) throw new TokenError(res.status, json.error ?? "");
+  return { ...json, expires_at: Date.now() + json.expires_in * 1000 };
+}
+
+/** Trade a user's OAuth 1.0a token and secret for an OAuth 2.0 token pair. */
+export function exchange(oauth1Token: string, oauth1Secret: string): Promise<Tokens> {
+  return tokenRequest({
+    grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+    subject_token: oauth1Token,
+    subject_token_type: "urn:x:params:oauth:token-type:oauth1_token",
+    oauth_token_secret: oauth1Secret,
+  });
+}
+
+/** Get a new access token. The response includes a new refresh token. */
+export function refresh(refreshToken: string): Promise<Tokens> {
+  return tokenRequest({ grant_type: "refresh_token", refresh_token: refreshToken });
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Exchange every user that still has only OAuth 1.0a tokens. Safe to re-run. */
+export async function migrateUsers(store: TokenStore): Promise<void> {
+  for await (const [userId, oauth1Token, oauth1Secret] of store.usersToMigrate()) {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      try {
+        await store.saveTokens(userId, await exchange(oauth1Token, oauth1Secret));
+        break;
+      } catch (e) {
+        if (!(e instanceof TokenError)) throw e;
+        if (e.status === 429 || e.status >= 500) {
+          await sleep(Math.min(2 ** attempt, 60) * 1000);
+          continue;
+        }
+        if (e.error === "invalid_grant") {
+          await store.markNeedsReauth(userId); // revoked or invalid: don't retry
+          break;
+        }
+        throw e; // invalid_request, invalid_scope, or client errors: fix your setup
+      }
+    }
+    // Users still pending after 8 attempts are retried on the next run.
+  }
+}
+
+/** Return a valid access token for the user, refreshing it when needed. */
+export function accessTokenFor(store: TokenStore, userId: string): Promise<string> {
+  // Refresh tokens are single-use: one refresh per user at a time.
+  return store.withLock(userId, async () => {
+    let tokens = await store.getTokens(userId);
+    if (tokens.expires_at - Date.now() > 5 * 60 * 1000) return tokens.access_token;
+    try {
+      tokens = await refresh(tokens.refresh_token);
+    } catch (e) {
+      if (!(e instanceof TokenError) || e.status !== 400) throw e; // 429 or 5xx: try again later
+      // Refresh token lost or expired: exchange again while OAuth 1.0a is supported.
+      const [oauth1Token, oauth1Secret] = await store.getOAuth1(userId);
+      tokens = await exchange(oauth1Token, oauth1Secret);
+    }
+    await store.saveTokens(userId, tokens); // save the new refresh token before using the access token
+    return tokens.access_token;
+  });
+}
+```
+
+</CodeGroup>
+
+Run `migrate_users(store)` (`migrateUsers` in TypeScript) as a batch job. Before each API call, get the user's token with `access_token_for(store, user_id)` (`accessTokenFor`) and send it as shown in [Switch requests to Bearer tokens](#switch-requests-to-bearer-tokens). Other errors are raised as `TokenError`. For example, if the fallback exchange in `access_token_for` returns `invalid_grant`, mark the user as needing to sign in again.
+
 ## FAQ
 
 <AccordionGroup>
-  <Accordion title="Will my users notice anything?">
-    No. There is no consent screen, no notification, and no session change. Their existing connection to your app continues.
+  <Accordion title="When does OAuth 1.0a stop working?">
+    On **[DATE TBD]**. Until then, OAuth 1.0a and OAuth 2.0 both work, so you can migrate at your own pace. After that date, requests signed with OAuth 1.0a fail and the token exchange is no longer available.
+  </Accordion>
+  <Accordion title="Do my users need to re-authorize my app?">
+    No. The exchange moves each user to OAuth 2.0 with no consent screen, no notification, and no session change. Their existing connection to your app continues. A user only has to sign in again if their OAuth 1.0a token is rejected with `invalid_grant`, if you need scopes their original authorization didn't cover, or if you haven't migrated them by the retirement date.
   </Accordion>
   <Accordion title="Does the exchange log users out or break my OAuth 1.0a integration?">
-    No. The OAuth 1.0a token remains valid until OAuth 1.0a is retired. v1.1 endpoints you call with OAuth 1.0a signing keep working.
+    No. The OAuth 1.0a token remains valid until OAuth 1.0a is retired. v1.1 endpoints you call with OAuth 1.0a signing keep working until then.
   </Accordion>
   <Accordion title="What if I lose a refresh token, or it expires after 6 months?">
     Exchange the user's OAuth 1.0a token again (while OAuth 1.0a remains supported) to get a fresh pair. After retirement, the user must re-authorize via the OAuth 2.0 flow.
@@ -166,10 +521,12 @@ The exchange is limited to **10,000 requests per 15 minutes per app per source I
   <Accordion title="Do exchanged tokens behave differently from normal OAuth 2.0 tokens?">
     No. They are ordinary OAuth 2.0 user tokens with the same refresh flow, the same scopes model, and the same revocation behavior.
   </Accordion>
-  <Accordion title="What about the Ads API?">
-    Exchanged tokens carry `ads.read` and `ads.write` where the user's original authorization included ads permissions, and these work on X API v2 ads endpoints. The legacy standalone [Ads API](/x-ads-api/fundamentals/accessing-ads-accounts) (`ads-api.x.com`) continues to use OAuth 1.0a. Keep your OAuth 1.0a integration for it until further notice.
+  <Accordion title="What about v1.1 endpoints?">
+    OAuth 2.0 user tokens work with X API v2. Move v1.1 calls to their v2 equivalents before the retirement date. The [endpoint map](/x-api/migrate/x-api-endpoint-map) lists them.
   </Accordion>
   <Accordion title="Which users should I migrate?">
-    All of them, eventually, because OAuth 1.0a is being retired. Migrate in batches, monitor your error rates, and treat `invalid_grant` users as churn to re-acquire through the normal login flow.
+    All of them. Migrate in batches, monitor your error rates, and treat `invalid_grant` users as churn to re-acquire through the normal sign-in flow.
   </Accordion>
 </AccordionGroup>
+
+Questions about your migration? Contact your account manager, or ask on the [developer forums](https://devcommunity.x.com).
