@@ -102,6 +102,9 @@ function getPricingTypeDisplayName(pricingType) {
     // EventTypePricing
     'Post': 'Post: Read',
     'User': 'User: Read',
+    'Media': 'Media: Read',
+    'Poll': 'Poll: Read',
+    'Place': 'Place: Read',
     'List': 'List: Read',
     'Space': 'Space: Read',
     'Community': 'Community: Read',
@@ -280,8 +283,8 @@ function buildSlugToPricingTypeMapping() {
   mapping['get-historical-post-insights'] = 'CountsRecent'; // Placeholder - may need to verify
   
   // Media lookup endpoints
-  mapping['get-media-by-media-key'] = 'CountsRecent'; // Placeholder - may need to verify
-  mapping['get-media-by-media-keys'] = 'CountsRecent'; // Placeholder - may need to verify
+  mapping['get-media-by-media-key'] = 'Media';
+  mapping['get-media-by-media-keys'] = 'Media';
   mapping['get-media-upload-status'] = 'CountsRecent'; // Placeholder - may need to verify
   
   // News endpoints
@@ -460,7 +463,7 @@ function createSliderContent(endpointName, unitCost, pricingType, options = {}) 
   const maxUsage = 50000; // 50k
   
   // Determine if this is event type (per resource) or request type (per request)
-  const eventTypePricing = ['Post', 'User', 'List', 'Space', 'Community', 'DirectMessage', 'ProfileUpdate', 'Like', 'Follow', 'Mute', 'Block', 'News'];
+  const eventTypePricing = ['Post', 'User', 'Media', 'Poll', 'Place', 'List', 'Space', 'Community', 'DirectMessage', 'ProfileUpdate', 'Like', 'Follow', 'Mute', 'Block', 'News'];
   const isEventType = eventTypePricing.includes(pricingType);
   const unitLabel = isEventType ? 'per resource' : 'per request';
   const usageLabelText = isEventType ? 'resources' : 'requests';

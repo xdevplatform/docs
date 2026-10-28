@@ -2,7 +2,7 @@
 title: X API pay-per-usage pricing and credits
 sidebarTitle: Pricing
 description: "The X API uses pay-per-usage pricing with no subscriptions. Buy credits, set spending limits, and earn up to 20% back in free xAI API credits."
-keywords: ["X API pricing", "API pricing", "pay-per-usage", "API credits", "billing", "deduplication", "API costs", "auto-recharge", "spending limit", "spend cap", "xAI credits", "free credits", "Grok API"]
+keywords: ["X API pricing", "API pricing", "pay-per-usage", "API credits", "billing", "deduplication", "expansions", "owned reads", "API costs", "auto-recharge", "spending limit", "spend cap", "xAI credits", "free credits", "Grok API"]
 ---
 
 import { Button } from '/snippets/button.mdx';
@@ -52,6 +52,9 @@ Charged per resource returned in the response.
 |:---------|:----------|
 | **Posts: Read** | &dollar;0.005 per resource |
 | **User: Read** | &dollar;0.010 per resource |
+| **Media: Read** | &dollar;0.005 per resource |
+| **Poll: Read** | &dollar;0.005 per resource |
+| **Place: Read** | &dollar;0.005 per resource |
 | **DM Event: Read** | &dollar;0.010 per resource |
 | **Following/Followers: Read** | &dollar;0.010 per resource |
 | **List: Read** | &dollar;0.005 per resource |
@@ -62,6 +65,8 @@ Charged per resource returned in the response.
 | **Mute: Read** | &dollar;0.001 per resource |
 | **Block: Read** | &dollar;0.001 per resource |
 | **Profile Update: Read** | &dollar;0.005 per resource |
+
+Media, Poll, and Place reads cost &dollar;0.005 for each media, poll, or place object returned, including objects returned through [expansions](#expansions). **Media: Read** is separate from **Media Metadata** under [Write operations](#write-operations), which is charged per request when you create or delete media metadata such as alt text or subtitles.
 
 <Note>
 Pay-per-usage plans are capped at **3 million Post reads per monthly billing cycle**. If you need higher volume, upgrade to an [Enterprise plan](/forms/enterprise-api-interest).
@@ -122,6 +127,28 @@ Webhook events delivered through the [X Activity API](/x-api/activity/introducti
 
 ---
 
+## Expansions
+
+Objects returned through [expansions](/x-api/fundamentals/expansions) (the `includes` section of a response) are billed at the same per-resource rate as a direct lookup. This applies to post, user, media, poll, and place expansions.
+
+| Object in `includes` | Returned by expansions such as | Billed as |
+|:---------------------|:-------------------------------|:----------|
+| Posts | `referenced_tweets.id`, `pinned_tweet_id` | Posts: Read (&dollar;0.005 per resource) |
+| Users | `author_id`, `entities.mentions.username` | User: Read (&dollar;0.010 per resource) |
+| Media | `attachments.media_keys` | Media: Read (&dollar;0.005 per resource) |
+| Polls | `attachments.poll_ids` | Poll: Read (&dollar;0.005 per resource) |
+| Places | `geo.place_id` | Place: Read (&dollar;0.005 per resource) |
+
+Each object in `includes` counts as one resource. A Post with four photos requested with `expansions=attachments.media_keys` returns four media objects, billed as four Media: Read resources. Expansion objects are [deduplicated](#deduplication) like any other resource, so the same object returned again in the same UTC day is not charged again.
+
+For example, a recent search request with `max_results=100&expansions=author_id,attachments.media_keys` that returns 100 Posts, 60 distinct authors, and 40 media objects, none of them already charged that day, costs 100 × &dollar;0.005 + 60 × &dollar;0.010 + 40 × &dollar;0.005 = **&dollar;1.30**.
+
+<Tip>
+Request only the expansions your app uses. Each post, user, media, poll, or place object returned in `includes` is billed.
+</Tip>
+
+---
+
 ## Owned Reads
 
 Owned Reads are requests made by your own developer app for your own data (posts, bookmarks, followers, likes, lists, and more). These endpoints are priced at **&dollar;0.001 per resource** (1,000 resources for &dollar;1).
@@ -143,9 +170,27 @@ The following endpoints qualify for Owned Read pricing when `{id}` matches the a
 | `GET /2/users/{id}/list_memberships` | Lists you belong to |
 | `GET /2/users/{id}/pinned_lists` | Your pinned lists |
 
+<Note>
+Third-party apps that read their users' data through OAuth are not making Owned Reads, because the authenticated user does not own the developer app. Those requests, including their expansions, are billed at the standard rates.
+</Note>
+
 <Tip>
 Owned Reads make it significantly cheaper to build apps that work with a user's own data, such as dashboard apps, personal analytics, or account management tools.
 </Tip>
+
+### Expansions on Owned Reads
+
+On Owned Read requests to the following endpoints, which track expansions, objects returned through [expansions](#expansions) are billed at the Owned Read rate of **&dollar;0.001 per resource** instead of their standard rate:
+
+| Endpoint | Description |
+|:---------|:------------|
+| `GET /2/users/{id}/tweets` | Your own posts |
+| `GET /2/users/{id}/mentions` | Your mentions |
+| `GET /2/users/{id}/liked_tweets` | Posts you liked |
+
+Expansion objects on these requests are deduplicated together with the primary results, so a resource that appears in both `data` and `includes` is charged once.
+
+For example, requesting 100 of your own Posts with `expansions=author_id,attachments.media_keys` that returns 1 user (you) and 30 media objects, none of them already charged that day, costs 131 × &dollar;0.001 = **&dollar;0.131**.
 
 ---
 
@@ -156,7 +201,7 @@ All resources are deduplicated within a **24-hour UTC day window**. If you reque
 This means:
 - Requesting the same Post multiple times in a day counts as one charge
 - The deduplication window resets at midnight UTC
-- This applies to all billable resources (Posts, users, etc.)
+- This applies to all billable resources, not just Posts, including users, media, polls, and places returned through [expansions](#expansions)
 
 <Note>
 Deduplication is a **soft guarantee**. While it occurs in the vast majority of cases, there may be specific edge cases like service outages that result in resources not being deduplicated.
