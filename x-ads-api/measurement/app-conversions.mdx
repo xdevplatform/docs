@@ -1,0 +1,179 @@
+---
+title: Conversion API for App Events
+description: Send app installs and in-app events to X with the Conversion API for App Events, without a mobile measurement partner.
+keywords: ["app conversion API", "conversion API for app events", "app events", "app installs", "X App Conversion API", "app conversion tracking", "mobile app conversions"]
+---
+
+The Conversion API for App Events sends app events, such as installs, sign-ups, and purchases, to X without a mobile measurement partner. X uses these events to attribute conversions to your campaigns and to improve how app install campaigns are delivered.
+
+In Ads Manager this integration is labeled **X App Conversion API**. Website events use the [Conversion API for Web](/x-ads-api/measurement/web-conversions). Mobile measurement partners report events and receive attribution through [Mobile Conversions](/x-ads-api/measurement/mobile-conversions).
+
+You can call the endpoint from your app or from your server. Send an event for every new install, and for any other event type you create in Events Manager.
+
+## Set up in Ads Manager
+
+<Steps>
+  <Step title="Open Events manager">
+    Sign in to [X Ads Manager](https://ads.x.com), choose your ad account, and click **Events manager** under **Tools** in the left navigation.
+  </Step>
+  <Step title="Click Manage App Events">
+    At the top right of Events manager, click **Manage App Events**.
+  </Step>
+  <Step title="Choose X App Conversion API">
+    In the Manage App Events window, click **X App Conversion API**. It is listed above the mobile measurement partners.
+  </Step>
+  <Step title="Select the app to connect">
+    Open the app list and pick the app to connect. The list shows apps on the ad account that are not connected yet. If the app is missing, click **Add new app**, then click **Connect**.
+
+    Connecting creates the app’s Install event, with a 14-day post-engagement window and a 1-day post-view window. You can change these windows later.
+  </Step>
+  <Step title="Generate an access token">
+    After you connect, the **Send events to X App Conversion API** window opens. Click **Generate access token**.
+
+    Copy the token and store it securely. It is shown only once. Pass it in the `X-App-Conversion-Token` header on every request. One token works for every app on the ad account.
+
+    You can reopen this window at any time. In Events manager, select the app as the event source and click the code icon (**View install code**) on an event.
+  </Step>
+  <Step title="Send an event for every new install">
+    Call the endpoint below each time the app is installed. The setup window shows the same request filled in with your account and app. The top of that window also has **Copy prompt**, which copies a prompt a coding agent can use to add the call to your project.
+  </Step>
+  <Step title="Add more event types (optional)">
+    In Events manager, choose the app as the event source and click **Add event**. Pick the event type. Types that are already set up are unavailable. Adjust the attribution windows if needed, then click **Create event**.
+
+    Send that event with the same request as an install, using its event name, such as `SIGN_UP` or `PURCHASE`.
+  </Step>
+</Steps>
+
+Once events arrive, the Install event’s status in Events manager changes to **Active**, and **Last recorded** shows the time of the latest event.
+
+## Identifiers
+
+Every event needs at least one of the following:
+
+- `device_id`
+- `hashed_email`
+- `hashed_phone_number`
+- `ip_address` together with `user_agent`
+
+Sending more than one identifier improves matching. `device_id` is the recommended identifier.
+
+<ParamField body="device_id" type="string">
+  The raw, unhashed IDFA on iOS or Advertising ID on Android. On iOS, reading the IDFA requires an app change: the app must ask the user for tracking permission with App Tracking Transparency.
+</ParamField>
+
+<ParamField body="hashed_email" type="string">
+  SHA-256 hash of the email address. Trim leading and trailing spaces, hash with SHA-256 and no salt, and send the lowercase hex digest. For `test@x.com`, send `5806dc6b2f04fb728708a8f7b81c14edcd4fba36f77914cf0c9368d9a3a25f76`.
+</ParamField>
+
+<ParamField body="hashed_phone_number" type="string">
+  SHA-256 hash of the phone number. Normalize the number to [E.164](https://en.wikipedia.org/wiki/E.164), hash with SHA-256 and no salt, and send the lowercase hex digest. For `+11234567890`, send `1fa6b8d986d9b9cd01bf36951815158bbde9f520c0567c835dfe34783d0a4231`.
+</ParamField>
+
+<ParamField body="ip_address" type="string">
+  IP address of the device when the event happened. Send it in the same identifier object as `user_agent`. No hashing is required. Example: `8.25.197.25`.
+</ParamField>
+
+<ParamField body="user_agent" type="string">
+  User agent of the device when the event happened. Send it in the same identifier object as `ip_address`. No hashing is required.
+</ParamField>
+
+If you do not want to change the app to read a device ID, send `hashed_email` or `hashed_phone_number` instead. X uses them for attribution and to improve campaign performance.
+
+## Send events
+
+### POST accounts/:account_id/measurement/app_conversions
+
+Send one or more app conversion events for an ads account. A successful request returns HTTP 200.
+
+Send up to 500 conversions in one request.
+
+**Resource URL**
+
+`https://ads-api.x.com/12/accounts/:account_id/measurement/app_conversions`
+
+<ParamField header="X-App-Conversion-Token" type="string" required>
+  Access token generated in Events Manager. Shown only once. One token works for every app on the ad account.
+</ParamField>
+
+<ParamField header="Content-Type" type="string" required>
+  `application/json`
+</ParamField>
+
+<ParamField path="account_id" type="string" required>
+  The identifier for the ads account. The setup window in Events Manager fills this in for the account you are using.
+</ParamField>
+
+<ParamField body="conversions" type="object[]" required>
+  App events to record. Maximum 500 objects per request. See [conversion object](#conversion-object).
+</ParamField>
+
+#### Conversion object
+
+| Field | Required | Description |
+| :--- | :--- | :--- |
+| `app_id` | Yes | App Store ID on iOS, or package name on Android. Example: `6756081399`, `com.example.app`. |
+| `os_type` | Yes | `IOS` or `ANDROID`. |
+| `event_name` | Yes | Event to record. `INSTALL` is created when you connect the app. Other events use the name of an event you created in Events Manager, such as `SIGN_UP` or `PURCHASE`. |
+| `conversion_timestamp` | Yes | When the event happened, as a Unix timestamp in milliseconds. Example: `1792576800000`. |
+| `identifiers` | Yes | Array of identifier objects. Include at least one of `device_id`, `hashed_email`, `hashed_phone_number`, or `ip_address` together with `user_agent`. See [Identifiers](#identifiers). |
+| `limit_ad_tracking` | No | Whether the user has limited ad tracking. On iOS 14.5 and later, this is the App Tracking Transparency status. `true` or `false`. |
+
+#### Example request
+
+`POST https://ads-api.x.com/12/accounts/{account_id}/measurement/app_conversions`
+
+```bash
+curl -X POST "https://ads-api.x.com/12/accounts/{account_id}/measurement/app_conversions" \
+  -H "X-App-Conversion-Token: {token}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversions": [
+      {
+        "app_id": "6756081399",
+        "os_type": "IOS",
+        "event_name": "INSTALL",
+        "conversion_timestamp": 1792576800000,
+        "identifiers": [
+          { "device_id": "38400000-8cf0-11bd-b23e-10b96e40000d" }
+        ],
+        "limit_ad_tracking": false
+      }
+    ]
+  }'
+```
+
+To send the event without an app change, replace the device ID with hashed identifiers:
+
+```json
+"identifiers": [
+  { "hashed_email": "5806dc6b2f04fb728708a8f7b81c14edcd4fba36f77914cf0c9368d9a3a25f76" },
+  { "hashed_phone_number": "1fa6b8d986d9b9cd01bf36951815158bbde9f520c0567c835dfe34783d0a4231" }
+]
+```
+
+`ip_address` and `user_agent` are sent together in one identifier object:
+
+```json
+"identifiers": [
+  {
+    "ip_address": "8.25.197.25",
+    "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
+  }
+]
+```
+
+#### Example response
+
+```json
+{
+  "data": {
+    "conversions_processed": 1,
+    "debug_id": "ff02e052-36e4-47d6-bdf0-6d8986446562"
+  }
+}
+```
+
+| Field | Description |
+| :--- | :--- |
+| `conversions_processed` | Number of conversion events accepted from the request. |
+| `debug_id` | Identifier for this request. Include it when you contact support about a submission. |
