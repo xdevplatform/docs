@@ -64,14 +64,26 @@ Your application must respond with a JSON body containing a `response_token`:
 ### How to build the CRC response
 
 1. Use the `crc_token` value from the query parameter as the **message**
-2. Use your app's **consumer secret** (API secret key) as the **key**
+2. Use your app's **OAuth 2.0 client secret** as the **key** (recommended). Your app's **OAuth 1.0 consumer secret** (API Secret Key) is also supported for existing integrations.
 3. Create an **HMAC SHA-256** hash
 4. **Base64 encode** the result
 5. Prepend `sha256=` to the encoded string
 
+Expressed as pseudocode:
+
+```
+response_token = "sha256=" + base64(
+  hmac_sha256(OAUTH2_CLIENT_SECRET, crc_token)
+)
+```
+
 <Warning>
-**Important:** Your web app must use your app's **consumer secret** (API secret key) for the CRC encryption — not your bearer token or access token.
+**Important:** Use the app's **OAuth 2.0 client secret** (or, for legacy integrations, the **OAuth 1.0 consumer secret**) to compute the CRC response. Do **not** use the OAuth 2.0 App Only Bearer Token you pass to `/2/webhooks`, and do not use any user access token. Client and consumer secrets must remain server-side.
 </Warning>
+
+<Note>
+The examples below use `WEBHOOK_SIGNING_SECRET` as a generic name for the app's **OAuth 2.0 client secret**. To keep an existing OAuth 1.0 integration working, set `WEBHOOK_SIGNING_SECRET` to your `OAUTH1_CONSUMER_SECRET` instead — the algorithm is identical.
+</Note>
 
 ### Example: Python
 
@@ -80,19 +92,20 @@ import hmac
 import hashlib
 import base64
 
-def handle_crc(crc_token, consumer_secret):
+def handle_crc(crc_token, webhook_signing_secret):
     """
-    Respond to a Twitter CRC check.
-    
+    Respond to an X CRC check.
+
     Args:
         crc_token: The crc_token query parameter from the GET request
-        consumer_secret: Your app's consumer secret (API secret key)
-    
+        webhook_signing_secret: Your app's OAuth 2.0 client secret
+            (or OAuth 1.0 consumer secret for legacy integrations)
+
     Returns:
         dict with the response_token
     """
     sha256_hash = hmac.new(
-        consumer_secret.encode('utf-8'),
+        webhook_signing_secret.encode('utf-8'),
         crc_token.encode('utf-8'),
         hashlib.sha256
     ).digest()
@@ -107,9 +120,11 @@ def handle_crc(crc_token, consumer_secret):
 ```javascript title="Example" lines wrap icon="square-js"
 const crypto = require('crypto');
 
-function handleCrc(crcToken, consumerSecret) {
+// OAuth 2.0 client secret (recommended). Set to your OAuth 1.0 consumer
+// secret instead to keep an existing OAuth 1.0 integration working.
+function handleCrc(crcToken, webhookSigningSecret) {
   const hmac = crypto
-    .createHmac('sha256', consumerSecret)
+    .createHmac('sha256', webhookSigningSecret)
     .update(crcToken)
     .digest('base64');
 
@@ -121,38 +136,60 @@ function handleCrc(crcToken, consumerSecret) {
 
 ### Example: Flask (full endpoint)
 
-This example shows a complete webhook endpoint that handles both CRC validation (GET) and event delivery (POST):
+This example shows a complete webhook endpoint that handles both CRC validation (GET) and event delivery (POST). It uses the OAuth 2.0 client secret by default and, when both secrets are configured, verifies incoming POSTs against `X-Twitter-Webhooks-Signature-OAuth2` first, falling back to the legacy `X-Twitter-Webhooks-Signature` header.
 
 ```python title="Example" expandable lines wrap icon="python"
-from flask import Flask, request, jsonify
+import os
 import hmac
 import hashlib
 import base64
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-CONSUMER_SECRET = "your_consumer_secret_here"
+# Recommended: the app's OAuth 2.0 client secret.
+OAUTH2_CLIENT_SECRET = os.environ["OAUTH2_CLIENT_SECRET"]
+
+# Optional: the app's OAuth 1.0 consumer secret (API Secret Key). Only set
+# this while migrating an existing OAuth 1.0 integration.
+OAUTH1_CONSUMER_SECRET = os.environ.get("OAUTH1_CONSUMER_SECRET")
+
+
+def _sign(secret: str, message: bytes) -> str:
+    digest = hmac.new(secret.encode("utf-8"), message, hashlib.sha256).digest()
+    return "sha256=" + base64.b64encode(digest).decode("utf-8")
+
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
-        # Handle CRC check
+        # CRC check — respond with HMAC of crc_token using the OAuth 2.0
+        # client secret.
         crc_token = request.args.get("crc_token")
-        if crc_token:
-            sha256_hash = hmac.new(
-                CONSUMER_SECRET.encode("utf-8"),
-                crc_token.encode("utf-8"),
-                hashlib.sha256,
-            ).digest()
-            response_token = "sha256=" + base64.b64encode(sha256_hash).decode("utf-8")
-            return jsonify({"response_token": response_token}), 200
-        return "Missing crc_token", 400
+        if not crc_token:
+            return "Missing crc_token", 400
+        return jsonify({"response_token": _sign(OAUTH2_CLIENT_SECRET, crc_token.encode("utf-8"))}), 200
 
-    elif request.method == "POST":
-        # Handle incoming webhook events
-        event = request.get_json()
-        print("Received event:", event)
-        return "", 200
+    # POST — verify signature over the raw request body.
+    raw_body = request.get_data()  # bytes
+
+    oauth2_signature = request.headers.get("X-Twitter-Webhooks-Signature-OAuth2")
+    if oauth2_signature is not None:
+        expected = _sign(OAUTH2_CLIENT_SECRET, raw_body)
+        if not hmac.compare_digest(expected, oauth2_signature):
+            return "Invalid signature", 401
+    else:
+        # Legacy fallback for OAuth 1.0-only apps during migration.
+        legacy_signature = request.headers.get("X-Twitter-Webhooks-Signature")
+        if legacy_signature is None or OAUTH1_CONSUMER_SECRET is None:
+            return "Missing signature", 401
+        expected = _sign(OAUTH1_CONSUMER_SECRET, raw_body)
+        if not hmac.compare_digest(expected, legacy_signature):
+            return "Invalid signature", 401
+
+    event = request.get_json(silent=True)
+    print("Received event:", event)
+    return "", 200
 ```
 
 ---
@@ -167,41 +204,74 @@ The CRC enables X to confirm ownership of the web app receiving webhook events. 
 
 ### Signature verification
 
-Each POST request from X includes an `x-twitter-webhooks-signature` header that enables you to confirm that X is the source of the incoming webhook.
+Each POST request from X includes a signature header that enables you to confirm that X is the source of the incoming webhook. Two headers are possible:
 
-To verify the signature:
+| Header | Secret used | Recommendation |
+|:-------|:------------|:---------------|
+| `X-Twitter-Webhooks-Signature-OAuth2` | OAuth 2.0 client secret | Recommended. Verify this header when present. |
+| `X-Twitter-Webhooks-Signature` | OAuth 1.0 consumer secret (API Secret Key) | Legacy. Format unchanged. Supported for backward compatibility. |
 
-1. Get the `x-twitter-webhooks-signature` header value from the incoming request
-2. Create an HMAC SHA-256 hash using your **consumer secret** as the key and the **raw request body** as the message
-3. Base64 encode the hash and prepend `sha256=`
-4. Compare your computed value to the header value — they should match
+Both headers use the format `sha256=<base64_encoded_hmac_sha256>` and are calculated over the **raw request body bytes**. If your app has both an OAuth 2.0 client secret and an OAuth 1.0 consumer secret configured, X may send both headers during migration — verify `X-Twitter-Webhooks-Signature-OAuth2` and optionally fall back to `X-Twitter-Webhooks-Signature`.
+
+To verify a signature:
+
+1. Read the incoming request body as raw bytes (do not re-serialize the JSON).
+2. Get the signature header value from the request, preferring `X-Twitter-Webhooks-Signature-OAuth2`.
+3. Create an HMAC SHA-256 hash using the corresponding secret as the key and the raw body as the message.
+4. Base64 encode the hash and prepend `sha256=`.
+5. Compare the computed value to the header value using a **constant-time comparison**.
+
+Expressed as pseudocode:
+
+```
+oauth2_signature = request.headers["X-Twitter-Webhooks-Signature-OAuth2"]
+expected = "sha256=" + base64(
+  hmac_sha256(OAUTH2_CLIENT_SECRET, raw_request_body)
+)
+constant_time_compare(expected, oauth2_signature)
+```
 
 ```python title="Example" expandable lines wrap icon="python"
 import hmac
 import hashlib
 import base64
 
-def verify_signature(payload, signature_header, consumer_secret):
+
+def _sign(secret: str, payload: bytes) -> str:
+    digest = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).digest()
+    return "sha256=" + base64.b64encode(digest).decode("utf-8")
+
+
+def verify_signature(
+    payload: bytes,
+    headers,
+    oauth2_client_secret: str,
+    oauth1_consumer_secret: str | None = None,
+) -> bool:
     """
     Verify that a webhook POST request actually came from X.
-    
+
     Args:
-        payload: The raw request body (bytes)
-        signature_header: The x-twitter-webhooks-signature header value
-        consumer_secret: Your app's consumer secret
-    
+        payload: The raw request body (bytes).
+        headers: A mapping of request headers.
+        oauth2_client_secret: The app's OAuth 2.0 client secret (recommended).
+        oauth1_consumer_secret: The app's OAuth 1.0 consumer secret. Only pass
+            this when migrating from OAuth 1.0.
+
     Returns:
-        True if the signature is valid
+        True if the signature is valid.
     """
-    expected = "sha256=" + base64.b64encode(
-        hmac.new(
-            consumer_secret.encode("utf-8"),
-            payload,
-            hashlib.sha256
-        ).digest()
-    ).decode("utf-8")
-    
-    return hmac.compare_digest(expected, signature_header)
+    oauth2_signature = headers.get("X-Twitter-Webhooks-Signature-OAuth2")
+    if oauth2_signature is not None:
+        expected = _sign(oauth2_client_secret, payload)
+        return hmac.compare_digest(expected, oauth2_signature)
+
+    legacy_signature = headers.get("X-Twitter-Webhooks-Signature")
+    if legacy_signature is not None and oauth1_consumer_secret is not None:
+        expected = _sign(oauth1_consumer_secret, payload)
+        return hmac.compare_digest(expected, legacy_signature)
+
+    return False
 ```
 
 ---

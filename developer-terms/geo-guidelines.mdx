@@ -4,50 +4,81 @@ description: "Guidelines for handling geotagged Posts and location data from the
 keywords: ["geo guidelines", "geotagging", "location data", "geographic data", "location guidelines", "geo features", "posting with location"]
 ---
 
-Last Update: October 22, 2014.
+Last Update: October 29, 2026.
 
 ## Introduction
 
-Posting With Location is the geotagging feature in the X API. This feature helps to provide a more meaningful experience for users by making posts more contextual. For instance, “Fireworks!” is much more relevant when associated with a location: “Fireworks!” from the SoMa Neighborhood in San Francisco, California. We look forward to working with the developer ecosystem to create great experiences around this functionality!
+Posting with location is the geotagging feature in the X API. This feature helps to provide a more meaningful experience for users by making Posts more contextual. For instance, “Fireworks!” is much more relevant when associated with a location: “Fireworks!” from the SoMa Neighborhood in San Francisco, California.
+
+This page explains how to give users control over their location when your app posts on their behalf, and how location data works in X API v2.
 
 ## User privacy and user control of their location information
 
-To ensure a good and safe experience, developers should be sensitive to user privacy when dealing with their location as well as provide baseline consistency in the “Posting with Location” experience. Here are some key things to keep in mind that help protect user privacy and ensure users understand the impact of their actions:
+To ensure a good and safe experience, developers should be sensitive to user privacy when dealing with their location as well as provide baseline consistency in the “posting with location” experience. Here are some key things to keep in mind that help protect user privacy and ensure users understand the impact of their actions:
 
 ## General guidelines
 
-- Users must opt-in to use the Posting With Location feature (turn location “on”).
-- Users must give explicit permission for their exact location to be displayed with their posts. If the location feature on your client is “sticky” — i.e. once location is turned on it always accompanies a post — you may wish to display only place names (place_ids) and allow users to further opt in to exact latitude and longitude on a per-post basis or as a specific alternative setting.
-- When you access your users’ location data to post a post, that information should not be stored by you apart from the post without the user’s explicit permission.
-- It must be clear to users what level of location information, if any, will be displayed in association with their post. One way you can do this is by showing a map of how this information will be displayed before the post is published. If exact latitude and longitude is part of the information (or the only information) published by the user on the client, it should be clear to the user that their exact coordinates will be published.
-- Users should be able to turn on and off their location each time they compose a post.
-- You must follow the terms of X’s [Developer Policy](/developer-terms/policy.html) – including the requirement that you may not aggregate, cache, or store location data and other geographic information from the X API, except as part of a post, and may not use such location data or geographic information on a standalone basis.
+- Users must opt in to posting with location (turn location “on”) before your app adds a location to their Posts.
+- When you access your users’ location data to add a location to a Post, that information should not be stored by you apart from the Post without the user’s explicit permission.
+- It must be clear to users what location information, if any, will be displayed in association with their Post. One way you can do this is by showing the user the place that will be attached, such as its name or a map, before the Post is published.
+- Users should be able to turn their location on and off each time they compose a Post.
+- You must follow the terms of X’s [Developer Policy](/developer-terms/policy#using-geo-data), including the requirement that you may not (and may not permit others to) store, aggregate, or cache location data and other geographic information contained in X Content, except as part of a Post, and may not use such location data or geographic information on a standalone basis.
 
-## Specific examples
+## Posting with location in X API v2
 
-Example 1: *No addition of explicit latitude and longitude (this is the current X Web Client UI)*
+To add a location when you [create a Post](/x-api/posts/create-post), include a `geo` object with a `place_id` in the `POST /2/tweets` request body. For example, this request tags the Post with Manhattan, NY (place ID `01a9a39529b27f36`):
 
-1. Show a link to “Add your location” when a user composes a post;
-2. In the background, use the X [reverse_geocode](https://developer.x.com/en/docs/geo/places-near-location/api-reference/get-geo-reverse_geocode.html) API call and pass the latitude, longitude, accuracy of your fix, and the user’s preferred granularity (which, by default, is “neighborhood”);
-3. Display the name for the default place (X will attempt to order these in a way that makes sense - the ordering is such that a X client can just display the list without a need for modification);
-4. Allow the user to select a different location from the list (e.g. change from “SoMa, San Francisco” to “South Beach, San Francisco”).
-5. Important: Be transparent with the user if you will be displaying exact location information. Make sure the user knows if exact location information will be displayed.
-6. Allow the user the choice to turn on or off location with every post compose.
+```bash
+curl -X POST "https://api.x.com/2/tweets" \
+  -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Fireworks!",
+    "geo": {
+      "place_id": "01a9a39529b27f36"
+    }
+  }'
+```
 
-Example 2: *Existing geotagging implementations*
+- `geo.place_id` is the only location field the endpoint accepts. You can't send latitude and longitude coordinates, so a Post created through the API can only be tagged with a place.
+- `place_id` takes the ID of an X place, the same identifier returned as `id` on a [Place object](/x-api/fundamentals/data-dictionary#place). X API v2 has no places search or reverse geocode endpoint, so take place IDs from existing Posts: request the `geo.place_id` expansion with `place.fields` (for example, `expansions=geo.place_id&place.fields=full_name,id`) and reuse the `id` of the returned Place object.
+- The location is attached only if the posting user has geo enabled in their profile settings. If they don't, the Post is still created, but without the location. See [Profile settings](/x-api/posts/manage-tweets/integrate#profile-settings).
 
-A number of X client apps have the original geotagging feature (which only broadcast lat/lons without providing place_IDs) implemented. The default behavior of the API mimics this behavior – i.e. as a developer you do not need to make any changes to your existing app in order to maintain the behavior that exists today. Indeed, if you simply pass a lat/lon coordinate in to X, X will automatically reverse geocode that latitude and longitude and display the place_ID in addition to lat/lon for areas where we have data available.
+A compose flow that follows these guidelines looks like this:
 
-Ensure that it is transparent to your users that their exact coordinates are being used and displayed on X. A best practice for existing apps would be to allow users to turn on or off their location on a per-post basis. You can also enable your users to share only place_IDs instead of exact coordinates as a default, “sticky” setting.
+1. Show an “Add your location” option when the user composes a Post, and leave location off until the user turns it on.
+2. Before the Post is published, show the user the place that will be attached, and let them remove it.
+3. When the user publishes, send the place’s ID as `geo.place_id`.
+4. Let the user turn location on or off each time they compose a Post.
+
+## Reading location from Posts
+
+For a geotagged Post, the `geo` field can contain:
+
+- `place_id`: the ID of the tagged place.
+- `coordinates`: exact coordinates, when present, as a GeoJSON `Point` whose `coordinates` array is `[longitude, latitude]`.
+
+`geo` isn’t returned by default; request it as a Post [field](/x-api/fundamentals/fields).
+
+To get details about the tagged place, add the `geo.place_id` [expansion](/x-api/fundamentals/expansions#post-expansions). The [Place object](/x-api/fundamentals/data-dictionary#place) is returned in `includes.places` with its default fields, `id` and `full_name`. Use `place.fields` to request more, such as `name`, `place_type`, `country`, `country_code`, `contained_within`, and `geo`, which is the place’s bounding box as a GeoJSON `Feature`.
+
+```bash
+curl "https://api.x.com/2/tweets?ids=1136048014974423040&expansions=geo.place_id&place.fields=contained_within,country,country_code,full_name,geo,id,name,place_type" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+See the [Place object](/x-api/fundamentals/data-dictionary#place) reference for the full response.
+
+Location data you read from Posts is subject to the same Developer Policy restrictions: keep it with the Post it belongs to, and don’t use it on a standalone basis.
 
 ## X storage of user location data
 
-X will store data passed by the client as follows:
+X saves all the location data that a user chooses to publicly display with a Post. This is similar to how X stores the time stamp that says when the Post was made, meaning if a Post includes exact coordinates, X stores this exact location along with the Post for as long as the Post exists. Users can remove location information from their Posts, as described in [this Help Center article](https://help.x.com/en/using-x/post-location).
 
-- X will save all the data that a user chooses to publicly display to his/her followers. This is similar to how X stores the time stamp that says when the post was made, meaning if a user posts with their exact coordinates, X will store this exact location along with the post for as long as the post exists. Users can clear location data from their posts by clicking the “clear my location history” button on the Settings page as described [here](https://help.x.com/en/using-x/post-location).
+If you store Posts, the Developer Policy’s [content compliance](/developer-terms/policy#content-compliance) rules require you to update your copies when location information is removed from them. [Batch compliance](/x-api/compliance/batch-compliance/introduction#compliance-events) results report these changes with the `scrub_geo` action.
 
 ## Summary
 
-The addition of location to a post adds an enormous amount of context and value from a user perspective. However, implementations of location in your client should be careful to take privacy and user transparency as a key consideration in designing a location-focused product.
+The addition of location to a Post adds an enormous amount of context and value from a user perspective. However, implementations of location in your app should take privacy and user transparency as key considerations in designing a location-focused product.
 
-If you have any questions or comments about privacy, location, and other geo features, please [contact us.](https://help.x.com/forms/platform)
+If you have any questions or comments about privacy, location, and other geo features, please [contact us](https://help.x.com/forms/platform).
