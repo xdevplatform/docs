@@ -105,6 +105,7 @@ function getPricingTypeDisplayName(pricingType) {
     'Media': 'Media: Read',
     'Poll': 'Poll: Read',
     'Place': 'Place: Read',
+    'Topic': 'Topic: Read',
     'List': 'List: Read',
     'Space': 'Space: Read',
     'Community': 'Community: Read',
@@ -463,7 +464,7 @@ function createSliderContent(endpointName, unitCost, pricingType, options = {}) 
   const maxUsage = 50000; // 50k
   
   // Determine if this is event type (per resource) or request type (per request)
-  const eventTypePricing = ['Post', 'User', 'Media', 'Poll', 'Place', 'List', 'Space', 'Community', 'DirectMessage', 'ProfileUpdate', 'Like', 'Follow', 'Mute', 'Block', 'News'];
+  const eventTypePricing = ['Post', 'User', 'Media', 'Poll', 'Place', 'Topic', 'List', 'Space', 'Community', 'DirectMessage', 'ProfileUpdate', 'Like', 'Follow', 'Mute', 'Block', 'News'];
   const isEventType = eventTypePricing.includes(pricingType);
   const unitLabel = isEventType ? 'per resource' : 'per request';
   const usageLabelText = isEventType ? 'resources' : 'requests';
