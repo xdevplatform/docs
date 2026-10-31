@@ -20,9 +20,50 @@ Broadcasts are ephemeral sessions tied to a source. A broadcast starts in `NOT_S
 
 The only transitions you trigger directly are `NOT_STARTED` → `RUNNING` (via `PUBLISH`) and `RUNNING` → `ENDED` (via `END`). The remaining states are set by the platform.
 
-<Warning>
-**Critical rule:** The chosen stream source must already be actively receiving an RTMP feed (`is_stream_active: true`) **before** you call Create Broadcast — otherwise you get a 404. There is a short delay after your encoder connects before this flips `true`, so poll `GET /2/users/:user_id/sources/:source_id` until `is_stream_active` is `true` before creating the broadcast.
-</Warning>
+<Note>
+A source doesn't need to be receiving video to create or publish a broadcast. Publishing makes the broadcast `RUNNING` right away, and video appears once your encoder is sending to the source. Start your encoder before or right after publishing.
+</Note>
+
+A broadcast that is created but never published isn't listed by List Broadcasts and is deleted after 7 days.
+
+## Eligibility
+
+The broadcasting account must be allowed to go live on X. For accounts that aren't, List Broadcasts returns `412` ("Listing broadcasts requires X Premium or more than 1,000 followers.") and Create Broadcast returns `412` ("This account can't create broadcasts."), both with `error_type: "preconditionFailed"`.
+
+## Broadcast object
+
+| Field | Description |
+|:------|:------------|
+| `id`, `broadcast_id` | Broadcast ID (the same value). |
+| `media_key`, `media_id` | Media identifiers, used for [chat access](/livestream-api/chat/accessing-live-chat). |
+| `state` | See [Broadcast states](#broadcast-states). |
+| `status` | Broadcast title. |
+| `twitter_user_id` | Numeric X user ID of the broadcaster, as a string. |
+| `created_at_ms`, `updated_at_ms`, `start_ms`, `end_ms` | Timestamps in milliseconds since the Unix epoch, as strings. `start_ms` and `end_ms` appear once the broadcast has gone live or ended. |
+| `chat_option` | Who can chat; see [chat option values](/livestream-api/broadcasts/publish-or-end-broadcast#chat-option-values). |
+| `language` | Broadcast language, when a `locale` was sent at publish. |
+| `height`, `width` | Video dimensions in pixels. |
+| `available_for_replay` | Whether a replay is available. |
+| `is_high_latency` | Informational latency flag. |
+| `image_url`, `image_url_medium`, `image_url_small` | Thumbnails. A placeholder image until video arrives. |
+| `total_watching`, `total_watched` | Live and cumulative viewer counts, as strings. |
+| `tweet_id` | The announcement post, once it exists. |
+
+<Note>
+Broadcast objects no longer include `user_id`, `username`, `twitter_username`, `user_display_name`, `profile_image_url`, `has_location`, `lat`, `lng`, `friend_chat`, `private_chat`, `is_locked`, `has_moderation`, `no_hearts`, `camera_rotation`, `ping_ms`, `version`, `broadcast_source` or `unavailable_in_periscope`. Use [`GET /2/users/me`](/x-api/users/get-my-user) for the broadcaster's profile.
+</Note>
+
+## Errors
+
+Invalid parameters return `400` in the standard X API problem format. Other errors return a `{ "error_type", "message" }` body:
+
+| Status | `error_type` | Example |
+|:-------|:-------------|:--------|
+| 400 | `badRequest` | The request can't be applied to the broadcast in its current state. |
+| 403 | `forbidden` | The account isn't permitted to perform the action. |
+| 404 | `notFound` | The broadcast or source doesn't exist or belongs to another user. |
+| 412 | `preconditionFailed` | The account isn't eligible to broadcast. |
+| 503 | `serviceUnavailable` | Temporary failure; retry with backoff. |
 
 ## Endpoints
 

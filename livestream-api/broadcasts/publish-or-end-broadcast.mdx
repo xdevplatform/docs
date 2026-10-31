@@ -17,6 +17,8 @@ Both actions use the same endpoint with different `state` values.
 
 Transitions `NOT_STARTED` → `RUNNING`. The broadcast becomes publicly visible on X. By default an announcement post is created. (Set `should_not_tweet: true` to suppress it.)
 
+You can publish before your encoder connects: the response shows `RUNNING` right away, and video appears once the source is receiving it. Start your encoder before or right after publishing.
+
 ### Request body
 
 ```json
@@ -32,10 +34,10 @@ Transitions `NOT_STARTED` → `RUNNING`. The broadcast becomes publicly visible 
 | Field | Type | Required | Description |
 |:------|:-----|:---------|:------------|
 | `state` | string | Yes | Must be `"PUBLISH"`. |
-| `title` | string | No | Broadcast title / status text (also used for the announcement post if sent). Subject to X post length limits. |
-| `should_not_tweet` | boolean | No | Set `true` to suppress the automatic announcement post. Default `false` (a post is sent). |
+| `title` | string | No | Broadcast title / status text (also used for the announcement post if sent). Subject to X post length limits. If omitted, the broadcaster's display name is used. |
+| `should_not_tweet` | boolean | No | Set `true` to suppress the automatic announcement post. Default `false` (a post is sent). The strings `"true"` / `"false"` and `1` / `0` are also accepted. |
 | `locale` | string | No | BCP 47 tag (e.g. `"en"`, `"en_US"`). Affects discovery/recommendation. |
-| `chat_option` | integer | No | Controls who can chat — see the values table below. If omitted, defaults to `3` (verified accounts). |
+| `chat_option` | integer | No | Controls who can chat — see the values table below. A numeric string (e.g. `"2"`) is also accepted. If omitted, the broadcast's `chat_option` is `0` (no option set). Values outside `0`–`6` return `400`. |
 
 ### Chat option values
 
@@ -51,12 +53,12 @@ Transitions `NOT_STARTED` → `RUNNING`. The broadcast becomes publicly visible 
 | `5` | The broadcaster's subscribers |
 | `6` | Accounts the broadcaster follows and who they follow (2nd degree followers) |
 
-If you omit `chat_option` when publishing, it defaults to `3` (verified accounts). Set it explicitly if you want a different audience.
+Set `chat_option` explicitly to choose who can chat.
 
 ### Example request
 
 ```bash
-curl -X PUT "https://api.x.com/2/users/172483972/broadcasts/1AxRnanzLOrxl/state" \
+curl -X PUT "https://api.x.com/2/users/172483972/broadcasts/2VNLjPpqaKWoep/state" \
   -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"state":"PUBLISH","title":"Live from the studio! Q&A time.","chat_option":2}'
@@ -79,8 +81,8 @@ curl -X PUT "https://api.x.com/2/users/172483972/broadcasts/1AxRnanzLOrxl/state"
 
 - `start_ms` is set when it becomes live.
 - The announcement post is created **asynchronously**. `tweet_id` is typically not present in this publish response — re-fetch the broadcast (`GET .../broadcasts/:broadcast_id`) a moment later to read `tweet_id` once the post exists.
-- `tweet_error`: when present, an empty string means the post succeeded and a non-empty value describes why it failed (the broadcast still goes live regardless). This field may be absent from the response entirely.
-- `language` defaults to `"en"` if you don't send `locale`.
+- `tweet_error`: present, next to `broadcast`, only when the announcement post failed; it describes why. The broadcast still goes live.
+- `language` is present only when you send `locale`.
 
 ## End (state: "END")
 
@@ -95,13 +97,15 @@ Transitions `RUNNING` → `ENDED`. Irreversible; you cannot restart a broadcast.
 ```
 
 <Warning>
-Do **not** include `title`, `should_not_tweet`, `locale`, or `chat_option` when ending. The server explicitly rejects them with `400` if any of these fields are present.
+Do **not** include `title`, `should_not_tweet`, `locale`, or `chat_option` when ending. The server explicitly rejects them with `400` if any of these fields are present (for example, `"title must not be set"`).
 </Warning>
+
+Ending a broadcast that isn't running returns `400` with `error_type: "badRequest"`.
 
 ### Example request
 
 ```bash
-curl -X PUT "https://api.x.com/2/users/172483972/broadcasts/1AxRnanzLOrxl/state" \
+curl -X PUT "https://api.x.com/2/users/172483972/broadcasts/2VNLjPpqaKWoep/state" \
   -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"state":"END"}'

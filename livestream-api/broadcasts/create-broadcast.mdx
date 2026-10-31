@@ -13,25 +13,21 @@ Creates a new broadcast bound to an existing source. Starts in `NOT_STARTED`.
 
 **Endpoint:** `POST /2/users/:user_id/broadcasts`
 
-<Warning>
-The source must already be actively receiving an RTMP feed (`is_stream_active: true`), or this endpoint returns a 404. See the [broadcast lifecycle overview](/livestream-api/broadcasts/overview).
-</Warning>
+The source doesn't need to be receiving video yet. If the source already has a running broadcast, that broadcast is returned instead of a new one. A broadcast that is never published is deleted after 7 days. See the [broadcast lifecycle overview](/livestream-api/broadcasts/overview).
 
 ## Request body
 
 ```json
 {
-  "source_id": "6ep48v6ar5q4",
-  "region": "eu-central-1",
-  "is_low_latency": true
+  "source_id": "6ep48v6ar5q4"
 }
 ```
 
 | Field | Type | Required | Description |
 |:------|:-----|:---------|:------------|
 | `source_id` | string | Yes | ID of an existing source owned by this user. |
-| `region` | string | Yes | Must match the source's region. |
-| `is_low_latency` | boolean | No | Requests low-latency mode (lower delay for interactive/chatty broadcasts, trading some quality/stability). If omitted, defaults to `false` (standard latency); we recommend setting it explicitly. The `is_high_latency` field in the response is informational only and does not reflect this value. |
+| `region` | string | No | Accepted but ignored: the source determines the ingest region. |
+| `is_low_latency` | boolean | No | Accepted but ignored. |
 
 ## Example request
 
@@ -39,7 +35,7 @@ The source must already be actively receiving an RTMP feed (`is_stream_active: t
 curl -X POST "https://api.x.com/2/users/172483972/broadcasts" \
   -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"source_id":"6ep48v6ar5q4","region":"eu-central-1","is_low_latency":true}'
+  -d '{"source_id":"6ep48v6ar5q4"}'
 ```
 
 ## Success response
@@ -47,50 +43,39 @@ curl -X POST "https://api.x.com/2/users/172483972/broadcasts" \
 ```json
 {
   "broadcast": {
-    "id": "1AxRnanzLOrxl",
-    "broadcast_id": "1AxRnanzLOrxl",
-    "media_key": "28_2026675106832068613",
-    "media_id": "2026675106832068613",
+    "id": "2VNLjPpqaKWoep",
+    "broadcast_id": "2VNLjPpqaKWoep",
+    "media_key": "28_2116610227978326016",
+    "media_id": "2116610227978326016",
     "created_at_ms": "1772031973914",
     "updated_at_ms": "1772031973914",
-    "broadcast_source": "producer",
-    "available_for_replay": false,
-    "user_id": "1DYEXPNqZwqEg",
     "twitter_user_id": "172483972",
-    "user_display_name": "Example User",
-    "username": "example",
-    "twitter_username": "example",
-    "profile_image_url": "https://pbs.twimg.com/profile_images/..._reasonably_small.jpeg",
     "state": "NOT_STARTED",
-    "is_locked": false,
-    "friend_chat": false,
-    "has_moderation": true,
-    "height": 1080,
-    "width": 1920,
-    "camera_rotation": 0,
-    "has_location": false,
-    "lat": 0.0,
-    "lng": 0.0,
-    "private_chat": false,
+    "available_for_replay": false,
     "chat_option": 0,
-    "no_hearts": false,
-    "is_high_latency": true
+    "height": 720,
+    "width": 1280,
+    "is_high_latency": false,
+    "image_url": "https://pbs.twimg.com/lex/placeholder_live_nomargin.png",
+    "image_url_medium": "https://pbs.twimg.com/lex/placeholder_live_nomargin.png",
+    "image_url_small": "https://pbs.twimg.com/lex/placeholder_live_nomargin.png",
+    "total_watching": "0",
+    "total_watched": "0"
   },
-  "video_access": {
-    "hls_url": "https://prod-fastly-eu-central-1.video.pscp.tv/.../ps_dynamic_hls-producer.m3u8?type=live",
-    "https_hls_url": "https://prod-fastly-eu-central-1.video.pscp.tv/.../ps_dynamic_hls-producer.m3u8?type=live"
-  },
-  "share_url": "https://x.com/i/broadcasts/1AxRnanzLOrxl"
+  "video_access": {},
+  "share_url": "https://x.com/i/broadcasts/2VNLjPpqaKWoep"
 }
 ```
 
 ## Key fields returned at creation
 
-- `media_key` / `media_id`: Required later for [chat access](/livestream-api/chat/accessing-live-chat) and some playback.
-- `video_access`: Playback URLs (HLS variants). `lhls*` and `replay_url` may appear later or for certain modes.
+- `id`: The broadcast ID. IDs are 13 or 14 characters; don't assume a fixed length.
+- `media_key` / `media_id`: Required later for [chat access](/livestream-api/chat/accessing-live-chat).
 - `share_url`: Public viewer link (`https://x.com/i/broadcasts/{id}`).
 - `state`: Always starts `"NOT_STARTED"`.
-- `is_high_latency`: Informational only; it does not reflect the `is_low_latency` value you sent.
-- `twitter_user_id` vs `user_id` vs `owner_id`: `twitter_user_id` is your numeric X user id (returned as a string) — use this for the `:user_id` path parameter in every endpoint. `user_id` (e.g. `"1DYEXPNqZwqEg"`) is a separate alphanumeric livestream-platform id; do not use it in paths. Note also that the Source object's `owner_id` is delivered as a JSON number and will lose precision for real (19-digit) user IDs — never rely on it; use `twitter_user_id` or your authenticated id instead.
+- `video_access`: Always an empty object. Playback URLs aren't returned; share `share_url` with viewers.
+- `twitter_user_id`: Your numeric X user ID (as a string). Use it for the `:user_id` path parameter in every endpoint.
 
-After creation, start pushing your RTMP feed to the source's `rtmps_url` + `rtmp_stream_key` if you haven't already, then [publish](/livestream-api/broadcasts/publish-or-end-broadcast).
+A `source_id` that doesn't exist, or belongs to another user, returns `404` (`"Could not find source."`).
+
+Then start pushing video to the source's `rtmps_url` with its `rtmp_stream_key`, if you haven't already, and [publish](/livestream-api/broadcasts/publish-or-end-broadcast).
