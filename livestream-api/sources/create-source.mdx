@@ -1,11 +1,11 @@
 ---
 title: Create Stream Source
 sidebarTitle: Create Stream Source
-description: "POST /2/users/:user_id/sources creates a new persistent RTMP/RTMPS ingest point with a unique stream key and recommended encoder configuration."
+description: "POST /2/users/:user_id/sources creates a new persistent RTMPS ingest point with a unique stream key."
 keywords: ["create stream source", "POST sources", "RTMP ingest point", "stream key", "rtmps_url"]
 ---
 
-Creates a new RTMP ingest point.
+Creates a new RTMPS ingest point.
 
 <Note>
   This endpoint is available by whitelist only. To request access, fill out the [Livestream API Access Form](/forms/livestream-api-access).
@@ -24,14 +24,14 @@ Creates a new RTMP ingest point.
 ```json
 {
   "name": "My Primary Encoder",
-  "region": "eu-central-1"
+  "region": "us-east-1"
 }
 ```
 
 | Field | Type | Required | Description |
 |:------|:-----|:---------|:------------|
 | `name` | string | Yes | Human-readable label for this source (for your own organization). Does not affect functionality. |
-| `region` | string | Yes | AWS-style region code (e.g. `"us-east-1"`, `"eu-central-1"`). Use the value from [`/2/region`](/livestream-api/sources/get-recommended-region). Determines the ingest server location. |
+| `region` | string | No | Where to ingest. Use the value from [`/2/region`](/livestream-api/sources/get-recommended-region). AWS-style region codes are accepted and mapped to the nearest X ingest location: `us-west-1` and `us-west-2` to the US West location; `us-east-1`, `us-east-2`, `ca-central-1`, `sa-east-1`, `eu-west-1`, `eu-west-2`, `eu-west-3`, `eu-central-1`, `eu-north-1`, `ap-south-1`, `ap-northeast-1`, `ap-northeast-2`, `ap-southeast-1` and `ap-southeast-2` to the US East location. If omitted, the source ingests in US West. Any other value returns `400`. |
 
 ## Example request
 
@@ -39,7 +39,7 @@ Creates a new RTMP ingest point.
 curl -X POST "https://api.x.com/2/users/172483972/sources" \
   -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"My Primary Encoder","region":"eu-central-1"}'
+  -d '{"name":"My Primary Encoder","region":"us-east-1"}'
 ```
 
 ## Success response (200)
@@ -50,33 +50,11 @@ curl -X POST "https://api.x.com/2/users/172483972/sources" \
     "id": "6ep48v6ar5q4",
     "owner_id": 172483972,
     "name": "My Primary Encoder",
-    "video_service": {
-      "value": 0,
-      "name": "...",
-      "original_name": "..."
-    },
     "is360": false,
     "creation_time": 1772029802844,
-    "creation_origin": {
-      "value": 1,
-      "name": "PublicApi",
-      "original_name": "PUBLIC_API"
-    },
-    "recommended_configuration": {
-      "audio_codec": "AAC",
-      "audio_sampling_rate": 44100,
-      "audio_bitrate": 128000.0,
-      "audio_num_channels": 2,
-      "video_codec": "H.264/AVC",
-      "video_bitrate": 4000000.0,
-      "video_framerate": 30.0,
-      "video_keyframe_interval_in_seconds": 3.0,
-      "video_width": 1280,
-      "video_height": 720
-    },
-    "rtmp_region": "eu-central-1",
-    "rtmp_url": "rtmp://de.pscp.tv:80/x",
-    "rtmps_url": "rtmps://de.pscp.tv:443/x",
+    "rtmp_region": "us-east-1",
+    "rtmp_url": "rtmps://a.live.x.com/x",
+    "rtmps_url": "rtmps://a.live.x.com:443/x",
     "rtmp_stream_key": "6ep48v6ar5q4",
     "is_stream_active": false
   }
@@ -85,9 +63,10 @@ curl -X POST "https://api.x.com/2/users/172483972/sources" \
 
 ## Notes
 
-- Newly created sources have no `stream_attributes` or `compatibility_info` (those appear after the source first receives video).
-- `rtmp_stream_key == id`. Use the `rtmps_url` (port 443) in production for TLS.
-- The `recommended_configuration` tells you ideal encoder settings (bitrate, resolution, keyframe interval, etc.).
-- `is_stream_active` becomes `true` while the source is currently receiving an RTMP feed.
+- `rtmp_stream_key == id`. Treat it as a secret: anyone with the key can stream to your source.
+- Both `rtmp_url` and `rtmps_url` are RTMPS (TLS) URLs. Configure your encoder with `rtmps_url` and `rtmp_stream_key`.
+- `rtmp_region` is the region of the X ingest location serving the source (`us-east-1` or `us-west-2`), which can differ from the `region` you requested (for example, `eu-central-1` is served from `us-east-1`).
+- `is_stream_active` is `true` while the source is receiving video from your encoder.
 - `owner_id` is a JSON **number**, not a string — for real (19-digit) X user IDs it exceeds the safe-integer range of many languages (e.g. JavaScript) and loses precision when parsed normally. Do not rely on `owner_id`; use your authenticated numeric user id (or a broadcast's `twitter_user_id`, which is a string).
-- `video_service`, `creation_origin` (and similar `{ value, name, original_name }` objects) are classification fields. `value` is a stable integer; `name` / `original_name` are opaque labels. You can safely ignore these unless you need the integer code.
+- Sources don't currently include recommended encoder settings (`recommended_configuration`), detected stream settings (`stream_attributes`) or `compatibility_info`.
+- Sources created before October 31, 2026 can also include the classification fields `video_service` and `creation_origin` (`{ value, name, original_name }` objects) and their original ingest hostnames. You can safely ignore the classification fields.
