@@ -5,30 +5,30 @@ description: "Broadcasts are ephemeral live sessions tied to a stream source, mo
 keywords: ["broadcast lifecycle", "broadcast states", "NOT_STARTED", "RUNNING", "ENDED", "go live"]
 ---
 
-Broadcasts are ephemeral sessions tied to a source. A broadcast starts in `NOT_STARTED`, moves to `RUNNING` when published, and ends in `ENDED` (or another terminal state).
+Broadcasts are ephemeral sessions tied to a source. [Go Live](/livestream-api/broadcasts/go-live) (`POST /2/broadcasts`) creates a broadcast that is already `RUNNING`. With the deprecated create-then-publish routes, a broadcast starts in `NOT_STARTED` and moves to `RUNNING` when published. Either way, it ends in `ENDED` (or another terminal state).
 
 ## Broadcast states
 
 | State | Meaning |
 |:------|:--------|
-| `NOT_STARTED` | Created but not yet live. Initial state returned by Create Broadcast. |
+| `NOT_STARTED` | Created but not yet live. Initial state returned by the deprecated Create Broadcast. |
 | `PRE_PUBLISHED` | Transitional state while the broadcast is being prepared to go live. |
-| `RUNNING` | Live and publicly visible. Set after a successful `PUBLISH`. |
+| `RUNNING` | Live and publicly visible. Returned by Go Live, or set after a successful `PUBLISH`. |
 | `ENDED` | Finished normally after `END`. Terminal — a broadcast cannot be restarted. |
-| `TIMED_OUT` | Terminal. The broadcast was not published in time, or ingest stopped before it went live. |
+| `TIMED_OUT` | Terminal. The broadcast was not published in time, or ingest stopped before it went live. A broadcast started with Go Live is also ended with `TIMED_OUT` if no video arrives within 5 minutes. |
 | `CANCELED` | Terminal. The broadcast was canceled before or during its lifecycle. |
 
-The only transitions you trigger directly are `NOT_STARTED` → `RUNNING` (via `PUBLISH`) and `RUNNING` → `ENDED` (via `END`). The remaining states are set by the platform.
+The only transitions you trigger directly are going live (Go Live, or `NOT_STARTED` → `RUNNING` via the deprecated `PUBLISH`) and `RUNNING` → `ENDED` (via `END`). The remaining states are set by the platform.
 
 <Note>
-A source doesn't need to be receiving video to create or publish a broadcast. Publishing makes the broadcast `RUNNING` right away, and video appears once your encoder is sending to the source. Start your encoder before or right after publishing.
+Usually, a source doesn't need to be receiving video to go live. Go Live makes the broadcast `RUNNING` right away, and video appears once your encoder is sending to the source; if no video arrives within 5 minutes, the broadcast ends as `TIMED_OUT`. Some sources can't take video before their encoder connects, and Go Live returns `409` for them until it does. Starting your encoder first avoids this.
 </Note>
 
-A broadcast that is created but never published isn't listed by List Broadcasts and is deleted after 7 days.
+A broadcast created with the deprecated Create Broadcast route but never published isn't listed and is deleted after 7 days.
 
 ## Eligibility
 
-The broadcasting account must be allowed to go live on X. For accounts that aren't, List Broadcasts returns `412` ("Listing broadcasts requires X Premium or more than 1,000 followers.") and Create Broadcast returns `412` ("This account can't create broadcasts."), both with `error_type: "preconditionFailed"`.
+The broadcasting account must be allowed to go live on X. For accounts that aren't, Go Live returns `403` ("This account is not eligible to go live."). On the deprecated routes, List Broadcasts returns `412` ("Listing broadcasts requires X Premium or more than 1,000 followers.") and Create Broadcast returns `412` ("This account can't create broadcasts."), both with `error_type: "preconditionFailed"`.
 
 ## Broadcast object
 
@@ -40,7 +40,7 @@ The broadcasting account must be allowed to go live on X. For accounts that aren
 | `status` | Broadcast title. |
 | `twitter_user_id` | Numeric X user ID of the broadcaster, as a string. |
 | `created_at_ms`, `updated_at_ms`, `start_ms`, `end_ms` | Timestamps in milliseconds since the Unix epoch, as strings. `start_ms` and `end_ms` appear once the broadcast has gone live or ended. |
-| `chat_option` | Who can chat; see [chat option values](/livestream-api/broadcasts/publish-or-end-broadcast#chat-option-values). |
+| `chat_option` | Who can chat; see [chat option values](/livestream-api/broadcasts/go-live#chat-option-values). |
 | `language` | Broadcast language, when a `locale` was sent at publish. |
 | `height`, `width` | Video dimensions in pixels. |
 | `available_for_replay` | Whether a replay is available. |
@@ -49,13 +49,17 @@ The broadcasting account must be allowed to go live on X. For accounts that aren
 | `total_watching`, `total_watched` | Live and cumulative viewer counts, as strings. |
 | `tweet_id` | The announcement post, once it exists. |
 
+On the `/2/broadcasts` routes, the title is returned as `title` instead of `status`, the broadcast also includes `share_url` and `source_id`, and `media_id` isn't returned. `source_id` is the source id of the broadcast's [stream source](/livestream-api/sources/overview), as returned by [Get Sources](/livestream-api/sources/get-sources); request it with `broadcast.fields=source_id`. It is omitted when the source has been deleted. See the [migration guide](/livestream-api/migration-guide#broadcast-field-names).
+
 <Note>
 Broadcast objects no longer include `user_id`, `username`, `twitter_username`, `user_display_name`, `profile_image_url`, `has_location`, `lat`, `lng`, `friend_chat`, `private_chat`, `is_locked`, `has_moderation`, `no_hearts`, `camera_rotation`, `ping_ms`, `version`, `broadcast_source` or `unavailable_in_periscope`. Use [`GET /2/users/me`](/x-api/users/get-my-user) for the broadcaster's profile.
 </Note>
 
 ## Errors
 
-Invalid parameters return `400` in the standard X API problem format. Other errors return a `{ "error_type", "message" }` body:
+The `/2/broadcasts` routes return every error in the standard X API problem format; see each route's page for its errors.
+
+On the deprecated `/2/users/:user_id/broadcasts*` routes, invalid parameters return `400` in the standard X API problem format. Other errors return a `{ "error_type", "message" }` body:
 
 | Status | `error_type` | Example |
 |:-------|:-------------|:--------|
@@ -67,20 +71,28 @@ Invalid parameters return `400` in the standard X API problem format. Other erro
 
 ## Endpoints
 
-| Endpoint | Method & Path | New Method & Path |
-|:---------|:--------------|:------------------|
-| Create Broadcast | [`POST /2/users/:user_id/broadcasts`](/livestream-api/broadcasts/create-broadcast) | — |
-| List Broadcasts | [`GET /2/users/:user_id/broadcasts`](/livestream-api/broadcasts/list-broadcasts) | [`GET /2/broadcasts`](/livestream-api/broadcasts/get-broadcasts) |
-| Get Broadcast | [`GET /2/users/:user_id/broadcasts/:broadcast_id`](/livestream-api/broadcasts/get-broadcast) | [`GET /2/broadcasts/:id`](/livestream-api/broadcasts/get-broadcast-by-id) |
-| Publish or End a Broadcast | [`PUT /2/users/:user_id/broadcasts/:broadcast_id/state`](/livestream-api/broadcasts/publish-or-end-broadcast) | — |
-| Delete Broadcast | [`DELETE /2/users/:user_id/broadcasts/:broadcast_id`](/livestream-api/broadcasts/delete-broadcast) | — |
+| Endpoint | Method & Path |
+|:---------|:--------------|
+| [Go Live](/livestream-api/broadcasts/go-live) | `POST /2/broadcasts` |
+| [Get Broadcasts](/livestream-api/broadcasts/get-broadcasts) | `GET /2/broadcasts` |
+| [Get Broadcast by ID](/livestream-api/broadcasts/get-broadcast-by-id) | `GET /2/broadcasts/:id` |
+| [End Broadcast](/livestream-api/broadcasts/end-broadcast) | `PUT /2/broadcasts/:id/state` |
+| [Delete Broadcast by ID](/livestream-api/broadcasts/delete-broadcast-by-id) | `DELETE /2/broadcasts/:id` |
 
-All routes accept both OAuth 2.0 and OAuth 1.0a [user context authentication](/livestream-api/authentication). The new routes (those without `user_id` in the path) are the recommended routes and return additional fields (for example, field selection with `broadcast.fields`).
-
-<Note>
-The original routes are being replaced over time. Where a new route is listed, use it in place of the original; the original route is deprecated and may be removed in a future release. Additional replacement routes will be added to the table above as they become available.
-</Note>
+All routes require [user context authentication](/livestream-api/authentication): OAuth 2.0 with the `broadcast.read` and `broadcast.write` scopes (recommended), or OAuth 1.0a. They take the owner from the access token, wrap responses in `data`, return errors in the standard X API problem format, and support field selection with `broadcast.fields` on reads.
 
 <Note>
-To schedule a broadcast in advance — one-time or recurring, with automatic or manual publishing — see the [Livestream Scheduling API](/livestream-api/scheduled-broadcasts/overview).
+To schedule a broadcast in advance, with automatic or manual publishing, see the [Livestream Scheduling API](/livestream-api/scheduled-broadcasts/overview).
 </Note>
+
+## Deprecated routes
+
+The original broadcast routes under `/2/users/:user_id/broadcasts` are deprecated and will be removed on **January 1, 2027**, after which they return `404`. They keep working unchanged until then. See the [migration guide](/livestream-api/migration-guide) for the differences.
+
+| Deprecated route | Replacement |
+|:-----------------|:------------|
+| [`POST /2/users/:user_id/broadcasts`](/livestream-api/broadcasts/create-broadcast), then [`PUT /2/users/:user_id/broadcasts/:broadcast_id/state`](/livestream-api/broadcasts/publish-or-end-broadcast) with `PUBLISH` | [`POST /2/broadcasts`](/livestream-api/broadcasts/go-live) (one call) |
+| [`GET /2/users/:user_id/broadcasts`](/livestream-api/broadcasts/list-broadcasts) | [`GET /2/broadcasts`](/livestream-api/broadcasts/get-broadcasts) |
+| [`GET /2/users/:user_id/broadcasts/:broadcast_id`](/livestream-api/broadcasts/get-broadcast) | [`GET /2/broadcasts/:id`](/livestream-api/broadcasts/get-broadcast-by-id) |
+| [`PUT /2/users/:user_id/broadcasts/:broadcast_id/state`](/livestream-api/broadcasts/publish-or-end-broadcast) with `END` | [`PUT /2/broadcasts/:id/state`](/livestream-api/broadcasts/end-broadcast) |
+| [`DELETE /2/users/:user_id/broadcasts/:broadcast_id`](/livestream-api/broadcasts/delete-broadcast) | [`DELETE /2/broadcasts/:id`](/livestream-api/broadcasts/delete-broadcast-by-id) |

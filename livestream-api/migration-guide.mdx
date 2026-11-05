@@ -1,0 +1,204 @@
+---
+title: Migrating to the /2/sources and /2/broadcasts routes
+sidebarTitle: Migration Guide
+description: "The /2/users/:user_id/sources and /2/users/:user_id/broadcasts routes are deprecated and will be removed on January 1, 2027. Map each one to its /2/sources or /2/broadcasts replacement and handle the source id, response, and error differences."
+keywords: ["Livestream migration", "deprecated broadcast routes", "deprecated source routes", "POST /2/broadcasts", "POST /2/sources", "source id", "stream key", "go live", "end of life", "migration guide"]
+---
+
+The original stream source routes under `/2/users/:user_id/sources` and broadcast routes under `/2/users/:user_id/broadcasts` are deprecated and will be **removed on January 1, 2027**. Move to the `/2/sources` and `/2/broadcasts` routes before then.
+
+<Warning>
+After January 1, 2027, requests to `/2/users/:user_id/sources`, `/2/users/:user_id/broadcasts` and their sub-routes return `404`. Passing a stream key as `source_id` to the scheduled broadcast routes also stops working on that date. Migrate every call listed below before then.
+</Warning>
+
+## Timeline
+
+| Date | Change |
+|:-----|:-------|
+| November 5, 2026 | The `/2/sources` and `/2/broadcasts` routes, including [`POST /2/broadcasts`](/livestream-api/broadcasts/go-live) and [`GET /2/sources/:id/stream_key`](/livestream-api/sources/get-source-stream-key), are available. The `/2/users/:user_id/sources` and `/2/users/:user_id/broadcasts` routes are deprecated but keep working unchanged. |
+| January 1, 2027 | The `/2/users/:user_id/sources` and `/2/users/:user_id/broadcasts` routes are removed and return `404`. The scheduled broadcast routes stop accepting a stream key as `source_id`. |
+
+## Route mapping
+
+### Stream sources
+
+| Original route | Replacement |
+|:---------------|:------------|
+| [`POST /2/users/:user_id/sources`](/livestream-api/sources/create-source) | [`POST /2/sources`](/livestream-api/sources/create-a-source) |
+| [`GET /2/users/:user_id/sources`](/livestream-api/sources/list-sources) | [`GET /2/sources`](/livestream-api/sources/get-sources) |
+| [`GET /2/users/:user_id/sources/:source_id`](/livestream-api/sources/get-source) | [`GET /2/sources/:id`](/livestream-api/sources/get-source-by-id) |
+| [`PUT /2/users/:user_id/sources/:source_id`](/livestream-api/sources/update-source) | [`PUT /2/sources/:id`](/livestream-api/sources/update-source-by-id) |
+| [`DELETE /2/users/:user_id/sources/:source_id`](/livestream-api/sources/delete-source) | [`DELETE /2/sources/:id`](/livestream-api/sources/delete-source-by-id) |
+| The source's `id` / `rtmp_stream_key` | [`GET /2/sources/:id/stream_key`](/livestream-api/sources/get-source-stream-key) (new) |
+
+[`GET /2/region`](/livestream-api/sources/get-recommended-region) is unchanged.
+
+### Broadcasts
+
+| Original route | Replacement |
+|:---------------|:------------|
+| [`POST /2/users/:user_id/broadcasts`](/livestream-api/broadcasts/create-broadcast), then [`PUT /2/users/:user_id/broadcasts/:broadcast_id/state`](/livestream-api/broadcasts/publish-or-end-broadcast) with `{"state":"PUBLISH"}` | [`POST /2/broadcasts`](/livestream-api/broadcasts/go-live) (one call) |
+| [`GET /2/users/:user_id/broadcasts`](/livestream-api/broadcasts/list-broadcasts) | [`GET /2/broadcasts`](/livestream-api/broadcasts/get-broadcasts) |
+| [`GET /2/users/:user_id/broadcasts/:broadcast_id`](/livestream-api/broadcasts/get-broadcast) | [`GET /2/broadcasts/:id`](/livestream-api/broadcasts/get-broadcast-by-id) |
+| [`PUT /2/users/:user_id/broadcasts/:broadcast_id/state`](/livestream-api/broadcasts/publish-or-end-broadcast) with `{"state":"END"}` | [`PUT /2/broadcasts/:id/state`](/livestream-api/broadcasts/end-broadcast) with `{"state":"END"}` |
+| [`DELETE /2/users/:user_id/broadcasts/:broadcast_id`](/livestream-api/broadcasts/delete-broadcast) | [`DELETE /2/broadcasts/:id`](/livestream-api/broadcasts/delete-broadcast-by-id) |
+
+Both sets of routes work on the same sources and broadcasts, so you can migrate one call at a time. For example, you can end or delete a broadcast created with the original routes by calling `PUT /2/broadcasts/:id/state` or `DELETE /2/broadcasts/:id` with its ID, and every source you created with the original routes is listed by `GET /2/sources`.
+
+The new routes use the same authentication: user context with OAuth 2.0 (`broadcast.read` and `broadcast.write` scopes) or OAuth 1.0a. See [Authentication](/livestream-api/authentication). Rate limits are unchanged: 450 requests per 15 minutes per user for each source route.
+
+## What changes
+
+### No user ID in the path
+
+The new routes take the owner from the access token. Drop `/users/:user_id` from the path; `:source_id` and `:broadcast_id` become `:id`.
+
+### Source id and stream key are separate
+
+On the original routes, a source's `id` is its stream key (`id == rtmp_stream_key`), so the same secret value identifies the source and lets anyone stream to it. The new routes separate them:
+
+| Value | Original routes | New routes |
+|:------|:----------------|:-----------|
+| Source id | `id` (equal to the stream key) | `id`, a separate 19-digit source id. Not a secret. |
+| Stream key | `id` and `rtmp_stream_key` in every source response | `stream_key`, only in the [`POST /2/sources`](/livestream-api/sources/create-a-source) response and from [`GET /2/sources/:id/stream_key`](/livestream-api/sources/get-source-stream-key) |
+
+To migrate:
+
+1. Call [`GET /2/sources`](/livestream-api/sources/get-sources) to get the source id of each of your sources, and store it in place of the stream key wherever you identify a source.
+2. Use the source id in `/2/sources/:id` paths and as `source_id` in [`POST /2/broadcasts`](/livestream-api/broadcasts/go-live) and the [scheduled broadcast](/livestream-api/scheduled-broadcasts/overview) routes.
+3. When you need to configure an encoder, read the key with [`GET /2/sources/:id/stream_key`](/livestream-api/sources/get-source-stream-key). Store it as a secret, and keep it out of logs and URLs.
+
+Existing sources keep their stream keys, so encoders that are already configured don't need to change.
+
+The new routes accept only a source id. Passing a stream key returns `400` with type `https://api.x.com/2/problems/invalid-request`: `` The `id` value is not a source id. `` for `/2/sources/:id`, and `` The `source_id` value is not a source id. `` for `POST /2/broadcasts`. The value you sent isn't echoed back in the error. An unknown source id, or another user's source, returns `404` with type `https://api.x.com/2/problems/resource-not-found`.
+
+### Source fields
+
+| Original field | New field |
+|:---------------|:----------|
+| `id` (stream key) | `id` (source id) |
+| `rtmp_stream_key` | `stream_key`, only from `POST /2/sources` and `GET /2/sources/:id/stream_key` |
+| `rtmp_region` | `region` |
+| `creation_time` (JSON number) | `created_at_ms` (string) |
+| `owner_id`, `is360`, `video_service`, `creation_origin` | Not returned |
+
+`name`, `rtmp_url`, `rtmps_url` and `is_stream_active` keep their names and formats.
+
+`POST /2/sources` requires `region` (the original route defaulted to US West when it was omitted), and returns `201` instead of `200`.
+
+### One call to go live
+
+Instead of creating a broadcast (`NOT_STARTED`) and then publishing it, call [`POST /2/broadcasts`](/livestream-api/broadcasts/go-live) with the source id as `source_id` and the fields you used to send with `PUBLISH` (`title`, `locale`, `chat_option`, `should_not_tweet`). The broadcast is `RUNNING` when the call returns.
+
+- **Source id:** `source_id` is the source id from `GET /2/sources`, not the stream key that the original create route took.
+- **Video timing:** the broadcast goes live even before your encoder sends video, but it is ended with state `TIMED_OUT` if no video arrives within 5 minutes. Start your encoder right before or right after the call.
+- **New or existing broadcast:** the response is `201` for a new broadcast and `200` when the source already had a live broadcast. A `200` returns that broadcast unchanged and ignores the request's `title`, `locale`, `chat_option` and `should_not_tweet`. The original create route returned `200` in both cases. Retrying is safe.
+- **No unpublished broadcasts:** there's no `NOT_STARTED` step, so the 7-day cleanup of never-published broadcasts doesn't apply.
+- **Source can't go live yet:** if the source can't take video before its encoder connects, the call returns a `409` `conflict`. Retry once video is flowing.
+- **Busy source:** if another broadcast is live on the source, the call returns a `409` `conflict` whose `detail` names that broadcast when known. End it first, then retry.
+
+### Strict request bodies
+
+`POST /2/broadcasts` validates its body strictly:
+
+- `chat_option` must be a JSON integer from `0` to `6`. The original `PUBLISH` also accepted numeric strings such as `"2"`.
+- `should_not_tweet` must be a JSON boolean. The original `PUBLISH` also accepted `"true"`/`"false"` and `1`/`0`.
+- Unknown fields are rejected with `400`. Remove `region` and `is_low_latency`, which the original create route accepted and ignored.
+
+The source routes also reject unknown body fields: `POST /2/sources` accepts only `name` and `region`, and `PUT /2/sources/:id` only `name`.
+
+### `data` wrapper
+
+Responses wrap the result in `data`, as in the rest of the X API v2:
+
+| Route | Original response | New response |
+|:------|:------------------|:-------------|
+| Create source | `{ "source": { ... } }` | `{ "data": { ... } }`, including `stream_key` |
+| List sources | `{ "sources": [ ... ] }` | `{ "data": [ ... ], "meta": { "result_count": 1 } }` |
+| Get or rename source | `{ "source": { ... } }` | `{ "data": { ... } }`, without the stream key |
+| Delete source | `{}` | `{ "data": { "deleted": true } }` |
+| Go live | `{ "broadcast": { ... }, "video_access": {}, "share_url": "..." }`, then `{ "broadcast": { ... } }` from `PUBLISH` | `{ "data": { ... } }` with `share_url` inside `data` |
+| List broadcasts | `{ "broadcasts": [ ... ], "next_token": { "offset": "..." } }` | `{ "data": [ ... ], "meta": { "result_count": 1, "next_token": "..." } }` |
+| Get broadcast | `{ "broadcast": { ... } }` | `{ "data": { ... } }` |
+| End broadcast | `{ "success": true }` | `{ "data": { "id": "...", "state": "ENDED" } }` |
+| Delete broadcast | `{ "success": true }` | `{ "data": { "deleted": true } }` |
+
+To page through `GET /2/broadcasts`, pass `meta.next_token` as `pagination_token`. The page size is set with `max_results` (up to 100) instead of being fixed at 100.
+
+### Broadcast field names
+
+The broadcast object uses the same field names, with these exceptions:
+
+| Original field | New field |
+|:---------------|:----------|
+| `status` (broadcast title) | `title` |
+| `media_id` | Not returned. It is the digits after the last `_` in `media_key` (for example, `28_2116610227978326016` has media ID `2116610227978326016`). |
+| `share_url` (next to `broadcast` in the create response) | `share_url`, a field of the broadcast |
+| — | `source_id` (new): the source id of the broadcast's source. Request it with `broadcast.fields=source_id`. It is omitted when the source has been deleted. |
+
+`id`, `broadcast_id`, `state`, `tweet_id`, `media_key`, `language`, `chat_option`, the timestamps (`created_at_ms`, `start_ms`, `end_ms` and so on) and the viewer counts keep their names and formats. With `GET /2/broadcasts` and `GET /2/broadcasts/:id`, use `broadcast.fields` to choose which fields are returned.
+
+### Announcing Post
+
+The announcing Post may not exist yet when `POST /2/broadcasts` returns, so `tweet_id` can be missing. Read it a moment later with [`GET /2/broadcasts/:id`](/livestream-api/broadcasts/get-broadcast-by-id), as before.
+
+If the Post fails, the original `PUBLISH` response included a `tweet_error` string next to `broadcast`. The new route has no error field for this: `tweet_id` stays missing. See [Announcing Post](/livestream-api/broadcasts/go-live#announcing-post).
+
+### Errors
+
+The original routes returned most errors as `{ "error_type", "message" }`. The new routes return every error in the standard X API problem format, identified by `type`:
+
+```json
+{
+  "type": "https://api.x.com/2/problems/invalid-request",
+  "title": "Invalid Request",
+  "detail": "The `id` value is not a source id.",
+  "status": 400
+}
+```
+
+| Case | Original | New |
+|:-----|:---------|:----|
+| Unknown source or broadcast, or another user's | `404`, `notFound` | `404`, `https://api.x.com/2/problems/resource-not-found` |
+| Stream key passed where a source id is expected | — (the stream key was the id) | `400`, `https://api.x.com/2/problems/invalid-request` |
+| Account can't go live | `412`, `preconditionFailed` (create) | `403`, `about:blank` |
+| Invalid request | `400`, `badRequest` or the problem format | `400`, `https://api.x.com/2/problems/invalid-request` |
+| Source can't go live yet, or another broadcast is live on it | — | `409`, `https://api.x.com/2/problems/conflict` |
+| Temporary failure | `503`, `serviceUnavailable` | `503`, `about:blank` |
+
+See the [Go Live errors](/livestream-api/broadcasts/go-live#errors) and the [source errors](/livestream-api/sources/overview#errors).
+
+## Scheduled broadcasts
+
+The [scheduled broadcast](/livestream-api/scheduled-broadcasts/overview) routes (`/2/broadcasts/scheduled*`) aren't being removed, but their `source_id` changes:
+
+- **Responses** return `source_id` as the source id, the same value as the source's `id` in `GET /2/sources`. If you match scheduled broadcasts to sources, compare against the source id, not the stream key.
+- **Create and update requests** accept the source id as `source_id`. A stream key is still accepted but deprecated, and stops working on **January 1, 2027**. Switch to the source id.
+
+Updates still require `scheduled_broadcast_id` in the body, as before.
+
+## Migration checklist
+
+<Steps>
+  <Step title="Look up source ids">
+    Call `GET /2/sources` and store each source's `id`. Use it wherever you used the stream key to identify a source.
+  </Step>
+  <Step title="Move source management to /2/sources">
+    Switch to `POST`, `GET`, `PUT` and `DELETE /2/sources[/:id]`. Read results from `data`, send `region` when creating, and read stream keys only with `GET /2/sources/:id/stream_key` or from the create response.
+  </Step>
+  <Step title="Replace create + publish with Go Live">
+    Call `POST /2/broadcasts` with the source id as `source_id` and your publish fields. Handle `201` and `200`, and both `409` cases.
+  </Step>
+  <Step title="Update broadcast reads">
+    Switch to `GET /2/broadcasts` and `GET /2/broadcasts/:id`. Read results from `data`, read the title from `title`, and page with `meta.next_token`.
+  </Step>
+  <Step title="Update end and delete">
+    Switch to `PUT /2/broadcasts/:id/state` with `{"state":"END"}` and `DELETE /2/broadcasts/:id`.
+  </Step>
+  <Step title="Update scheduled broadcasts">
+    Pass the source id as `source_id` when creating and updating scheduled broadcasts.
+  </Step>
+  <Step title="Update error handling">
+    Branch on the problem `type` and HTTP status instead of `error_type`.
+  </Step>
+</Steps>

@@ -1,0 +1,35 @@
+---
+title: End Broadcast
+sidebarTitle: End Broadcast
+description: "PUT /2/broadcasts/:id/state with state END ends one of the authenticated user's live broadcasts."
+keywords: ["end broadcast", "PUT broadcasts state", "broadcast state", "END", "stop broadcast"]
+openapi: "put /2/broadcasts/{id}/state"
+---
+
+Ends one of the authenticated user's broadcasts. `:id` is the alphanumeric broadcast ID. The broadcast moves to `ENDED`; this is irreversible, and a broadcast can't be restarted. This route replaces `END` on the deprecated [Publish or End a Broadcast](/livestream-api/broadcasts/publish-or-end-broadcast) route; see the [migration guide](/livestream-api/migration-guide).
+
+<Note>
+  This endpoint is available by whitelist only. To request access, fill out the [Livestream API Access Form](/forms/livestream-api-access).
+</Note>
+
+<Warning>
+Only `END` is supported. `PUBLISH` is rejected with `400`: to go live, use [Go Live](/livestream-api/broadcasts/go-live) (`POST /2/broadcasts`), which creates and publishes a broadcast in one call.
+</Warning>
+
+Send exactly `{"state": "END"}`. Don't include `title`, `locale`, `chat_option` or `should_not_tweet`: if any of them is set, the request is rejected with `400` (for example, `"title must not be set"`).
+
+On success, the response is `200` with the broadcast ID and its new state, `ENDED`. After ending, stop your encoder. Read the final broadcast, including `end_ms`, with [`GET /2/broadcasts/:id`](/livestream-api/broadcasts/get-broadcast-by-id).
+
+## Errors
+
+Errors use the standard X API problem format.
+
+| Status | Problem `type` | When | What to do |
+|:-------|:---------------|:-----|:-----------|
+| `400` | `https://api.x.com/2/problems/invalid-request` | The body asks for `PUBLISH`, has an invalid `state`, or sets another field. The message is in the problem's `errors` array. | Send exactly `{"state":"END"}`. Use [Go Live](/livestream-api/broadcasts/go-live) to go live. |
+| `400` | `https://api.x.com/2/problems/invalid-request` | The broadcast can't be ended in its current state. | Check it with [`GET /2/broadcasts/:id`](/livestream-api/broadcasts/get-broadcast-by-id). |
+| `401` | `about:blank` | The request isn't authenticated. | Send a valid user-context access token. |
+| `403` | `about:blank` | The broadcast belongs to another user, the account can't manage it, or the broadcast was moderated. | Don't retry. |
+| `403` | `https://api.x.com/2/problems/missing-scopes` | The OAuth 2.0 token lacks `broadcast.write`. | Re-authorize the user with the `broadcast.read` and `broadcast.write` scopes. |
+| `404` | `https://api.x.com/2/problems/resource-not-found` | The broadcast doesn't exist. | Check the broadcast ID. |
+| `503` | `about:blank` | Temporary failure. A `503` doesn't confirm the broadcast ended. | Retry with backoff. |
