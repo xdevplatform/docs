@@ -1,0 +1,72 @@
+---
+title: Go Live
+sidebarTitle: Go Live
+description: "POST /2/broadcasts takes one of your stream sources live in one call and returns the new broadcast, already RUNNING."
+keywords: ["go live", "create broadcast", "POST broadcasts", "publish broadcast", "source_id", "chat_option", "should_not_tweet"]
+openapi: "post /2/broadcasts"
+---
+
+Takes one of the authenticated user's sources live in one call. The broadcast is created and published together: it is `RUNNING` and publicly visible as soon as the request succeeds. This route replaces the deprecated [Create Broadcast](/livestream-api/broadcasts/create-broadcast) + [Publish](/livestream-api/broadcasts/publish-or-end-broadcast) sequence; see the [migration guide](/livestream-api/migration-guide).
+
+
+The broadcast goes live immediately, even before your encoder sends video. If no video arrives within **5 minutes**, the broadcast is ended with state `TIMED_OUT`. Start your encoder right before or right after this call.
+
+By default, the broadcast is announced in a Post from the authenticated user. Set `should_not_tweet: true` to skip the Post.
+
+## Request body
+
+`source_id` is required. It is the source id (19 digits) of one of your sources, from [Get Sources](/livestream-api/sources/get-sources) or [Create a Source](/livestream-api/sources/create-a-source). It is not the stream key: passing a stream key returns `400` with `` The `source_id` value is not a source id. ``
+
+The body is strictly typed: `chat_option` must be a JSON integer from `0` to `6` and `should_not_tweet` a JSON boolean (strings such as `"2"` or `"true"` are rejected). Fields other than `source_id`, `title`, `locale`, `chat_option` and `should_not_tweet`, such as `region` or `is_low_latency`, are rejected with `400`.
+
+### Chat option values
+
+| Value | Meaning |
+|:------|:--------|
+| `0` | Default (no option set) |
+| `1` | Chat disabled |
+| `2` | Everyone |
+| `3` | Verified accounts |
+| `4` | Accounts the broadcaster follows |
+| `5` | The broadcaster's subscribers |
+| `6` | Accounts followed by an account the broadcaster follows |
+
+## Responses
+
+- **`201 Created`**: the source went live. `data` is the new broadcast, with state `RUNNING`.
+- **`200 OK`**: the source already had a live broadcast. `data` is that broadcast, returned unchanged: the request's `title`, `locale`, `chat_option` and `should_not_tweet` are ignored.
+
+Both have the same shape. `id` (also returned as `broadcast_id`) is the broadcast ID to use in the other `/2/broadcasts` routes; IDs vary in length, so don't assume a fixed length. `share_url` is the public viewer link. Fields without a value are omitted. The response doesn't include the source's stream key.
+
+Fetch the full broadcast, including viewer counts, thumbnails and `source_id`, with [`GET /2/broadcasts/:id`](/livestream-api/broadcasts/get-broadcast-by-id).
+
+### Announcing Post
+
+`tweet_id` is the ID of the Post announcing the broadcast. It is missing when the Post hasn't been created yet, when you set `should_not_tweet: true`, or when the Post couldn't be created. To read it later, call [`GET /2/broadcasts/:id`](/livestream-api/broadcasts/get-broadcast-by-id) a moment after going live. If it's still missing, the Post wasn't created.
+
+The broadcast is live either way, and viewers can watch it at `share_url`. Don't retry the request to get a Post: a retry returns the same live broadcast with `200` and doesn't post again. Share `share_url` yourself if you need an announcement.
+
+## Errors
+
+Errors use the standard X API problem format. The problem `type` identifies the error:
+
+| Status | Problem `type` | When | What to do |
+|:-------|:---------------|:-----|:-----------|
+| `400` | `https://api.x.com/2/problems/invalid-request` | The body is invalid: a missing `source_id`, a `chat_option` outside `0`–`6`, a wrongly typed value or an unknown field. The message for each invalid field is in the problem's `errors` array. | Fix the request body. |
+| `400` | `https://api.x.com/2/problems/invalid-request` | `` The `source_id` value is not a source id. `` You sent a stream key or another value that isn't a source id. The value isn't echoed back. | Pass the source's `id` from [Get Sources](/livestream-api/sources/get-sources). |
+| `401` | `about:blank` | The request isn't authenticated. | Send a valid user-context access token. |
+| `403` | `about:blank` | The account isn't eligible to go live, or the broadcast was moderated. | Don't retry. |
+| `403` | `https://api.x.com/2/problems/missing-scopes` | The OAuth 2.0 token lacks `broadcast.write`. | Re-authorize the user with the `broadcast.read` and `broadcast.write` scopes. |
+| `404` | `https://api.x.com/2/problems/resource-not-found` | The source doesn't exist or belongs to another user. | Check `source_id`. |
+| `409` | `https://api.x.com/2/problems/conflict` | The source can't take video before its encoder connects (for example, some regions and external HLS sources). | Start your encoder, wait until `is_stream_active` is `true` on [Get Source by ID](/livestream-api/sources/get-source-by-id), then retry. |
+| `409` | `https://api.x.com/2/problems/conflict` | Another broadcast is live on the source. The `detail` names that broadcast when known. | [End that broadcast](/livestream-api/broadcasts/end-broadcast) first, then retry, or use a different source. |
+| `503` | `about:blank` | Temporary failure. | Retry with backoff. |
+
+## Retries
+
+Go Live is safe to retry. If an earlier request already took the source live (for example, the response was lost to a timeout), a retry returns `200` with that broadcast instead of creating a second one. On a `503`, or a `409` because the encoder hasn't connected, retry with backoff. A `409` for another broadcast live on the source doesn't clear on its own; end that broadcast first.
+
+## Next steps
+
+- While live, poll [`GET /2/broadcasts/:id`](/livestream-api/broadcasts/get-broadcast-by-id) for state, viewer counts and `tweet_id`.
+- When done, stop your encoder and [end the broadcast](/livestream-api/broadcasts/end-broadcast).

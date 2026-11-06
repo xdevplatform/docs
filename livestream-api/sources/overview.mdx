@@ -1,36 +1,78 @@
 ---
 title: Stream Source Management
 sidebarTitle: Overview
-description: "Stream sources are persistent RTMPS ingest endpoints (URL + unique stream key). Create them once per region/encoder setup and reuse them across broadcasts."
-keywords: ["stream source", "RTMP ingest", "RTMPS", "stream key", "ingest endpoint"]
+description: "Stream sources are persistent RTMPS ingest endpoints. Manage them with the /2/sources routes: each source has a non-secret source id and a separate stream key you configure in your encoder."
+keywords: ["stream source", "RTMP ingest", "RTMPS", "stream key", "source id", "ingest endpoint", "/2/sources"]
 ---
 
-A **stream source** is a persistent RTMPS ingest endpoint (URL + unique stream key). Create sources once per region/encoder setup and reuse them across many broadcasts.
+A **stream source** is a persistent RTMPS ingest endpoint. Create sources once per region/encoder setup and reuse them across many broadcasts.
 
 <Note>
 A per-user limit on the number of sources may apply. Create sources sparingly and reuse them across broadcasts rather than creating a new source per broadcast. Sources belong to the creating user.
 </Note>
+
+## Source id and stream key
+
+Every source has two different values. Don't mix them up:
+
+| Value | Example | What it is |
+|:------|:--------|:-----------|
+| Source id (`id`) | `9123456789012345678` | Identifies the source, 19 digits. Not a secret. Use it in `/2/sources/:id` paths and as `source_id` when you [go live](/livestream-api/broadcasts/go-live) or [schedule a broadcast](/livestream-api/scheduled-broadcasts/create-scheduled-broadcast). |
+| Stream key (`stream_key`) | `YOUR_STREAM_KEY` | A credential your encoder uses to publish video. Anyone with it can stream to the source. |
+
+The stream key is returned only by [Create a Source](/livestream-api/sources/create-a-source) and by [Get Source Stream Key](/livestream-api/sources/get-source-stream-key). Every other response leaves it out.
+
+<Warning>
+Treat the stream key like a password. Keep it out of logs, URLs, analytics and client-side code. Use the source id everywhere else.
+</Warning>
+
+`rtmp_url` and `rtmps_url` are server URLs and don't contain the stream key. In your encoder, set the server to `rtmps_url` and enter the stream key in its stream key field. If your encoder takes a single URL, append the key: `rtmps_url` + `/` + stream key.
+
+## Source object
+
+| Field | Description |
+|:------|:------------|
+| `id` | Source id (19 digits). |
+| `name` | Label for your own organization. Doesn't affect functionality. |
+| `region` | Region of the X ingest location serving the source: `us-east-1` or `us-west-2`. It can differ from the `region` you requested; for example, `eu-central-1` is served from `us-east-1`. Sources created before October 31, 2026 keep the AWS region they were created in. |
+| `rtmp_url`, `rtmps_url` | Ingest server URLs. Both are RTMPS (TLS) URLs; configure your encoder with `rtmps_url`. |
+| `is_stream_active` | `true` while the source is receiving video from your encoder. |
+| `created_at_ms` | Creation time in milliseconds since the Unix epoch, as a string. |
+| `stream_key` | Only in the [Create a Source](/livestream-api/sources/create-a-source) response. |
 
 ## Endpoints
 
 | Endpoint | Method & Path |
 |:---------|:--------------|
 | [Get Recommended Region](/livestream-api/sources/get-recommended-region) | `GET /2/region` |
-| [Create Stream Source](/livestream-api/sources/create-source) | `POST /2/users/:user_id/sources` |
-| [List Stream Sources](/livestream-api/sources/list-sources) | `GET /2/users/:user_id/sources` |
-| [Get Stream Source](/livestream-api/sources/get-source) | `GET /2/users/:user_id/sources/:source_id` |
-| [Update Stream Source](/livestream-api/sources/update-source) | `PUT /2/users/:user_id/sources/:source_id` |
-| [Delete Stream Source](/livestream-api/sources/delete-source) | `DELETE /2/users/:user_id/sources/:source_id` |
+| [Create a Source](/livestream-api/sources/create-a-source) | `POST /2/sources` |
+| [Get Sources](/livestream-api/sources/get-sources) | `GET /2/sources` |
+| [Get Source by ID](/livestream-api/sources/get-source-by-id) | `GET /2/sources/:id` |
+| [Get Source Stream Key](/livestream-api/sources/get-source-stream-key) | `GET /2/sources/:id/stream_key` |
+| [Update Source by ID](/livestream-api/sources/update-source-by-id) | `PUT /2/sources/:id` |
+| [Delete Source by ID](/livestream-api/sources/delete-source-by-id) | `DELETE /2/sources/:id` |
 
-All of these require [user context authentication](/livestream-api/authentication). OAuth 2.0 (with `broadcast.read` and `broadcast.write` scopes) is recommended; OAuth 1.0a is also supported.
+All of these require [user context authentication](/livestream-api/authentication): OAuth 2.0 with the `broadcast.read` and `broadcast.write` scopes (recommended), or OAuth 1.0a. Responses wrap the result in `data`, and errors use the standard X API problem format.
+
+## Rate limits
+
+Each `/2/sources` route allows 450 requests per 15 minutes per user, the same as the deprecated `/2/users/:user_id/sources` routes.
 
 ## Errors
 
-Invalid parameters (for example, an unsupported `region` or a missing `name`) return `400` in the standard X API problem format. Other errors return a `{ "error_type", "message" }` body, for example a `404` for a source that doesn't exist:
+| Status | Problem `type` | When |
+|:-------|:---------------|:-----|
+| `400` | `https://api.x.com/2/problems/invalid-request` | The request is invalid, for example a missing `name`, an unsupported `region`, or an unknown body field. Also returned when `:id` isn't a source id, for example when you pass a stream key (`` The `id` value is not a source id. ``). The value you sent isn't echoed back. |
+| `404` | `https://api.x.com/2/problems/resource-not-found` | The source doesn't exist or belongs to another user. |
 
-```json
-{
-  "error_type": "notFound",
-  "message": "..."
-}
-```
+## Deprecated routes
+
+The original source routes under `/2/users/:user_id/sources` are deprecated and will be removed on **January 1, 2027**. On those routes the source's `id` is its stream key. They keep working unchanged until then. See the [migration guide](/livestream-api/migration-guide).
+
+| Deprecated route | Replacement |
+|:-----------------|:------------|
+| [`POST /2/users/:user_id/sources`](/livestream-api/sources/create-source) | [`POST /2/sources`](/livestream-api/sources/create-a-source) |
+| [`GET /2/users/:user_id/sources`](/livestream-api/sources/list-sources) | [`GET /2/sources`](/livestream-api/sources/get-sources) |
+| [`GET /2/users/:user_id/sources/:source_id`](/livestream-api/sources/get-source) | [`GET /2/sources/:id`](/livestream-api/sources/get-source-by-id) |
+| [`PUT /2/users/:user_id/sources/:source_id`](/livestream-api/sources/update-source) | [`PUT /2/sources/:id`](/livestream-api/sources/update-source-by-id) |
+| [`DELETE /2/users/:user_id/sources/:source_id`](/livestream-api/sources/delete-source) | [`DELETE /2/sources/:id`](/livestream-api/sources/delete-source-by-id) |
