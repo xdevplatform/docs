@@ -1,0 +1,92 @@
+---
+title: How Post matching works
+sidebarTitle: Post matching
+description: "Which Post content filtered stream rules match on, including long posts over 280 characters, replies, Quote Posts, Reposts, and Articles."
+keywords: ["matching", "filtered stream matching", "long posts", "note_tweet", "quote posts", "replies", "reposts", "articles", "quoted_text", "in_reply_to_text"]
+---
+
+This page explains which content filtered stream rules match on for every kind of Post.
+
+---
+
+## The rule
+
+**Keyword, phrase, and entity operators match the content a Post carries.** That includes the full text of long posts, not only the first 280 characters.
+
+**Quote Posts and Reposts carry the Post they share.** A Quote Post matches on its own content and the quoted Post's content. A Repost matches on the original Post.
+
+**Replies match on their own content only.** A reply does not include the Post it replies to. To match the replied-to Post, use `in_reply_to_text:`.
+
+Limiting replies to their own content removes matches that came only from the replied-to Post. It also adds matches for some negated rules:
+
+- `keyword -is:reply` starts matching Quote Posts of replies. A Quote Post of a reply is not itself a reply.
+- `keyword -has:links` (and other exclusions such as `-has:images` or `-is:nullcast`) starts matching a reply when the excluded property is on the replied-to Post and not on the reply.
+
+---
+
+## What each Post type matches on
+
+| Post type | Keywords, phrases, `#`, `$`, `@`, `url:` match | Use to match the referenced Post |
+|:----------|:-----------------------------------------------|:---------------------------------|
+| Original Post | The Post's text and entities | — |
+| Long post (over 280 characters) | The full text in `note_tweet.text` and the entities across the full text | — |
+| Reply | The reply's own text and entities, including the @handles it replies to | `in_reply_to_text:` |
+| Quote Post | The Quote Post's own text and entities, and the quoted Post's text and entities | `quoted_text:` (quoted Post only) |
+| Repost | The original Post's full text and entities | — |
+| Article | The Article's title and body | — |
+
+Reply metadata operators such as `to:`, `in_reply_to_tweet_id:`, `is:reply`, and `is:quote` are unaffected.
+
+---
+
+## Matching beyond 280 characters
+
+Long posts deliver the first part of their text in `text` and the full text in `note_tweet.text`. Matching uses the full text, so a rule can match a word that does not appear in `text`.
+
+To see the full text in the stream, request `tweet.fields=note_tweet`.
+
+```bash
+curl "https://api.x.com/2/tweets/search/stream?tweet.fields=note_tweet" \
+  -H "Authorization: Bearer $BEARER_TOKEN"
+```
+
+---
+
+## Matching the referenced Post
+
+Use these operators to match content in the Post being quoted or replied to:
+
+| Operator | Matches | Example |
+|:---------|:--------|:--------|
+| `quoted_text:` | The text of the directly quoted Post | `quoted_text:launch` |
+| `in_reply_to_text:` | The text of the directly replied-to Post | `in_reply_to_text:"product update"` |
+
+Both operators:
+- Take a keyword or a quoted phrase, tokenized the same way as a bare keyword.
+- Match the full text when the referenced Post is a long post.
+- Are standalone and can be negated, for example `-quoted_text:spoiler`.
+
+Examples:
+
+| Goal | Rule |
+|:-----|:-----|
+| A keyword in a reply or in the Post it replies to | `acme OR in_reply_to_text:acme` |
+| A keyword only in the quoted Post, not the Quote Post's own text | `quoted_text:acme` |
+| Quote Posts about a topic, excluding quotes of Posts with a word | `launch is:quote -quoted_text:giveaway` |
+
+To receive the referenced Post in the stream, use `expansions=referenced_tweets.id`.
+
+---
+
+## Search Posts
+
+[Search Posts](/x-api/posts/search/introduction) matches replies on their own text and long posts on their full text. It differs from filtered stream in these ways:
+
+| Behavior | Filtered stream | Search Posts |
+|:---------|:----------------|:-------------|
+| Quote Posts | Match on the Quote Post and the quoted Post | Match on the Quote Post's own text |
+| Reposts | Match on the original Post's full text | Match on the Repost's own text |
+| `quoted_text:`, `in_reply_to_text:` | Supported | Not supported |
+| Diacritics | Keywords with accents match only Posts with the accent | Keywords with accents match Posts with and without the accent |
+
+See [Filtered stream operators](/x-api/posts/filtered-stream/integrate/operators) for the full operator list.
