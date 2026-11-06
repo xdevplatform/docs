@@ -1,0 +1,155 @@
+---
+title: Livestream API SKILL.md
+sidebarTitle: SKILL.md
+description: "A SKILL.md for AI agents building on the X Livestream API: stream sources, one-call go-live, broadcasts, scheduled broadcasts, live chat, errors, and the migration steps off the deprecated /2/users/:id routes."
+keywords: ["SKILL.md", "agent skills", "AI agent", "Livestream API", "migration", "stream sources", "go live", "agentskills.io"]
+---
+
+This `SKILL.md` follows the [agentskills.io specification](https://agentskills.io/specification), like the site-wide [`skill.md`](/tools/skill-md). It gives an agent the Livestream API's routes, inputs, constraints and the migration steps for integrations still on the deprecated `/2/users/:id/sources` and `/2/users/:id/broadcasts` routes.
+
+To use it, save the block below as `SKILL.md` in a folder your agent loads skills from, for example `.agents/skills/x-livestream-api/SKILL.md` or `.cursor/skills/x-livestream-api/SKILL.md`. You can also point an agent at this page's Markdown: [`docs.x.com/livestream-api/skill-md.md`](https://docs.x.com/livestream-api/skill-md.md).
+
+````markdown SKILL.md
+---
+name: x-livestream-api
+description: Use when building or migrating an integration with the X Livestream API (https://api.x.com/2): creating and managing RTMP/RTMPS stream sources, going live in one call, ending or deleting broadcasts, scheduling broadcasts, reading and moderating live chat, handling its errors, or moving off the deprecated /2/users/:id/sources and /2/users/:id/broadcasts routes before their January 1, 2027 end of life.
+metadata:
+  version: "1.0"
+---
+
+# X Livestream API
+
+## Product summary
+
+The Livestream API lets an app go live on X for a user. A **stream source** is a persistent RTMPS ingest point (server URL plus stream key) that an encoder pushes video to. A **broadcast** is one live session on a source that viewers watch on X. Base URL `https://api.x.com/2`. Docs: https://docs.x.com/livestream-api/introduction
+
+## When to use
+
+- Creating, listing, renaming or deleting a user's stream sources
+- Getting a source's stream key to configure an encoder (OBS, ffmpeg, a hosted encoder)
+- Going live on a source, ending a broadcast, deleting it, or listing a user's broadcasts
+- Scheduling broadcasts ahead of time
+- Reading, sending or moderating live chat
+- Migrating code that calls `/2/users/:id/sources*` or `/2/users/:id/broadcasts*`
+
+## Authentication
+
+- OAuth 2.0 user context (Authorization Code with PKCE) with scopes `broadcast.read` and `broadcast.write`, or OAuth 1.0a user context with a Read and Write app.
+- The user is always the authenticated user. The `/2/sources` and `/2/broadcasts` routes take no user id in the path.
+- Rate limits: 450 requests per user per 15 minutes on the source routes and `POST /2/broadcasts`. Read the `x-rate-limit-*` response headers; back off on `429`.
+
+## Ids and secrets
+
+| Value | Example | Notes |
+|:------|:--------|:------|
+| Source id | `9123456789012345678` | 19 digits. Not a secret. Use it in `/2/sources/:id` and as `source_id`. |
+| Stream key | `YOUR_STREAM_KEY` | A publish credential: anyone with it can stream to the source. Never log it, put it in a URL, or send it to a client. |
+| Broadcast id | `2AbCdEfGhIjKlM` | Alphanumeric; don't assume a fixed length. |
+
+The stream key is returned only by `POST /2/sources` and `GET /2/sources/:id/stream_key`. Every other response omits it.
+
+## Routes
+
+### Stream sources
+
+| Action | Route | Notes |
+|:-------|:------|:------|
+| Create | `POST /2/sources` | Body `name`, `region` (`us-east-1` or `us-west-2`). `201` with the source, including `stream_key`. |
+| List | `GET /2/sources` | The user's sources (`id`, `name`, `region`, `rtmp_url`, `rtmps_url`, `is_stream_active`, `created_at_ms`). |
+| Get | `GET /2/sources/:id` | One source. |
+| Get stream key | `GET /2/sources/:id/stream_key` | `{"data": {"id", "stream_key"}}`. Call only when configuring an encoder. |
+| Rename | `PUT /2/sources/:id` | Body `name`. |
+| Delete | `DELETE /2/sources/:id` | `{"data": {"deleted": true}}`. |
+| Recommended region | `GET /2/region` | The closest ingest region for the caller. |
+
+Configure the encoder with the source's `rtmps_url` as the server and the stream key as the key. `is_stream_active` is `true` while video is arriving.
+
+### Broadcasts
+
+| Action | Route | Notes |
+|:-------|:------|:------|
+| Go live | `POST /2/broadcasts` | Body `source_id` (required), `title`, `locale`, `chat_option` (0-6), `should_not_tweet`. See below. |
+| List | `GET /2/broadcasts` | The user's broadcasts. Cursor with `pagination_token`. |
+| Get | `GET /2/broadcasts/:id` | Use `broadcast.fields` to pick fields, e.g. `broadcast.fields=source_id,state`. |
+| End | `PUT /2/broadcasts/:id/state` | Body `{"state": "END"}`. Returns `{"data": {"id", "state": "ENDED"}}`. |
+| Delete | `DELETE /2/broadcasts/:id` | A live broadcast must be ended first. |
+
+Go live behavior:
+- `201` with the new broadcast in state `RUNNING`. It is live immediately, even before the encoder sends video, and ends as `TIMED_OUT` if no video arrives within 5 minutes. Start the encoder right before or right after the call.
+- `200` with the source's already-live broadcast, unchanged, when the source is already live. The request's `title`, `locale`, `chat_option` and `should_not_tweet` are ignored then.
+- A Post announces the broadcast unless `should_not_tweet` is `true`. A missing `tweet_id` means the Post isn't created yet, was suppressed, or failed. Read it later with `GET /2/broadcasts/:id`.
+- Safe to retry: a retry returns the same live broadcast rather than a second one.
+
+### Scheduled broadcasts
+
+`POST /2/broadcasts/scheduled`, `GET /2/broadcasts/scheduled`, `GET`, `PUT` and `DELETE /2/broadcasts/scheduled/:id`, and `POST /2/broadcasts/scheduled/:id/live` (go live now).
+- `source_id` in requests and responses is the source id. A stream key is still accepted as `source_id` in create and update, but that is deprecated until January 1, 2027.
+- Start must be in the future; duration 1 minute to 24 hours, or open-ended (`scheduled_end_ms: "0"`).
+- `PUT` is partial but requires `scheduled_broadcast_id`, `scheduled_start_ms` and `scheduled_end_ms`.
+- Recurrence (`recurrence`, `roll_forward`) is retired; schedule each occurrence separately.
+
+### Live chat
+
+- History: `GET /2/broadcasts/:id/chat`. Send: `POST /2/broadcasts/:id/chat`. Remove a message: `DELETE /2/broadcasts/:id/chat/:message_id`.
+- Mutes apply across all of the host's broadcasts: `GET`, `POST /2/broadcasts/chat/mutes`, `DELETE /2/broadcasts/chat/mutes/:user_id`.
+- Moderators: `GET`, `POST /2/broadcasts/chat/moderators`, `DELETE /2/broadcasts/chat/moderators/:user_id`.
+
+## Typical workflow
+
+1. `GET /2/region` (optional), then `POST /2/sources` with that `region`. Store the source `id`. Use the `stream_key` from the response to configure the encoder, and don't store it longer than needed.
+2. Later sessions reuse the source: `GET /2/sources` to find it, `GET /2/sources/:id/stream_key` to reconfigure an encoder.
+3. `POST /2/broadcasts` with `source_id` and start the encoder. Share the returned `share_url`.
+4. `PUT /2/broadcasts/:id/state` with `{"state": "END"}` when done, then stop the encoder.
+5. `DELETE /2/broadcasts/:id` only if the broadcast and its replay should be removed.
+
+## Errors
+
+Errors use the X API problem format (`type`, `title`, `detail`, `status`).
+
+| Status | Type | Meaning and action |
+|:-------|:-----|:-------------------|
+| `400` | `invalid-request` | Bad body or path. A stream key where a source id goes gets "The `id` value is not a source id." (or `source_id`). Fix the request; don't retry. |
+| `401` | `about:blank` | Missing or invalid user token. |
+| `403` | `about:blank` or `missing-scopes` | Account not eligible to go live, broadcast moderated, or missing `broadcast.read`/`broadcast.write`. |
+| `404` | `resource-not-found` | Unknown id, or a source or broadcast that belongs to another user (same response, by design). |
+| `409` | `conflict` | Go live only: the source can't take video before its encoder connects (retry once video flows), or another broadcast is live on it (the `detail` names it; end it first). |
+| `429` | Too Many Requests | Rate limited. Wait for `x-rate-limit-reset`. |
+| `503` | `about:blank` | Temporary. Retry with backoff. |
+
+## Migrating from `/2/users/:id/*`
+
+The `/2/users/:id/sources*` and `/2/users/:id/broadcasts*` routes are deprecated and return `404` from January 1, 2027. They keep working unchanged until then, with the stream key as the source id.
+
+| Deprecated route | Replacement |
+|:-----------------|:------------|
+| `POST /2/users/:id/sources` | `POST /2/sources` |
+| `GET /2/users/:id/sources` | `GET /2/sources` |
+| `GET /2/users/:id/sources/:source_id` | `GET /2/sources/:id` (and `GET /2/sources/:id/stream_key` for the key) |
+| `PUT /2/users/:id/sources/:source_id` | `PUT /2/sources/:id` |
+| `DELETE /2/users/:id/sources/:source_id` | `DELETE /2/sources/:id` |
+| `POST /2/users/:id/broadcasts` then `PUT .../state` `PUBLISH` | `POST /2/broadcasts` (one call) |
+| `GET /2/users/:id/broadcasts` | `GET /2/broadcasts` |
+| `GET /2/users/:id/broadcasts/:broadcast_id` | `GET /2/broadcasts/:id` |
+| `PUT /2/users/:id/broadcasts/:broadcast_id/state` `END` | `PUT /2/broadcasts/:id/state` `END` |
+| `DELETE /2/users/:id/broadcasts/:broadcast_id` | `DELETE /2/broadcasts/:id` |
+
+Steps:
+1. **Switch stored source references to source ids.** The old routes used the stream key as the source `id`. Call `GET /2/sources` once per connected user and store each source's new `id`, matching existing records by name or by fetching each key with `GET /2/sources/:id/stream_key`. Existing sources and stream keys keep working; encoders need no change.
+2. **Stop persisting stream keys as identifiers.** Fetch a key with `GET /2/sources/:id/stream_key` only when configuring an encoder.
+3. **Replace create + `PUBLISH` with `POST /2/broadcasts`.** There is no `NOT_STARTED` draft step. Move the publish fields (`title`, `locale`, `chat_option`, `should_not_tweet`) into the go-live body, and handle `201` (new) versus `200` (already live).
+4. **Read responses from `data`.** New routes wrap results in `data` (lists add `meta` with `result_count` and `next_token`). The title is `title` (was `status`), and `share_url` is a field of the broadcast. Request extra broadcast fields with `broadcast.fields`.
+5. **Send strictly typed bodies.** `chat_option` is a JSON integer, `should_not_tweet` a JSON boolean, and unknown fields are rejected with `400`.
+6. **Handle the new errors.** Problem-format errors instead of `{"error_type", "message"}`; `409 conflict` on go live; `404` for another user's resources.
+7. **Scheduled broadcasts:** send the source id as `source_id`, and read `source_id` in responses as the source id (it was the stream key).
+8. **Remove the `:id` user path segment.** The user comes from the token, so the "path user must match the token" `400` goes away.
+
+Migration guide: https://docs.x.com/livestream-api/migration-guide
+
+## Gotchas
+
+- Keep stream keys out of logs, analytics, URLs and client-side code.
+- Don't hardcode ingest hosts. Use the `rtmp_url`/`rtmps_url` returned for each source.
+- A broadcast that never gets video times out after 5 minutes; start the encoder promptly.
+- Region names are AWS-style (`us-east-1`, `us-west-2`); no data-center names.
+- Broadcast and source ids have different formats; validate each against its own shape.
+````
