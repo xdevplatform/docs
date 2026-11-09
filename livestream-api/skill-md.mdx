@@ -14,7 +14,7 @@ To use it, save the block below as `SKILL.md` in a folder your agent loads skill
 name: x-livestream-api
 description: Use when building or migrating an integration with the X Livestream API (https://api.x.com/2): creating and managing RTMP/RTMPS stream sources, going live in one call, ending or deleting broadcasts, scheduling broadcasts, reading and moderating live chat, handling its errors, or moving off the deprecated /2/users/:id/sources and /2/users/:id/broadcasts routes before their January 1, 2027 end of life.
 metadata:
-  version: "1.0"
+  version: "1.1"
 ---
 
 # X Livestream API
@@ -36,7 +36,7 @@ The Livestream API lets an app go live on X for a user. A **stream source** is a
 
 - OAuth 2.0 user context (Authorization Code with PKCE) with scopes `broadcast.read` and `broadcast.write`, or OAuth 1.0a user context with a Read and Write app.
 - The user is always the authenticated user. The `/2/sources` and `/2/broadcasts` routes take no user id in the path.
-- Rate limits: 450 requests per user per 15 minutes on the source routes and `POST /2/broadcasts`. Read the `x-rate-limit-*` response headers; back off on `429`.
+- Rate limits: 450 requests per user per 15 minutes on the source routes, `POST /2/broadcasts` and `GET /2/broadcasts`. Other broadcast routes have lower limits. Read the `x-rate-limit-*` response headers; back off on `429`.
 
 ## Ids and secrets
 
@@ -84,9 +84,15 @@ Go live behavior:
 
 `POST /2/broadcasts/scheduled`, `GET /2/broadcasts/scheduled`, `GET`, `PUT` and `DELETE /2/broadcasts/scheduled/:id`, and `POST /2/broadcasts/scheduled/:id/live` (go live now).
 - `source_id` in requests and responses is the source id. A stream key is still accepted as `source_id` in create and update, but that is deprecated until January 1, 2027.
-- Start must be in the future; duration 1 minute to 24 hours, or open-ended (`scheduled_end_ms: "0"`).
-- `PUT` is partial but requires `scheduled_broadcast_id`, `scheduled_start_ms` and `scheduled_end_ms`.
-- Recurrence (`recurrence`, `roll_forward`) is retired; schedule each occurrence separately.
+- Paths take the alphanumeric `broadcast_id`. Save the numeric `scheduled_broadcast_id` too; `PUT` needs it in the body.
+- Start must be in the future; duration 1 minute to 24 hours, or open-ended (omit `scheduled_end_ms` on create, `"0"` on update).
+- Schedules on the same source can't overlap; open-ended ones must start at least 1 minute apart.
+- `PUT` is partial: unsent fields keep their values. It still requires `scheduled_broadcast_id`, `scheduled_start_ms` and `scheduled_end_ms`, and works only before the broadcast starts.
+- A live scheduled broadcast can't be deleted until it ends.
+- Set `manual_publish: true` to publish with `POST /2/broadcasts/scheduled/:id/live`; otherwise it publishes automatically at the start time.
+- List: `next_token` is returned only when there's another page.
+- Schedule errors are `400`, and the message starts with the reason: `start_in_past`, `invalid_period`, `schedule_conflict`, `not_found`.
+- Recurrence is retired: `recurrence` and `roll_forward=true` return `400`, and `telecast_id` is ignored. Schedule each occurrence separately.
 
 ### Live chat
 
