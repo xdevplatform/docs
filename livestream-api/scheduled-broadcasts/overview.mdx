@@ -1,13 +1,13 @@
 ---
 title: Livestream Scheduling API
 sidebarTitle: Overview
-description: "Create, manage, and publish scheduled broadcasts on X with one-time and recurring schedules, automatic or manual publishing, and OAuth 2.0 support."
-keywords: ["Livestream Scheduling API", "scheduled broadcast", "recurring schedule", "manual publish", "broadcast.read", "broadcast.write"]
+description: "Create, manage, and publish scheduled broadcasts on X, with automatic or manual publishing and OAuth 2.0 support."
+keywords: ["Livestream Scheduling API", "scheduled broadcast", "manual publish", "broadcast.read", "broadcast.write"]
 ---
 
 Use the Livestream Scheduling API to create, manage, and publish scheduled broadcasts on X.
 
-The API supports one-time and recurring schedules. A scheduled broadcast is associated with an existing [livestream source](/livestream-api/sources/overview). It can publish automatically at its scheduled start time or wait for an explicit go-live request.
+A scheduled broadcast is associated with an existing [livestream source](/livestream-api/sources/overview). It can publish automatically at its scheduled start time or wait for an explicit go-live request.
 
 ## Before you begin
 
@@ -46,15 +46,23 @@ For a manual go-live request, begin sending RTMP video to the source before call
 
 - Timestamp fields use Unix epoch time in milliseconds.
 - Send timestamps and numeric IDs as decimal strings to preserve precision.
-- The `broadcast_id` is an alphanumeric ID used in endpoint paths.
+- The `broadcast_id` is an alphanumeric ID used in endpoint paths. IDs are 13 or 14 characters; don't assume a fixed length.
 - The `scheduled_broadcast_id` is a numeric scheduler ID. Save both values returned by create, list, or get. Updates require the numeric ID in the request body.
+
+### Schedule rules
+
+- The start time must be in the future.
+- A broadcast with a scheduled end lasts 1 minute to 24 hours. Omit the end for an open-ended broadcast.
+- Scheduled broadcasts on the same source can't overlap. Open-ended broadcasts on one source must start at least 1 minute apart.
+- A scheduled broadcast can be updated only before it starts, and can't be deleted while it's live.
+- Each broadcast is scheduled once. Recurring schedules are retired: `recurrence` and `roll_forward=true` return `400`, and `telecast_id` is ignored.
 
 ## Scheduled broadcast object
 
 ```json
 {
   "scheduled_broadcast_id": "2075599796786561024",
-  "broadcast_id": "1DxLddgepQbxm",
+  "broadcast_id": "2AxRnanzLOrxlQ",
   "state": "Created",
   "title": "Product launch",
   "description": "Live from our launch event",
@@ -65,8 +73,6 @@ For a manual go-live request, begin sending RTMP video to the source before call
   "chat_option": "1",
   "locale": "en",
   "available_for_replay": true,
-  "recurring_schedule_id": null,
-  "telecast_id": null,
   "manual_publish": true
 }
 ```
@@ -135,9 +141,9 @@ Common HTTP responses:
 
 | Status | Meaning |
 |:-------|:--------|
-| `400 Bad Request` | Missing or invalid input, invalid schedule, unknown broadcast, incomplete full-replacement update, or a go-live request for a schedule that is not configured for manual publishing. |
+| `400 Bad Request` | Missing or invalid input, a schedule that breaks the [schedule rules](#schedule-rules), an unknown broadcast, or a go-live request for a schedule that is not configured for manual publishing. The error message starts with the reason, such as `start_in_past`, `invalid_period`, `schedule_conflict` or `not_found`. |
 | `401 Unauthorized` | Missing, expired, or invalid user access token. |
-| `403 Forbidden` | The token lacks the required scope or the authenticated user is not permitted to access the resource. |
+| `403 Forbidden` | The token lacks the required scope, the authenticated user is not permitted to access the resource, or the account isn't allowed to go live. |
 | `429 Too Many Requests` | Rate limit exceeded. |
 | `503 Service Unavailable` | A dependent livestream or scheduling service could not complete the request. |
 
@@ -147,5 +153,3 @@ If a go-live request fails:
 - Confirm the source ID is correct.
 - Confirm RTMP video is actively reaching the source.
 - Confirm the broadcast has not already ended or been deleted.
-
-If an update reports incomplete broadcast data, retrieve the current broadcast and resend all fields that should remain set.
