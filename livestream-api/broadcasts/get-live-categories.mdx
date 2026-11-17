@@ -1,0 +1,45 @@
+---
+title: Get Live Categories
+sidebarTitle: Get Live Categories
+description: "GET /2/broadcasts/categories returns the live categories a host can pick when going live. Pass a category's id as live_category_id on POST /2/broadcasts."
+keywords: ["live categories", "GET /2/broadcasts/categories", "live_category_id", "broadcast category", "category picker", "go live"]
+openapi: "get /2/broadcasts/categories"
+---
+
+Returns the live categories a host can pick when going live, in display order. Use it to build a category picker, then pass the chosen category's `id` as `live_category_id` to [Go Live](/livestream-api/broadcasts/go-live) (`POST /2/broadcasts`).
+
+The whole list is returned in one response: there are no query parameters and no paging. The list is the same for every user.
+
+```json
+{
+  "data": [
+    { "id": "gaming", "name": "Gaming" },
+    { "id": "music", "name": "Music" },
+    { "id": "sports", "name": "Sports" }
+  ],
+  "meta": { "result_count": 3 }
+}
+```
+
+This example is shortened to three categories. `meta.result_count` is the number of categories in `data`.
+
+## Using the list
+
+- **Store the `id`, show the `name`.** Ids are permanent. Names can change, so read the current name from this route instead of saving it.
+- **Keep the order.** Categories are returned in the order to display them.
+- **Don't hard-code the list.** Categories can be added, so fetch the list instead of shipping a copy of it. An id that isn't in the list is rejected by Go Live with `400`.
+
+## Authentication and rate limit
+
+Requires [user context authentication](/livestream-api/authentication): OAuth 2.0 with the `broadcast.read` scope, or OAuth 1.0a. The route allows 450 requests per 15 minutes per user.
+
+## Errors
+
+Errors use the standard X API problem format.
+
+| Status | Problem `type` | When | What to do |
+|:-------|:---------------|:-----|:-----------|
+| `401` | `about:blank` | The request isn't authenticated. | Send a valid user-context access token. |
+| `403` | `https://api.x.com/2/problems/missing-scopes` | The OAuth 2.0 token lacks `broadcast.read`. | Re-authorize the user with the `broadcast.read` scope. |
+| `403` | `about:blank` | The account isn't permitted to list live categories. | Don't retry. |
+| `503` | `about:blank` | Temporary failure. | Retry with backoff. |

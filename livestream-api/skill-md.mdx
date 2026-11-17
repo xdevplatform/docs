@@ -14,7 +14,7 @@ To use it, save the block below as `SKILL.md` in a folder your agent loads skill
 name: x-livestream-api
 description: Use when building or migrating an integration with the X Livestream API (https://api.x.com/2): creating and managing RTMP/RTMPS stream sources, going live in one call, ending or deleting broadcasts, scheduling broadcasts, reading and moderating live chat, handling its errors, or moving off the deprecated /2/users/:id/sources and /2/users/:id/broadcasts routes before their January 1, 2027 end of life.
 metadata:
-  version: "1.1"
+  version: "1.2"
 ---
 
 # X Livestream API
@@ -36,7 +36,7 @@ The Livestream API lets an app go live on X for a user. A **stream source** is a
 
 - OAuth 2.0 user context (Authorization Code with PKCE) with scopes `broadcast.read` and `broadcast.write`, or OAuth 1.0a user context with a Read and Write app.
 - The user is always the authenticated user. The `/2/sources` and `/2/broadcasts` routes take no user id in the path.
-- Rate limits: 450 requests per user per 15 minutes on the source routes, `POST /2/broadcasts` and `GET /2/broadcasts`. Other broadcast routes have lower limits. Read the `x-rate-limit-*` response headers; back off on `429`.
+- Rate limits: 450 requests per user per 15 minutes on the source routes, `POST /2/broadcasts`, `GET /2/broadcasts` and `GET /2/broadcasts/categories`. Other broadcast routes have lower limits. Read the `x-rate-limit-*` response headers; back off on `429`.
 
 ## Ids and secrets
 
@@ -68,15 +68,17 @@ Configure the encoder with the source's `rtmps_url` as the server and the stream
 
 | Action | Route | Notes |
 |:-------|:------|:------|
-| Go live | `POST /2/broadcasts` | Body `source_id` (required), `title`, `locale`, `chat_option` (0-6), `should_not_tweet`. See below. |
+| Go live | `POST /2/broadcasts` | Body `source_id` (required), `title`, `locale`, `chat_option` (0-6), `should_not_tweet`, `live_category_id`. See below. |
+| Live categories | `GET /2/broadcasts/categories` | `{"data": [{"id", "name"}]}`, in display order, without paging. Pass an `id` as `live_category_id` when going live. |
 | List | `GET /2/broadcasts` | The user's broadcasts. Cursor with `pagination_token`. |
-| Get | `GET /2/broadcasts/:id` | Use `broadcast.fields` to pick fields, e.g. `broadcast.fields=source_id,state`. |
+| Get | `GET /2/broadcasts/:id` | Use `broadcast.fields` to pick fields, e.g. `broadcast.fields=source_id,state,live_category_id`. |
 | End | `PUT /2/broadcasts/:id/state` | Body `{"state": "END"}`. Returns `{"data": {"id", "state": "ENDED"}}`. |
 | Delete | `DELETE /2/broadcasts/:id` | A live broadcast must be ended first. |
 
 Go live behavior:
 - `201` with the new broadcast in state `RUNNING`. It is live immediately, even before the encoder sends video, and ends as `TIMED_OUT` if no video arrives within 5 minutes. Start the encoder right before or right after the call.
-- `200` with the source's already-live broadcast, unchanged, when the source is already live. The request's `title`, `locale`, `chat_option` and `should_not_tweet` are ignored then.
+- `200` with the source's already-live broadcast, unchanged, when the source is already live. The request's `title`, `locale`, `chat_option`, `should_not_tweet` and `live_category_id` are ignored then.
+- `live_category_id` is optional and sets the broadcast's live category. Use an `id` from `GET /2/broadcasts/categories`; store the id and show the current name. An id that isn't in that list returns `400`. Don't hard-code the list.
 - A Post announces the broadcast unless `should_not_tweet` is `true`. A missing `tweet_id` means the Post isn't created yet, was suppressed, or failed. Read it later with `GET /2/broadcasts/:id`.
 - Safe to retry: a retry returns the same live broadcast rather than a second one.
 
