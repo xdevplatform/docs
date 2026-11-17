@@ -2,7 +2,7 @@
 title: Go Live
 sidebarTitle: Go Live
 description: "POST /2/broadcasts takes one of your stream sources live in one call and returns the new broadcast, already RUNNING."
-keywords: ["go live", "create broadcast", "POST broadcasts", "publish broadcast", "source_id", "chat_option", "should_not_tweet"]
+keywords: ["go live", "create broadcast", "POST broadcasts", "publish broadcast", "source_id", "chat_option", "should_not_tweet", "live_category_id"]
 openapi: "post /2/broadcasts"
 ---
 
@@ -17,7 +17,7 @@ By default, the broadcast is announced in a Post from the authenticated user. Se
 
 `source_id` is required. It is the source id (19 digits) of one of your sources, from [Get Sources](/livestream-api/sources/get-sources) or [Create a Source](/livestream-api/sources/create-a-source). It is not the stream key: passing a stream key returns `400` with `` The `source_id` value is not a source id. ``
 
-The body is strictly typed: `chat_option` must be a JSON integer from `0` to `6` and `should_not_tweet` a JSON boolean (strings such as `"2"` or `"true"` are rejected). Fields other than `source_id`, `title`, `locale`, `chat_option` and `should_not_tweet`, such as `region` or `is_low_latency`, are rejected with `400`.
+The body is strictly typed: `chat_option` must be a JSON integer from `0` to `6` and `should_not_tweet` a JSON boolean (strings such as `"2"` or `"true"` are rejected). Fields other than `source_id`, `title`, `locale`, `chat_option`, `should_not_tweet` and `live_category_id`, such as `region` or `is_low_latency`, are rejected with `400`.
 
 ### Chat option values
 
@@ -31,12 +31,18 @@ The body is strictly typed: `chat_option` must be a JSON integer from `0` to `6`
 | `5` | The broadcaster's subscribers |
 | `6` | Accounts followed by an account the broadcaster follows |
 
+### Live category
+
+`live_category_id` is optional. It sets the live category the host picked for the broadcast, for example `gaming`. Get the valid ids from [Get Live Categories](/livestream-api/broadcasts/get-live-categories) (`GET /2/broadcasts/categories`). An id that isn't in that list returns `400`. Leave the field out to go live without a category.
+
+The category can only be set when going live.
+
 ## Responses
 
 - **`201 Created`**: the source went live. `data` is the new broadcast, with state `RUNNING`.
-- **`200 OK`**: the source already had a live broadcast. `data` is that broadcast, returned unchanged: the request's `title`, `locale`, `chat_option` and `should_not_tweet` are ignored.
+- **`200 OK`**: the source already had a live broadcast. `data` is that broadcast, returned unchanged: the request's `title`, `locale`, `chat_option`, `should_not_tweet` and `live_category_id` are ignored.
 
-Both have the same shape. `id` (also returned as `broadcast_id`) is the broadcast ID to use in the other `/2/broadcasts` routes; IDs vary in length, so don't assume a fixed length. `share_url` is the public viewer link. Fields without a value are omitted. The response doesn't include the source's stream key.
+Both have the same shape. `id` (also returned as `broadcast_id`) is the broadcast ID to use in the other `/2/broadcasts` routes; IDs vary in length, so don't assume a fixed length. `share_url` is the public viewer link. `live_category_id` is the broadcast's live category, when it has one. Fields without a value are omitted. The response doesn't include the source's stream key.
 
 Fetch the full broadcast, including viewer counts, thumbnails and `source_id`, with [`GET /2/broadcasts/:id`](/livestream-api/broadcasts/get-broadcast-by-id).
 
@@ -54,6 +60,7 @@ Errors use the standard X API problem format. The problem `type` identifies the 
 |:-------|:---------------|:-----|:-----------|
 | `400` | `https://api.x.com/2/problems/invalid-request` | The body is invalid: a missing `source_id`, a `chat_option` outside `0`–`6`, a wrongly typed value or an unknown field. The message for each invalid field is in the problem's `errors` array. | Fix the request body. |
 | `400` | `https://api.x.com/2/problems/invalid-request` | `` The `source_id` value is not a source id. `` You sent a stream key or another value that isn't a source id. The value isn't echoed back. | Pass the source's `id` from [Get Sources](/livestream-api/sources/get-sources). |
+| `400` | `https://api.x.com/2/problems/invalid-request` | `` `live_category_id` is not a live category id. `` The id isn't in the list of live categories. The value isn't echoed back. | Pass an `id` from [Get Live Categories](/livestream-api/broadcasts/get-live-categories), or leave the field out. |
 | `401` | `about:blank` | The request isn't authenticated. | Send a valid user-context access token. |
 | `403` | `about:blank` | The account isn't eligible to go live, or the broadcast was moderated. | Don't retry. |
 | `403` | `https://api.x.com/2/problems/missing-scopes` | The OAuth 2.0 token lacks `broadcast.write`. | Re-authorize the user with the `broadcast.read` and `broadcast.write` scopes. |
