@@ -118,11 +118,44 @@ When [building search queries](/x-api/posts/search/integrate/build-a-query), key
 
 ## Quote Tweet matching
 
-When using filtered stream, operators match on both the Quote Tweet's content **and** the content from the original Post that was quoted.
+By default, keyword, `#`, `@`, `$`, `url:`, and `has:links` / `has:hashtags` / `has:cashtags` / `has:mentions` operators match both the Quote Post's ~280-character preview (`data.text`) **and** the quoted Post's ~280-character preview (`includes.tweets`). The same applies to replies, where default operators check both the reply's preview and the direct parent Post's preview.
 
 <Note>
 [Search Posts](/x-api/posts/search/introduction) behaves differently—it only matches on the Quote Tweet's content, not the original Post.
 </Note>
+
+To require a match on—or exclude matches from—the referenced Post alone, use `quoted:(...)` or `reply:(...)`:
+
+- `quoted:(@XDevelopers)` matches Quote Posts quoting a Post that mentions `@XDevelopers`, ignoring standalone Posts and the quoting Post's own words.
+- `reply:(url:docs.x.com)` matches replies to a parent Post linking to `docs.x.com`, even when the reply itself does not repeat the link.
+- `$SPY -quoted:($SPY) -reply:($SPY)` drops Quote Posts and replies that only matched because the quoted or parent Post already contained `$SPY`, while keeping Quote Posts and replies that introduce `$SPY` in their own text.
+
+---
+
+## Matching long-form Posts and X Articles
+
+Default text and entity operators inspect only the ~280-character preview (`data.text` and `data.entities`). They do not match text or entities past character 280 on a long-form Post (`data.note_tweet`) or inside an X Article (`data.article`, where `data.text` is typically only a `t.co` link).
+
+Use `extended:(...)` and `article:(...)` (see [Text-scope operators](/x-api/posts/filtered-stream/integrate/operators#text-scope-operators)) to opt in to full long-form and Article matching:
+
+```
+($SPY OR extended:($SPY) OR article:($SPY)) -is:retweet
+```
+
+- Keep long-post conditions inside the parentheses (`extended:(earnings has:links)` rather than `earnings extended:(has:links)`), and keep Post-level filters such as `lang:`, `from:`, and `-is:retweet` outside.
+- When excluding a term across both short and long-form Posts, negate both (`-#spam -extended:(#spam)`), because short Posts have no `note_tweet` object.
+- A Post that matches multiple clauses or multiple rules is still delivered once, with every matched rule listed in `matching_rules`. Request `tweet.fields=note_tweet,article,referenced_tweets&expansions=referenced_tweets.id` on `GET /2/tweets/search/stream` so delivered payloads include the matched text.
+
+### Rule example: Long-form and Article coverage
+
+Capture original long-form Posts and X Articles mentioning `$SPY`, excluding Reposts, Quote Posts, and replies (note `lang:en` is scoped to `extended:()` because captionless Article Posts have `data.lang` set to `"zxx"`):
+
+```json
+{
+  "value": "(extended:($SPY) lang:en OR article:($SPY)) -is:retweet -is:quote -is:reply",
+  "tag": "spy-longform-and-articles"
+}
+```
 
 ---
 

@@ -1,8 +1,8 @@
 ---
 title: Filtered Stream Operators
 sidebarTitle: Operators
-description: "Complete X API v2 Filtered Stream operator reference, covering keyword, has:, is:, and Enterprise-only semantic embedding: operators for stream rules."
-keywords: ["stream operators", "filter operators", "rule operators", "streaming operators", "filter syntax", "operators guide"]
+description: "Complete X API v2 Filtered Stream operator reference, covering keyword, entity, text-scope (extended, article, quoted, reply), has:, is:, and Enterprise embedding: operators."
+keywords: ["stream operators", "filter operators", "rule operators", "streaming operators", "filter syntax", "operators guide", "extended operator", "article operator", "quoted operator", "reply operator"]
 ---
 
 This page provides a complete list of operators available when [building rules](/x-api/posts/filtered-stream/integrate/build-a-rule) for Filtered Stream.
@@ -26,6 +26,8 @@ Most operators are available on both Pay-per-use and Enterprise. Some advanced o
 | `emoji` | Standalone | Matches an emoji within the Post body | `(😃 OR 😡) 😬` |
 | `"exact phrase"` | Standalone | Matches the exact phrase within the Post body | `("X API" OR #v2) -"filtered stream"` |
 | `"keyword1 keyword2"~N` | Standalone | Proximity match — keywords within N tokens of each other (max N=6) | `"social media"~5` |
+
+By default, keyword, phrase, `#`, `@`, `$`, `url:`, and `has:hashtags` / `has:cashtags` / `has:mentions` / `has:links` operators match the Post's ~280-character preview (`data.text` and `data.entities`), plus the quoted Post's preview on a Quote Post and the parent Post's preview on a reply (`includes.tweets`). On a Repost, they match the original Post. They do not match text or entities past the 280-character preview (`data.note_tweet`) or inside an X Article (`data.article`). Use [text-scope operators](#text-scope-operators) to match long-form Posts, Articles, or referenced Posts specifically.
 
 ---
 
@@ -59,6 +61,28 @@ Most operators are available on both Pay-per-use and Enterprise. Some advanced o
 | `url_title:` | — | Keyword match on expanded URL HTML title metadata | `url_title:snow` |
 | `url_description:` | — | Keyword match on expanded page description metadata | `url_description:weather` |
 | `url_contains:` | — | Literal match on URL content | `url_contains:photos` |
+
+---
+
+## Text-scope operators
+
+Text-scope operators target a specific text field and its entities without changing how plain keyword or entity rules behave. Available on all tiers with Filtered Stream access (Pay-per-use and Enterprise).
+
+| Operator | Type | Summary | Example |
+|:---------|:-----|:--------|:--------|
+| `extended:(...)` | Standalone | Matches the full text and entities (`data.note_tweet`) of a long-form Post over 280 characters, from character 1 to the end of the Post. Does not match Posts of 280 characters or fewer. Evaluates the original Post on Reposts. | `extended:($SPY OR "rate cuts")` |
+| `article:(...)` | Standalone | Matches the title, full plain-text body, and entities (`data.article`) of an X Article. Evaluates the original Post on Reposts. | `article:(#AI url:docs.x.com)` |
+| `quoted:(...)` | Standalone | Matches Quote Posts where the **quoted Post's** ~280-character preview or top-level entities (`includes.tweets`) match, ignoring the quoting Post's own text. Does not inspect the quoted Post's `note_tweet` or `article`. | `quoted:(@XDevelopers)` |
+| `reply:(...)` | Standalone | Matches replies where the **direct parent Post's** ~280-character preview or top-level entities (`includes.tweets`) match, ignoring the reply's own text. Does not inspect the parent Post's `note_tweet` or `article`. | `reply:(url:docs.x.com)` |
+
+### Syntax and supported inner operators
+
+- **Parentheses are required, and scopes cannot nest:** `extended:(earnings)` is valid; `extended:earnings` and `extended:(article:(earnings))` are rejected. Combine separate scopes with `OR` instead.
+- **Allowed inside `( ... )`:** `keyword`, `emoji`, `"exact phrase"`, `#`, `@`, `$`, `url:`, `has:hashtags`, `has:cashtags`, `has:mentions`, `has:links` (conjunction-required — pair with a standalone term), spaces (`AND`), `OR`, `()`, and `-`.
+- **Keep outside `( ... )`:** Post-level and author operators (`lang:`, `from:`, `to:`, `is:`, `has:media`, `has:images`, `has:video_link`, `has:geo`, `context:`, `entity:`, profile/location operators, and proximity `"keyword1 keyword2"~N`) must appear outside the parentheses and apply to the delivered Post (`data`).
+- **Standalone limits still apply:** Stopword-only scopes (`extended:(the)`) and purely negated rules (`-extended:(spam)`) are rejected.
+- **Avoid gating `article:(...)` with `lang:`:** When an X Article is published without accompanying Post text, `data.text` contains only the `t.co` link and `data.lang` is `"zxx"`. Apply `lang:` only to Post clauses, such as `($SPY lang:en) OR (extended:($SPY) lang:en) OR article:($SPY)`.
+- **Requesting matched fields:** Rule evaluation is independent of the fields requested on `GET /2/tweets/search/stream`. Pass `tweet.fields=note_tweet,article,referenced_tweets&expansions=referenced_tweets.id` when connecting so delivered payloads include the text that matched. If a Post matches multiple clauses or multiple rules, it is still delivered once with all matched rules listed in `matching_rules`.
 
 ---
 
