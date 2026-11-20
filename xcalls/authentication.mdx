@@ -1,0 +1,48 @@
+---
+title: Authentication
+sidebarTitle: Authentication
+description: "X Calls API endpoints take a user-context token for the account your agent speaks as; the media WebSocket takes the single-use media token from the join response."
+keywords: ["X Calls API authentication", "OAuth 2.0 scopes", "user context", "dm.write", "media token", "OAuth 1.0a"]
+---
+
+Every X Calls API endpoint needs a **user-context** token for the account your agent speaks as. App-only bearer tokens are rejected with `403 Unsupported Authentication`, because a call participant is always a user.
+
+## OAuth 2.0
+
+Use the Authorization Code flow with PKCE. The token must carry the endpoint's scopes, or the request fails with `403 Missing OAuth2 Scopes`:
+
+| Endpoint | Scopes |
+|:---------|:-------|
+| `POST /2/calls` | `tweet.read` `users.read` `dm.write` |
+| `GET /2/calls/:id` | `tweet.read` `users.read` `dm.read` |
+| `POST /2/calls/:id/join` | `tweet.read` `users.read` `dm.write` |
+| `POST /2/calls/:id/leave` | `tweet.read` `users.read` `dm.write` |
+| `GET /2/calls/scheduled` | `tweet.read` `users.read` `dm.read` |
+| `POST /2/calls/scheduled` | `tweet.read` `users.read` `dm.write` |
+| `GET /2/calls/scheduled/:id` | `tweet.read` `users.read` `dm.read` |
+| `PUT /2/calls/scheduled/:id` | `tweet.read` `users.read` `dm.write` |
+| `DELETE /2/calls/scheduled/:id` | `tweet.read` `users.read` `dm.write` |
+| `POST /2/calls/scheduled/:id/rsvp` | `tweet.read` `users.read` `dm.write` |
+
+## OAuth 1.0a
+
+With OAuth 1.0a user context, your app needs the **Read, write, and Direct Messages** permission.
+
+## What your user may do
+
+Calls follow the same rules as calls placed from the X app:
+
+- Your bot joins a call only as its [join policy](/xcalls/introduction#join-policies) allows.
+- It can start a call in a conversation only if it is a member of that conversation.
+- Only a scheduled call's organizer changes or cancels it, and only its invitees answer it. See [Scheduled calls](/xcalls/scheduled-calls).
+
+## The media token
+
+The media WebSocket does **not** take your OAuth token. It takes the single-use `media_token` from the [join response](/xcalls/api-reference/join-a-call), so the socket can be opened by another process, such as your media server, without sharing user credentials. The token is valid for about 2 minutes (`expires_at`) and works once.
+
+```text
+GET wss://api.x.com/2/calls/media
+Authorization: Bearer <media_token>
+```
+
+Clients that cannot set headers, such as browsers, pass `?token=<media_token>` instead. See [Media WebSocket](/xcalls/media-websocket).

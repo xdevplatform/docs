@@ -1,0 +1,115 @@
+---
+title: Quickstart
+sidebarTitle: Quickstart
+description: "Create an X call, join it as your bot, and connect a voice agent to the media WebSocket that streams the call's audio."
+keywords: ["X Calls API quickstart", "create a call", "join a call", "media WebSocket", "voice agent", "PCM16"]
+---
+
+<Warning>
+  The X Calls API is in development. It isn't generally available yet, and endpoints and payloads may still change.
+</Warning>
+
+This walkthrough starts a call hosted by your bot, puts your agent in it and leaves again. You need an X app and the bot account your agent speaks as.
+
+<Steps>
+  <Step title="Get a user token for your bot">
+    Every endpoint needs a **user-context** token for the account your agent speaks as; app-only bearer tokens are rejected. With OAuth 2.0 (Authorization Code with PKCE), request `tweet.read`, `users.read`, `dm.read` and `dm.write`, which cover every Calls endpoint. See [Authentication](/xcalls/authentication) for the per-endpoint scopes and OAuth 1.0a.
+  </Step>
+  <Step title="Create a call">
+    ```bash
+    curl -X POST "https://api.x.com/2/calls" \
+      -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{"title": "Support line", "join_policy": "open"}'
+    ```
+
+    The call starts empty. Share its `join_url` with the people you want in it.
+
+    ```json
+    {
+      "data": {
+        "id": "t69-8sb-6z5",
+        "title": "Support line",
+        "join_policy": "open",
+        "host_id": "2099230323825426442",
+        "participant_count": 0,
+        "created_at": "2026-09-24T02:10:00.000Z",
+        "join_url": "https://call.x.com/t69-8sb-6z5",
+        "viewer_may_join": true
+      }
+    }
+    ```
+
+    To ring someone instead, pass the `conversation_id` of your bot's conversation with them. See [Calling people](/xcalls/calling-people).
+  </Step>
+  <Step title="Join the call">
+    Choose the sample rate your agent works at. It applies in both directions.
+
+    ```bash
+    curl -X POST "https://api.x.com/2/calls/t69-8sb-6z5/join" \
+      -H "Authorization: Bearer $USER_ACCESS_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{"media": {"type": "websocket", "audio": {"encoding": "pcm16", "sample_rate": 16000}}}'
+    ```
+
+    ```json
+    {
+      "data": {
+        "session_id": "cs_4f1c2a9e0b7d3a51",
+        "media_type": "websocket",
+        "media_url": "wss://api.x.com/2/calls/media",
+        "media_token": "eyJhbGciOiJIUzI1NiJ9…",
+        "expires_at": "2026-09-24T02:12:00.000Z",
+        "admission": "immediate",
+        "call": { "id": "t69-8sb-6z5", "join_policy": "open" }
+      }
+    }
+    ```
+
+    Open the media WebSocket before `expires_at`. The `media_token` works once.
+  </Step>
+  <Step title="Connect your agent">
+    Open `media_url` with the media token. Binary frames carry audio (PCM16 little-endian mono at your sample rate); text frames carry JSON events from X and commands to X.
+
+    ```javascript
+    const ws = new WebSocket(`${session.media_url}?token=${encodeURIComponent(session.media_token)}`);
+    ws.binaryType = "arraybuffer";
+    const send = (command) => ws.send(JSON.stringify(command));
+
+    ws.onmessage = ({ data }) => {
+      if (data instanceof ArrayBuffer) {
+        // 20 ms of everyone else in the call: feed it to your model.
+        return;
+      }
+      const event = JSON.parse(data);
+      switch (event.type) {
+        case "session.joined":
+          // Your agent is in the call. Send its voice as binary frames of any size.
+          break;
+        case "speech.started":
+          send({ type: "audio.clear" }); // someone started talking: stop your agent
+          break;
+        case "session.ended":
+          ws.close();
+          break;
+      }
+    };
+    ```
+
+    The session starts with `session.created`, then `session.joined` once your agent is in the call. See [Media WebSocket](/xcalls/media-websocket) for every event and command, and [Example agent](/xcalls/example-agent) for a complete program.
+  </Step>
+  <Step title="Leave">
+    Send `{"type": "leave"}` on the WebSocket, call `POST /2/calls/:id/leave`, or close the socket. Your WebSocket receives `session.ended` with the reason.
+  </Step>
+</Steps>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Media WebSocket" icon="waveform-lines" href="/xcalls/media-websocket">
+    Session lifecycle, events, commands and turn-taking.
+  </Card>
+  <Card title="Scheduled calls" icon="calendar" href="/xcalls/scheduled-calls">
+    Put calls on the calendar and find the ones to join.
+  </Card>
+</CardGroup>
