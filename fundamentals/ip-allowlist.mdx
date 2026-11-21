@@ -1,0 +1,177 @@
+---
+title: IP Allowlist
+sidebarTitle: IP Allowlist
+icon: lock
+description: Restrict X API requests for your developer account to approved IPv4 and IPv6 addresses or CIDR blocks in the Developer Console.
+keywords: ["IP allowlist", "IP allowlisting", "CIDR", "IPv4", "IPv6", "API security", "access control", "403 Forbidden", "client IP not allowed", "Developer Console"]
+---
+
+import { Button } from '/snippets/button.mdx';
+
+IP allowlisting lets you restrict X API requests made with your account's credentials so that only traffic originating from approved IPv4 or IPv6 addresses and CIDR blocks is accepted. Requests from any other IP address are rejected with `HTTP 403 Forbidden`.
+
+<Button href="https://console.x.com">Open Developer Console</Button>
+
+<Note>
+Self-serve IP allowlist management in the Developer Console is currently rolling out. If you do not see the **IP allowlist** section under **Settings** yet, it has not been enabled for your account.
+</Note>
+
+---
+
+## How it works
+
+<CardGroup cols={2}>
+  <Card title="Account-wide scope" icon="grid-2">
+    One allowlist applies to every App across every Project in your developer account. There are no per-app or per-project lists.
+  </Card>
+  <Card title="All API token types" icon="/icons/xds/icon-key.svg">
+    Enforced for OAuth 2.0 App-Only (Bearer Token), OAuth 2.0 User Context, and OAuth 1.0a User Context requests.
+  </Card>
+  <Card title="Empty list means off" icon="square-check">
+    When an account has no rules, IP allowlisting is off and requests are accepted from any IP address.
+  </Card>
+  <Card title="No Console lockout" icon="/icons/xds/icon-shield-check.svg">
+    The allowlist applies only to X API calls. The Developer Console always works from any IP address.
+  </Card>
+</CardGroup>
+
+### Enforcement details
+
+- **Account-wide:** Adding a rule applies to every App owned by the developer account across all Projects. On user-billed requests (where usage is billed to an authenticated end user's account), the allowlist checked is that of the developer account that owns the calling App.
+- **Turning on and off:** With no rules configured, the allowlist is **Off** and all IP addresses are allowed. Adding your first rule turns the allowlist **On**. Removing the last rule turns it **Off** again.
+- **Propagation delay:** Rule additions and removals typically take effect within **seconds**, and within a few minutes at most.
+- **X MCP (`api.x.com/mcp`):** Tool calls (`tools/call`) are enforced against your account's IP allowlist using the client's IP address. Non-tool discovery methods such as `initialize` and `tools/list` are not blocked by the allowlist, but invoking a tool from an unapproved IP returns `403 Forbidden`.
+- **Not covered:**
+  - The [Developer Console](https://console.x.com) is never restricted by the allowlist, so an Administrator can always sign in from any address to update or remove rules.
+  - Public, unauthenticated endpoints (and `GET /2/chat/features`) are not checked.
+  - Real-time streaming connections (Filtered Stream and Sampled Stream) are not currently covered by the IP allowlist.
+
+---
+
+## Managing your IP allowlist
+
+<Note>
+Only account **Administrators** can view, add, or remove IP allowlist rules. Other team members (such as Developers) can see the section in **Settings**, but cannot view or modify the list.
+</Note>
+
+<Steps>
+  <Step title="Open Settings in the Developer Console">
+    Sign in to the [Developer Console](https://console.x.com) as an account Administrator and open **Settings** (select your account in the sidebar or navigation bar).
+  </Step>
+  <Step title="Open the IP allowlist page">
+    Scroll to the **IP allowlist** section and select **Manage IP allowlist**.
+  </Step>
+  <Step title="Add your egress IP addresses or CIDR blocks">
+    Enter an IPv4 or IPv6 address or CIDR block and an optional label (up to 64 characters), then select **Add rule**.
+
+    The page also shows your current browser IP address, indicates whether an existing rule covers it, and offers a **Use this address** shortcut. Remember that servers, NAT gateways, and CI runners usually call the X API from different egress IP addresses than your workstation.
+  </Step>
+  <Step title="Confirm turning on the allowlist">
+    When adding the first rule, the Console prompts **Turn on the IP allowlist?** to confirm that you want to start rejecting traffic from all other IP addresses. Select **Add rule and turn on** to activate enforcement.
+  </Step>
+</Steps>
+
+<Warning>
+**Add every egress IP before or right as you turn the allowlist on.** Once the first rule is added, X API requests from any address outside the list are rejected with `HTTP 403 Forbidden` across all Apps in your account. If you lock out a production server, sign in to the Developer Console from any address to add the missing block or remove all rules.
+</Warning>
+
+### Removing rules
+
+- Removing a rule while other rules remain causes requests from that block to be rejected with `HTTP 403 Forbidden` (unless another remaining rule covers those addresses).
+- Removing the **last** rule turns the allowlist **Off** so X API requests are accepted from any IP address again.
+
+---
+
+## Accepted formats, normalization, and limits
+
+| Setting | Rule |
+|:--------|:-----|
+| **Maximum rules** | Up to **100** active rules per account |
+| **Label** | Optional; up to **64 characters** (leading and trailing whitespace is trimmed; control characters are not allowed) |
+| **IPv4 addresses** | Single address (e.g., `203.0.113.7`) normalized to `/32`, or CIDR block with prefix `/1`–`/32` (e.g., `203.0.113.0/24`). Leading zeros in octets are not allowed. |
+| **IPv6 addresses** | Single address (e.g., `2001:db8::1`) normalized to `/128`, or CIDR block with prefix `/1`–`/128` (e.g., `2001:db8::/32`). Normalized to lowercase RFC 5952 form. |
+| **Duplicates** | Duplicate blocks (after normalization) cannot be added again. |
+
+### Normalization rules
+
+Before saving, every entry is normalized to its canonical CIDR form (and the Developer Console previews **Will be saved as …** whenever the normalized form differs from what you typed):
+
+- **Bare addresses:** A single IPv4 address becomes a `/32` block and a single IPv6 address becomes a `/128` block.
+- **Host bits cleared:** Any host bits past the prefix length are zeroed out.
+- **IPv6 canonicalization:** IPv6 blocks are stored in lowercase RFC 5952 canonical notation.
+- **IPv4-mapped IPv6 addresses:** Blocks inside the IPv4-mapped IPv6 range (`::ffff:0:0/96`, with prefix lengths `/97`–`/128`) are normalized to their equivalent IPv4 CIDR block. At request time, IPv4-mapped IPv6 client addresses are also matched as IPv4 against your IPv4 rules.
+
+| Input | Saved as |
+|:------|:---------|
+| `203.0.113.7` | `203.0.113.7/32` |
+| `203.0.113.7/24` | `203.0.113.0/24` |
+| `2001:0DB8:0000::1/64` | `2001:db8::/64` |
+| `::ffff:64.63.31.7/120` | `64.63.31.0/24` |
+| `::ffff:203.0.113.7` | `203.0.113.7/32` |
+
+### Rejected CIDR blocks
+
+The following blocks are rejected on validation:
+
+- **`/0` blocks** (`0.0.0.0/0`, `::/0`, and `::ffff:0:0/96`, which maps to `0.0.0.0/0`): A `/0` block allows every address. To accept requests from any IP address, remove all rules instead.
+- **Wide IPv6 blocks covering `::ffff:0:0/96`:** Any IPv6 block with a prefix length shorter than `/96` that encompasses the IPv4-mapped range (such as `::/1`, `::/80`, or `::fffe:0:0/95`) is rejected. Because IPv4-mapped client addresses are matched against IPv4 rules, add explicit IPv4 rules instead.
+
+---
+
+## Error response
+
+When an account has an active IP allowlist and a request comes from an IP address not covered by any rule, the X API rejects the request before running the endpoint handler (the request is not executed or billed) and returns `HTTP 403 Forbidden` with `Content-Type: application/problem+json`:
+
+```json
+{
+  "detail": "client IP not allowed: 198.51.100.1",
+  "status": 403,
+  "title": "Forbidden",
+  "type": "https://api.x.com/2/problems/not-authorized-for-resource"
+}
+```
+
+- `detail` includes the client IP address observed by the X API (`client IP not allowed: <ip>`). If no usable client IP is available on the request, enforcement fails closed and returns `"detail": "client IP not allowed"`.
+- For security, the error response never discloses the rules configured on the account's allowlist.
+
+---
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="403 Forbidden: client IP not allowed: <ip>">
+    Your request reached the X API from an IP address that is not covered by your account's IP allowlist:
+
+    1. **Inspect the reported IP** in `detail` (`client IP not allowed: <ip>`). This is the exact egress IP address the X API observed for the request.
+    2. **Check your egress paths.** Cloud infrastructure, NAT gateways, proxies, serverless functions, and CI runners often use different outbound IPs than your local machine or inbound load balancer.
+    3. **Check IPv4 vs. IPv6 egress.** IPv4 rules match only IPv4 (and IPv4-mapped IPv6) addresses, and IPv6 rules match only IPv6 addresses. If your server sends requests over IPv6 on a dual-stack network but your allowlist only contains IPv4 blocks, add your IPv6 egress CIDR block or force IPv4 egress.
+    4. **Check account-wide impact.** Remember that one allowlist applies to every App across every Project in the developer account.
+    5. **Add the block and wait briefly.** Have an account Administrator add the observed IP or CIDR block in **Developer Console → Settings → IP allowlist**, then allow a few seconds to a few minutes for the update to propagate before retrying.
+  </Accordion>
+
+  <Accordion title="Changes have not taken effect yet">
+    Rule additions and removals typically propagate within seconds, but can take up to a few minutes. Wait briefly and retry the request.
+  </Accordion>
+
+  <Accordion title="I cannot view or edit the IP allowlist in the Developer Console">
+    - **Check your role:** Only account **Administrators** can view, add, or remove rules. Ask an Administrator on your account to make changes.
+    - **Check rollout availability:** Self-serve IP allowlist management is rolling out gradually. If the **IP allowlist** section does not appear under **Settings**, it is not yet enabled for your account.
+  </Accordion>
+
+  <Accordion title="We locked out our production servers">
+    The IP allowlist does not restrict access to [console.x.com](https://console.x.com). Sign in as an account Administrator from any IP address, open **Settings → IP allowlist**, and either add the missing server egress CIDR blocks or remove all rules to immediately disable enforcement (propagates within seconds to a few minutes).
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Related resources
+
+<CardGroup cols={2}>
+  <Card title="Security" icon="shield-halved" href="/fundamentals/security">
+    Credential storage, OAuth best practices, and key rotation.
+  </Card>
+  <Card title="Response Codes & Errors" icon="/icons/xds/icon-warning.svg" href="/x-api/fundamentals/response-codes-and-errors">
+    HTTP status codes, problem details format, and error troubleshooting.
+  </Card>
+</CardGroup>
