@@ -1,0 +1,81 @@
+---
+title: Update Broadcast by ID
+sidebarTitle: Update Broadcast by ID
+description: "PUT /2/broadcasts/:id changes the title, chat option or live category of one of the authenticated user's broadcasts and returns the broadcast."
+keywords: ["update broadcast", "PUT /2/broadcasts/:id", "change broadcast title", "chat_option", "live_category_id", "change live category"]
+openapi: "put /2/broadcasts/{id}"
+---
+
+Changes the title, chat option or live category of one of the authenticated user's broadcasts and returns the updated broadcast. `:id` is the alphanumeric broadcast ID. A broadcast can be updated before it starts, while it is live and after it has ended.
+
+To end a broadcast, use [End Broadcast](/livestream-api/broadcasts/end-broadcast) (`PUT /2/broadcasts/:id/state`). To change a scheduled broadcast before it starts, use [Update Scheduled Broadcast](/livestream-api/scheduled-broadcasts/update-scheduled-broadcast).
+
+## Request body
+
+Send at least one of `title`, `chat_option` and `live_category_id`. Fields you leave out keep their values, and a field set to `null` counts as left out.
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| `title` | string | The new title. It can't be empty. |
+| `chat_option` | integer | Who can chat, `0` to `6`; see [chat option values](/livestream-api/broadcasts/go-live#chat-option-values). |
+| `live_category_id` | string | The new live category, for example `gaming`. Use an `id` from [Get Live Categories](/livestream-api/broadcasts/get-live-categories). Send an empty string (`""`) to remove the broadcast's category. |
+
+The body is strictly typed: `chat_option` must be a JSON integer (a string such as `"2"` is rejected). Any other field, such as `locale` or `should_not_tweet`, is rejected with `400`.
+
+This request changes the title and sets the category:
+
+```json
+{
+  "title": "Finals, game 2",
+  "live_category_id": "sports"
+}
+```
+
+This request removes the category and changes nothing else:
+
+```json
+{
+  "live_category_id": ""
+}
+```
+
+## Response
+
+On success, the response is `200` with the broadcast in `data`, in the same shape [Go Live](/livestream-api/broadcasts/go-live#responses) returns:
+
+```json
+{
+  "data": {
+    "id": "1AbCdEfGhIjKl",
+    "broadcast_id": "1AbCdEfGhIjKl",
+    "state": "RUNNING",
+    "title": "Finals, game 2",
+    "chat_option": 2,
+    "live_category_id": "sports",
+    "share_url": "https://x.com/i/broadcasts/1AbCdEfGhIjKl"
+  }
+}
+```
+
+This example is shortened. Fields without a value are omitted, so `live_category_id` is missing when the broadcast has no category.
+
+Use this response as the result of the update. A [`GET /2/broadcasts/:id`](/livestream-api/broadcasts/get-broadcast-by-id) sent immediately afterwards can return the previous values for a moment.
+
+## Authentication and rate limit
+
+Requires [user context authentication](/livestream-api/authentication): OAuth 2.0 with the `broadcast.read` and `broadcast.write` scopes, or OAuth 1.0a with read and write access. The route allows 100 requests per 15 minutes per user.
+
+## Errors
+
+Errors use the standard X API problem format.
+
+| Status | Problem `type` | When | What to do |
+|:-------|:---------------|:-----|:-----------|
+| `400` | `https://api.x.com/2/problems/invalid-request` | The body is invalid: none of the three fields is set, `title` is empty, `chat_option` is outside `0`–`6`, a value has the wrong type, or there is an unknown field. The message for each problem is in the `errors` array. | Fix the request body. |
+| `400` | `https://api.x.com/2/problems/invalid-request` | `` `live_category_id` is not a live category id. `` The id isn't in the list of live categories. The value isn't echoed back. | Pass an `id` from [Get Live Categories](/livestream-api/broadcasts/get-live-categories), or `""` to remove the category. |
+| `401` | `about:blank` | The request isn't authenticated. | Send a valid user-context access token. |
+| `403` | `https://api.x.com/2/problems/missing-scopes` | The OAuth 2.0 token lacks `broadcast.write`. | Re-authorize the user with the `broadcast.read` and `broadcast.write` scopes. |
+| `403` | `about:blank` | The account isn't permitted to update the broadcast. | Don't retry. |
+| `404` | `https://api.x.com/2/problems/resource-not-found` | The broadcast doesn't exist or belongs to another user. | Check the broadcast ID. |
+| `409` | `https://api.x.com/2/problems/conflict` | The broadcast can't be edited, for example because it was deleted or moderated. | Don't retry. |
+| `503` | `about:blank` | Temporary failure. A `503` doesn't confirm whether the update was applied. | Retry with backoff. The request is safe to repeat. |
