@@ -1,3 +1,38 @@
 ---
 openapi: get /2/tweets/analytics
 ---
+
+Post analytics returns activity on your own Posts during the time window you request. You must authenticate as the Post's author with user context.
+
+## How the metrics are counted
+
+- **Event totals in the window.** Each metric counts events that happened between `start_time` and `end_time`. It is not a snapshot of the Post. For example, `likes` is how many times the Post was liked during the window, not how many accounts like it now.
+- **Organic only.** Activity from promoted (ad) impressions of the Post is not included.
+- **Hourly buckets.** Metrics are stored by the hour. `start_time` is rounded down to the start of its hour. `end_time` is rounded up to the next hour, unless it is already on the hour. A window of `14:15` to `14:45` returns the `14:00`–`15:00` hour.
+- **`end_time` is exclusive.** After rounding, the hour that begins at `end_time` is not included. A window of `00:00` to `06:00` covers six hours, ending with the `05:00`–`06:00` hour.
+- **Limits.** The window can be at most 30 days long. `end_time` can be at most one year in the past, and no later than the end of the current hour.
+
+`granularity` only changes how the window is split up: `hourly`, `daily`, `weekly`, or a single `total`.
+
+## Likes and unlikes
+
+`likes` and `unlikes` are separate event counts. **Do not subtract `unlikes` from `likes`** to get a like count:
+
+- An unlike in the window can undo a like from before the window, so `likes - unlikes` can be negative.
+- Promoted likes are excluded here but are part of the Post's visible like count.
+
+For the number of likes a Post has right now, use the Post lookup endpoints:
+
+| You want | Use |
+|:---|:---|
+| Current like count, all sources | `public_metrics.like_count` |
+| Current organic (non-promoted) like count, your own Posts created in the last 30 days | `organic_metrics.like_count` (user context) |
+| How many times the Post was liked or unliked during a window | `likes` and `unlikes` from this endpoint |
+
+### API version 2.174 and later
+
+Starting in API version 2.174, `likes` counts only users liking the Post and `unlikes` counts only users removing a like.
+
+In earlier versions, the counts also include internal corrections that hide or restore an existing like on the Post. They are not actions by users, but they are counted as `unlikes` (hide) and `likes` (restore). That inflates both numbers, sometimes far above the Post's visible like count.
+
+To use 2.174 before it becomes the default version, send the header `x-api-minor-version: 174` with your request.
