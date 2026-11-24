@@ -69,6 +69,7 @@ Pick one of three routes:
 | Grok (web) | `https://grok.com/connectors-oauth-exchange-code/` |
 | Cursor (Desktop app) | `http://localhost:8787/callback` |
 | Cursor (Web / Cloud Agents) | `https://www.cursor.com/agents/mcp/oauth/callback` |
+| Claude.ai (web custom connector) | `https://claude.ai/api/mcp/auth_callback` |
 
 4. **Copy your OAuth 2.0 Client ID** from the app's **Keys and tokens** page (the long string, not the numeric app ID).
 
@@ -209,6 +210,21 @@ Create `~/.cursor/mcp.json` (global, all projects) or `.cursor/mcp.json` (this p
 </CodeGroup>
 
 Include `"offline.access"` in `auth.scopes` so Cursor receives a refresh token (you can also use `"${env:X_MCP_CLIENT_ID}"` interpolation instead of hardcoding `CLIENT_ID`). Omit `CLIENT_SECRET` for a Native App (public client). Then open **Cursor → Settings → MCP**, sign in when prompted, and confirm **xapi** shows a green dot and its tools.
+
+
+#### 4. Claude.ai (web)
+
+Claude.ai connects to `https://api.x.com/mcp` as a custom connector with your X app's OAuth 2.0 Client ID. Use a **Native App** (public client, PKCE):
+
+1. In the [X Developer Console](https://developer.x.com), open your app's **User authentication settings**, set the app type to **Native App**, and add `https://claude.ai/api/mcp/auth_callback` as a callback URI.
+2. Copy the app's **OAuth 2.0 Client ID** from **Keys and tokens**.
+3. In Claude.ai, add a custom connector with the URL `https://api.x.com/mcp`.
+4. Under **Advanced settings**, enter only your **OAuth Client ID** and leave **OAuth Client Secret** blank.
+5. Connect, then complete the X consent screen.
+
+<Warning>
+**Don't use a Web App or Automated App with Claude.ai.** These are confidential clients, and Claude.ai sends their secret in the token request body (`client_secret_post`). X's token endpoint only accepts a confidential client's secret through HTTP Basic auth (`client_secret_basic`), so the connection fails after you click **Authorize**. Use a Native App and leave the secret blank. See [anthropics/claude-ai-mcp#667](https://github.com/anthropics/claude-ai-mcp/issues/667).
+</Warning>
 
 ### Authentication
 
@@ -384,6 +400,7 @@ npx -y @xdevplatform/xurl mcp https://api.x.com/mcp
 | Browser never opens (`xurl mcp`) | No display (headless) → run `xurl auth oauth2 --headless` first; ensure `npx` resolves |
 | `401` / `token refresh failed` | App credentials wrong, refresh token revoked, or `offline.access` not requested → re-authenticate (or re-run `xurl auth oauth2 [--app NAME]`) |
 | Token exchange rejected for confidential app | X supports `none` (PKCE only) and `client_secret_basic`, not `client_secret_post` → switch to a Native App (public client) or configure `client_secret_basic` |
+| Claude.ai connector fails after you click **Authorize** | The app is a Web App or Automated App, and Claude.ai sends the secret with `client_secret_post` → switch to a **Native App** and enter only the Client ID in the connector's **Advanced settings** (see [Claude.ai (web)](#4-claudeai-web)) |
 | Browser shows "Something went wrong — You weren't able to give access to the App" | `CLIENT_ID` (and `CLIENT_SECRET` if confidential) missing or invalid → check your client OAuth config or `xurl` env vars |
 | Redirect/callback error in browser | Callback URI not registered on the app (e.g. `http://127.0.0.1:8080/callback` for Grok Build CLI, `http://localhost:8787/callback` for Cursor Desktop, `http://localhost:8080/callback` for `xurl`) |
 | `client-not-enrolled` after login | App isn't in the right X package/environment → in the console move it to **Pay-per-use** + **Production** |
