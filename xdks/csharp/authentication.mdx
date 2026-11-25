@@ -1,0 +1,97 @@
+---
+title: C# Authentication
+sidebarTitle: Authentication
+description: Authenticate the C# / .NET XDK (XDevPlatform.Xdk) using Bearer Tokens, OAuth 2.0 PKCE with token refresh, or OAuth 1.0a user context.
+---
+
+`XClient` supports all three X API v2 authentication modes through `XClientOptions`:
+
+1. **Bearer Token (App-Only)** — Public read, search, and filtered/sample streaming endpoints.
+2. **OAuth 2.0 User Context with PKCE** — Scoped user-authorized calls (`POST /2/tweets`, bookmarks, DMs, X Chat) with refresh token support.
+3. **OAuth 1.0a User Context** — HMAC-SHA1 request signing.
+
+## 1. Bearer Token (App-Only)
+
+```csharp
+using System;
+using Xdk;
+
+using var client = new XClient(new XClientOptions
+{
+    BearerToken = Environment.GetEnvironmentVariable("X_BEARER_TOKEN"),
+});
+
+var user = await client.Users.GetByUsernameAsync("XDevelopers");
+```
+
+## 2. OAuth 2.0 User Context with PKCE
+
+If you already hold an OAuth 2.0 user access token:
+
+```csharp
+using var client = new XClient(new XClientOptions
+{
+    AccessToken = Environment.GetEnvironmentVariable("X_ACCESS_TOKEN"),
+});
+
+var me = await client.Users.GetMeAsync();
+```
+
+To run the full RFC 7636 PKCE authorization flow and enable token refresh via `OAuth2Pkce`:
+
+```csharp
+using System;
+using Xdk;
+using Xdk.Auth;
+using Xdk.Models;
+
+var oauth2 = new OAuth2Pkce(
+    clientId: Environment.GetEnvironmentVariable("X_CLIENT_ID")!,
+    redirectUri: "http://localhost:8080/callback",
+    clientSecret: Environment.GetEnvironmentVariable("X_CLIENT_SECRET"), // null for public clients
+    scopes: new[] { "tweet.read", "tweet.write", "users.read", "offline.access" }
+);
+
+// 1. Direct the user to authorize your application
+string authorizationUrl = oauth2.GetAuthorizationUrl("random-csrf-state");
+
+// 2. Exchange the authorization code from the callback URL
+OAuth2Token token = await oauth2.ExchangeCodeAsync(callbackCode);
+
+// 3. Create XClient bound to the OAuth2Pkce manager
+using var client = new XClient(new XClientOptions
+{
+    OAuth2 = oauth2,
+});
+
+var created = await client.Posts.CreateAsync(new CreatePostsRequest
+{
+    Text = "Hello from C# XDK!",
+});
+
+// Refresh tokens explicitly when needed (requires offline.access scope)
+await client.RefreshTokenAsync();
+```
+
+## 3. OAuth 1.0a User Context
+
+```csharp
+using System;
+using Xdk;
+using Xdk.Auth;
+
+var oauth1 = new OAuth1(
+    apiKey: Environment.GetEnvironmentVariable("X_API_KEY")!,
+    apiSecret: Environment.GetEnvironmentVariable("X_API_SECRET")!,
+    callback: "oob",
+    accessToken: Environment.GetEnvironmentVariable("X_ACCESS_TOKEN"),
+    accessTokenSecret: Environment.GetEnvironmentVariable("X_ACCESS_TOKEN_SECRET")
+);
+
+using var client = new XClient(new XClientOptions
+{
+    OAuth1 = oauth1,
+});
+
+var me = await client.Users.GetMeAsync();
+```

@@ -1,0 +1,411 @@
+---
+title: "CallsClient (Python XDK)"
+sidebarTitle: "Calls"
+description: "Python XDK CallsClient reference — 10 methods for X API v2 Calls endpoints."
+---
+
+Access **Calls** endpoints via `client.calls` (`CallsClient`).
+
+## Methods
+
+| Method | Endpoint | Behavior | Summary |
+| :--- | :--- | :--- | :--- |
+| [`cancel_scheduled_call`](#cancel_scheduled_call) | `DELETE /2/calls/scheduled/{id}` | Standard | Cancel a Scheduled Call |
+| [`create_call`](#create_call) | `POST /2/calls` | Standard | Create a Call |
+| [`get_call`](#get_call) | `GET /2/calls/{id}` | Standard | Get a Call |
+| [`get_scheduled_call`](#get_scheduled_call) | `GET /2/calls/scheduled/{id}` | Standard | Get a Scheduled Call |
+| [`join_call`](#join_call) | `POST /2/calls/{id}/join` | Standard | Join a Call |
+| [`leave_call`](#leave_call) | `POST /2/calls/{id}/leave` | Standard | Leave a Call |
+| [`list_scheduled`](#list_scheduled) | `GET /2/calls/scheduled` | Standard | List Scheduled Calls |
+| [`respond_to_scheduled_call`](#respond_to_scheduled_call) | `POST /2/calls/scheduled/{id}/rsvp` | Standard | Respond to a Scheduled Call |
+| [`schedule_call`](#schedule_call) | `POST /2/calls/scheduled` | Standard | Schedule a Call |
+| [`update_scheduled_call`](#update_scheduled_call) | `PUT /2/calls/scheduled/{id}` | Standard | Update a Scheduled Call |
+
+## `cancel_scheduled_call`
+
+<Badge color="red">DELETE</Badge> `/2/calls/scheduled/{id}`
+
+**Cancel a Scheduled Call**
+
+Cancels a scheduled call the authenticated user organizes, and takes it off invitees' calendars. For a recurring call, scope and occurrence_start_time pick the occurrences: all of them (the default), one, or one and every one after it. Cancelling what is already cancelled succeeds.
+
+```python
+import os
+from xdk import Client
+
+client = Client(access_token=os.environ["X_ACCESS_TOKEN"])
+
+response = client.calls.cancel_scheduled_call(id="1895000000000000000")
+print(response)
+```
+
+### Parameters
+
+<ResponseField name="id" type="str" required>
+  `id` (path parameter).
+</ResponseField>
+
+<Expandable title="Optional keyword arguments (3)">
+
+<ResponseField name="scope" type={"Literal[\"all\", \"this\", \"this_and_following\"]"}>
+  Which occurrences: all (the default without occurrence_start_time), this (the default with it), or this_and_following.
+</ResponseField>
+
+<ResponseField name="occurrence_start_time" type="str">
+  Start of the occurrence that scope this or this_and_following refers to (RFC 3339).
+</ResponseField>
+
+<ResponseField name="notify_invitees" type="bool">
+  Whether invitees get an email about it. Defaults to true.
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `CancelScheduledCallResponse`
+
+---
+
+## `create_call`
+
+<Badge color="green">POST</Badge> `/2/calls`
+
+**Create a Call**
+
+Starts an X call hosted by the authenticated user (typically a bot). Pass an XChat conversation_id to start the call in that conversation, or omit it for a standalone call anyone can join with the returned join_url (subject to join_policy). The call starts empty: put an agent in it with POST /2/calls/:id/join. When the host joins a conversation call, the other members are rung.
+
+```python
+import os
+from xdk import Client
+from xdk.calls.models import CreateCallRequest
+
+client = Client(access_token=os.environ["X_ACCESS_TOKEN"])
+
+response = client.calls.create_call(body=CreateCallRequest(conversation_id="1500000000000000000"))
+print(response)
+```
+
+### Parameters
+
+<ResponseField name="body" type="CreateCallRequest" required>
+  Request payload.
+</ResponseField>
+
+**Returns:** `CreateCallResponse`
+
+---
+
+## `get_call`
+
+<Badge color="blue">GET</Badge> `/2/calls/{id}`
+
+**Get a Call**
+
+Returns a call's title, join policy, host and participant count, and whether the authenticated user may join it without asking the host.
+
+```python
+import os
+from xdk import Client
+
+client = Client(access_token=os.environ["X_ACCESS_TOKEN"])
+
+response = client.calls.get_call(id="1895000000000000000")
+print(response)
+```
+
+### Parameters
+
+<ResponseField name="id" type="str" required>
+  `id` (path parameter).
+</ResponseField>
+
+<Expandable title="Optional keyword arguments (3)">
+
+<ResponseField name="call_fields" type={"List[Literal[\"conversation_id\", \"created_at\", \"id\", \"join_policy\", \"join_url\", \"participant_count\", \"title\", \"viewer_may_join\"]]"}>
+  A comma separated list of Call fields to display.
+</ResponseField>
+
+<ResponseField name="expansions" type={"List[Literal[\"host_id\"]]"}>
+  A comma separated list of fields to expand.
+</ResponseField>
+
+<ResponseField name="user_fields" type={"List[Literal[\"active_follower_count\", \"confirmed_email\", \"connection_status\", \"created_at\", \"description\", \"entities\", \"id\", \"is_identity_verified\", \"location\", \"name\", \"org_only\", \"parody\", \"profile_banner_url\", \"profile_image_url\", \"protected\", \"public_metrics\", \"receives_your_chat\", \"receives_your_dm\", \"subscriber_count\", \"subscribes_to_you\", \"subscription\", \"subscription_type\", \"url\", \"username\", \"verified\", \"verified_followers_count\", \"verified_type\", \"withheld\"]]"}>
+  A comma separated list of User fields to display.
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `GetCallResponse`
+
+---
+
+## `get_scheduled_call`
+
+<Badge color="blue">GET</Badge> `/2/calls/scheduled/{id}`
+
+**Get a Scheduled Call**
+
+Returns a scheduled call the authenticated user organizes or is invited to, at its occurrence running now or its next one within a year: its time, call, recurrence and who is invited and how they answered. Changes can take a few seconds to show here. Use scheduled_call.fields to select which fields are returned.
+
+```python
+import os
+from xdk import Client
+
+client = Client(access_token=os.environ["X_ACCESS_TOKEN"])
+
+response = client.calls.get_scheduled_call(id="1895000000000000000")
+print(response)
+```
+
+### Parameters
+
+<ResponseField name="id" type="str" required>
+  `id` (path parameter).
+</ResponseField>
+
+<Expandable title="Optional keyword arguments (4)">
+
+<ResponseField name="scheduled_call_fields" type={"List[Literal[\"calendar\", \"call_id\", \"description\", \"end_time\", \"id\", \"join_url\", \"occurrence_start_time\", \"recurrence\", \"start_time\", \"status\", \"time_zone\", \"title\"]]"}>
+  A comma separated list of ScheduledCall fields to display.
+</ResponseField>
+
+<ResponseField name="expansions" type={"List[Literal[\"call_id\", \"invitees\", \"organizer_id\"]]"}>
+  A comma separated list of fields to expand.
+</ResponseField>
+
+<ResponseField name="call_fields" type={"List[Literal[\"conversation_id\", \"created_at\", \"id\", \"join_policy\", \"join_url\", \"participant_count\", \"title\", \"viewer_may_join\"]]"}>
+  A comma separated list of Call fields to display.
+</ResponseField>
+
+<ResponseField name="user_fields" type={"List[Literal[\"active_follower_count\", \"confirmed_email\", \"connection_status\", \"created_at\", \"description\", \"entities\", \"id\", \"is_identity_verified\", \"location\", \"name\", \"org_only\", \"parody\", \"profile_banner_url\", \"profile_image_url\", \"protected\", \"public_metrics\", \"receives_your_chat\", \"receives_your_dm\", \"subscriber_count\", \"subscribes_to_you\", \"subscription\", \"subscription_type\", \"url\", \"username\", \"verified\", \"verified_followers_count\", \"verified_type\", \"withheld\"]]"}>
+  A comma separated list of User fields to display.
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `GetScheduledCallResponse`
+
+---
+
+## `join_call`
+
+<Badge color="green">POST</Badge> `/2/calls/{id}/join`
+
+**Join a Call**
+
+Starts a media session that takes part in the call as the authenticated user. The response carries a media_url and a short-lived media_token: open a WebSocket to media_url with the token as a Bearer credential to exchange PCM16 audio and events with the call; the user enters the call when the WebSocket connects. On a closed or trusted call the session asks the host first (admission: requires_approval).
+
+```python
+import os
+from xdk import Client
+from xdk.calls.models import JoinCallRequest
+
+client = Client(access_token=os.environ["X_ACCESS_TOKEN"])
+
+response = client.calls.join_call(
+    id="1895000000000000000",
+    body=JoinCallRequest(media={"type": "websocket"})
+)
+print(response)
+```
+
+### Parameters
+
+<ResponseField name="id" type="str" required>
+  `id` (path parameter).
+</ResponseField>
+
+<ResponseField name="body" type="JoinCallRequest" required>
+  Request payload.
+</ResponseField>
+
+**Returns:** `JoinCallResponse`
+
+---
+
+## `leave_call`
+
+<Badge color="green">POST</Badge> `/2/calls/{id}/leave`
+
+**Leave a Call**
+
+Ends the authenticated user's media session in the call (its WebSocket receives session.ended with reason left) and removes the user from the call.
+
+```python
+import os
+from xdk import Client
+
+client = Client(access_token=os.environ["X_ACCESS_TOKEN"])
+
+response = client.calls.leave_call(id="1895000000000000000")
+print(response)
+```
+
+### Parameters
+
+<ResponseField name="id" type="str" required>
+  `id` (path parameter).
+</ResponseField>
+
+**Returns:** `LeaveCallResponse`
+
+---
+
+## `list_scheduled`
+
+<Badge color="blue">GET</Badge> `/2/calls/scheduled`
+
+**List Scheduled Calls**
+
+Returns the X calls on the authenticated user's calendar, earliest first: events on their X Calls calendar, and events on the Microsoft Outlook calendars they linked to X whose conference is an X call. Calls still running at start_time are included. The window defaults to the next 24 hours and may span at most 7 days. Use scheduled_call.fields to select which fields are returned.
+
+When both are provided, `start_time` must be earlier than `end_time`.
+
+```python
+import os
+from xdk import Client
+
+client = Client(access_token=os.environ["X_ACCESS_TOKEN"])
+
+response = client.calls.list_scheduled()
+print(response)
+```
+
+### Parameters
+
+<Expandable title="Optional keyword arguments (7)">
+
+<ResponseField name="start_time" type="str">
+  Calls still running at this time or starting after it (RFC 3339). Defaults to now.
+</ResponseField>
+
+<ResponseField name="end_time" type="str">
+  Calls starting before this time (RFC 3339). Defaults to 24 hours after start_time.
+</ResponseField>
+
+<ResponseField name="max_results" type="int">
+  The most calls to return. Defaults to 20.
+</ResponseField>
+
+<ResponseField name="scheduled_call_fields" type={"List[Literal[\"calendar\", \"call_id\", \"description\", \"end_time\", \"id\", \"join_url\", \"occurrence_start_time\", \"recurrence\", \"start_time\", \"status\", \"time_zone\", \"title\"]]"}>
+  A comma separated list of ScheduledCall fields to display.
+</ResponseField>
+
+<ResponseField name="expansions" type={"List[Literal[\"call_id\", \"invitees\", \"organizer_id\"]]"}>
+  A comma separated list of fields to expand.
+</ResponseField>
+
+<ResponseField name="call_fields" type={"List[Literal[\"conversation_id\", \"created_at\", \"id\", \"join_policy\", \"join_url\", \"participant_count\", \"title\", \"viewer_may_join\"]]"}>
+  A comma separated list of Call fields to display.
+</ResponseField>
+
+<ResponseField name="user_fields" type={"List[Literal[\"active_follower_count\", \"confirmed_email\", \"connection_status\", \"created_at\", \"description\", \"entities\", \"id\", \"is_identity_verified\", \"location\", \"name\", \"org_only\", \"parody\", \"profile_banner_url\", \"profile_image_url\", \"protected\", \"public_metrics\", \"receives_your_chat\", \"receives_your_dm\", \"subscriber_count\", \"subscribes_to_you\", \"subscription\", \"subscription_type\", \"url\", \"username\", \"verified\", \"verified_followers_count\", \"verified_type\", \"withheld\"]]"}>
+  A comma separated list of User fields to display.
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `ListScheduledResponse`
+
+---
+
+## `respond_to_scheduled_call`
+
+<Badge color="green">POST</Badge> `/2/calls/scheduled/{id}/rsvp`
+
+**Respond to a Scheduled Call**
+
+Accepts, declines or tentatively accepts an invitation to a scheduled call for the authenticated user. For a recurring call, scope and occurrence_start_time pick the occurrences the answer is for: all of them (the default), one, or one and every one after it.
+
+```python
+import os
+from xdk import Client
+from xdk.calls.models import RespondToScheduledCallRequest
+
+client = Client(access_token=os.environ["X_ACCESS_TOKEN"])
+
+response = client.calls.respond_to_scheduled_call(
+    id="1895000000000000000",
+    body=RespondToScheduledCallRequest(response="accepted")
+)
+print(response)
+```
+
+### Parameters
+
+<ResponseField name="id" type="str" required>
+  `id` (path parameter).
+</ResponseField>
+
+<ResponseField name="body" type="RespondToScheduledCallRequest" required>
+  Request payload.
+</ResponseField>
+
+**Returns:** `RespondToScheduledCallResponse`
+
+---
+
+## `schedule_call`
+
+<Badge color="green">POST</Badge> `/2/calls/scheduled`
+
+**Schedule a Call**
+
+Puts an X call on the authenticated user's X Calls calendar, with them as its organizer, and invites people to it. The call exists right away: share its join_url, or put an agent in it at start time with POST /2/calls/:id/join. A recurrence (an RFC 5545 RRULE) repeats it. Invitees get an email unless notify_invitees is false.
+
+```python
+import os
+from xdk import Client
+from xdk.calls.models import ScheduleCallRequest
+
+client = Client(access_token=os.environ["X_ACCESS_TOKEN"])
+
+response = client.calls.schedule_call(body=ScheduleCallRequest(start_time="2026-01-01T00:00:00Z"))
+print(response)
+```
+
+### Parameters
+
+<ResponseField name="body" type="ScheduleCallRequest" required>
+  Request payload.
+</ResponseField>
+
+**Returns:** `ScheduleCallResponse`
+
+---
+
+## `update_scheduled_call`
+
+<Badge color="orange">PUT</Badge> `/2/calls/scheduled/{id}`
+
+**Update a Scheduled Call**
+
+Moves, renames or re-invites a scheduled call the authenticated user organizes. Only the fields sent change. For a recurring call, scope and occurrence_start_time pick the occurrences: all of them (the default), one, or one and every one after it.
+
+```python
+import os
+from xdk import Client
+from xdk.calls.models import UpdateScheduledCallRequest
+
+client = Client(access_token=os.environ["X_ACCESS_TOKEN"])
+
+response = client.calls.update_scheduled_call(
+    id="1895000000000000000",
+    body=UpdateScheduledCallRequest(occurrence_start_time="example")
+)
+print(response)
+```
+
+### Parameters
+
+<ResponseField name="id" type="str" required>
+  `id` (path parameter).
+</ResponseField>
+
+<ResponseField name="body" type="UpdateScheduledCallRequest" required>
+  At least one of `start_time`, `duration_minutes`, `title`, `description`, `invitee_ids`, `recurrence`, `time_zone` is required.
+</ResponseField>
+
+**Returns:** `UpdateScheduledCallResponse`
+
+---
+

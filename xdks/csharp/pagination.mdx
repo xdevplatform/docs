@@ -1,0 +1,61 @@
+---
+title: C# Pagination
+sidebarTitle: Pagination
+description: Automatically iterate paginated X API v2 endpoints in C# using IAsyncEnumerable<T> and *Pages(...) methods.
+---
+
+Every paginated endpoint in the C# XDK exposes a companion `*Pages(...)` method returning `Paginator<T>` (`IAsyncEnumerable<T>`), which lazily fetches subsequent pages via `meta.next_token` as you iterate with `await foreach`.
+
+## Automatic Async Pagination (`*Pages`)
+
+```csharp
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using Xdk;
+using Xdk.Clients;
+
+using var cts = new CancellationTokenSource();
+using var client = new XClient(new XClientOptions
+{
+    BearerToken = Environment.GetEnvironmentVariable("X_BEARER_TOKEN"),
+});
+
+int pageCount = 0;
+await foreach (var page in client.Posts.SearchRecentPages(
+    "from:XDevelopers -is:retweet",
+    new PostsClient.SearchRecentOptions
+    {
+        MaxResults = 50,
+        PostFields = new List<string> { "created_at", "public_metrics" },
+    }).WithCancellation(cts.Token))
+{
+    Console.WriteLine($"Fetched {page.Data?.Count ?? 0} posts");
+    if (++pageCount >= 5)
+    {
+        break; // Stops immediately without issuing additional HTTP requests
+    }
+}
+```
+
+## Manual Cursor Control
+
+If you need to persist pagination tokens across separate requests or background jobs, call the single-page `*Async` method with `PaginationToken`:
+
+```csharp
+var firstPage = await client.Posts.SearchRecentAsync(
+    "from:XDevelopers",
+    new PostsClient.SearchRecentOptions { MaxResults = 25 });
+
+string? nextToken = firstPage.Meta?.NextToken;
+if (!string.IsNullOrEmpty(nextToken))
+{
+    var secondPage = await client.Posts.SearchRecentAsync(
+        "from:XDevelopers",
+        new PostsClient.SearchRecentOptions
+        {
+            MaxResults = 25,
+            PaginationToken = nextToken,
+        });
+}
+```

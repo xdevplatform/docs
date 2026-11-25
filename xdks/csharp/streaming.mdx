@@ -1,0 +1,59 @@
+---
+title: C# Streaming
+sidebarTitle: Streaming
+description: Consume real-time X API v2 streams in C# using EventStream<T> (IAsyncEnumerable<T> and IAsyncDisposable) with automatic reconnection.
+---
+
+Streaming endpoints on `client.Stream` return `EventStream<T>`, which implements both `IAsyncEnumerable<T>` and `IAsyncDisposable`. Use `await using` together with `await foreach` to consume events in real time and release the HTTP connection cleanly when done.
+
+## Consuming Filtered & Sampled Streams
+
+```csharp
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using Xdk;
+using Xdk.Clients;
+
+using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+using var client = new XClient(new XClientOptions
+{
+    BearerToken = Environment.GetEnvironmentVariable("X_BEARER_TOKEN"),
+});
+
+var options = new StreamClient.PostsOptions
+{
+    TweetFields = new List<string> { "created_at", "author_id", "public_metrics" },
+};
+
+await using var stream = await client.Stream.PostsStream(options, cts.Token);
+int received = 0;
+await foreach (var item in stream.WithCancellation(cts.Token))
+{
+    Console.WriteLine(item.Data);
+    if (++received >= 25)
+    {
+        break;
+    }
+}
+```
+
+## Managing Filtered Stream Rules
+
+Add or remove rules using `client.Stream.UpdateRulesAsync(...)` and inspect active rules with `client.Stream.GetRulesPages()`:
+
+```csharp
+using System.Text.Json;
+
+using var addDoc = JsonDocument.Parse(
+    """{"add":[{"value":"from:XDevelopers -is:retweet","tag":"xdevs"}]}"""
+);
+await client.Stream.UpdateRulesAsync(addDoc.RootElement);
+
+await foreach (var page in client.Stream.GetRulesPages())
+{
+    Console.WriteLine(page.Data);
+}
+```
+
+See [Build a Rule](/x-api/posts/filtered-stream/integrate/build-a-rule) for the full Filtered Stream operator reference.
