@@ -1,223 +1,140 @@
 ---
-title: "Authentication"
-sidebarTitle: "Authentication"
-
-description: "The TypeScript SDK supports multiple authentication methods for different use cases. For read-only operations and public data access: For legacy applications."
+title: Authentication
+sidebarTitle: Authentication
+description: Configure Bearer Token, OAuth 2.0 PKCE, or OAuth 1.0a in the TypeScript XDK.
 ---
 
-The TypeScript SDK supports multiple authentication methods for different use cases.
+`Client` supports Bearer Token (app-only), OAuth 2.0 with PKCE (user context), and OAuth 1.0a (user context). Get your credentials from the [X Developer Console](https://console.x.com).
 
-## Bearer Token (App-Only Auth)
+## Bearer Token
 
-For read-only operations and public data access:
+For public read, search, and streaming endpoints:
 
 <CodeGroup dropdown>
 
-```typescript title="quickstart.ts" lines wrap icon="square-js" theme={null}
-import { 
-  Client, 
-  type ClientConfig,
-  type Users
-} from '@xdevplatform/xdk';
+```typescript title="bearer.ts" lines wrap icon="square-js" theme={null}
+import { Client, type ClientConfig, type Users } from "@xdevplatform/xdk";
 
-const config: ClientConfig = { bearerToken: 'your-bearer-token' };
+const config: ClientConfig = { bearerToken: process.env.X_BEARER_TOKEN };
+const client = new Client(config);
 
-const client: Client = new Client(config);
-
-async function main(): Promise<void> {
-  const userResponse: Users.GetByUsernameResponse = await client.users.getByUsername('XDevelopers');
-  const username: string = userResponse.data?.username!;
-  console.log(username);
-}
-
-main();
+const userResponse: Users.GetByUsernameResponse =
+  await client.users.getByUsername("XDevelopers");
+console.log(userResponse.data?.username);
 ```
 
-```javascript quickstart.js theme={null}
-import { Client } from '@xdevplatform/xdk';
+```javascript title="bearer.js" theme={null}
+import { Client } from "@xdevplatform/xdk";
 
-const client = new Client({ bearerToken: 'your-bearer-token' });
+const client = new Client({ bearerToken: process.env.X_BEARER_TOKEN });
 
-const userResponse = await client.users.getByUsername('XDevelopers');
-const username = userResponse.data.username;
-console.log(username);
+const userResponse = await client.users.getByUsername("XDevelopers");
+console.log(userResponse.data?.username);
 ```
 
 </CodeGroup>
 
-## OAuth 1.0a (User Context)
+## OAuth 2.0 with PKCE
 
-For legacy applications or specific use cases:
-
-<CodeGroup dropdown>
-
-```typescript title="oauth1.ts" expandable lines wrap icon="square-js" theme={null}
-import { 
-  Client, 
-  OAuth1,
-  type OAuth1Config,
-  type ClientConfig,
-  type Users
-} from '@xdevplatform/xdk';
-
-const oauth1Config: OAuth1Config = {
-  apiKey: 'your-api-key',
-  apiSecret: 'your-api-secret',
-  accessToken: 'user-access-token',
-  accessTokenSecret: 'user-access-token-secret'
-};
-
-const oauth1: OAuth1 = new OAuth1(oauth1Config);
-
-const config: ClientConfig = {
-  oauth1: oauth1,
-};
-
-const client: Client = new Client(config);
-
-async function main(): Promise<void> {
-  const response: Users.GetMeResponse = await client.users.getMe();
-
-  const me = response.data;
-  console.log(me);
-}
-
-main();
-
-```
-
-```javascript title="oauth1.js" lines wrap icon="square-js" theme={null}
-import { Client, OAuth1 } from '@xdevplatform/xdk';
-
-const oauth1 = new OAuth1({
-  apiKey: 'your-api-key',
-  apiSecret: 'your-api-secret',
-  accessToken: 'user-access-token',
-  accessTokenSecret: 'user-access-token-secret'
-});
-
-const client = new Client({ oauth1: oauth1 });
-
-const response = await client.users.getMe();
-const me = response.data;
-console.log(me);
-
-```
-
-</CodeGroup>
-
-## OAuth 2.0 (User Context)
-
-For user-specific operations:
+For user-authorized actions (creating posts, bookmarks, DMs, X Chat):
 
 <CodeGroup dropdown>
 
 ```typescript title="oauth2.ts" expandable lines wrap icon="square-js" theme={null}
-import { 
-  Client, 
+import {
+  Client,
   OAuth2,
   generateCodeVerifier,
   generateCodeChallenge,
   type OAuth2Config,
-  type ClientConfig,
-  type OAuth2Token
-} from '@xdevplatform/xdk';
+  type OAuth2Token,
+} from "@xdevplatform/xdk";
 
-(async (): Promise<void> => {
-  const oauth2Config: OAuth2Config = {
-    clientId: 'your-client-id',
-    clientSecret: 'your-client-secret',
-    redirectUri: 'https://example.com',
-    scope: ['tweet.read', 'users.read', 'offline.access'],
-  };
+const oauth2Config: OAuth2Config = {
+  clientId: process.env.X_CLIENT_ID!,
+  clientSecret: process.env.X_CLIENT_SECRET,
+  redirectUri: "http://localhost:8080/callback",
+  scope: ["tweet.read", "users.read", "offline.access"],
+};
 
-  const oauth2: OAuth2 = new OAuth2(oauth2Config);
+const oauth2 = new OAuth2(oauth2Config);
 
-  const state: string = 'example-state';
-  const codeVerifier: string = generateCodeVerifier();
-  const codeChallenge: string = await generateCodeChallenge(codeVerifier);
-  
-  oauth2.setPkceParameters(codeVerifier, codeChallenge);
-  
-  const authUrl: string = await oauth2.getAuthorizationUrl(state);
+const codeVerifier = generateCodeVerifier();
+const codeChallenge = await generateCodeChallenge(codeVerifier);
+oauth2.setPkceParameters(codeVerifier, codeChallenge);
 
-  // User visits authUrl and authorizes the app
-  // After authorization, user is redirected back with a code parameter
-  // Extract the code from the callback URL (e.g., from query params)
-  const authCode: string = 'code-from-callback-url'; // Replace with actual code from OAuth callback
+const authUrl = await oauth2.getAuthorizationUrl("example-state");
+// Direct the user to authUrl and read the `code` query param from the callback
 
-  const tokens: OAuth2Token = await oauth2.exchangeCode(authCode, codeVerifier);
-
-  const config: ClientConfig = {
-    accessToken: tokens.access_token,
-  };
-
-  const client: Client = new Client(config);
-});
-
+const tokens: OAuth2Token = await oauth2.exchangeCode(authCode, codeVerifier);
+const client = new Client({ accessToken: tokens.access_token });
 ```
 
 ```javascript title="oauth2.js" expandable lines wrap icon="square-js" theme={null}
-import { Client, OAuth2, generateCodeVerifier, generateCodeChallenge } from '@xdevplatform/xdk';
+import {
+  Client,
+  OAuth2,
+  generateCodeVerifier,
+  generateCodeChallenge,
+} from "@xdevplatform/xdk";
 
-(async () => {
-  const oauth2 = new OAuth2({
-    clientId: 'your-client-id',
-    clientSecret: 'your-client-secret',
-    redirectUri: 'https://example.com',
-    scope: ['tweet.read', 'users.read', 'offline.access'],
-  });
-
-  const state = 'example-state';
-  const codeVerifier = generateCodeVerifier();
-  const codeChallenge = await generateCodeChallenge(codeVerifier);
-  oauth2.setPkceParameters(codeVerifier, codeChallenge);
-  const authUrl = await oauth2.getAuthorizationUrl(state);
-
-  // User visits authUrl and authorizes the app
-  // After authorization, user is redirected back with a code parameter
-  // Extract the code from the callback URL (e.g., from query params)
-  const authCode = 'code-from-callback-url'; // Replace with actual code from OAuth callback
-
-  const tokens = await oauth2.exchangeCode(authCode, codeVerifier);
-
-  const client = new Client({ accessToken: tokens.access_token });
-
-  const response = await client.users.getMe();
-  const me = response.data;
-  console.log(me);
+const oauth2 = new OAuth2({
+  clientId: process.env.X_CLIENT_ID,
+  clientSecret: process.env.X_CLIENT_SECRET,
+  redirectUri: "http://localhost:8080/callback",
+  scope: ["tweet.read", "users.read", "offline.access"],
 });
+
+const codeVerifier = generateCodeVerifier();
+const codeChallenge = await generateCodeChallenge(codeVerifier);
+oauth2.setPkceParameters(codeVerifier, codeChallenge);
+
+const authUrl = await oauth2.getAuthorizationUrl("example-state");
+const tokens = await oauth2.exchangeCode(authCode, codeVerifier);
+
+const client = new Client({ accessToken: tokens.access_token });
+const me = await client.users.getMe();
+console.log(me.data);
 ```
 
 </CodeGroup>
 
-## Environment Variables
+## OAuth 1.0a
 
-Store sensitive credentials in environment variables:
-
-```bash
-# .env
-X_API_BEARER_TOKEN=your-bearer-token
-X_API_CLIENT_ID=your-client-id
-X_API_CLIENT_SECRET=your-client-secret
-```
+For OAuth 1.0a HMAC-SHA1 user context:
 
 <CodeGroup dropdown>
 
-```typescript env.ts theme={null}
-import { Client } from '@xdevplatform/xdk';
+```typescript title="oauth1.ts" expandable lines wrap icon="square-js" theme={null}
+import { Client, OAuth1, type OAuth1Config, type Users } from "@xdevplatform/xdk";
 
-const client = new Client({ bearerToken: process.env.X_API_BEARER_TOKEN });
+const oauth1Config: OAuth1Config = {
+  apiKey: process.env.X_API_KEY!,
+  apiSecret: process.env.X_API_SECRET!,
+  accessToken: process.env.X_ACCESS_TOKEN!,
+  accessTokenSecret: process.env.X_ACCESS_TOKEN_SECRET!,
+};
+
+const client = new Client({ oauth1: new OAuth1(oauth1Config) });
+const response: Users.GetMeResponse = await client.users.getMe();
+console.log(response.data);
 ```
 
-```javascript env.js theme={null}
-import { Client } from '@xdevplatform/xdk';
+```javascript title="oauth1.js" lines wrap icon="square-js" theme={null}
+import { Client, OAuth1 } from "@xdevplatform/xdk";
 
-const client = new Client({ bearerToken: process.env.X_API_BEARER_TOKEN });
+const oauth1 = new OAuth1({
+  apiKey: process.env.X_API_KEY,
+  apiSecret: process.env.X_API_SECRET,
+  accessToken: process.env.X_ACCESS_TOKEN,
+  accessTokenSecret: process.env.X_ACCESS_TOKEN_SECRET,
+});
+
+const client = new Client({ oauth1 });
+const response = await client.users.getMe();
+console.log(response.data);
 ```
 
 </CodeGroup>
 
-<Info>
-For detailed code examples using the Javascript/TypeScript XDK, check out our [code samples GitHub repo](https://github.com/xdevplatform/samples/tree/main/javascript).
-</Info>
+See the [TypeScript samples repo](https://github.com/xdevplatform/samples/tree/main/typescript) for more examples.

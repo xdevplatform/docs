@@ -1,16 +1,12 @@
 ---
-title: C# Authentication
+title: Authentication
 sidebarTitle: Authentication
-description: Authenticate the C# / .NET XDK (XDevPlatform.Xdk) using Bearer Tokens, OAuth 2.0 PKCE with token refresh, or OAuth 1.0a user context.
+description: Configure Bearer Token, OAuth 2.0 PKCE, or OAuth 1.0a in the C# / .NET XDK.
 ---
 
-`XClient` supports all three X API v2 authentication modes through `XClientOptions`:
+`XClient` supports Bearer Token (app-only), OAuth 2.0 with PKCE (user context), and OAuth 1.0a (user context) via `XClientOptions`. Get your credentials from the [X Developer Console](https://console.x.com).
 
-1. **Bearer Token (App-Only)** — Public read, search, and filtered/sample streaming endpoints.
-2. **OAuth 2.0 User Context with PKCE** — Scoped user-authorized calls (`POST /2/tweets`, bookmarks, DMs, X Chat) with refresh token support.
-3. **OAuth 1.0a User Context** — HMAC-SHA1 request signing.
-
-## 1. Bearer Token (App-Only)
+## Bearer Token
 
 ```csharp
 using System;
@@ -24,9 +20,9 @@ using var client = new XClient(new XClientOptions
 var user = await client.Users.GetByUsernameAsync("XDevelopers");
 ```
 
-## 2. OAuth 2.0 User Context with PKCE
+## OAuth 2.0 with PKCE
 
-If you already hold an OAuth 2.0 user access token:
+If you already have a user access token:
 
 ```csharp
 using var client = new XClient(new XClientOptions
@@ -37,7 +33,7 @@ using var client = new XClient(new XClientOptions
 var me = await client.Users.GetMeAsync();
 ```
 
-To run the full RFC 7636 PKCE authorization flow and enable token refresh via `OAuth2Pkce`:
+To run the PKCE authorization flow and refresh tokens with `OAuth2Pkce`:
 
 ```csharp
 using System;
@@ -52,13 +48,13 @@ var oauth2 = new OAuth2Pkce(
     scopes: new[] { "tweet.read", "tweet.write", "users.read", "offline.access" }
 );
 
-// 1. Direct the user to authorize your application
+// 1. Direct the user to authorize your app
 string authorizationUrl = oauth2.GetAuthorizationUrl("random-csrf-state");
 
-// 2. Exchange the authorization code from the callback URL
+// 2. Exchange the callback `code` parameter for tokens
 OAuth2Token token = await oauth2.ExchangeCodeAsync(callbackCode);
 
-// 3. Create XClient bound to the OAuth2Pkce manager
+// 3. Create XClient with the OAuth2Pkce instance
 using var client = new XClient(new XClientOptions
 {
     OAuth2 = oauth2,
@@ -69,11 +65,11 @@ var created = await client.Posts.CreateAsync(new CreatePostsRequest
     Text = "Hello from C# XDK!",
 });
 
-// Refresh tokens explicitly when needed (requires offline.access scope)
+// Refresh tokens when needed (requires offline.access scope)
 await client.RefreshTokenAsync();
 ```
 
-## 3. OAuth 1.0a User Context
+## OAuth 1.0a
 
 ```csharp
 using System;
@@ -95,3 +91,5 @@ using var client = new XClient(new XClientOptions
 
 var me = await client.Users.GetMeAsync();
 ```
+
+See the [C# samples repo](https://github.com/xdevplatform/samples/tree/main/csharp) for more examples.
