@@ -2,6 +2,8 @@ name: Update Documentation
 
 on:
   workflow_dispatch:
+  repository_dispatch:
+    types: [xdk-released]
   schedule:
     - cron: '0 17 * * *' # 9am PT
     - cron: '0 20 * * *' # 12pm PT
@@ -14,13 +16,28 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+      - name: Checkout Docs Repository
+        uses: actions/checkout@v4
+
+      - name: Checkout XDK Generator
+        uses: actions/checkout@v4
+        with:
+          repository: xdevplatform/xdk
+          ref: main
+          path: .xdk-gen
 
       - name: Set Up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Set Up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache XDK Rust Build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .xdk-gen
 
       - name: Fetch Latest OpenAPI Specification
         run: |
@@ -28,69 +45,28 @@ jobs:
             --retry 3 --retry-delay 5 --max-time 120 \
             -o openapi.json \
             https://api.x.com/2/openapi.json
-          # Fail early if the response is not valid JSON (e.g. an error page)
           jq -e .openapi openapi.json > /dev/null
 
-      - name: Remove Existing api-reference Directory
-        run: rm -rf api-reference
-
-      - name: Generate MDX Files
-        run: npx @mintlify/scraping@latest openapi-file ./openapi.json -o api-reference
-
-      - name: Rename Subdirectories
+      - name: Sync XDK Reference, OpenAPI Code Samples Overlay, and Endpoint Stubs
         run: |
-          if [ -d "api-reference/tweets" ]; then
-            mv api-reference/tweets api-reference/posts
-          fi
-          # Add more rename commands here if needed, e.g.:
-          # if [ -d "api-reference/other" ]; then
-          #   mv api-reference/other api-reference/newname
-          # fi
-      - name: Rename Files Containing '%'
-        run: |
-          find api-reference -type f -name '*%*.mdx' -exec bash -c '
-            new_name="${0//%/}"
-            if [ ! -f "$new_name" ]; then
-              mv "$0" "$new_name"
-            else
-              echo "Cannot rename $0 to $new_name: file already exists"
-            fi
-          ' {} \;
-      - name: Move Files to x-api
-        run: |
-          # Function to move files from api-reference to x-api
-          move_files() {
-            local src_dir=$1
-            local dest_dir=$2
-            for item in "$src_dir"/*; do
-              if [ -d "$item" ]; then
-                # Handle subdirectories
-                local base_name=$(basename "$item")
-                local new_dest="$dest_dir/$base_name"
-                mkdir -p "$new_dest"  # Create subdirectory in x-api if it doesn’t exist
-                move_files "$item" "$new_dest"  # Recursively move contents
-              elif [ -f "$item" ]; then
-                # Move individual files
-                local file_name=$(basename "$item")
-                local dest_file="$dest_dir/$file_name"
-                mv "$item" "$dest_file"  # Move file to x-api subdirectory
-              fi
-            done
-          }
+          cargo run --manifest-path .xdk-gen/Cargo.toml --bin xdk-build -- \
+            docs --spec ./openapi.json --output . --sync-endpoint-stubs
+          rm -rf .xdk-gen
 
-          # Start moving files from api-reference to x-api
-          move_files "api-reference" "x-api"
-
-      - name: Remove api-reference Directory
-        run: rm -rf api-reference
+      - name: Validate Mintlify Build & XDK Docs
+        run: |
+          npx --yes mint@latest validate --no-build --files "xdks/**" "tools/**" "tools-and-libraries.mdx"
+          npx --yes mint@latest validate --no-build --disable unknown-component
+          npx --yes mint@latest broken-links --files "xdks/**" "tools/**" "tools-and-libraries.mdx"
 
       - name: Commit and Push Changes
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add openapi.json x-api
-          if git commit -m "Update documentation with latest OpenAPI spec"; then
-            git push
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add openapi.json overlays/xdk-code-samples.json docs.json xdks tools tools-and-libraries.mdx x-api
+          if git diff --cached --quiet; then
+            echo "No documentation changes to commit."
           else
-            echo "No changes to commit"
+            git commit -m "chore: sync OpenAPI spec, XDK reference, and code samples overlay"
+            git push
           fi

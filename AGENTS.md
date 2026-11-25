@@ -12,7 +12,7 @@ This document provides guidance for AI agents, coding assistants, and LLM-based 
      - https://docs.x.com/x-api/llms.txt (X API v2 — 370+ pages)
      - https://docs.x.com/enterprise-api/llms.txt
      - https://docs.x.com/x-ads-api/llms.txt
-     - https://docs.x.com/xdks/llms.txt (Python + TypeScript XDKs)
+     - https://docs.x.com/xdks/llms.txt (Official Python, TypeScript, Java, and C# XDKs)
 
 2. **llms-full.txt** — Complete documentation as a single Markdown file for maximum context:
    - https://docs.x.com/llms-full.txt
@@ -33,7 +33,7 @@ This document provides guidance for AI agents, coding assistants, and LLM-based 
 - **X API v2** (`/x-api/...`): Posts, Users, Direct Messages, Lists, Spaces, Media, Streams (filtered + volume), Compliance, Webhooks, Account Activity, Trends, News, Usage, Connections.
 - **Enterprise APIs** (`/enterprise-api/...`): Account Activity (webhooks), X Activity (XAA), GNIP/PowerTrack historical & real-time, Compliance.
 - **Ads API** (`/x-ads-api/...`): Campaign Management, Creatives, Audiences, Analytics, Measurement, Catalog, Lead Generation.
-- **SDKs (XDKs)** (`/xdks/python/...` and `/xdks/typescript/...`): Official client libraries with full type coverage, pagination, and streaming helpers.
+- **SDKs (XDKs)** (`/xdks/overview`, `/xdks/{python,typescript,java,csharp}/...`): Official client libraries in Python, TypeScript, Java, and C# with full type coverage, pagination, and streaming helpers.
 - **Fundamentals**: Authentication, rate limits, data dictionary, expansions, fields, pagination, versioning, consistency.
 - **AI & Agent Tools** (`/tools/ai`, `/tools/llms-txt`, `/tools/skill-md`, `/tools/mcp`).
 
@@ -54,7 +54,7 @@ All pages are available in the navigation tree defined in `docs.json`.
 - For deep context on the entire platform, load `llms-full.txt`.
 - For structured capabilities (what actions are possible), load `skill.md`.
 - For live tool calling against the X API, use the MCP server.
-- When writing code, prefer the official Python or TypeScript XDKs (full references available in their `llms.txt` files).
+- When writing code, prefer the official Python, TypeScript, Java, or C# XDKs (full references available in `/xdks/llms.txt` and per-language `llms.txt` files).
 
 ## Do Not
 

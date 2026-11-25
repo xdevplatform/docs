@@ -1,0 +1,996 @@
+---
+title: "PostsClient (C# XDK)"
+sidebarTitle: "Posts"
+description: "C# XDK PostsClient reference — 17 methods for X API v2 Posts endpoints."
+---
+
+Access **Posts** endpoints via `client.Posts` (`PostsClient`).
+
+## Methods
+
+| Method | Endpoint | Behavior | Summary |
+| :--- | :--- | :--- | :--- |
+| [`CreateAsync`](#createasync) | `POST /2/tweets` | Standard | Create or Edit Post |
+| [`CreatePostDraftAsync`](#createpostdraftasync) | `POST /2/posts/drafts` | Standard | Create Post Draft |
+| [`DeleteAsync`](#deleteasync) | `DELETE /2/tweets/{id}` | Standard | Delete Post |
+| [`DeletePostDraftAsync`](#deletepostdraftasync) | `DELETE /2/posts/drafts/{id}` | Standard | Delete Post Draft |
+| [`GetAnalyticsAsync`](#getanalyticsasync) | `GET /2/tweets/analytics` | Standard | Get Post Analytics |
+| [`GetByIdAsync`](#getbyidasync) | `GET /2/tweets/{id}` | Standard | Get Post by ID |
+| [`GetByIdsAsync`](#getbyidsasync) | `GET /2/tweets` | Standard | Get Posts by IDs |
+| [`GetCountsAllAsync`](#getcountsallasync) | `GET /2/tweets/counts/all` | Paginated | Get Count of All Posts |
+| [`GetCountsRecentAsync`](#getcountsrecentasync) | `GET /2/tweets/counts/recent` | Paginated | Get Count of Recent Posts |
+| [`GetLikingUsersAsync`](#getlikingusersasync) | `GET /2/tweets/{id}/liking_users` | Paginated | Get Liking Users |
+| [`GetPostDraftsAsync`](#getpostdraftsasync) | `GET /2/posts/drafts` | Paginated | Get Post Drafts |
+| [`GetQuotedAsync`](#getquotedasync) | `GET /2/tweets/{id}/quote_tweets` | Paginated | Get Quoted Posts |
+| [`GetRepostedByAsync`](#getrepostedbyasync) | `GET /2/tweets/{id}/retweeted_by` | Paginated | Get Reposted By |
+| [`GetRepostsAsync`](#getrepostsasync) | `GET /2/tweets/{id}/retweets` | Paginated | Get Reposts |
+| [`HideReplyAsync`](#hidereplyasync) | `PUT /2/tweets/{tweet_id}/hidden` | Standard | Hide Reply |
+| [`SearchAllAsync`](#searchallasync) | `GET /2/tweets/search/all` | Paginated | Search All Posts |
+| [`SearchRecentAsync`](#searchrecentasync) | `GET /2/tweets/search/recent` | Paginated | Search Recent Posts |
+
+## `CreateAsync`
+
+<Badge color="green">POST</Badge> `/2/tweets`
+
+**Create or Edit Post**
+
+Creates a new Post for the authenticated user, or edits an existing Post when edit_options are provided. Media in media.media_ids is attached in the order given; get the ids by uploading each image with Upload Media, or a video with Initialize Media Upload. Supports paid partnership disclosure via the paid_partnership field. To share a clip of another Post's video, set clip to that Post's id and a range of 5 to 60 seconds.
+
+```csharp
+using System;
+using Xdk;
+using Xdk.Models;
+
+using var client = new XClient(new XClientOptions
+{
+    AccessToken = Environment.GetEnvironmentVariable("X_ACCESS_TOKEN"),
+});
+
+var response = await client.Posts.CreateAsync(new CreatePostsRequest { Text = "Hello from XDK!" });
+Console.WriteLine(response);
+```
+
+### Parameters
+
+<ResponseField name="body" type="CreatePostsRequest" required>
+  Request payload.
+</ResponseField>
+
+**Returns:** `Task<CreatePostsResponse>`
+
+---
+
+## `CreatePostDraftAsync`
+
+<Badge color="green">POST</Badge> `/2/posts/drafts`
+
+**Create Post Draft**
+
+Saves a Post draft to the authenticated user's X account without publishing it. Takes the body of Create or Edit Post, of which a draft stores text, media with tagged users, a reply and the AI and paid partnership disclosures. Any other field that is set is a 400 that names it.
+
+```csharp
+using System;
+using Xdk;
+using Xdk.Models;
+
+using var client = new XClient(new XClientOptions
+{
+    AccessToken = Environment.GetEnvironmentVariable("X_ACCESS_TOKEN"),
+});
+
+var response = await client.Posts.CreatePostDraftAsync(new CreatePostDraftRequest { Text = "Hello from XDK!" });
+Console.WriteLine(response);
+```
+
+### Parameters
+
+<ResponseField name="body" type="CreatePostDraftRequest" required>
+  Request payload.
+</ResponseField>
+
+**Returns:** `Task<CreatePostDraftResponse>`
+
+---
+
+## `DeleteAsync`
+
+<Badge color="red">DELETE</Badge> `/2/tweets/{id}`
+
+**Delete Post**
+
+Deletes a specific Post by its ID, if owned by the authenticated user.
+
+```csharp
+using System;
+using Xdk;
+
+using var client = new XClient(new XClientOptions
+{
+    AccessToken = Environment.GetEnvironmentVariable("X_ACCESS_TOKEN"),
+});
+
+var response = await client.Posts.DeleteAsync("1895000000000000000");
+Console.WriteLine(response);
+```
+
+### Parameters
+
+<ResponseField name="id" type="string" required>
+  `id` (path parameter).
+</ResponseField>
+
+**Returns:** `Task<DeletePostsResponse>`
+
+---
+
+## `DeletePostDraftAsync`
+
+<Badge color="red">DELETE</Badge> `/2/posts/drafts/{id}`
+
+**Delete Post Draft**
+
+Deletes one of the authenticated user's Post drafts by its ID. The whole draft is deleted, including any part Get Post Drafts does not list, and cannot be restored. An ID that is not one of the user's drafts also returns deleted: true.
+
+```csharp
+using System;
+using Xdk;
+
+using var client = new XClient(new XClientOptions
+{
+    AccessToken = Environment.GetEnvironmentVariable("X_ACCESS_TOKEN"),
+});
+
+var response = await client.Posts.DeletePostDraftAsync("1895000000000000000");
+Console.WriteLine(response);
+```
+
+### Parameters
+
+<ResponseField name="id" type="string" required>
+  The ID of the draft to delete.
+</ResponseField>
+
+**Returns:** `Task<DeletePostDraftResponse>`
+
+---
+
+## `GetAnalyticsAsync`
+
+<Badge color="blue">GET</Badge> `/2/tweets/analytics`
+
+**Get Post Analytics**
+
+Retrieves analytics data for specified Posts within a defined time range.
+
+```csharp
+using System;
+using System.Collections.Generic;
+using Xdk;
+
+using var client = new XClient(new XClientOptions
+{
+    AccessToken = Environment.GetEnvironmentVariable("X_ACCESS_TOKEN"),
+});
+
+var response = await client.Posts.GetAnalyticsAsync(
+    new List<string> { "1895000000000000000" },
+    "2026-01-01T00:00:00Z",
+    "2026-01-02T00:00:00Z"
+);
+Console.WriteLine(response);
+```
+
+### Parameters
+
+<ResponseField name="ids" type="List<string>" required>
+  `ids` (query parameter).
+</ResponseField>
+
+<ResponseField name="startTime" type="string" required>
+  `start_time` (query parameter).
+</ResponseField>
+
+<ResponseField name="endTime" type="string" required>
+  `end_time` (query parameter).
+</ResponseField>
+
+<Expandable title="Optional parameters (PostsClient.GetAnalyticsOptions — 2)">
+
+<ResponseField name="options.Granularity" type="string">
+  `granularity` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.AnalyticsFields" type="List<string>">
+  A comma separated list of Analytics fields to display.
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `Task<GetPostsAnalyticsResponse>`
+
+---
+
+## `GetByIdAsync`
+
+<Badge color="blue">GET</Badge> `/2/tweets/{id}`
+
+**Get Post by ID**
+
+Retrieves details of a specific Post by its ID.
+
+```csharp
+using System;
+using Xdk;
+
+using var client = new XClient(new XClientOptions
+{
+    BearerToken = Environment.GetEnvironmentVariable("X_BEARER_TOKEN"),
+});
+
+var response = await client.Posts.GetByIdAsync("1895000000000000000");
+Console.WriteLine(response);
+```
+
+### Parameters
+
+<ResponseField name="id" type="string" required>
+  `id` (path parameter).
+</ResponseField>
+
+<Expandable title="Optional parameters (PostsClient.GetByIdOptions — 6)">
+
+<ResponseField name="options.PostFields" type="List<string>">
+  A comma separated list of Post fields to display.
+</ResponseField>
+
+<ResponseField name="options.Expansions" type="List<string>">
+  A comma separated list of fields to expand.
+</ResponseField>
+
+<ResponseField name="options.UserFields" type="List<string>">
+  A comma separated list of User fields to display.
+</ResponseField>
+
+<ResponseField name="options.MediaFields" type="List<string>">
+  A comma separated list of Media fields to display.
+</ResponseField>
+
+<ResponseField name="options.PollFields" type="List<string>">
+  A comma separated list of Poll fields to display.
+</ResponseField>
+
+<ResponseField name="options.PlaceFields" type="List<string>">
+  A comma separated list of Place fields to display.
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `Task<GetPostsByIdResponse>`
+
+---
+
+## `GetByIdsAsync`
+
+<Badge color="blue">GET</Badge> `/2/tweets`
+
+**Get Posts by IDs**
+
+Retrieves details of multiple Posts by their IDs.
+
+```csharp
+using System;
+using System.Collections.Generic;
+using Xdk;
+
+using var client = new XClient(new XClientOptions
+{
+    BearerToken = Environment.GetEnvironmentVariable("X_BEARER_TOKEN"),
+});
+
+var response = await client.Posts.GetByIdsAsync(new List<string> { "1895000000000000000" });
+Console.WriteLine(response);
+```
+
+### Parameters
+
+<ResponseField name="ids" type="List<string>" required>
+  `ids` (query parameter).
+</ResponseField>
+
+<Expandable title="Optional parameters (PostsClient.GetByIdsOptions — 6)">
+
+<ResponseField name="options.PostFields" type="List<string>">
+  A comma separated list of Post fields to display.
+</ResponseField>
+
+<ResponseField name="options.Expansions" type="List<string>">
+  A comma separated list of fields to expand.
+</ResponseField>
+
+<ResponseField name="options.UserFields" type="List<string>">
+  A comma separated list of User fields to display.
+</ResponseField>
+
+<ResponseField name="options.MediaFields" type="List<string>">
+  A comma separated list of Media fields to display.
+</ResponseField>
+
+<ResponseField name="options.PollFields" type="List<string>">
+  A comma separated list of Poll fields to display.
+</ResponseField>
+
+<ResponseField name="options.PlaceFields" type="List<string>">
+  A comma separated list of Place fields to display.
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `Task<GetPostsByIdsResponse>`
+
+---
+
+## `GetCountsAllAsync`
+
+<Badge color="blue">GET</Badge> `/2/tweets/counts/all` <Badge color="purple">Paginated</Badge>
+
+**Get Count of All Posts**
+
+Retrieves the count of Posts matching a search query from the full archive.
+
+At most one of `pagination_token`, `next_token` may be provided.
+
+```csharp
+using System;
+using Xdk;
+
+using var client = new XClient(new XClientOptions
+{
+    BearerToken = Environment.GetEnvironmentVariable("X_BEARER_TOKEN"),
+});
+
+await foreach (var page in client.Posts.GetCountsAllPages("from:XDevelopers"))
+{
+    Console.WriteLine(page);
+}
+```
+
+### Parameters
+
+<ResponseField name="query" type="string" required>
+  `query` (query parameter).
+</ResponseField>
+
+<Expandable title="Optional parameters (PostsClient.GetCountsAllOptions — 8)">
+
+<ResponseField name="options.StartTime" type="string">
+  `start_time` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.EndTime" type="string">
+  `end_time` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.SinceId" type="string">
+  `since_id` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.UntilId" type="string">
+  `until_id` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.NextToken" type="string">
+  A base32hex-encoded pagination token.
+</ResponseField>
+
+<ResponseField name="options.PaginationToken" type="string">
+  A base32hex-encoded pagination token.
+</ResponseField>
+
+<ResponseField name="options.Granularity" type="string">
+  `granularity` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.SearchCountFields" type="string">
+  `search_count.fields` (query parameter).
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `Task<GetPostsCountsAllResponse>` (use `GetCountsAllPages(...)` for `IAsyncEnumerable` page iteration)
+
+---
+
+## `GetCountsRecentAsync`
+
+<Badge color="blue">GET</Badge> `/2/tweets/counts/recent` <Badge color="purple">Paginated</Badge>
+
+**Get Count of Recent Posts**
+
+Retrieves the count of Posts from the last 7 days matching a search query.
+
+At most one of `pagination_token`, `next_token` may be provided.
+
+```csharp
+using System;
+using Xdk;
+
+using var client = new XClient(new XClientOptions
+{
+    BearerToken = Environment.GetEnvironmentVariable("X_BEARER_TOKEN"),
+});
+
+await foreach (var page in client.Posts.GetCountsRecentPages("from:XDevelopers"))
+{
+    Console.WriteLine(page);
+}
+```
+
+### Parameters
+
+<ResponseField name="query" type="string" required>
+  `query` (query parameter).
+</ResponseField>
+
+<Expandable title="Optional parameters (PostsClient.GetCountsRecentOptions — 8)">
+
+<ResponseField name="options.StartTime" type="string">
+  Must be within the last 7 days.
+</ResponseField>
+
+<ResponseField name="options.EndTime" type="string">
+  `end_time` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.SinceId" type="string">
+  `since_id` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.UntilId" type="string">
+  `until_id` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.NextToken" type="string">
+  A base32hex-encoded pagination token.
+</ResponseField>
+
+<ResponseField name="options.PaginationToken" type="string">
+  A base32hex-encoded pagination token.
+</ResponseField>
+
+<ResponseField name="options.Granularity" type="string">
+  `granularity` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.SearchCountFields" type="string">
+  `search_count.fields` (query parameter).
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `Task<GetPostsCountsRecentResponse>` (use `GetCountsRecentPages(...)` for `IAsyncEnumerable` page iteration)
+
+---
+
+## `GetLikingUsersAsync`
+
+<Badge color="blue">GET</Badge> `/2/tweets/{id}/liking_users` <Badge color="purple">Paginated</Badge>
+
+**Get Liking Users**
+
+Retrieves a list of Users who liked a specific Post by its ID.
+
+```csharp
+using System;
+using Xdk;
+
+using var client = new XClient(new XClientOptions
+{
+    AccessToken = Environment.GetEnvironmentVariable("X_ACCESS_TOKEN"),
+});
+
+await foreach (var page in client.Posts.GetLikingUsersPages("1895000000000000000"))
+{
+    Console.WriteLine(page);
+}
+```
+
+### Parameters
+
+<ResponseField name="id" type="string" required>
+  `id` (path parameter).
+</ResponseField>
+
+<Expandable title="Optional parameters (PostsClient.GetLikingUsersOptions — 5)">
+
+<ResponseField name="options.MaxResults" type="int">
+  `max_results` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.PaginationToken" type="string">
+  A base32hex-encoded pagination token.
+</ResponseField>
+
+<ResponseField name="options.UserFields" type="List<string>">
+  A comma separated list of User fields to display.
+</ResponseField>
+
+<ResponseField name="options.Expansions" type="List<string>">
+  A comma separated list of fields to expand.
+</ResponseField>
+
+<ResponseField name="options.PostFields" type="List<string>">
+  A comma separated list of Post fields to display.
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `Task<GetPostsLikingUsersResponse>` (use `GetLikingUsersPages(...)` for `IAsyncEnumerable` page iteration)
+
+---
+
+## `GetPostDraftsAsync`
+
+<Badge color="blue">GET</Badge> `/2/posts/drafts` <Badge color="purple">Paginated</Badge>
+
+**Get Post Drafts**
+
+Returns the authenticated user's Post drafts, newest first, in the fields of the Create or Edit Post body. thread holds the Posts after the first. A draft with unsupported_content is not listed in full: do not publish it from this list or delete it unless the user asks. Needs the tweet.write scope.
+
+```csharp
+using System;
+using Xdk;
+
+using var client = new XClient(new XClientOptions
+{
+    AccessToken = Environment.GetEnvironmentVariable("X_ACCESS_TOKEN"),
+});
+
+await foreach (var page in client.Posts.GetPostDraftsPages())
+{
+    Console.WriteLine(page);
+}
+```
+
+### Parameters
+
+<Expandable title="Optional parameters (PostsClient.GetPostDraftsOptions — 2)">
+
+<ResponseField name="options.MaxResults" type="int">
+  The maximum number of drafts to return.
+</ResponseField>
+
+<ResponseField name="options.PaginationToken" type="string">
+  The meta.next_token of the previous page.
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `Task<GetPostDraftsResponse>` (use `GetPostDraftsPages(...)` for `IAsyncEnumerable` page iteration)
+
+---
+
+## `GetQuotedAsync`
+
+<Badge color="blue">GET</Badge> `/2/tweets/{id}/quote_tweets` <Badge color="purple">Paginated</Badge>
+
+**Get Quoted Posts**
+
+Retrieves a list of Posts that quote a specific Post by its ID.
+
+```csharp
+using System;
+using Xdk;
+
+using var client = new XClient(new XClientOptions
+{
+    BearerToken = Environment.GetEnvironmentVariable("X_BEARER_TOKEN"),
+});
+
+await foreach (var page in client.Posts.GetQuotedPages("1895000000000000000"))
+{
+    Console.WriteLine(page);
+}
+```
+
+### Parameters
+
+<ResponseField name="id" type="string" required>
+  `id` (path parameter).
+</ResponseField>
+
+<Expandable title="Optional parameters (PostsClient.GetQuotedOptions — 9)">
+
+<ResponseField name="options.MaxResults" type="int">
+  `max_results` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.PaginationToken" type="string">
+  A base32hex-encoded pagination token.
+</ResponseField>
+
+<ResponseField name="options.Exclude" type="List<string>">
+  `exclude` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.PostFields" type="List<string>">
+  A comma separated list of Post fields to display.
+</ResponseField>
+
+<ResponseField name="options.Expansions" type="List<string>">
+  A comma separated list of fields to expand.
+</ResponseField>
+
+<ResponseField name="options.UserFields" type="List<string>">
+  A comma separated list of User fields to display.
+</ResponseField>
+
+<ResponseField name="options.MediaFields" type="List<string>">
+  A comma separated list of Media fields to display.
+</ResponseField>
+
+<ResponseField name="options.PollFields" type="List<string>">
+  A comma separated list of Poll fields to display.
+</ResponseField>
+
+<ResponseField name="options.PlaceFields" type="List<string>">
+  A comma separated list of Place fields to display.
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `Task<GetPostsQuotedPostsResponse>` (use `GetQuotedPages(...)` for `IAsyncEnumerable` page iteration)
+
+---
+
+## `GetRepostedByAsync`
+
+<Badge color="blue">GET</Badge> `/2/tweets/{id}/retweeted_by` <Badge color="purple">Paginated</Badge>
+
+**Get Reposted By**
+
+Retrieves a list of Users who reposted a specific Post by its ID.
+
+```csharp
+using System;
+using Xdk;
+
+using var client = new XClient(new XClientOptions
+{
+    BearerToken = Environment.GetEnvironmentVariable("X_BEARER_TOKEN"),
+});
+
+await foreach (var page in client.Posts.GetRepostedByPages("1895000000000000000"))
+{
+    Console.WriteLine(page);
+}
+```
+
+### Parameters
+
+<ResponseField name="id" type="string" required>
+  `id` (path parameter).
+</ResponseField>
+
+<Expandable title="Optional parameters (PostsClient.GetRepostedByOptions — 5)">
+
+<ResponseField name="options.MaxResults" type="int">
+  `max_results` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.PaginationToken" type="string">
+  A base32hex-encoded pagination token.
+</ResponseField>
+
+<ResponseField name="options.UserFields" type="List<string>">
+  A comma separated list of User fields to display.
+</ResponseField>
+
+<ResponseField name="options.Expansions" type="List<string>">
+  A comma separated list of fields to expand.
+</ResponseField>
+
+<ResponseField name="options.PostFields" type="List<string>">
+  A comma separated list of Post fields to display.
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `Task<GetPostsRepostedByResponse>` (use `GetRepostedByPages(...)` for `IAsyncEnumerable` page iteration)
+
+---
+
+## `GetRepostsAsync`
+
+<Badge color="blue">GET</Badge> `/2/tweets/{id}/retweets` <Badge color="purple">Paginated</Badge>
+
+**Get Reposts**
+
+Retrieves a list of Posts that repost a specific Post by its ID.
+
+```csharp
+using System;
+using Xdk;
+
+using var client = new XClient(new XClientOptions
+{
+    BearerToken = Environment.GetEnvironmentVariable("X_BEARER_TOKEN"),
+});
+
+await foreach (var page in client.Posts.GetRepostsPages("1895000000000000000"))
+{
+    Console.WriteLine(page);
+}
+```
+
+### Parameters
+
+<ResponseField name="id" type="string" required>
+  `id` (path parameter).
+</ResponseField>
+
+<Expandable title="Optional parameters (PostsClient.GetRepostsOptions — 8)">
+
+<ResponseField name="options.MaxResults" type="int">
+  `max_results` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.PaginationToken" type="string">
+  A base32hex-encoded pagination token.
+</ResponseField>
+
+<ResponseField name="options.PostFields" type="List<string>">
+  A comma separated list of Post fields to display.
+</ResponseField>
+
+<ResponseField name="options.Expansions" type="List<string>">
+  A comma separated list of fields to expand.
+</ResponseField>
+
+<ResponseField name="options.UserFields" type="List<string>">
+  A comma separated list of User fields to display.
+</ResponseField>
+
+<ResponseField name="options.MediaFields" type="List<string>">
+  A comma separated list of Media fields to display.
+</ResponseField>
+
+<ResponseField name="options.PollFields" type="List<string>">
+  A comma separated list of Poll fields to display.
+</ResponseField>
+
+<ResponseField name="options.PlaceFields" type="List<string>">
+  A comma separated list of Place fields to display.
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `Task<GetPostsRepostsResponse>` (use `GetRepostsPages(...)` for `IAsyncEnumerable` page iteration)
+
+---
+
+## `HideReplyAsync`
+
+<Badge color="orange">PUT</Badge> `/2/tweets/{tweet_id}/hidden`
+
+**Hide Reply**
+
+Hides or unhides a reply to a conversation owned by the authenticated user.
+
+```csharp
+using System;
+using Xdk;
+using Xdk.Models;
+
+using var client = new XClient(new XClientOptions
+{
+    AccessToken = Environment.GetEnvironmentVariable("X_ACCESS_TOKEN"),
+});
+
+var response = await client.Posts.HideReplyAsync("1895000000000000000", new HidePostsReplyRequest { Hidden = true });
+Console.WriteLine(response);
+```
+
+### Parameters
+
+<ResponseField name="tweetId" type="string" required>
+  `tweet_id` (path parameter).
+</ResponseField>
+
+<ResponseField name="body" type="HidePostsReplyRequest" required>
+  Request payload.
+</ResponseField>
+
+**Returns:** `Task<HidePostsReplyResponse>`
+
+---
+
+## `SearchAllAsync`
+
+<Badge color="blue">GET</Badge> `/2/tweets/search/all` <Badge color="purple">Paginated</Badge>
+
+**Search All Posts**
+
+Retrieves Posts from the full archive matching a search query.
+
+At most one of `start_time`, `since_id` may be provided. At most one of `end_time`, `until_id` may be provided. At most one of `pagination_token`, `next_token` may be provided.
+
+```csharp
+using System;
+using Xdk;
+
+using var client = new XClient(new XClientOptions
+{
+    BearerToken = Environment.GetEnvironmentVariable("X_BEARER_TOKEN"),
+});
+
+await foreach (var page in client.Posts.SearchAllPages("from:XDevelopers"))
+{
+    Console.WriteLine(page);
+}
+```
+
+### Parameters
+
+<ResponseField name="query" type="string" required>
+  `query` (query parameter).
+</ResponseField>
+
+<Expandable title="Optional parameters (PostsClient.SearchAllOptions — 14)">
+
+<ResponseField name="options.StartTime" type="string">
+  `start_time` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.EndTime" type="string">
+  `end_time` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.SinceId" type="string">
+  `since_id` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.UntilId" type="string">
+  `until_id` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.MaxResults" type="int">
+  `max_results` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.NextToken" type="string">
+  A base32hex-encoded pagination token.
+</ResponseField>
+
+<ResponseField name="options.PaginationToken" type="string">
+  A base32hex-encoded pagination token.
+</ResponseField>
+
+<ResponseField name="options.SortOrder" type="string">
+  `sort_order` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.PostFields" type="List<string>">
+  A comma separated list of Post fields to display.
+</ResponseField>
+
+<ResponseField name="options.Expansions" type="List<string>">
+  A comma separated list of fields to expand.
+</ResponseField>
+
+<ResponseField name="options.UserFields" type="List<string>">
+  A comma separated list of User fields to display.
+</ResponseField>
+
+<ResponseField name="options.MediaFields" type="List<string>">
+  A comma separated list of Media fields to display.
+</ResponseField>
+
+<ResponseField name="options.PollFields" type="List<string>">
+  A comma separated list of Poll fields to display.
+</ResponseField>
+
+<ResponseField name="options.PlaceFields" type="List<string>">
+  A comma separated list of Place fields to display.
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `Task<SearchPostsAllResponse>` (use `SearchAllPages(...)` for `IAsyncEnumerable` page iteration)
+
+---
+
+## `SearchRecentAsync`
+
+<Badge color="blue">GET</Badge> `/2/tweets/search/recent` <Badge color="purple">Paginated</Badge>
+
+**Search Recent Posts**
+
+Retrieves Posts from the last 7 days matching a search query.
+
+At most one of `start_time`, `since_id` may be provided. At most one of `end_time`, `until_id` may be provided. At most one of `pagination_token`, `next_token` may be provided.
+
+```csharp
+using System;
+using Xdk;
+
+using var client = new XClient(new XClientOptions
+{
+    BearerToken = Environment.GetEnvironmentVariable("X_BEARER_TOKEN"),
+});
+
+await foreach (var page in client.Posts.SearchRecentPages("from:XDevelopers"))
+{
+    Console.WriteLine(page);
+}
+```
+
+### Parameters
+
+<ResponseField name="query" type="string" required>
+  `query` (query parameter).
+</ResponseField>
+
+<Expandable title="Optional parameters (PostsClient.SearchRecentOptions — 14)">
+
+<ResponseField name="options.MaxResults" type="int">
+  `max_results` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.NextToken" type="string">
+  A base32hex-encoded pagination token.
+</ResponseField>
+
+<ResponseField name="options.PaginationToken" type="string">
+  A base32hex-encoded pagination token.
+</ResponseField>
+
+<ResponseField name="options.StartTime" type="string">
+  Must be within the last 7 days.
+</ResponseField>
+
+<ResponseField name="options.EndTime" type="string">
+  `end_time` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.SinceId" type="string">
+  `since_id` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.UntilId" type="string">
+  `until_id` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.SortOrder" type="string">
+  `sort_order` (query parameter).
+</ResponseField>
+
+<ResponseField name="options.PostFields" type="List<string>">
+  A comma separated list of Post fields to display.
+</ResponseField>
+
+<ResponseField name="options.Expansions" type="List<string>">
+  A comma separated list of fields to expand.
+</ResponseField>
+
+<ResponseField name="options.UserFields" type="List<string>">
+  A comma separated list of User fields to display.
+</ResponseField>
+
+<ResponseField name="options.MediaFields" type="List<string>">
+  A comma separated list of Media fields to display.
+</ResponseField>
+
+<ResponseField name="options.PollFields" type="List<string>">
+  A comma separated list of Poll fields to display.
+</ResponseField>
+
+<ResponseField name="options.PlaceFields" type="List<string>">
+  A comma separated list of Place fields to display.
+</ResponseField>
+
+</Expandable>
+
+**Returns:** `Task<SearchPostsRecentResponse>` (use `SearchRecentPages(...)` for `IAsyncEnumerable` page iteration)
+
+---
+

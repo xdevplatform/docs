@@ -1,0 +1,57 @@
+---
+title: Java Streaming
+sidebarTitle: Streaming
+description: Consume real-time X API v2 streams in Java using EventStream<T> with try-with-resources lifecycle management and automatic reconnection.
+---
+
+Streaming methods on `client.stream()` return `EventStream<T>`, which implements both `Iterable<T>` and `AutoCloseable`. Wrapping the stream in `try (...)` guarantees the underlying HTTP connection is closed cleanly when you exit the loop.
+
+## Sampled & Filtered Post Streams
+
+```java
+import com.x.xdk.Schemas;
+import com.x.xdk.XClient;
+import com.x.xdk.clients.StreamClient;
+import java.util.List;
+
+XClient client = XClient.builder()
+    .bearerToken(System.getenv("X_BEARER_TOKEN"))
+    .build();
+
+StreamClient.PostsOptions options = StreamClient.PostsOptions.builder()
+    .tweetFields(List.of("created_at", "author_id", "public_metrics"));
+
+try (var stream = client.stream().posts(options)) {
+    int count = 0;
+    for (Schemas.StreamPostsResponse event : stream) {
+        System.out.println(event.getData());
+        if (++count >= 25) {
+            break; // Exiting try-with-resources closes the HTTP stream
+        }
+    }
+}
+```
+
+## Managing Filtered Stream Rules
+
+Add or delete Filtered Stream rules via `client.stream().updateRules(...)` and inspect active rules with `client.stream().getRulesPages()`:
+
+```java
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.x.xdk.XClient;
+
+ObjectMapper mapper = new ObjectMapper();
+
+// Add a filter rule
+var addPayload = mapper.readTree(
+    "{\"add\":[{\"value\":\"from:XDevelopers -is:retweet\",\"tag\":\"xdevs\"}]}"
+);
+client.stream().updateRules(addPayload);
+
+// List active rules
+for (var page : client.stream().getRulesPages()) {
+    System.out.println(page.getData());
+}
+```
+
+See [Build a Rule](/x-api/posts/filtered-stream/integrate/build-a-rule) for the full Filtered Stream operator reference.

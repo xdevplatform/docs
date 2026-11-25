@@ -2,14 +2,19 @@
 title: TypeScript XDK
 sidebarTitle: TypeScript
 description: Install and use the official TypeScript XDK client library for the X API v2, with authentication, typed responses, pagination, and streaming examples.
-keywords: ["TypeScript SDK", "XDK", "TypeScript", "JavaScript", "X API", "client library", "npm", "xdk"]
+keywords: ["TypeScript SDK", "XDK", "TypeScript", "JavaScript", "X API", "client library", "npm", "@xdevplatform/xdk"]
 ---
 
-The [TypeScript XDK](https://github.com/xdevplatform/twitter-api-typescript-sdk) is the official client library for the X API v2. Full type safety, automatic pagination, and event-driven streaming.
+The [TypeScript XDK](https://github.com/xdevplatform/xdk-typescript) (`@xdevplatform/xdk` on npm) is the official TypeScript and JavaScript client library for the X API v2, featuring full TypeScript types, dual ESM/CommonJS builds, async paginators, and event-driven streaming.
 
-<Card title="GitHub repository" icon="github" href="https://github.com/xdevplatform/twitter-api-typescript-sdk">
-  Source code, issues, and releases.
-</Card>
+<CardGroup cols={2}>
+  <Card title="npm Package" icon="js" href="https://www.npmjs.com/package/@xdevplatform/xdk">
+    `npm install @xdevplatform/xdk` — Node.js 18+.
+  </Card>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/xdevplatform/xdk-typescript">
+    Source code, release notes, and issue tracker.
+  </Card>
+</CardGroup>
 
 ---
 
@@ -21,42 +26,30 @@ The [TypeScript XDK](https://github.com/xdevplatform/twitter-api-typescript-sdk)
 npm install @xdevplatform/xdk
 ```
 
-```bash yarn
-yarn add @xdevplatform/xdk
-```
-
 ```bash pnpm
 pnpm add @xdevplatform/xdk
 ```
 
+```bash yarn
+yarn add @xdevplatform/xdk
+```
+
 </CodeGroup>
 
-Requires Node.js 16+ and TypeScript 4.5+ (if using TypeScript).
+Requires Node.js 18+ (built-in `fetch` and Web Crypto).
 
 ---
 
 ## Quick start
 
 ```typescript
-import { Client } from '@xdevplatform/xdk';
+import { Client } from "@xdevplatform/xdk";
 
-const client = new Client({ bearerToken: 'YOUR_BEARER_TOKEN' });
+const client = new Client({ bearerToken: process.env.X_BEARER_TOKEN });
 
-const userResponse = await client.users.getByUsername('XDevelopers');
+const userResponse = await client.users.getByUsername("XDevelopers");
 console.log(userResponse.data?.username);
 ```
-
----
-
-## Key features
-
-| Feature | Description |
-|:--------|:------------|
-| **Type safety** | Complete TypeScript definitions for all endpoints and parameters |
-| **Authentication** | Bearer Token, OAuth 2.0 with PKCE, and OAuth 1.0a |
-| **Automatic pagination** | Async iteration support for paginated endpoints |
-| **Streaming** | Event-driven streaming with automatic reconnection |
-| **Full API coverage** | Users, Posts, Lists, Bookmarks, Communities, and more |
 
 ---
 
@@ -65,26 +58,26 @@ console.log(userResponse.data?.username);
 <Tabs>
   <Tab title="Bearer Token">
 ```typescript
-import { Client } from '@xdevplatform/xdk';
+import { Client } from "@xdevplatform/xdk";
 
-const client = new Client({ bearerToken: 'YOUR_BEARER_TOKEN' });
+const client = new Client({ bearerToken: process.env.X_BEARER_TOKEN });
 ```
   </Tab>
-  <Tab title="OAuth 2.0">
-```typescript title="Example" lines wrap icon="square-js"
-import { Client, OAuth2, generateCodeVerifier, generateCodeChallenge } from '@xdevplatform/xdk';
+  <Tab title="OAuth 2.0 PKCE">
+```typescript
+import { Client, OAuth2, generateCodeVerifier, generateCodeChallenge } from "@xdevplatform/xdk";
 
 const oauth2 = new OAuth2({
-  clientId: 'YOUR_CLIENT_ID',
-  clientSecret: 'YOUR_CLIENT_SECRET',
-  redirectUri: 'https://your-app.com/callback',
-  scope: ['tweet.read', 'users.read', 'offline.access'],
+  clientId: process.env.X_CLIENT_ID!,
+  clientSecret: process.env.X_CLIENT_SECRET,
+  redirectUri: "http://localhost:3000/callback",
+  scope: ["tweet.read", "tweet.write", "users.read", "offline.access"],
 });
 
 const codeVerifier = generateCodeVerifier();
 const codeChallenge = await generateCodeChallenge(codeVerifier);
 oauth2.setPkceParameters(codeVerifier, codeChallenge);
-const authUrl = await oauth2.getAuthorizationUrl('state');
+const authUrl = await oauth2.getAuthorizationUrl("state");
 
 const tokens = await oauth2.exchangeCode(authCode, codeVerifier);
 const client = new Client({ accessToken: tokens.access_token });
@@ -92,16 +85,16 @@ const client = new Client({ accessToken: tokens.access_token });
   </Tab>
   <Tab title="OAuth 1.0a">
 ```typescript
-import { Client, OAuth1 } from '@xdevplatform/xdk';
+import { Client, OAuth1 } from "@xdevplatform/xdk";
 
 const oauth1 = new OAuth1({
-  apiKey: 'YOUR_API_KEY',
-  apiSecret: 'YOUR_API_SECRET',
-  accessToken: 'YOUR_ACCESS_TOKEN',
-  accessTokenSecret: 'YOUR_ACCESS_TOKEN_SECRET'
+  apiKey: process.env.X_API_KEY!,
+  apiSecret: process.env.X_API_SECRET!,
+  accessToken: process.env.X_ACCESS_TOKEN!,
+  accessTokenSecret: process.env.X_ACCESS_TOKEN_SECRET!,
 });
 
-const client = new Client({ oauth1: oauth1 });
+const client = new Client({ oauth1 });
 ```
   </Tab>
 </Tabs>
@@ -112,11 +105,12 @@ const client = new Client({ oauth1: oauth1 });
 
 | Category | Method |
 |:---------|:-------|
-| **Posts** | `client.posts.search()` |
-| **Users** | `client.users.getMe()` |
-| **Spaces** | `client.spaces.findSpaceById()` |
-| **Lists** | `client.lists.getList()` |
-| **DMs** | `client.directMessages.lookup()` |
+| **Posts** | `client.posts.searchRecent(query, options)`, `client.posts.create(body)` |
+| **Users** | `client.users.getMe()`, `client.users.getByUsername(username)` |
+| **Streams** | `client.stream.posts()`, `client.stream.postsSample()` |
+| **Spaces** | `client.spaces.getById(id)` |
+| **Lists** | `client.lists.getById(id)` |
+| **Direct Messages** | `client.directMessages.getEvents()` |
 
 ---
 
@@ -124,20 +118,21 @@ const client = new Client({ oauth1: oauth1 });
 
 <CardGroup cols={2}>
   <Card title="Installation" icon="download" href="/xdks/typescript/install">
-    Package managers, TypeScript setup, and requirements.
+    Package managers, ESM/CommonJS usage, and requirements.
+  </Card>
+  <Card title="Quickstart" icon="/icons/xds/icon-rocket.svg" href="/xdks/typescript/quickstart">
+    Step-by-step first request walkthrough.
   </Card>
   <Card title="Authentication" icon="/icons/xds/icon-key.svg" href="/xdks/typescript/authentication">
-    Detailed guide for all auth methods.
+    Bearer Token, OAuth 2.0 PKCE, and OAuth 1.0a guides.
   </Card>
   <Card title="Pagination" icon="arrows-left-right" href="/xdks/typescript/pagination">
-    Async iteration and paginated responses.
+    `UserPaginator`, `PostPaginator`, and async iteration.
   </Card>
   <Card title="Streaming" icon="satellite-dish" href="/xdks/typescript/streaming">
-    Event-driven streaming with reconnection.
+    `EventDrivenStream` listeners and `for await` consumption.
   </Card>
-  <Card title="API Reference" icon="/icons/xds/icon-book.svg" href="/xdks/typescript/reference/modules">
-    Complete client, interface, and type reference.
+  <Card title="API Reference" icon="/icons/xds/icon-book.svg" href="/xdks/typescript/reference/overview">
+    Complete reference for all 24 resource clients.
   </Card>
 </CardGroup>
-
-For code examples, see the [samples repo](https://github.com/xdevplatform/samples/tree/main/javascript).
