@@ -1,49 +1,47 @@
 ---
-title: "Pagination"
-sidebarTitle: "Pagination"
-description: "Paginate X API responses in TypeScript using UserPaginator and generic paginator utilities with manual fetchNext loops or async iteration for any list endpoint."
+title: Pagination
+sidebarTitle: Pagination
+description: Paginate X API v2 responses in TypeScript with Paginator classes or manual tokens.
 ---
 
-The SDK provides generic paginator utilities you can use with any endpoint that returns paginated responses. Methods return plain responses; you wrap them with a paginator.
+Client methods return a single page response. Wrap any paginated call with `UserPaginator`, `PostPaginator`, `EventPaginator`, or the base `Paginator` to follow `next_token` automatically.
 
-### Basic Pagination
+## Setup
 
 <CodeGroup dropdown>
 
-```typescript title="quick-start.ts" lines wrap icon="square-js" theme={null}
-import { Client, UserPaginator, PaginatedResponse, Schemas } from '@xdevplatform/xdk';
+```typescript title="paginator.ts" lines wrap icon="square-js" theme={null}
+import { Client, UserPaginator, PaginatedResponse, Schemas } from "@xdevplatform/xdk";
 
-const client: Client = new Client({ bearerToken: 'your-bearer-token' });
+const client = new Client({ bearerToken: process.env.X_BEARER_TOKEN });
 
-// Wrap any list endpoint with proper typing
-const followers: UserPaginator = new UserPaginator(
+const followers = new UserPaginator(
   async (token?: string): Promise<PaginatedResponse<Schemas.User>> => {
-    const res = await client.users.getFollowers('<userId>', {
+    const res = await client.users.getFollowers("2244994945", {
       maxResults: 100,
       paginationToken: token,
-      userFields: ['id','name','username'],
+      userFields: ["id", "name", "username"],
     });
-    return { 
-      data: res.data ?? [], 
-      meta: res.meta, 
-      includes: res.includes, 
-      errors: res.errors 
+    return {
+      data: res.data ?? [],
+      meta: res.meta,
+      includes: res.includes,
+      errors: res.errors,
     };
   }
 );
 ```
 
-```javascript title="quick-start.js" lines wrap icon="square-js" theme={null}
-import { Client } from '@xdevplatform/xdk';
-import { UserPaginator } from '@xdevplatform/xdk';
+```javascript title="paginator.js" lines wrap icon="square-js" theme={null}
+import { Client, UserPaginator } from "@xdevplatform/xdk";
 
-const client = new Client({ bearerToken: 'your-bearer-token' });
+const client = new Client({ bearerToken: process.env.X_BEARER_TOKEN });
 
 const followers = new UserPaginator(async (token) => {
-  const res = await client.users.getFollowers('<userId>', {
+  const res = await client.users.getFollowers("2244994945", {
     maxResults: 100,
     paginationToken: token,
-    userFields: ['id','name','username'],
+    userFields: ["id", "name", "username"],
   });
   return { data: res.data ?? [], meta: res.meta, includes: res.includes, errors: res.errors };
 });
@@ -51,41 +49,13 @@ const followers = new UserPaginator(async (token) => {
 
 </CodeGroup>
 
-### Manual paging
-
-<CodeGroup>
-
-```typescript manual.ts theme={null}
-import { UserPaginator, Schemas } from '@xdevplatform/xdk';
-
-await followers.fetchNext();          // first page
-while (!followers.done) {
-  await followers.fetchNext();        // subsequent pages
-}
-
-const userCount: number = followers.users.length;  // all fetched users
-const firstUser: Schemas.User | undefined = followers.users[0];
-const nextToken: string | undefined = followers.meta?.nextToken;
-```
-
-```javascript manual.js theme={null}
-await followers.fetchNext();
-while (!followers.done) await followers.fetchNext();
-console.log(followers.items.length);
-```
-
-</CodeGroup>
-
-### Async iteration
+## Async iteration
 
 <CodeGroup>
 
 ```typescript async.ts theme={null}
-import { Schemas } from '@xdevplatform/xdk';
-
 for await (const user of followers) {
-  const typedUser: Schemas.User = user;
-  console.log(typedUser.username);  // fully typed access
+  console.log(user.username);
 }
 ```
 
@@ -97,70 +67,43 @@ for await (const user of followers) {
 
 </CodeGroup>
 
-### Next page as a new instance
+## Manual paging
 
 <CodeGroup>
 
-```typescript next.ts theme={null}
-import { UserPaginator } from '@xdevplatform/xdk';
-
-await followers.fetchNext();
-if (!followers.done) {
-  const page2: UserPaginator = await followers.next(); // independent paginator starting at next page
-  await page2.fetchNext();
-  console.log(page2.users.length);  // items from second page
+```typescript manual.ts theme={null}
+await followers.fetchNext(); // first page
+while (!followers.done) {
+  await followers.fetchNext(); // subsequent pages
 }
+
+console.log(followers.users.length);
 ```
 
-```javascript next.js theme={null}
+```javascript manual.js theme={null}
 await followers.fetchNext();
-if (!followers.done) {
-  const page2 = await followers.next();
-  await page2.fetchNext();
+while (!followers.done) {
+  await followers.fetchNext();
 }
+console.log(followers.items.length);
 ```
 
 </CodeGroup>
 
-### Error handling and rate limits
-
-<CodeGroup>
+## Error handling
 
 ```typescript title="errors.ts" lines wrap icon="square-js" theme={null}
-import { UserPaginator, Schemas } from '@xdevplatform/xdk';
-
 try {
-  for await (const item of followers) {
-    const user: Schemas.User = item;
-    // process user...
+  for await (const user of followers) {
+    console.log(user.username);
   }
 } catch (err: unknown) {
   if (followers.rateLimited) {
-    console.error('Rate limited, backoff required');
-    // backoff / retry later
-  } else {
-    console.error('Pagination error:', err);
-    throw err;
-  }
-}
-```
-
-```javascript errors.js theme={null}
-try {
-  for await (const item of followers) {
-    // ...
-  }
-} catch (err) {
-  if (followers.rateLimited) {
-    // backoff / retry later
+    console.error("Rate limited, retry after backoff");
   } else {
     throw err;
   }
 }
 ```
 
-</CodeGroup>
-
-<Info>
-For detailed code examples using the Javascript/TypeScript XDK, check out our [code samples GitHub repo](https://github.com/xdevplatform/samples/tree/main/javascript).
-</Info>
+See the [TypeScript samples repo](https://github.com/xdevplatform/samples/tree/main/typescript) for more examples.
