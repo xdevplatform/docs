@@ -5,10 +5,7 @@ on:
   repository_dispatch:
     types: [xdk-released]
   schedule:
-    - cron: '0 17 * * *' # 9am PT
-    - cron: '0 20 * * *' # 12pm PT
-    - cron: '0 23 * * *' # 3pm PT
-    - cron: '0 2 * * *' # 6pm PT
+    - cron: '0 */6 * * *' # Every 6 hours: 00:00, 06:00, 12:00, 18:00 UTC
 
 jobs:
   update-docs:
@@ -47,11 +44,20 @@ jobs:
             https://api.x.com/2/openapi.json
           jq -e .openapi openapi.json > /dev/null
 
+      # The API returns OAuth2 scopes in a different order on every request.
+      - name: Normalize OpenAPI Scope Order
+        run: node .github/scripts/sync-openapi-mdx.mjs --normalize
+
       - name: Sync XDK Reference, OpenAPI Code Samples Overlay, and Endpoint Stubs
         run: |
           cargo run --manifest-path .xdk-gen/Cargo.toml --bin xdk-build -- \
             docs --spec ./openapi.json --output . --sync-endpoint-stubs
           rm -rf .xdk-gen
+
+      # Repoints nav-linked pages whose operation was renamed in the spec, and
+      # fails when a nav-linked page still points at a missing operation.
+      - name: Reconcile and Validate Endpoint Pages Against the OpenAPI Spec
+        run: node .github/scripts/sync-openapi-mdx.mjs --reconcile --validate
 
       - name: Validate Mintlify Build & XDK Docs
         run: |
@@ -64,6 +70,8 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add openapi.json overlays/xdk-code-samples.json docs.json xdks tools tools-and-libraries.mdx x-api
+          # Endpoint pages the reconcile step repointed outside the paths above.
+          git add --update -- '*.mdx'
           if git diff --cached --quiet; then
             echo "No documentation changes to commit."
           else
